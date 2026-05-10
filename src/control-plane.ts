@@ -16,6 +16,7 @@ const settingsPath = path.join(dataDirectory, "lead-agent-settings.json");
 const templatesPath = path.join(dataDirectory, "outreach-templates.json");
 const learningPath = path.join(dataDirectory, "lead-agent-learning.json");
 const latestLeadRunPath = path.join(dataDirectory, "latest-lead-run.json");
+const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-review.json");
 
 const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
@@ -162,6 +163,7 @@ export class ControlPlaneStore {
     await ensureFile(templatesPath, OUTREACH_TEMPLATES);
     await ensureFile(learningPath, defaultLearning);
     await ensureFile(latestLeadRunPath, defaultLatestLeadRun);
+    await ensureFile(latestOutreachReviewPath, defaultLatestLeadRun);
   }
 
   async getSettings(): Promise<LeadAgentSettings> {
@@ -268,6 +270,7 @@ export class ControlPlaneStore {
   async writeLatestLeadRun(record: LatestLeadRunRecord): Promise<void> {
     await this.ensureSeedData();
     await writeJsonFile(latestLeadRunPath, record);
+    await writeJsonFile(latestOutreachReviewPath, record);
   }
 
   async updateTemplate(key: string, input: Partial<Omit<OutreachTemplate, "key">>): Promise<OutreachTemplate> {

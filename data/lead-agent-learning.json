@@ -1,6 +1,55 @@
 {
   "companyFeedback": [
     {
+      "companyName": "Adecco",
+      "domain": "adecco.com",
+      "verdict": "reject",
+      "reason": "Staffing and recruiting business, not a ONE WARE industrial delivery or OEM target.",
+      "createdAt": "2026-05-10T17:25:00.000Z"
+    },
+    {
+      "companyName": "Choco",
+      "domain": "choco.com",
+      "verdict": "reject",
+      "reason": "Food supply chain SaaS platform, not an industrial Vision AI delivery integrator or target customer.",
+      "createdAt": "2026-05-10T17:25:00.000Z"
+    },
+    {
+      "companyName": "Crypto Market",
+      "domain": "crypto-market.io",
+      "verdict": "reject",
+      "reason": "Crypto platform signal, outside ONE WARE ICP.",
+      "createdAt": "2026-05-10T17:25:00.000Z"
+    },
+    {
+      "companyName": "Jobgether",
+      "domain": "jobgether.com",
+      "verdict": "reject",
+      "reason": "Job and recruiting platform, not an industrial automation or Vision AI delivery target.",
+      "createdAt": "2026-05-10T17:25:00.000Z"
+    },
+    {
+      "companyName": "LiveEO",
+      "domain": "live-eo.com",
+      "verdict": "reject",
+      "reason": "Geospatial AI product company, closer to product vendor than delivery-led ONE WARE partner ICP.",
+      "createdAt": "2026-05-10T17:25:00.000Z"
+    },
+    {
+      "companyName": "Oxolo",
+      "domain": "oxolo.com",
+      "verdict": "reject",
+      "reason": "Generative AI product company, not an industrial Vision AI delivery integrator.",
+      "createdAt": "2026-05-10T17:25:00.000Z"
+    },
+    {
+      "companyName": "SAP Build",
+      "domain": "sap.com",
+      "verdict": "reject",
+      "reason": "Enterprise software platform, not a ONE WARE target segment.",
+      "createdAt": "2026-05-10T17:25:00.000Z"
+    },
+    {
       "companyName": "InfinitiBit",
       "domain": "infinitibit.com",
       "verdict": "reject",
@@ -24,14 +73,14 @@
   ],
   "filterPerformance": {
     "Germany Industrial Software Integrators": {
-      "runs": 3,
-      "averageRelevanceRatio": 0.48979591836734687,
-      "earlyStopCount": 1
+      "runs": 5,
+      "averageRelevanceRatio": 0.3795918367346938,
+      "earlyStopCount": 3
     },
     "Germany AI Delivery Integrators": {
-      "runs": 5,
-      "averageRelevanceRatio": 0.5176870748299319,
-      "earlyStopCount": 2
+      "runs": 7,
+      "averageRelevanceRatio": 0.5370383867832847,
+      "earlyStopCount": 3
     },
     "Germany Industrial Customers With QC Need": {
       "runs": 3,
@@ -44,12 +93,354 @@
       "earlyStopCount": 1
     },
     "Europe Industrial Camera Partners": {
-      "runs": 5,
-      "averageRelevanceRatio": 0.5892307692307692,
+      "runs": 6,
+      "averageRelevanceRatio": 0.6576923076923077,
       "earlyStopCount": 1
+    },
+    "Germany Industrial Software Integrators Revised": {
+      "runs": 2,
+      "averageRelevanceRatio": 0.4897959183673469,
+      "earlyStopCount": 1
+    },
+    "Germany & EU Industrial Software Integrators Focused on Delivery": {
+      "runs": 2,
+      "averageRelevanceRatio": 0.5628571428571428,
+      "earlyStopCount": 1
+    },
+    "Germany & EU Industrial AI Delivery Integrators Strict": {
+      "runs": 3,
+      "averageRelevanceRatio": 0.5973639455782312,
+      "earlyStopCount": 1
+    },
+    "Germany & EU Industrial AI Delivery Integrators Revised v2": {
+      "runs": 2,
+      "averageRelevanceRatio": 0.47360248447204967,
+      "earlyStopCount": 1
+    },
+    "Germany & EU Industrial AI Delivery Integrators Strict v2": {
+      "runs": 2,
+      "averageRelevanceRatio": 0.4756838905775076,
+      "earlyStopCount": 1
+    },
+    "Germany & EU Industrial AI Delivery Integrators Strict v3": {
+      "runs": 1,
+      "averageRelevanceRatio": 0.7142857142857143,
+      "earlyStopCount": 0
     }
   },
   "searchHistory": [
+    {
+      "timestamp": "2026-05-10T17:44:30.199Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v2",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 2,
+      "relevanceRatio": 0.14285714285714285,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:44:55.916Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v3",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 9,
+      "relevanceRatio": 0.6428571428571429,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:45:36.990Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v3",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 35,
+      "relevantCount": 26,
+      "relevanceRatio": 0.7428571428571429,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:40:10.969Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Revised v2",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 2,
+      "relevanceRatio": 0.14285714285714285,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:40:31.924Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v2",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 13,
+      "relevantCount": 10,
+      "relevanceRatio": 0.7692307692307693,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:41:11.827Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v2",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 34,
+      "relevantCount": 28,
+      "relevanceRatio": 0.8235294117647058,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:25:52.886Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 2,
+      "relevanceRatio": 0.14285714285714285,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:26:10.978Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Revised v2",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 12,
+      "relevantCount": 10,
+      "relevanceRatio": 0.8333333333333334,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:26:50.861Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Revised v2",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 34,
+      "relevantCount": 27,
+      "relevanceRatio": 0.7941176470588235,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:23:05.433Z",
+      "filterName": "Germany Industrial Software Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 2,
+      "relevanceRatio": 0.14285714285714285,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:23:27.282Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 13,
+      "relevantCount": 10,
+      "relevanceRatio": 0.7692307692307693,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:24:06.397Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 35,
+      "relevantCount": 29,
+      "relevanceRatio": 0.8285714285714286,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:19:38.406Z",
+      "filterName": "Germany & EU Industrial Software Integrators Focused on Delivery",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 4,
+      "relevanceRatio": 0.2857142857142857,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:20:01.695Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 12,
+      "relevanceRatio": 0.8571428571428571,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:20:40.916Z",
+      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 35,
+      "relevantCount": 29,
+      "relevanceRatio": 0.8285714285714286,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:18:16.726Z",
+      "filterName": "Germany AI Delivery Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 6,
+      "relevanceRatio": 0.4,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:15:31.723Z",
+      "filterName": "Germany AI Delivery Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 8,
+      "relevanceRatio": 0.5333333333333333,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:16:11.286Z",
+      "filterName": "Germany AI Delivery Integrators",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 33,
+      "relevantCount": 29,
+      "relevanceRatio": 0.8787878787878788,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:13:16.332Z",
+      "filterName": "Germany Industrial Software Integrators Revised",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 2,
+      "relevanceRatio": 0.14285714285714285,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:13:39.369Z",
+      "filterName": "Germany & EU Industrial Software Integrators Focused on Delivery",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 12,
+      "relevanceRatio": 0.8,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:14:17.578Z",
+      "filterName": "Germany & EU Industrial Software Integrators Focused on Delivery",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 35,
+      "relevantCount": 30,
+      "relevanceRatio": 0.8571428571428571,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:09:52.761Z",
+      "filterName": "Germany Industrial Software Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 4,
+      "relevanceRatio": 0.2857142857142857,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T17:10:14.334Z",
+      "filterName": "Germany Industrial Software Integrators Revised",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 13,
+      "relevanceRatio": 0.8666666666666667,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:10:53.267Z",
+      "filterName": "Germany Industrial Software Integrators Revised",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 34,
+      "relevantCount": 28,
+      "relevanceRatio": 0.8235294117647058,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:07:08.470Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 15,
+      "relevanceRatio": 1,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T17:07:09.331Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 35,
+      "relevantCount": 35,
+      "relevanceRatio": 1,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
     {
       "timestamp": "2026-05-10T11:00:07.414Z",
       "filterName": "Europe Industrial Camera Partners",

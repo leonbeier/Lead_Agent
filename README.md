@@ -103,6 +103,7 @@ curl -X POST http://localhost:3000/api/hubspot/workflow-trigger \
 - Azure OpenAI endpoint, key und deployment name
 - optional: Foundry project endpoint fuer agentische Filteroptimierung, Vorqualifikation und Deep Research mit Web Search oder Bing Grounding
 - optional: Foundry Bing connection name, wenn statt allgemeinem Web Search die neue Grounding-with-Bing-Resource verwendet werden soll
+- optional: kein zusaetzlicher Search-API-Key noetig, wenn ihr den eingebauten DuckDuckGo-basierten Web-Search-Agent-Fallback nutzt
 
 ## Foundry Agent Setup
 
@@ -129,6 +130,29 @@ Empfohlene Umgebungsvariablen:
 - `FOUNDRY_BING_CONNECTION_NAME`: optionaler Name eurer Foundry-Connection auf die Bing-Grounding-Ressource
 
 Wenn `FOUNDRY_BING_CONNECTION_NAME` gesetzt ist, verwendet der Deep Research Agent eure Grounding-with-Bing-Resource. Wenn nicht, faellt er auf den Foundry-Web-Search-Toolpfad zurueck.
+
+## Eigener Web-Search-Agent ohne Zusatz-API
+
+Wenn Foundry oder Bing Grounding nicht verfuegbar sind, nutzt der Azure-Research-Fallback jetzt einen eingebauten Web-Search-Agent auf Basis von `duck-duck-scrape`.
+
+Der Ablauf ist bewusst einfach gehalten:
+
+1. Es werden mehrere Firmen-Queries gegen DuckDuckGo erzeugt.
+2. Die besten Treffer werden dedupliziert.
+3. Fuer die ersten Treffer werden Seiteninhalte direkt abgerufen und als Evidenzblock an Azure OpenAI uebergeben.
+4. Das Modell erzeugt daraus den bestehenden `ResearchBrief` mit echten Web-Citations.
+
+Relevante Umgebungsvariablen:
+
+- `WEB_SEARCH_AGENT_ENABLED=true`
+- `WEB_SEARCH_AGENT_MAX_RESULTS=5`
+
+Damit bekommt ihr echten externen Web-Search im bestehenden Pipeline-Pfad, ohne zusaetzliche Search-Provider-API. Die Grenzen liegen eher bei Trefferqualitaet, Rate-Limits oder HTML-Struktur einzelner Seiten als bei Azure selbst.
+
+Wichtige Betriebshinweise:
+
+- fuer Bing Grounding in Foundry Agents (classic) sollte kein `gpt-5`-Deployment verwendet werden; ein verifizierter kompatibler Pfad in diesem Setup ist `gpt-4.1-mini`
+- die aktuelle Implementierung unter `src/clients/foundry-agents.ts` authentifiziert sich mit `DefaultAzureCredential`; fuer echten Betrieb braucht der Runtime-Host deshalb eine funktionierende Entra-ID-Credential-Kette und die Rolle `Azure AI User` auf der Foundry-Resource bzw. dem Projektpfad
 
 ## HubSpot- und Operator-Kontext
 

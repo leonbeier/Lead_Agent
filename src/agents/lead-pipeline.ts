@@ -4,6 +4,7 @@ import { AzureOpenAIClient } from "../clients/azure-openai";
 import { HubSpotClient } from "../clients/hubspot";
 import { ControlPlaneStore } from "../control-plane";
 import {
+  ApolloOrganizationFilter,
   CompanySample,
   FilterEvaluation,
   GeneratedLeadRecord,
@@ -12,6 +13,7 @@ import {
   LeadJobRequest,
   LeadJobResult,
   PreCategorizedCompany,
+  PublicContactCandidate,
   SearchHistoryEntry
 } from "../types";
 
@@ -29,6 +31,8 @@ const MAX_EARLY_STOP_REVIEW_COUNT = 15;
 const DEFAULT_EARLY_STOP_THRESHOLD = 0.5;
 const AZURE_WORKER_CONCURRENCY = 4;
 const EXPANSION_BATCH_SIZE = 50;
+const MAX_FILTER_REVISIONS = 1;
+const CONTACT_DISCOVERY_CONCURRENCY = 2;
 
 const EUROPEAN_COUNTRIES = new Set([
   "germany",
@@ -110,8 +114,10 @@ export class LeadPipelineAgent {
     );
     const earlyStopThreshold = request.earlyStopThreshold ?? DEFAULT_EARLY_STOP_THRESHOLD;
     const suggestedFilters = this.orderFiltersByLearning(
-      await this.getSuggestedFilters(request.market, request.customGoal, request.agentContext, dryRun),
-      learning
+      await this.getSuggestedFilters(request.market, request.customGoal, request.agentContext, dryRun, learning),
+      learning,
+      request.market,
+      request.customGoal
     );
     const evaluations: FilterEvaluation[] = [];
     const shortlistedCompanies: PreCategorizedCompany[] = [];
@@ -120,103 +126,146 @@ export class LeadPipelineAgent {
     let companiesSkippedAfterEarlyStop = 0;
 
     for (const filter of suggestedFilters) {
-      const reviewedCompanies: PreCategorizedCompany[] = [];
-      const probeSample = this.excludeRejectedCompanies(
-        await this.apolloClient.fetchOrganizationSample(filter, earlyStopReviewCount, dryRun, 1),
-        learning
-      );
-      const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, request.agentContext, learning);
-      reviewedCompanies.push(...categorizedInitialSample);
-      const initialEvaluation = this.evaluateFilter(
-        filter.name,
-        categorizedInitialSample,
-        filter,
-        categorizedInitialSample.length,
-        false
-      );
-      searchHistory.push(
-        this.buildSearchHistoryEntry(
-          filter.name,
-          "probe_15",
-          1,
-          earlyStopReviewCount,
-          categorizedInitialSample,
-          filter,
-          earlyStopThreshold
-        )
-      );
+      const candidateFilters: ApolloOrganizationFilter[] = [filter];
+      let revisionCount = 0;
 
-      shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedInitialSample, filter));
-
-      if (earlyStopEnabled && initialEvaluation.relevanceRatio < earlyStopThreshold) {
-        const skippedCount = Math.max(0, FULL_SAMPLE_SIZE - categorizedInitialSample.length);
-        evaluations.push({
-          ...initialEvaluation,
-          stoppedEarly: true,
-          skippedAfterEarlyStop: skippedCount,
-          recommendation: `${initialEvaluation.recommendation} Early stop triggered after ${categorizedInitialSample.length} reviews.`
-        });
-        filtersStoppedEarly += 1;
-        companiesSkippedAfterEarlyStop += skippedCount;
-
-        if (this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
-          break;
-        }
-
-        continue;
-      }
-
-      for (let page = 1; page <= 10; page += 1) {
-        const expandedSample = this.excludeRejectedCompanies(
-          await this.apolloClient.fetchOrganizationSample(filter, EXPANSION_BATCH_SIZE, dryRun, page),
+      while (candidateFilters.length > 0) {
+        const activeFilter = candidateFilters.shift() as ApolloOrganizationFilter;
+        const reviewedCompanies: PreCategorizedCompany[] = [];
+        const probeSample = this.excludeRejectedCompanies(
+          await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
           learning
         );
+        const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, request.agentContext, learning);
+        reviewedCompanies.push(...categorizedInitialSample);
 
-        if (expandedSample.length === 0) {
-          break;
-        }
-
-        const categorizedExpandedSample = await this.categorizeCompanies(expandedSample, dryRun, request.agentContext, learning);
-        reviewedCompanies.push(...categorizedExpandedSample);
-        shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedExpandedSample, filter));
-
-        const batchEvaluation = this.evaluateFilter(
-          filter.name,
-          categorizedExpandedSample,
-          filter,
-          earlyStopReviewCount,
+        const initialEvaluation = this.evaluateFilter(
+          activeFilter.name,
+          categorizedInitialSample,
+          activeFilter,
+          categorizedInitialSample.length,
           false
         );
 
         searchHistory.push(
           this.buildSearchHistoryEntry(
-            filter.name,
-            "expand_50",
-            page,
-            EXPANSION_BATCH_SIZE,
-            categorizedExpandedSample,
-            filter,
+            activeFilter.name,
+            "probe_15",
+            1,
+            earlyStopReviewCount,
+            categorizedInitialSample,
+            activeFilter,
             earlyStopThreshold
           )
         );
 
-        if (page > 1 && batchEvaluation.relevanceRatio < earlyStopThreshold) {
-          break;
+        shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedInitialSample, activeFilter));
+
+        if (earlyStopEnabled && initialEvaluation.relevanceRatio < earlyStopThreshold) {
+          const skippedCount = Math.max(0, FULL_SAMPLE_SIZE - categorizedInitialSample.length);
+          const stoppedEvaluation: FilterEvaluation = {
+            ...initialEvaluation,
+            stoppedEarly: true,
+            skippedAfterEarlyStop: skippedCount,
+            recommendation: `${initialEvaluation.recommendation} Early stop triggered after ${categorizedInitialSample.length} reviews.`
+          };
+
+          evaluations.push(stoppedEvaluation);
+          filtersStoppedEarly += 1;
+          companiesSkippedAfterEarlyStop += skippedCount;
+
+          if (revisionCount < MAX_FILTER_REVISIONS) {
+            const revisedFilter = await this.azureClient.reviseSearchFilter(
+              activeFilter,
+              stoppedEvaluation,
+              dryRun,
+              learning,
+              request.market,
+              request.customGoal,
+              request.agentContext
+            );
+
+            if (revisedFilter) {
+              candidateFilters.push(revisedFilter);
+              revisionCount += 1;
+            }
+          }
+
+          if (this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
+            break;
+          }
+
+          continue;
         }
 
-        if (expandedSample.length < EXPANSION_BATCH_SIZE || this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
-          break;
+        for (let page = 1; page <= 10; page += 1) {
+          const expandedSample = this.excludeRejectedCompanies(
+            await this.apolloClient.fetchOrganizationSample(activeFilter, EXPANSION_BATCH_SIZE, dryRun, page),
+            learning
+          );
+
+          if (expandedSample.length === 0) {
+            break;
+          }
+
+          const unseenExpandedSample = this.excludeAlreadyReviewedCompanies(expandedSample, reviewedCompanies);
+          if (unseenExpandedSample.length === 0) {
+            if (expandedSample.length < EXPANSION_BATCH_SIZE) {
+              break;
+            }
+
+            continue;
+          }
+
+          const categorizedExpandedSample = await this.categorizeCompanies(
+            unseenExpandedSample,
+            dryRun,
+            request.agentContext,
+            learning
+          );
+          reviewedCompanies.push(...categorizedExpandedSample);
+          shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedExpandedSample, activeFilter));
+
+          const batchEvaluation = this.evaluateFilter(
+            activeFilter.name,
+            categorizedExpandedSample,
+            activeFilter,
+            earlyStopReviewCount,
+            false
+          );
+
+          searchHistory.push(
+            this.buildSearchHistoryEntry(
+              activeFilter.name,
+              "expand_50",
+              page,
+              EXPANSION_BATCH_SIZE,
+              categorizedExpandedSample,
+              activeFilter,
+              earlyStopThreshold
+            )
+          );
+
+          if (batchEvaluation.relevanceRatio < earlyStopThreshold) {
+            break;
+          }
+
+          if (expandedSample.length < EXPANSION_BATCH_SIZE || this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
+            break;
+          }
         }
+
+        evaluations.push(
+          this.evaluateFilter(
+            activeFilter.name,
+            reviewedCompanies,
+            activeFilter,
+            categorizedInitialSample.length,
+            false
+          )
+        );
+        break;
       }
-
-      const evaluation = this.evaluateFilter(
-        filter.name,
-        reviewedCompanies,
-        filter,
-        categorizedInitialSample.length,
-        false
-      );
-      evaluations.push(evaluation);
 
       if (this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
         break;
@@ -237,6 +286,8 @@ export class LeadPipelineAgent {
           AZURE_WORKER_CONCURRENCY
         );
 
+    const publicContactsByCompany = await this.collectPublicContacts(uniqueShortlist, dryRun);
+
     const hubspotSync = await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, !syncToHubSpot);
     await this.controlPlaneStore.recordFilterEvaluations(evaluations);
     await this.controlPlaneStore.recordSearchHistory(searchHistory);
@@ -249,7 +300,13 @@ export class LeadPipelineAgent {
         filtersStoppedEarly,
         companiesSkippedAfterEarlyStop
       },
-      contacts: uniqueShortlist.map((company) => this.buildGeneratedLeadRecord(company, researchBriefs)),
+      contacts: uniqueShortlist.map((company) =>
+        this.buildGeneratedLeadRecord(
+          company,
+          researchBriefs,
+          publicContactsByCompany.get(this.getCompanyKey(company)) ?? []
+        )
+      ),
       searchHistory
     });
 
@@ -264,7 +321,10 @@ export class LeadPipelineAgent {
         attempted: hubspotSync.attempted,
         mode: hubspotSync.mode,
         candidateCount: hubspotSync.candidateCount,
-        syncedCount: hubspotSync.syncedCount
+        syncedCount: hubspotSync.syncedCount,
+        companySyncedCount: hubspotSync.companySyncedCount,
+        contactSyncedCount: hubspotSync.contactSyncedCount,
+        errors: hubspotSync.errors
       },
       efficiency: {
         filtersStoppedEarly,
@@ -289,14 +349,16 @@ export class LeadPipelineAgent {
     market: string | undefined,
     customGoal: string | undefined,
     agentContext: string | undefined,
-    dryRun: boolean
+    dryRun: boolean,
+    learning?: LeadLearningData
   ) {
     return this.azureClient.generateSuggestedFilters(
       market,
       customGoal,
       agentContext,
       buildSuggestedFilters(market, customGoal),
-      dryRun
+      dryRun,
+      learning
     );
   }
 
@@ -308,6 +370,14 @@ export class LeadPipelineAgent {
   ): Promise<PreCategorizedCompany[]> {
     return this.mapWithConcurrency(
       companies.map((company) => async () => {
+        const localCategorization = this.prequalifyLocally(company);
+        if (localCategorization) {
+          return {
+            ...company,
+            ...localCategorization
+          };
+        }
+
         const categorization = await this.azureClient.categorizeCompany(
           company.name,
           company.shortDescription,
@@ -318,11 +388,159 @@ export class LeadPipelineAgent {
 
         return {
           ...company,
-          ...categorization
+          ...this.enforceIndustrialFit(company, categorization)
         };
       }),
       AZURE_WORKER_CONCURRENCY
     );
+  }
+
+  private prequalifyLocally(
+    company: CompanySample
+  ): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null {
+    const text = `${company.name} ${company.shortDescription} ${company.domain ?? ""}`.toLowerCase();
+    const normalizedCountry = company.country?.trim().toLowerCase();
+    const industrialSignals = [
+      "industrial",
+      "automation",
+      "inspection",
+      "quality control",
+      "machine vision",
+      "camera",
+      "robotics",
+      "embedded",
+      "factory",
+      "oem",
+      "sensor"
+    ];
+    const recruitingSignals = [
+      "recruit",
+      "staffing",
+      "talent",
+      "job board",
+      "joblead",
+      "job platform",
+      "career platform",
+      "employment",
+      "hr software"
+    ];
+    const nonIndustrialPlatformSignals = [
+      "erp",
+      "crm",
+      "marketing platform",
+      "supply chain saas",
+      "crypto",
+      "blockchain",
+      "food ordering",
+      "pricing software",
+      "procurement saas",
+      "travel platform",
+      "marketplace"
+    ];
+    const competitorSignals = [
+      "annotation platform",
+      "mlops",
+      "vision platform",
+      "training data platform",
+      "labeling platform",
+      "computer vision platform"
+    ];
+
+    const industrialHits = industrialSignals.filter((signal) => text.includes(signal)).length;
+
+    if (normalizedCountry && !EUROPEAN_COUNTRIES.has(normalizedCountry)) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 5,
+        rationale: "Company is outside the European target geography for this campaign."
+      };
+    }
+
+    if (recruitingSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 4,
+        rationale: "Company appears to be in recruiting, staffing, or HR rather than an industrial Vision AI target."
+      };
+    }
+
+    if (competitorSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 5,
+        rationale: "Company appears closer to an AI platform competitor than to a delivery-led ONE WARE target."
+      };
+    }
+
+    if (industrialHits === 0 && nonIndustrialPlatformSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 6,
+        rationale: "Company appears to be a generic SaaS or non-industrial platform rather than a ONE WARE ICP fit."
+      };
+    }
+
+    return null;
+  }
+
+  private enforceIndustrialFit(
+    company: CompanySample,
+    categorization: Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">
+  ): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> {
+    const text = `${company.name} ${company.shortDescription} ${company.domain ?? ""} ${company.sourceFilter}`.toLowerCase();
+    const industrialSignals = [
+      "industrial",
+      "automation",
+      "inspection",
+      "quality control",
+      "machine vision",
+      "camera",
+      "robotics",
+      "embedded",
+      "factory",
+      "oem",
+      "sensor",
+      "manufacturing",
+      "process automation"
+    ];
+    const clearlyBadSignals = [
+      "staffing",
+      "recruit",
+      "talent",
+      "joblead",
+      "job platform",
+      "logistics",
+      "parcel",
+      "hr",
+      "crypto",
+      "marketing",
+      "payments"
+    ];
+
+    if (clearlyBadSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 8,
+        rationale: "Company profile signals a non-industrial service or platform segment outside ONE WARE's ICP."
+      };
+    }
+
+    if (company.sourceFilter.includes("Industrial Camera Partners")) {
+      return categorization;
+    }
+
+    if (
+      (categorization.category === "software_integrator" || categorization.category === "ai_software_integrator") &&
+      !industrialSignals.some((signal) => text.includes(signal))
+    ) {
+      return {
+        category: "other",
+        relevanceScore: Math.min(categorization.relevanceScore, 35),
+        rationale: "Company may have software or AI capability, but the profile lacks clear industrial, automation, or vision-delivery signals."
+      };
+    }
+
+    return categorization;
   }
 
   private excludeRejectedCompanies(companies: CompanySample[], learning: LeadLearningData): CompanySample[] {
@@ -345,19 +563,61 @@ export class LeadPipelineAgent {
 
   private orderFiltersByLearning(
     filters: import("../types").ApolloOrganizationFilter[],
-    learning: LeadLearningData
+    learning: LeadLearningData,
+    market?: string,
+    customGoal?: string
   ): import("../types").ApolloOrganizationFilter[] {
-    return [...filters].sort((left, right) => this.getFilterRank(right.name, learning) - this.getFilterRank(left.name, learning));
+    return [...filters].sort(
+      (left, right) => this.getFilterRank(right.name, learning, market, customGoal) - this.getFilterRank(left.name, learning, market, customGoal)
+    );
   }
 
-  private getFilterRank(filterName: string, learning: LeadLearningData): number {
+  private getFilterRank(filterName: string, learning: LeadLearningData, market?: string, customGoal?: string): number {
     const stats = learning.filterPerformance[filterName];
+    const strategicBias = this.getStrategicFilterBias(filterName, market, customGoal);
+
     if (!stats) {
-      return 0;
+      return strategicBias;
     }
 
     const earlyStopPenalty = stats.runs === 0 ? 0 : stats.earlyStopCount / stats.runs;
-    return stats.averageRelevanceRatio - earlyStopPenalty;
+    return stats.averageRelevanceRatio - earlyStopPenalty + strategicBias;
+  }
+
+  private getStrategicFilterBias(filterName: string, market?: string, customGoal?: string): number {
+    const normalizedName = filterName.toLowerCase();
+    const normalizedGoal = customGoal?.toLowerCase() ?? "";
+    let bias = 0;
+
+    if (normalizedName.includes("software integrators")) {
+      bias += 0.45;
+    }
+
+    if (normalizedName.includes("ai delivery integrators")) {
+      bias += 0.05;
+    }
+
+    if (normalizedName.includes("industrial customers")) {
+      bias += 0.35;
+    }
+
+    if (normalizedName.includes("machine builders")) {
+      bias += 0.25;
+    }
+
+    if (normalizedName.includes("camera partners")) {
+      bias -= 0.15;
+    }
+
+    if ((market ?? "").toLowerCase() === "de" && normalizedName.includes("europe")) {
+      bias -= 0.05;
+    }
+
+    if (/(software integrator|industrial|quality control|qc|process automation)/.test(normalizedGoal) && normalizedName.includes("camera partners")) {
+      bias -= 0.1;
+    }
+
+    return bias;
   }
 
   private getRelevantEuropeanCompanies(
@@ -422,6 +682,14 @@ export class LeadPipelineAgent {
     return companies.filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index).length;
   }
 
+  private excludeAlreadyReviewedCompanies(
+    companies: CompanySample[],
+    reviewedCompanies: PreCategorizedCompany[]
+  ): CompanySample[] {
+    const reviewedKeys = new Set(reviewedCompanies.map((company) => this.getCompanyKey(company)));
+    return companies.filter((company) => !reviewedKeys.has(this.getCompanyKey(company)));
+  }
+
   private findFirstMatchingCompanyIndex(companies: PreCategorizedCompany[], company: PreCategorizedCompany): number {
     const companyDomain = company.domain?.toLowerCase();
     const companyName = company.name.toLowerCase();
@@ -435,7 +703,8 @@ export class LeadPipelineAgent {
 
   private buildGeneratedLeadRecord(
     company: PreCategorizedCompany,
-    researchBriefs: import("../types").ResearchBrief[]
+    researchBriefs: import("../types").ResearchBrief[],
+    publicContacts: PublicContactCandidate[]
   ): GeneratedLeadRecord {
     const researchBrief = researchBriefs.find((entry) => entry.companyName === company.name);
 
@@ -453,8 +722,31 @@ export class LeadPipelineAgent {
       emailSubject: researchBrief?.emailSubject,
       emailBody: researchBrief?.emailBody,
       phoneScript: researchBrief?.phoneScript,
-      riskFlags: researchBrief?.riskFlags
+      riskFlags: researchBrief?.riskFlags,
+      publicContactEmails: publicContacts.map((contact) => contact.email).filter((email): email is string => Boolean(email)),
+      publicContactPhones: publicContacts.map((contact) => contact.phone).filter((phone): phone is string => Boolean(phone)),
+      publicContactSources: publicContacts.map((contact) => contact.sourceUrl)
     };
+  }
+
+  private async collectPublicContacts(
+    companies: PreCategorizedCompany[],
+    dryRun: boolean
+  ): Promise<Map<string, PublicContactCandidate[]>> {
+    if (dryRun) {
+      return new Map();
+    }
+
+    const entries = await this.mapWithConcurrency(
+      companies.map((company) => async () => [this.getCompanyKey(company), await this.hubspotClient.findPublicContactsForCompany(company)] as const),
+      CONTACT_DISCOVERY_CONCURRENCY
+    );
+
+    return new Map(entries);
+  }
+
+  private getCompanyKey(company: Pick<CompanySample, "name" | "domain">): string {
+    return company.domain?.trim().toLowerCase() || company.name.trim().toLowerCase();
   }
 
   private async mapWithConcurrency<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {

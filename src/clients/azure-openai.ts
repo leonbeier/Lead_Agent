@@ -1,5 +1,12 @@
 import { env, readiness } from "../config";
-import { LeadCategory, LeadLearningData, PreCategorizedCompany, ResearchBrief } from "../types";
+import {
+  ApolloOrganizationFilter,
+  FilterEvaluation,
+  LeadCategory,
+  LeadLearningData,
+  PreCategorizedCompany,
+  ResearchBrief
+} from "../types";
 import {
   buildExecutionContextBlock,
   getTemplateForCategory,
@@ -7,6 +14,7 @@ import {
   TARGET_REGIONS
 } from "../prompting/one-ware-playbook";
 import { FoundryAgentsClient } from "./foundry-agents";
+import { WebSearchAgent } from "./web-search-agent";
 
 interface ChatMessage {
   role: "system" | "user";
@@ -26,9 +34,11 @@ const QUICK_QUALIFICATION_CONTEXT = [
   "Return JSON only with category, relevanceScore 0-100, rationale.",
   "Keep rationale to one short sentence."
 ].join(" ");
+const MAX_FILTER_STRATEGY_HISTORY = 8;
 
 export class AzureOpenAIClient {
   private readonly foundryAgentsClient = new FoundryAgentsClient();
+  private readonly webSearchAgent = new WebSearchAgent();
 
   async categorizeCompany(
     name: string,
@@ -51,34 +61,38 @@ export class AzureOpenAIClient {
       return foundryCategorization;
     }
 
-    const content = await this.runChat([
-      {
-        role: "system",
-        content: QUICK_QUALIFICATION_CONTEXT
-      },
-      {
-        role: "user",
-        content: [
-          `Company=${name}`,
-          `Description=${description}`,
-          agentContext ? `Context=${agentContext}` : undefined,
-          learning ? this.buildLearningContext(learning) : undefined
-        ]
-          .filter(Boolean)
-          .join("\n")
-      }
-    ], { maxTokens: 220 });
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: QUICK_QUALIFICATION_CONTEXT
+        },
+        {
+          role: "user",
+          content: [
+            `Company=${name}`,
+            `Description=${description}`,
+            agentContext ? `Context=${agentContext}` : undefined,
+            learning ? this.buildLearningContext(learning) : undefined
+          ]
+            .filter(Boolean)
+            .join("\n")
+        }
+      ], { maxTokens: 140 });
 
-    const parsed = this.parseJsonObject<{
-      category: LeadCategory;
-      relevanceScore: number;
-      rationale: string;
-    }>(content);
+      const parsed = this.parseJsonObject<{
+        category: LeadCategory;
+        relevanceScore: number;
+        rationale: string;
+      }>(content);
 
-    return {
-      ...parsed,
-      category: this.normalizeCategory(parsed.category)
-    };
+      return {
+        ...parsed,
+        category: this.normalizeCategory(parsed.category)
+      };
+    } catch {
+      return this.categorizeDryRun(description);
+    }
   }
 
   async buildResearchBrief(
@@ -96,77 +110,225 @@ export class AzureOpenAIClient {
     }
 
     if (dryRun || !readiness.azureConfigured) {
+      return this.buildFallbackResearchBrief(company, template, executionContext, agentContext);
+    }
+
+    const webResearchEvidence = await this.webSearchAgent.buildResearchContext(company);
+
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: `${ONE_WARE_PROMPT_CONTEXT}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Use any supplied web evidence as your factual grounding. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
+        },
+        {
+          role: "user",
+          content: [
+            `Company: ${company.name}`,
+            company.domain ? `Known website: ${company.domain}` : undefined,
+            company.country ? `Country: ${company.country}` : undefined,
+            `Known description: ${company.shortDescription}`,
+            `Category: ${company.category}`,
+            executionContext,
+            `Source filter: ${company.sourceFilter}`,
+            `Relevance score: ${company.relevanceScore}`,
+            `Base template key: ${template.key}`,
+            `Base template subject: ${template.subject}`,
+            `Base template email body:\n${template.emailBody}`,
+            `Base template LinkedIn message:\n${template.linkedInMessage}`,
+            `Base template phone script:\n${template.phoneScript}`,
+            webResearchEvidence?.context,
+            learning ? this.buildLearningContext(learning) : undefined
+          ].join("\n\n")
+        }
+      ]);
+
+      const parsed = this.parseJsonObject<Omit<ResearchBrief, "companyName">>(content);
       return {
         companyName: company.name,
         appliedAgentContext: agentContext,
-        citations: company.domain ? [company.domain] : [],
-        overview: `${company.name} appears relevant based on its positioning around ${company.shortDescription.toLowerCase()}.`,
-        qualificationSummary: "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
-        qualifyingSignals: [
-          `Category fit: ${company.category}`,
-          `Source filter: ${company.sourceFilter}`,
-          `Target region bias: ${TARGET_REGIONS[0]} first, then wider EU/US/JP/KR.`,
-          `Execution context applied: ${executionContext.split("\n")[0]}`
-        ],
-        riskFlags: ["Needs manual verification against direct competing own Vision AI software before outreach."],
-        recommendedTemplateKey: template.key,
-        personalizationRule: "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
-        linkedInAngle: "Use a short question around delivery bottlenecks, not a generic compliment.",
-        emailAngle: "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
-        phoneAngle: "Lead with the operational bottleneck, not platform features.",
-        linkedInMessage: template.linkedInMessage,
-        emailSubject: template.subject,
-        emailBody: template.emailBody,
-        phoneScript: template.phoneScript,
-        eventIdea: "Check for presence at SPS, Automatica, Vision, or regional automation events."
+        citations: webResearchEvidence?.citations?.length
+          ? webResearchEvidence.citations
+          : company.domain
+            ? [company.domain]
+            : [],
+        ...parsed
       };
+    } catch {
+      return this.buildFallbackResearchBrief(company, template, executionContext, agentContext, webResearchEvidence?.citations);
     }
-
-    const content = await this.runChat([
-      {
-        role: "system",
-        content: `${ONE_WARE_PROMPT_CONTEXT}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
-      },
-      {
-        role: "user",
-        content: [
-          `Company: ${company.name}`,
-          `Known description: ${company.shortDescription}`,
-          `Category: ${company.category}`,
-          executionContext,
-          `Source filter: ${company.sourceFilter}`,
-          `Relevance score: ${company.relevanceScore}`,
-          `Base template key: ${template.key}`,
-          `Base template subject: ${template.subject}`,
-          `Base template email body:\n${template.emailBody}`,
-          `Base template LinkedIn message:\n${template.linkedInMessage}`,
-          `Base template phone script:\n${template.phoneScript}`,
-          learning ? this.buildLearningContext(learning) : undefined
-        ].join("\n\n")
-      }
-    ]);
-
-    const parsed = this.parseJsonObject<Omit<ResearchBrief, "companyName">>(content);
-    return {
-      companyName: company.name,
-      appliedAgentContext: agentContext,
-      citations: company.domain ? [company.domain] : [],
-      ...parsed
-    };
   }
 
   async generateSuggestedFilters(
     market: string | undefined,
     customGoal: string | undefined,
     agentContext: string | undefined,
-    baseFilters: import("../types").ApolloOrganizationFilter[],
-    dryRun: boolean
-  ): Promise<import("../types").ApolloOrganizationFilter[]> {
-    return this.foundryAgentsClient.generateSuggestedFilters(market, customGoal, agentContext, baseFilters, dryRun);
+    baseFilters: ApolloOrganizationFilter[],
+    dryRun: boolean,
+    learning?: LeadLearningData
+  ): Promise<ApolloOrganizationFilter[]> {
+    const foundryFilters = await this.foundryAgentsClient.generateSuggestedFilters(
+      market,
+      customGoal,
+      agentContext,
+      baseFilters,
+      dryRun
+    );
+
+    if (foundryFilters !== baseFilters) {
+      return foundryFilters;
+    }
+
+    if (dryRun || !readiness.azureConfigured) {
+      return baseFilters;
+    }
+
+    try {
+      const content = await this.runChat(
+        [
+          {
+            role: "system",
+            content: [
+              ONE_WARE_PROMPT_CONTEXT,
+              "You are the Apollo Search Strategy Agent.",
+              "Return strict JSON with {\"filters\":[...]}",
+              "Produce 4 to 6 practical Apollo company filters for ONE WARE.",
+              "Optimize for at least 50% relevant firms in the first 15-company sample.",
+              "Relevant means Europe-first and a plausible ONE WARE target category.",
+              "Prioritize Germany first, then strong European industrial regions.",
+              "Avoid VCs, generic consultancies, recruiting, banks, China, Saudi Arabia, and direct AI platform competitors.",
+              "Keep industries, keywords, employee ranges, and locations realistic for Apollo."
+            ].join(" ")
+          },
+          {
+            role: "user",
+            content: [
+              market ? `Market focus: ${market}` : undefined,
+              customGoal ? `Custom goal: ${customGoal}` : undefined,
+              agentContext ? `Operator context: ${agentContext}` : undefined,
+              `Base filters JSON:\n${JSON.stringify(baseFilters)}`,
+              this.buildLearningContextForSearchStrategy(learning)
+            ]
+              .filter(Boolean)
+              .join("\n\n")
+          }
+        ],
+        { maxTokens: 900 }
+      );
+
+      const parsed = this.parseJsonObject<{ filters?: ApolloOrganizationFilter[] }>(content);
+      const filters = (parsed.filters ?? [])
+        .map((filter) => this.normalizeApolloFilter(filter))
+        .filter((filter): filter is ApolloOrganizationFilter => Boolean(filter));
+
+      return filters.length > 0 ? filters : baseFilters;
+    } catch {
+      return baseFilters;
+    }
+  }
+
+  async reviseSearchFilter(
+    failedFilter: ApolloOrganizationFilter,
+    evaluation: FilterEvaluation,
+    dryRun: boolean,
+    learning?: LeadLearningData,
+    market?: string,
+    customGoal?: string,
+    agentContext?: string
+  ): Promise<ApolloOrganizationFilter | null> {
+    if (dryRun || !readiness.azureConfigured) {
+      return null;
+    }
+
+    try {
+      const content = await this.runChat(
+        [
+          {
+            role: "system",
+            content: [
+              ONE_WARE_PROMPT_CONTEXT,
+              "You revise one failing Apollo company search filter.",
+              "Return strict JSON with {\"filter\":{...}}.",
+              "The revised filter must aim for at least 50% relevant firms in the next 15-company probe.",
+              "Tighten geography and commercial fit before broadening.",
+              "Prefer service-led integrators and industrial accounts in Europe over broad AI vendors or generic consultancies."
+            ].join(" ")
+          },
+          {
+            role: "user",
+            content: [
+              market ? `Market focus: ${market}` : undefined,
+              customGoal ? `Custom goal: ${customGoal}` : undefined,
+              agentContext ? `Operator context: ${agentContext}` : undefined,
+              `Failing filter JSON:\n${JSON.stringify(failedFilter)}`,
+              `Evaluation JSON:\n${JSON.stringify(evaluation)}`,
+              this.buildLearningContextForSearchStrategy(learning)
+            ]
+              .filter(Boolean)
+              .join("\n\n")
+          }
+        ],
+        { maxTokens: 500 }
+      );
+
+      const parsed = this.parseJsonObject<{ filter?: ApolloOrganizationFilter }>(content);
+      const normalizedFilter = this.normalizeApolloFilter(parsed.filter);
+
+      if (!normalizedFilter) {
+        return null;
+      }
+
+      return {
+        ...normalizedFilter,
+        name:
+          normalizedFilter.name === failedFilter.name
+            ? `${normalizedFilter.name} Retry`
+            : normalizedFilter.name
+      };
+    } catch {
+      return null;
+    }
   }
 
   private categorizeDryRun(description: string): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> {
     const lowered = description.toLowerCase();
+    const nonIndustrialPlatformSignals = [
+      "enterprise software",
+      "erp",
+      "crm",
+      "human resources",
+      "hr software",
+      "logistics",
+      "parcel",
+      "supply chain",
+      "e-commerce",
+      "marketing platform",
+      "cloud platform",
+      "business software"
+    ];
+    const industrialSignals = [
+      "industrial",
+      "automation",
+      "inspection",
+      "quality control",
+      "machine",
+      "robotics",
+      "camera",
+      "imaging",
+      "embedded",
+      "factory"
+    ];
+
+    const nonIndustrialHits = nonIndustrialPlatformSignals.filter((signal) => lowered.includes(signal)).length;
+    const industrialHits = industrialSignals.filter((signal) => lowered.includes(signal)).length;
+
+    if (nonIndustrialHits >= 1 && industrialHits === 0) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 6,
+        rationale: "Description points to a generic enterprise platform or logistics business rather than an industrial delivery target."
+      };
+    }
 
     if (
       lowered.includes("venture capital") ||
@@ -227,6 +389,50 @@ export class AzureOpenAIClient {
     learning?: LeadLearningData
   ): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null {
     const lowered = `${name} ${description}`.toLowerCase();
+    const nonIndustrialPlatformSignals = [
+      "enterprise software",
+      "erp",
+      "crm",
+      "human resources",
+      "hr software",
+      "logistics",
+      "parcel",
+      "supply chain",
+      "e-commerce",
+      "marketing platform",
+      "cloud platform",
+      "business software"
+    ];
+    const industrialSignals = [
+      "industrial",
+      "automation",
+      "inspection",
+      "quality control",
+      "machine",
+      "robotics",
+      "camera",
+      "imaging",
+      "embedded",
+      "factory"
+    ];
+    const hardwareVendorSignals = [
+      "industrial camera",
+      "machine vision",
+      "camera manufacturer",
+      "imaging systems",
+      "camera systems",
+      "optics",
+      "embedded vision",
+      "image sensor"
+    ];
+    const serviceSignals = [
+      "system integrator",
+      "software development",
+      "consultancy",
+      "services",
+      "project delivery",
+      "integration services"
+    ];
     const recruitingSignals = [
       "recruiting software",
       "applicant tracking",
@@ -245,6 +451,34 @@ export class AzureOpenAIClient {
         category: "irrelevant",
         relevanceScore: 4,
         rationale: "Company description strongly matches recruiting, hiring, or applicant-tracking software rather than ONE WARE's ICP."
+      };
+    }
+
+    const nonIndustrialHits = nonIndustrialPlatformSignals.filter((signal) => lowered.includes(signal)).length;
+    const industrialHits = industrialSignals.filter((signal) => lowered.includes(signal)).length;
+    if (nonIndustrialHits >= 1 && industrialHits === 0) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 5,
+        rationale: "Company description looks like a generic enterprise platform or logistics business rather than an industrial delivery fit."
+      };
+    }
+
+    const hardwareHits = hardwareVendorSignals.filter((signal) => lowered.includes(signal)).length;
+    const mentionsImagingOrCamera = lowered.includes("imaging") || lowered.includes("camera");
+    const mentionsVendorOrHardware =
+      lowered.includes("vendor") ||
+      lowered.includes("hardware") ||
+      lowered.includes("oem") ||
+      lowered.includes("manufacturer") ||
+      lowered.includes("optics");
+    const serviceHits = serviceSignals.filter((signal) => lowered.includes(signal)).length;
+
+    if ((hardwareHits >= 2 || (mentionsImagingOrCamera && mentionsVendorOrHardware)) && serviceHits === 0) {
+      return {
+        category: "industrial_camera_vendor_without_ai_software",
+        relevanceScore: 90,
+        rationale: "Company description strongly matches an industrial imaging or camera vendor without a clear delivery-led services profile."
       };
     }
 
@@ -341,6 +575,66 @@ export class AzureOpenAIClient {
     }
   }
 
+  private buildLearningContextForSearchStrategy(learning?: LeadLearningData): string | undefined {
+    if (!learning) {
+      return undefined;
+    }
+
+    const topFilters = Object.entries(learning.filterPerformance)
+      .sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio)
+      .slice(0, MAX_FILTER_STRATEGY_HISTORY)
+      .map(([name, stats]) => `${name}: avg ${(stats.averageRelevanceRatio * 100).toFixed(0)}%, runs ${stats.runs}, early stops ${stats.earlyStopCount}`);
+
+    const recentHistory = learning.searchHistory
+      .slice(0, MAX_FILTER_STRATEGY_HISTORY)
+      .map(
+        (entry) =>
+          `${entry.filterName} | ${entry.batchType} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}% | ${entry.recommendation}`
+      );
+
+    const sections = [
+      topFilters.length > 0 ? ["Known filter performance:", ...topFilters].join("\n") : undefined,
+      recentHistory.length > 0 ? ["Recent search history:", ...recentHistory].join("\n") : undefined
+    ].filter(Boolean);
+
+    return sections.length > 0 ? sections.join("\n\n") : undefined;
+  }
+
+  private normalizeApolloFilter(filter: ApolloOrganizationFilter | undefined): ApolloOrganizationFilter | null {
+    if (!filter) {
+      return null;
+    }
+
+    const industries = this.normalizeStringList(filter.industries, 6);
+    const keywords = this.normalizeStringList(filter.keywords, 8);
+    const locations = this.normalizeStringList(filter.locations, 6);
+    const employeeRanges = this.normalizeStringList(filter.employeeRanges, 6);
+
+    if (!filter.name?.trim() || !filter.persona?.trim() || industries.length === 0 || keywords.length === 0 || locations.length === 0) {
+      return null;
+    }
+
+    return {
+      name: filter.name.trim(),
+      persona: filter.persona.trim(),
+      industries,
+      keywords,
+      locations,
+      employeeRanges: employeeRanges.length > 0 ? employeeRanges : ["11,50", "51,200", "201,500"],
+      notes: filter.notes?.trim() || "Adaptive Azure search strategy"
+    };
+  }
+
+  private normalizeStringList(values: string[] | undefined, maxItems: number): string[] {
+    return Array.from(
+      new Set(
+        (values ?? [])
+          .map((value) => value?.trim())
+          .filter((value): value is string => Boolean(value))
+      )
+    ).slice(0, maxItems);
+  }
+
   private normalizeCategory(category: string): LeadCategory {
     const normalizedCategory = category.trim().toLowerCase();
 
@@ -360,6 +654,39 @@ export class AzureOpenAIClient {
     }
 
     return "other";
+  }
+
+  private buildFallbackResearchBrief(
+    company: PreCategorizedCompany,
+    template: ReturnType<typeof getTemplateForCategory>,
+    executionContext: string,
+    agentContext?: string,
+    citations?: string[]
+  ): ResearchBrief {
+    return {
+      companyName: company.name,
+      appliedAgentContext: agentContext,
+      citations: citations?.length ? citations : company.domain ? [company.domain] : [],
+      overview: `${company.name} appears relevant based on its positioning around ${company.shortDescription.toLowerCase()}.`,
+      qualificationSummary: "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
+      qualifyingSignals: [
+        `Category fit: ${company.category}`,
+        `Source filter: ${company.sourceFilter}`,
+        `Target region bias: ${TARGET_REGIONS[0]} first, then wider EU/US/JP/KR.`,
+        `Execution context applied: ${executionContext.split("\n")[0]}`
+      ],
+      riskFlags: ["Needs manual verification against direct competing own Vision AI software before outreach."],
+      recommendedTemplateKey: template.key,
+      personalizationRule: "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
+      linkedInAngle: "Use a short question around delivery bottlenecks, not a generic compliment.",
+      emailAngle: "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
+      phoneAngle: "Lead with the operational bottleneck, not platform features.",
+      linkedInMessage: template.linkedInMessage,
+      emailSubject: template.subject,
+      emailBody: template.emailBody,
+      phoneScript: template.phoneScript,
+      eventIdea: "Check for presence at SPS, Automatica, Vision, or regional automation events."
+    };
   }
 
   private delay(durationMs: number): Promise<void> {

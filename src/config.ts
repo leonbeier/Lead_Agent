@@ -28,6 +28,8 @@ const envSchema = z.object({
   FOUNDRY_USE_AGENT_FILTERS: booleanFlag().default("false"),
   FOUNDRY_USE_AGENT_QUALIFICATION: booleanFlag().default("false"),
   FOUNDRY_USE_AGENT_RESEARCH: booleanFlag().default("false"),
+  WEB_SEARCH_AGENT_ENABLED: booleanFlag().default("true"),
+  WEB_SEARCH_AGENT_MAX_RESULTS: z.coerce.number().int().positive().default(5),
   AZURE_RESEARCH_ENABLED: z
     .string()
     .transform((value) => value.toLowerCase() === "true")
@@ -44,5 +46,6 @@ export const readiness = {
   azureConfigured: Boolean(env.AZURE_OPENAI_API_KEY && env.AZURE_OPENAI_ENDPOINT),
   researchConfigured: Boolean(env.AZURE_RESEARCH_ENABLED && env.AZURE_RESEARCH_ENDPOINT),
   foundryConfigured: Boolean(env.FOUNDRY_PROJECT_ENDPOINT),
-  foundryBingConfigured: Boolean(env.FOUNDRY_PROJECT_ENDPOINT && env.FOUNDRY_BING_CONNECTION_NAME)
+  foundryBingConfigured: Boolean(env.FOUNDRY_PROJECT_ENDPOINT && env.FOUNDRY_BING_CONNECTION_NAME),
+  webSearchConfigured: Boolean(env.WEB_SEARCH_AGENT_ENABLED)
 };

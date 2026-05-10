@@ -412,6 +412,10 @@
             <h3>Letzte Suchschritte</h3>
             <div class="history-list" id="search-history-list"></div>
           </div>
+          <div>
+            <h3>Gelernte Filter</h3>
+            <div class="history-list" id="filter-performance-list"></div>
+          </div>
         </div>
       </section>
 
@@ -438,6 +442,8 @@
       const contextList = document.getElementById("context-list");
       const latestRunList = document.getElementById("latest-run-list");
       const searchHistoryList = document.getElementById("search-history-list");
+      const filterPerformanceList = document.getElementById("filter-performance-list");
+      let bootstrapData = null;
 
       async function requestJson(url, options = {}) {
         const response = await fetch(url, {
@@ -527,6 +533,8 @@
               <strong>${contact.companyName}</strong>
               <span class="mini-meta">${contact.category} · Score ${contact.relevanceScore}</span>
               <span class="mini-meta">${contact.sourceFilter}</span>
+              ${contact.publicContactEmails?.length ? `<span class="mini-meta">E-Mail: ${contact.publicContactEmails.slice(0, 2).join(", ")}</span>` : ""}
+              ${contact.publicContactPhones?.length ? `<span class="mini-meta">Telefon: ${contact.publicContactPhones.slice(0, 2).join(", ")}</span>` : ""}
             </div>
           `)
         ].join("");
@@ -544,6 +552,23 @@
             <span class="mini-meta">${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page}</span>
             <span class="mini-meta">Relevant: ${entry.relevantCount}/${entry.returnedCount} (${Math.round(entry.relevanceRatio * 100)}%)</span>
             <span class="mini-meta">${entry.recommendation}</span>
+          </div>
+        `).join("");
+      }
+
+      function renderFilterPerformance(filterPerformance) {
+        const entries = Object.entries(filterPerformance || {}).sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio);
+
+        if (entries.length === 0) {
+          filterPerformanceList.innerHTML = '<div class="history-item"><strong>Noch keine Lernhistorie</strong><span class="mini-meta">Nach den ersten echten Suchlaeufen erscheinen hier die staerksten und schwaechsten Filter.</span></div>';
+          return;
+        }
+
+        filterPerformanceList.innerHTML = entries.slice(0, 8).map(([name, stats]) => `
+          <div class="history-item">
+            <strong>${name}</strong>
+            <span class="mini-meta">Durchschnitt relevant: ${Math.round(stats.averageRelevanceRatio * 100)}%</span>
+            <span class="mini-meta">Laeufe: ${stats.runs} · Early stops: ${stats.earlyStopCount}</span>
           </div>
         `).join("");
       }
@@ -617,6 +642,7 @@
             throw new Error("Missing lead agent shared key. Open this UI through HubSpot or append ?key=... for local validation.");
           }
           const data = await requestJson("/api/control-plane/bootstrap");
+          bootstrapData = data;
           fillSettingsForm(data.settings);
           renderSummary(data.settings, data.templates, data.latestLeadRun);
           renderSuggestedControls(data.suggestedControls);
@@ -624,6 +650,7 @@
           renderContexts(data.categoryContexts);
           renderLatestRun(data.latestLeadRun);
           renderSearchHistory(data.learning?.searchHistory || []);
+          renderFilterPerformance(data.learning?.filterPerformance || {});
           setStatus(settingsStatus, "Settings geladen");
           setStatus(templatesStatus, "Templates geladen");
         } catch (error) {
@@ -640,6 +667,9 @@
             method: "PUT",
             body: JSON.stringify(collectSettings())
           });
+          if (bootstrapData) {
+            bootstrapData.settings = result.settings;
+          }
           fillSettingsForm(result.settings);
           setStatus(settingsStatus, "Settings gespeichert");
           resultOutput.textContent = JSON.stringify(result, null, 2);
@@ -649,6 +679,22 @@
         }
       }
 
+      async function refreshRunSurfaces() {
+        if (!bootstrapData) {
+          return;
+        }
+
+        const latestRunPayload = await requestJson("/api/control/latest-lead-run");
+        const learningPayload = await requestJson("/api/control/learning");
+        const latestLeadRun = latestRunPayload.latestLeadRun;
+        bootstrapData.latestLeadRun = latestLeadRun;
+        bootstrapData.learning = learningPayload.learning;
+        renderSummary(collectSettings(), bootstrapData.templates, latestLeadRun);
+        renderLatestRun(latestLeadRun);
+        renderSearchHistory(latestLeadRun?.searchHistory || []);
+        renderFilterPerformance(learningPayload.learning?.filterPerformance || {});
+      }
+
       async function triggerRun(endpoint) {
         try {
           resultOutput.textContent = "Lauf wird gestartet...";
@@ -656,6 +702,7 @@
             method: "POST",
             body: JSON.stringify(collectSettings())
           });
+          await refreshRunSurfaces();
           resultOutput.textContent = JSON.stringify(result, null, 2);
         } catch (error) {
           resultOutput.textContent = String(error);

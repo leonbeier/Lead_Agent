@@ -51,6 +51,16 @@ export interface ResearchBrief {
   eventIdea?: string;
 }
 
+export interface PublicContactCandidate {
+  email?: string;
+  phone?: string;
+  sourceUrl: string;
+  label: string;
+  firstName?: string;
+  lastName?: string;
+  jobTitle?: string;
+}
+
 export interface LeadAgentSettings {
   targetLeadCount: number;
   market: string;
@@ -117,6 +127,9 @@ export interface GeneratedLeadRecord {
   emailBody?: string;
   phoneScript?: string;
   riskFlags?: string[];
+  publicContactEmails?: string[];
+  publicContactPhones?: string[];
+  publicContactSources?: string[];
 }
 
 export interface LatestLeadRunRecord {
@@ -163,6 +176,9 @@ export interface LeadJobResult {
     mode: "dry-run" | "live";
     candidateCount: number;
     syncedCount: number;
+    companySyncedCount: number;
+    contactSyncedCount: number;
+    errors?: string[];
   };
   efficiency: {
     filtersStoppedEarly: number;
