@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.env
+hubspot-ui/src/hsprofile.*.json
+!hubspot-ui/src/hsprofile.example.json

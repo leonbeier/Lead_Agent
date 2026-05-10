@@ -1,0 +1,31 @@
+{
+  "uid": "one_ware_lead_agent_ui",
+  "type": "app",
+  "config": {
+    "name": "ONE WARE Lead Agent UI",
+    "description": "HubSpot app card and settings entrypoint for triggering lead generation and editing ONE WARE outreach defaults.",
+    "distribution": "private",
+    "auth": {
+      "type": "oauth",
+      "redirectUrls": [
+        "${LEAD_AGENT_API_BASE_URL}/oauth-callback"
+      ],
+      "requiredScopes": [
+        "oauth",
+        "crm.objects.companies.read",
+        "crm.objects.contacts.read"
+      ],
+      "optionalScopes": [],
+      "conditionallyRequiredScopes": []
+    },
+    "permittedUrls": {
+      "fetch": [
+        "${LEAD_AGENT_API_BASE_URL}"
+      ],
+      "iframe": [
+        "${LEAD_AGENT_API_BASE_URL}"
+      ],
+      "img": []
+    }
+  }
+}

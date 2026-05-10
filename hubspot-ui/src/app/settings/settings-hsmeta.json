@@ -1,0 +1,7 @@
+{
+  "uid": "one_ware_lead_agent_settings",
+  "type": "settings",
+  "config": {
+    "entrypoint": "/app/settings/LeadAgentSettings.tsx"
+  }
+}

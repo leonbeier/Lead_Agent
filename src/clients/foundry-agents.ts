@@ -1,0 +1,321 @@
+import { AIProjectClient } from "@azure/ai-projects";
+import { DefaultAzureCredential } from "@azure/identity";
+import { env, readiness } from "../config";
+import { ApolloOrganizationFilter, LeadCategory, PreCategorizedCompany, ResearchBrief } from "../types";
+import {
+  ONE_WARE_PROMPT_CONTEXT,
+  TARGET_REGIONS,
+  buildExecutionContextBlock,
+  getTemplateForCategory
+} from "../prompting/one-ware-playbook";
+
+type AgentKind = "filters" | "qualification" | "research";
+
+interface CachedAgentReference {
+  name: string;
+  version: string;
+}
+
+interface AgentTextResponse {
+  output_text?: string;
+  output?: Array<{
+    type?: string;
+    content?: Array<{
+      type?: string;
+      text?: string;
+      annotations?: Array<{
+        type?: string;
+        url?: string;
+      }>;
+    }>;
+  }>;
+}
+
+export class FoundryAgentsClient {
+  private projectClient?: AIProjectClient;
+
+  private openAIClient?: {
+    responses: {
+      create: (body: Record<string, unknown>, options?: Record<string, unknown>) => Promise<AgentTextResponse>;
+    };
+  };
+
+  private readonly agentCache = new Map<AgentKind, Promise<CachedAgentReference>>();
+
+  async generateSuggestedFilters(
+    market: string | undefined,
+    customGoal: string | undefined,
+    agentContext: string | undefined,
+    baseFilters: ApolloOrganizationFilter[],
+    dryRun: boolean
+  ): Promise<ApolloOrganizationFilter[]> {
+    if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_FILTERS) {
+      return baseFilters;
+    }
+
+    try {
+      const content = await this.runAgent("filters", [
+        `Market focus: ${market ?? "Germany"}`,
+        customGoal ? `Custom goal: ${customGoal}` : "Custom goal: Keep focus on the highest-conviction ICP.",
+        agentContext ? `Operator context: ${agentContext}` : undefined,
+        `Existing Apollo filters JSON:\n${JSON.stringify(baseFilters)}`
+      ].filter(Boolean).join("\n\n"));
+
+      const parsed = JSON.parse(content) as { filters?: ApolloOrganizationFilter[] };
+      const filters = (parsed.filters ?? []).filter((filter) => this.isValidApolloFilter(filter));
+
+      return filters.length > 0 ? filters : baseFilters;
+    } catch {
+      return baseFilters;
+    }
+  }
+
+  async categorizeCompany(
+    name: string,
+    description: string,
+    agentContext: string | undefined,
+    dryRun: boolean
+  ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null> {
+    if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_QUALIFICATION) {
+      return null;
+    }
+
+    try {
+      const content = await this.runAgent(
+        "qualification",
+        [
+          `Company: ${name}`,
+          `Description: ${description}`,
+          `Target regions: ${TARGET_REGIONS.join(", ")}`,
+          agentContext ? `Operator context: ${agentContext}` : undefined
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+
+      const parsed = JSON.parse(content) as {
+        category?: LeadCategory;
+        relevanceScore?: number;
+        rationale?: string;
+      };
+
+      if (!parsed.category || typeof parsed.relevanceScore !== "number" || !parsed.rationale) {
+        return null;
+      }
+
+      return {
+        category: parsed.category,
+        relevanceScore: parsed.relevanceScore,
+        rationale: parsed.rationale
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async buildResearchBrief(
+    company: PreCategorizedCompany,
+    agentContext: string | undefined,
+    dryRun: boolean
+  ): Promise<ResearchBrief | null> {
+    if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_RESEARCH) {
+      return null;
+    }
+
+    const template = getTemplateForCategory(company.category);
+
+    try {
+      const response = await this.runAgentWithMetadata(
+        "research",
+        [
+          `Company: ${company.name}`,
+          company.domain ? `Website: ${company.domain}` : "Website: unknown",
+          company.country ? `Country: ${company.country}` : "Country: unknown",
+          `Known description: ${company.shortDescription}`,
+          `Category: ${company.category}`,
+          buildExecutionContextBlock(company.category, agentContext),
+          `Source filter: ${company.sourceFilter}`,
+          `Relevance score: ${company.relevanceScore}`,
+          `Template key: ${template.key}`,
+          `Template subject: ${template.subject}`,
+          `Template email body:\n${template.emailBody}`,
+          `Template LinkedIn message:\n${template.linkedInMessage}`,
+          `Template phone script:\n${template.phoneScript}`
+        ].join("\n\n")
+      );
+
+      const parsed = JSON.parse(response.text) as Omit<ResearchBrief, "companyName">;
+
+      return {
+        companyName: company.name,
+        appliedAgentContext: agentContext,
+        citations: response.citations,
+        ...parsed
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async runAgent(kind: AgentKind, input: string): Promise<string> {
+    const response = await this.runAgentWithMetadata(kind, input);
+
+    if (!response.text) {
+      throw new Error(`Foundry agent '${kind}' returned no text.`);
+    }
+
+    return response.text;
+  }
+
+  private async runAgentWithMetadata(
+    kind: AgentKind,
+    input: string
+  ): Promise<{ text: string; citations: string[] }> {
+    const agent = await this.ensureAgent(kind);
+    const response = await this.openAI.responses.create(
+      {
+        input
+      },
+      {
+        body: {
+          agent: { name: agent.name, type: "agent_reference" },
+          tool_choice: kind === "research" ? "auto" : undefined
+        }
+      }
+    );
+
+    const citations = Array.from(
+      new Set(
+        (response.output ?? [])
+          .flatMap((item) => item.content ?? [])
+          .flatMap((content) => content.annotations ?? [])
+          .filter((annotation) => annotation.type === "url_citation" && annotation.url)
+          .map((annotation) => annotation.url as string)
+      )
+    );
+
+    return {
+      text: response.output_text ?? "",
+      citations
+    };
+  }
+
+  private async ensureAgent(kind: AgentKind): Promise<CachedAgentReference> {
+    const cached = this.agentCache.get(kind);
+    if (cached) {
+      return cached;
+    }
+
+    const creation = this.createAgent(kind);
+    this.agentCache.set(kind, creation);
+    return creation;
+  }
+
+  private async createAgent(kind: AgentKind): Promise<CachedAgentReference> {
+    const agentName = `lead-agent-${kind}`;
+    const definition = await this.buildAgentDefinition(kind);
+    const agent = await this.project.agents.createVersion(agentName, definition as any);
+
+    return {
+      name: agent.name,
+      version: agent.version
+    };
+  }
+
+  private async buildAgentDefinition(kind: AgentKind): Promise<Record<string, unknown>> {
+    switch (kind) {
+      case "filters":
+        return {
+          kind: "prompt",
+          model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Apollo Filter Strategy Agent. Generate 4 to 6 Apollo company search filters focused on Germany first. Prioritize service-led software integrators, industrial automation firms, embedded/robotics players, and industrial end-customers with clear QC or process automation needs. Focus strongest on software integrators, AI-capable service providers, industrial customers with own engineering, and machine builders with plausible need. Avoid VCs, banks, broad consultancies, China, Saudi Arabia, and competing AI platform vendors. Return strict JSON: {"filters":[{"name":"...","persona":"...","industries":[...],"keywords":[...],"locations":[...],"employeeRanges":[...],"notes":"..."}]}. Keep industries and keywords practical for Apollo.`
+        };
+      case "qualification":
+        return {
+          kind: "prompt",
+          model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Classify companies into exactly one category: software_integrator, ai_software_integrator, machine_builder_with_vision_ai_need, industrial_camera_vendor_without_ai_software, irrelevant, other. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
+        };
+      case "research": {
+        const tools = await this.buildResearchTools();
+        return {
+          kind: "prompt",
+          model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Deep Research Agent. Use web grounding to verify the company, identify its business model, target customers, recent signals, likely Vision-AI or process-automation relevance, and clear outreach hooks. Always adapt your reasoning to the supplied category-specific execution context. Use the provided segment template as the base. Personalize only if there is a clear factual hook. Do not rewrite the outreach from scratch. Make the output steerable by preserving the template direction while sharpening the most relevant business pain. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.` ,
+          tools
+        };
+      }
+      default:
+        throw new Error(`Unsupported agent kind: ${kind satisfies never}`);
+    }
+  }
+
+  private async buildResearchTools(): Promise<Array<Record<string, unknown>>> {
+    if (env.FOUNDRY_BING_CONNECTION_NAME) {
+      const connection = await this.project.connections.get(env.FOUNDRY_BING_CONNECTION_NAME);
+
+      return [
+        {
+          type: "bing_grounding",
+          bing_grounding: {
+            search_configurations: [
+              {
+                project_connection_id: connection.id
+              }
+            ]
+          }
+        }
+      ];
+    }
+
+    return [
+      {
+        type: "web_search",
+        user_location: {
+          type: "approximate",
+          country: "DE",
+          city: "Osnabrueck",
+          region: "Lower Saxony"
+        },
+        search_context_size: "high"
+      }
+    ];
+  }
+
+  private isValidApolloFilter(filter: ApolloOrganizationFilter | undefined): filter is ApolloOrganizationFilter {
+    return Boolean(
+      filter &&
+        filter.name &&
+        filter.persona &&
+        Array.isArray(filter.industries) &&
+        Array.isArray(filter.keywords) &&
+        Array.isArray(filter.locations) &&
+        Array.isArray(filter.employeeRanges) &&
+        typeof filter.notes === "string"
+    );
+  }
+
+  private get project(): AIProjectClient {
+    if (!this.projectClient) {
+      this.projectClient = new AIProjectClient(env.FOUNDRY_PROJECT_ENDPOINT as string, new DefaultAzureCredential());
+    }
+
+    return this.projectClient;
+  }
+
+  private get openAI(): {
+    responses: {
+      create: (body: Record<string, unknown>, options?: Record<string, unknown>) => Promise<AgentTextResponse>;
+    };
+  } {
+    if (!this.openAIClient) {
+      this.openAIClient = this.project.getOpenAIClient() as unknown as {
+        responses: {
+          create: (body: Record<string, unknown>, options?: Record<string, unknown>) => Promise<AgentTextResponse>;
+        };
+      };
+    }
+
+    return this.openAIClient;
+  }
+}

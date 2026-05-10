@@ -1,0 +1,11 @@
+{
+  "targetLeadCount": 50,
+  "market": "DE",
+  "customGoal": "Find ONE WARE targets with clear Vision AI delivery upside.",
+  "agentContext": "",
+  "runDeepResearch": true,
+  "dryRun": true,
+  "earlyStopEnabled": true,
+  "earlyStopReviewCount": 15,
+  "earlyStopThreshold": 0.5
+}

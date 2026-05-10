@@ -1,0 +1,14 @@
+{
+  "uid": "one_ware_lead_agent_card",
+  "type": "card",
+  "config": {
+    "name": "ONE WARE Lead Agent",
+    "description": "Open the lead generation console from company or contact records.",
+    "location": "crm.record.tab",
+    "entrypoint": "/app/cards/LeadAgentCard.tsx",
+    "objectTypes": [
+      "companies",
+      "contacts"
+    ]
+  }
+}

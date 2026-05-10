@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ONE WARE Lead Console</title>
+    <style>
+      :root {
+        --ink: #162029;
+        --muted: #5a6875;
+        --line: rgba(22, 32, 41, 0.14);
+        --surface: rgba(255, 255, 255, 0.9);
+        --surface-strong: #ffffff;
+        --accent: #0f7a6c;
+        --accent-strong: #0a5d53;
+        --accent-soft: rgba(15, 122, 108, 0.12);
+        --warn: #b25d00;
+        --shadow: 0 24px 70px rgba(18, 33, 48, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", "Aptos", "Trebuchet MS", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(15, 122, 108, 0.16), transparent 28%),
+          radial-gradient(circle at top right, rgba(218, 167, 32, 0.15), transparent 30%),
+          linear-gradient(180deg, #f7f4ea 0%, #eef4f2 42%, #edf2f6 100%);
+      }
+
+      main {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 28px auto;
+        display: grid;
+        gap: 18px;
+      }
+
+      .hero,
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+
+      .hero {
+        padding: 26px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .eyebrow {
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-size: 12px;
+        color: var(--accent-strong);
+        font-weight: 700;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-family: "Bahnschrift", "Franklin Gothic Medium", sans-serif;
+        letter-spacing: 0.01em;
+      }
+
+      h1 {
+        font-size: clamp(28px, 4.4vw, 44px);
+        line-height: 1.03;
+        max-width: 760px;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .summary-grid,
+      .content-grid,
+      .settings-grid,
+      .template-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .context-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .content-grid {
+        grid-template-columns: 1.15fr 0.85fr;
+        align-items: start;
+      }
+
+      .panel {
+        padding: 22px;
+      }
+
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .stat {
+        padding: 16px;
+        background: var(--surface-strong);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 24px;
+        margin-top: 8px;
+      }
+
+      .settings-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid rgba(22, 32, 41, 0.18);
+        border-radius: 14px;
+        background: #fff;
+        color: var(--ink);
+        padding: 12px 14px;
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 130px;
+        resize: vertical;
+      }
+
+      .checkbox-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding-top: 28px;
+      }
+
+      .checkbox-row input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        color: white;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+        box-shadow: 0 10px 24px rgba(15, 122, 108, 0.24);
+      }
+
+      button.secondary {
+        color: var(--ink);
+        background: white;
+        border: 1px solid var(--line);
+        box-shadow: none;
+      }
+
+      .template-grid {
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+
+      .template-card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.82);
+        padding: 18px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .context-card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.82);
+        padding: 18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .history-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .history-item {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.82);
+        padding: 14px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .history-item strong {
+        font-size: 14px;
+      }
+
+      .mini-meta {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .template-meta {
+        display: grid;
+        gap: 6px;
+      }
+
+      .hint-list {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--muted);
+      }
+
+      .hint-list li + li {
+        margin-top: 8px;
+      }
+
+      pre {
+        margin: 0;
+        padding: 14px;
+        border-radius: 16px;
+        background: #101a22;
+        color: #ecf6fb;
+        overflow: auto;
+        font-family: "Cascadia Code", Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .status {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font-weight: 700;
+      }
+
+      .status.warn {
+        background: rgba(178, 93, 0, 0.12);
+        color: var(--warn);
+      }
+
+      @media (max-width: 960px) {
+        .content-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .history-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <span class="eyebrow">ONE WARE x HubSpot</span>
+        <h1>Lead-Generierung starten, Templates pflegen und die Pipeline direkt aus HubSpot steuern.</h1>
+        <p>
+          Diese Konsole haengt direkt an den Lead-Agent-Endpunkten. Sie speichert Default-Settings persistent,
+          erlaubt Template-Pflege pro ICP-Segment und kann Preview oder Live-Run unmittelbar ausloesen.
+        </p>
+        <div class="summary-grid" id="summary-cards"></div>
+      </section>
+
+      <section class="content-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Kampagnensteuerung</h2>
+              <p>Nur Settings, die die Laufzeit tatsaechlich beeinflussen, sind hier direkt beschreibbar.</p>
+            </div>
+            <div class="status" id="settings-status">Lade Settings...</div>
+          </div>
+          <form id="settings-form" class="settings-grid">
+            <label>
+              Zielanzahl Leads
+              <input id="targetLeadCount" name="targetLeadCount" type="number" min="1" max="1000" required />
+            </label>
+            <label>
+              Markt
+              <input id="market" name="market" type="text" required />
+            </label>
+            <label style="grid-column: 1 / -1;">
+              Kampagnenziel
+              <textarea id="customGoal" name="customGoal"></textarea>
+            </label>
+            <label style="grid-column: 1 / -1;">
+              Agent-Kontext aus HubSpot oder Operator-UI
+              <textarea id="agentContext" name="agentContext"></textarea>
+            </label>
+            <label>
+              Erste Stichprobe
+              <input id="earlyStopReviewCount" name="earlyStopReviewCount" type="number" min="5" max="15" required />
+            </label>
+            <label>
+              Mindestquote relevant
+              <input id="earlyStopThreshold" name="earlyStopThreshold" type="number" min="0" max="1" step="0.01" required />
+            </label>
+            <div class="checkbox-row">
+              <input id="runDeepResearch" name="runDeepResearch" type="checkbox" />
+              <label for="runDeepResearch">Deep Research aktivieren</label>
+            </div>
+            <div class="checkbox-row">
+              <input id="dryRun" name="dryRun" type="checkbox" />
+              <label for="dryRun">Dry-Run als Default verwenden</label>
+            </div>
+            <div class="checkbox-row">
+              <input id="syncToHubSpot" name="syncToHubSpot" type="checkbox" />
+              <label for="syncToHubSpot">Ergebnisse in HubSpot schreiben</label>
+            </div>
+            <div class="checkbox-row">
+              <input id="earlyStopEnabled" name="earlyStopEnabled" type="checkbox" />
+              <label for="earlyStopEnabled">Fruehes Stoppen schwacher Filter</label>
+            </div>
+          </form>
+          <div class="button-row">
+            <button id="save-settings" type="button">Settings speichern</button>
+            <button id="run-preview" type="button" class="secondary">Preview starten</button>
+            <button id="run-live" type="button">Lead-Run starten</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Operator-Hinweise</h2>
+              <p>Diese zusaetzlichen Hebel sind sinnvoll, sobald ihr die naechste Iteration der Filtersteuerung erweitert.</p>
+            </div>
+          </div>
+          <ol class="hint-list" id="suggested-controls"></ol>
+          <div style="height: 18px;"></div>
+          <h3>Letzte Antwort</h3>
+          <p style="margin-bottom: 12px;">Preview- oder Run-Ergebnisse werden hier komprimiert angezeigt.</p>
+          <pre id="result-output">Noch kein Lauf gestartet.</pre>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Outreach-Templates</h2>
+            <p>Templates bleiben segmentgebunden. Personalisierung soll auf klare faktenbasierte Hooks begrenzt bleiben.</p>
+          </div>
+          <div class="status" id="templates-status">Lade Templates...</div>
+        </div>
+        <div class="template-grid" id="template-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Suchstrategie und Verlauf</h2>
+            <p>Hier ist sichtbar, welche 15er-Proben und 50er-Expansionen wirklich tragfaehig waren.</p>
+          </div>
+        </div>
+        <div class="history-grid">
+          <div>
+            <h3>Letzter Lauf</h3>
+            <div class="history-list" id="latest-run-list"></div>
+          </div>
+          <div>
+            <h3>Letzte Suchschritte</h3>
+            <div class="history-list" id="search-history-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Kategorie-Kontexte</h2>
+            <p>Diese Guidance-Bloecke steuern, wie Research und Outreach je Kategorie erstellt und angepasst werden.</p>
+          </div>
+        </div>
+        <div class="context-grid" id="context-list"></div>
+      </section>
+    </main>
+
+    <script>
+      const injectedSharedKey = "__LEAD_AGENT_SHARED_KEY__";
+      const sharedKey = new URLSearchParams(window.location.search).get("key") || injectedSharedKey;
+      const settingsStatus = document.getElementById("settings-status");
+      const templatesStatus = document.getElementById("templates-status");
+      const resultOutput = document.getElementById("result-output");
+      const summaryCards = document.getElementById("summary-cards");
+      const suggestedControlsList = document.getElementById("suggested-controls");
+      const templateList = document.getElementById("template-list");
+      const contextList = document.getElementById("context-list");
+      const latestRunList = document.getElementById("latest-run-list");
+      const searchHistoryList = document.getElementById("search-history-list");
+
+      async function requestJson(url, options = {}) {
+        const response = await fetch(url, {
+          headers: {
+            "Content-Type": "application/json",
+            "x-lead-agent-key": sharedKey
+          },
+          ...options
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        return response.json();
+      }
+
+      function setStatus(element, message, warn = false) {
+        element.textContent = message;
+        element.className = warn ? "status warn" : "status";
+      }
+
+      function fillSettingsForm(settings) {
+        document.getElementById("targetLeadCount").value = settings.targetLeadCount;
+        document.getElementById("market").value = settings.market;
+        document.getElementById("customGoal").value = settings.customGoal || "";
+        document.getElementById("agentContext").value = settings.agentContext || "";
+        document.getElementById("runDeepResearch").checked = Boolean(settings.runDeepResearch);
+        document.getElementById("dryRun").checked = Boolean(settings.dryRun);
+        document.getElementById("syncToHubSpot").checked = false;
+        document.getElementById("earlyStopEnabled").checked = Boolean(settings.earlyStopEnabled);
+        document.getElementById("earlyStopReviewCount").value = settings.earlyStopReviewCount;
+        document.getElementById("earlyStopThreshold").value = settings.earlyStopThreshold;
+      }
+
+      function collectSettings() {
+        return {
+          targetLeadCount: Number(document.getElementById("targetLeadCount").value),
+          market: document.getElementById("market").value.trim(),
+          customGoal: document.getElementById("customGoal").value.trim(),
+          agentContext: document.getElementById("agentContext").value.trim(),
+          runDeepResearch: document.getElementById("runDeepResearch").checked,
+          dryRun: document.getElementById("dryRun").checked,
+          syncToHubSpot: document.getElementById("syncToHubSpot").checked,
+          earlyStopEnabled: document.getElementById("earlyStopEnabled").checked,
+          earlyStopReviewCount: Number(document.getElementById("earlyStopReviewCount").value),
+          earlyStopThreshold: Number(document.getElementById("earlyStopThreshold").value)
+        };
+      }
+
+      function renderSummary(settings, templates, latestLeadRun) {
+        const cards = [
+          { label: "Default Markt", value: settings.market },
+          { label: "Lead-Ziel", value: String(settings.targetLeadCount) },
+          { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
+          { label: "Templates", value: String(Object.keys(templates).length) },
+          { label: "Kontext", value: settings.agentContext ? "gesetzt" : "leer" },
+          { label: "Letzte Treffer", value: String(latestLeadRun?.summary?.foundCandidates ?? 0) }
+        ];
+
+        summaryCards.innerHTML = cards
+          .map(
+            (card) => `
+              <div class="stat">
+                <span>${card.label}</span>
+                <strong>${card.value}</strong>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function renderSuggestedControls(items) {
+        suggestedControlsList.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
+      }
+
+      function renderLatestRun(latestLeadRun) {
+        if (!latestLeadRun || !latestLeadRun.createdAt || latestLeadRun.summary.foundCandidates === 0) {
+          latestRunList.innerHTML = '<div class="history-item"><strong>Noch kein verwertbarer Lauf</strong><span class="mini-meta">Sobald ein echter Lauf durch ist, erscheinen hier Trefferzahl, getestete Filter und Exportstatus.</span></div>';
+          return;
+        }
+
+        latestRunList.innerHTML = [
+          `<div class="history-item"><strong>${latestLeadRun.summary.foundCandidates} Kontakte im letzten Export</strong><span class="mini-meta">Erstellt: ${new Date(latestLeadRun.createdAt).toLocaleString("de-DE")}</span><span class="mini-meta">Filter getestet: ${latestLeadRun.summary.filtersTested}, frueh gestoppt: ${latestLeadRun.summary.filtersStoppedEarly}</span></div>`,
+          ...latestLeadRun.contacts.slice(0, 4).map((contact) => `
+            <div class="history-item">
+              <strong>${contact.companyName}</strong>
+              <span class="mini-meta">${contact.category} · Score ${contact.relevanceScore}</span>
+              <span class="mini-meta">${contact.sourceFilter}</span>
+            </div>
+          `)
+        ].join("");
+      }
+
+      function renderSearchHistory(entries) {
+        if (!entries || entries.length === 0) {
+          searchHistoryList.innerHTML = '<div class="history-item"><strong>Noch keine Suchhistorie</strong><span class="mini-meta">Die 15er-Proben und 50er-Expansionen werden nach dem ersten Lauf hier aufgezeichnet.</span></div>';
+          return;
+        }
+
+        searchHistoryList.innerHTML = entries.slice(0, 8).map((entry) => `
+          <div class="history-item">
+            <strong>${entry.filterName}</strong>
+            <span class="mini-meta">${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page}</span>
+            <span class="mini-meta">Relevant: ${entry.relevantCount}/${entry.returnedCount} (${Math.round(entry.relevanceRatio * 100)}%)</span>
+            <span class="mini-meta">${entry.recommendation}</span>
+          </div>
+        `).join("");
+      }
+
+      function renderTemplates(templates) {
+        templateList.innerHTML = Object.values(templates)
+          .map(
+            (template) => `
+              <article class="template-card" data-template-key="${template.key}">
+                <div class="template-meta">
+                  <h3>${template.audience}</h3>
+                  <p>${template.goal}</p>
+                </div>
+                <label>
+                  Betreff
+                  <input data-field="subject" value="${template.subject.replace(/"/g, "&quot;")}" />
+                </label>
+                <label>
+                  E-Mail
+                  <textarea data-field="emailBody">${template.emailBody}</textarea>
+                </label>
+                <label>
+                  LinkedIn
+                  <textarea data-field="linkedInMessage">${template.linkedInMessage}</textarea>
+                </label>
+                <label>
+                  Telefon
+                  <textarea data-field="phoneScript">${template.phoneScript}</textarea>
+                </label>
+                <button type="button" data-action="save-template">Template speichern</button>
+              </article>
+            `
+          )
+          .join("");
+      }
+
+      function renderContexts(categoryContexts) {
+        contextList.innerHTML = Object.values(categoryContexts)
+          .map(
+            (context) => `
+              <article class="context-card">
+                <div class="template-meta">
+                  <h3>${context.label}</h3>
+                  <p>${context.category}</p>
+                </div>
+                <div>
+                  <strong>Research</strong>
+                  <ul class="hint-list">${context.researchPriorities.map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+                <div>
+                  <strong>Outreach</strong>
+                  <ul class="hint-list">${context.outreachPriorities.map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+                <div>
+                  <strong>Personalisierung</strong>
+                  <ul class="hint-list">${context.personalizationRules.map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+                <div>
+                  <strong>Vermeiden</strong>
+                  <ul class="hint-list">${context.avoidSignals.map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+              </article>
+            `
+          )
+          .join("");
+      }
+
+      async function loadBootstrap() {
+        try {
+          if (!sharedKey || sharedKey.startsWith("__")) {
+            throw new Error("Missing lead agent shared key. Open this UI through HubSpot or append ?key=... for local validation.");
+          }
+          const data = await requestJson("/api/control-plane/bootstrap");
+          fillSettingsForm(data.settings);
+          renderSummary(data.settings, data.templates, data.latestLeadRun);
+          renderSuggestedControls(data.suggestedControls);
+          renderTemplates(data.templates);
+          renderContexts(data.categoryContexts);
+          renderLatestRun(data.latestLeadRun);
+          renderSearchHistory(data.learning?.searchHistory || []);
+          setStatus(settingsStatus, "Settings geladen");
+          setStatus(templatesStatus, "Templates geladen");
+        } catch (error) {
+          setStatus(settingsStatus, "Settings konnten nicht geladen werden", true);
+          setStatus(templatesStatus, "Templates konnten nicht geladen werden", true);
+          resultOutput.textContent = String(error);
+        }
+      }
+
+      async function saveSettings() {
+        try {
+          setStatus(settingsStatus, "Speichere Settings...");
+          const result = await requestJson("/api/control/settings", {
+            method: "PUT",
+            body: JSON.stringify(collectSettings())
+          });
+          fillSettingsForm(result.settings);
+          setStatus(settingsStatus, "Settings gespeichert");
+          resultOutput.textContent = JSON.stringify(result, null, 2);
+        } catch (error) {
+          setStatus(settingsStatus, "Settings konnten nicht gespeichert werden", true);
+          resultOutput.textContent = String(error);
+        }
+      }
+
+      async function triggerRun(endpoint) {
+        try {
+          resultOutput.textContent = "Lauf wird gestartet...";
+          const result = await requestJson(endpoint, {
+            method: "POST",
+            body: JSON.stringify(collectSettings())
+          });
+          resultOutput.textContent = JSON.stringify(result, null, 2);
+        } catch (error) {
+          resultOutput.textContent = String(error);
+        }
+      }
+
+      async function saveTemplate(card) {
+        const key = card.dataset.templateKey;
+        const payload = {};
+
+        card.querySelectorAll("[data-field]").forEach((field) => {
+          payload[field.dataset.field] = field.value;
+        });
+
+        try {
+          setStatus(templatesStatus, `Speichere ${key}...`);
+          const result = await requestJson(`/api/outreach/templates/${key}`, {
+            method: "PUT",
+            body: JSON.stringify(payload)
+          });
+          setStatus(templatesStatus, `${key} gespeichert`);
+          resultOutput.textContent = JSON.stringify(result, null, 2);
+        } catch (error) {
+          setStatus(templatesStatus, `${key} konnte nicht gespeichert werden`, true);
+          resultOutput.textContent = String(error);
+        }
+      }
+
+      document.getElementById("save-settings").addEventListener("click", saveSettings);
+      document.getElementById("run-preview").addEventListener("click", () => triggerRun("/api/lead-jobs/preview"));
+      document.getElementById("run-live").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger"));
+
+      templateList.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-action='save-template']");
+        if (!button) {
+          return;
+        }
+
+        saveTemplate(button.closest("article[data-template-key]"));
+      });
+
+      loadBootstrap();
+    </script>
+  </body>
+  </html>

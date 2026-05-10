@@ -1,0 +1,469 @@
+{
+  "createdAt": "2026-05-10T11:00:48.267Z",
+  "requested": {
+    "targetLeadCount": 20,
+    "market": "DE",
+    "customGoal": "Find ONE WARE targets with clear Vision AI delivery upside.",
+    "agentContext": "",
+    "runDeepResearch": true,
+    "dryRun": false,
+    "syncToHubSpot": false,
+    "earlyStopEnabled": true,
+    "earlyStopReviewCount": 15,
+    "earlyStopThreshold": 0.5
+  },
+  "summary": {
+    "foundCandidates": 20,
+    "filtersTested": 1,
+    "filtersStoppedEarly": 0,
+    "companiesSkippedAfterEarlyStop": 0
+  },
+  "contacts": [
+    {
+      "companyName": "XIMEA - Imaging beyond the Standard.",
+      "domain": "http://www.ximea.com",
+      "country": "Germany",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with strong potential fit for ONE WARE, especially if they lack a proprietary Vision AI software layer.",
+      "overview": "XIMEA appears to be a strong industrial imaging/camera vendor with a hardware-first positioning and no clear indication of a dominant proprietary Vision AI software commercialization layer. That makes them a plausible complement partner for ONE WARE, especially where OEMs, machine builders, or inspection-system customers need Vision AI capability embedded into camera-based products without building a large internal ML team. The fit is strongest if XIMEA is selling cameras, embedded imaging, or OEM imaging solutions rather than a competing AI platform.",
+      "qualificationSummary": "Qualified as a hardware partner target. The likely value is product enhancement and partner enablement: helping XIMEA or its ecosystem add production-ready Vision AI faster, with less trial and error, more predictable timelines, and hardware-optimized models. No evidence here suggests they should be treated as a software competitor.",
+      "linkedInMessage": "Wie aufwendig ist es aktuell, Vision-AI in Ihre Kamera- oder OEM-Imaging-Produkte produktionsreif zu integrieren? Gerade Modellgenerierung und Hardware-Optimierung sind oft die größten Bremsen – genau das automatisieren wir bei ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und OEM-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nXIMEA ist für industrielle Bildverarbeitung und Kameralösungen ein spannender Ansprechpartner. In solchen Hardware- und OEM-Setups sehen wir oft, dass Vision-AI als Produktfeature interessant ist, die Entwicklung einer belastbaren, hardware-optimierten Lösung intern aber viel Zeit kostet.\n\nMit ONE WARE entstehen aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware. So lässt sich Vision-AI einfacher in bestehende Imaging- und Kameraprodukte integrieren – mit weniger Trial and Error, schnellerem Weg in die Produktion und geringerem Entwicklungsaufwand.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei XIMEA produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Gerade bei Kamera- und OEM-Setups ist das oft der größte Aufwand. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If XIMEA has a hidden or underdocumented AI software stack, that could reduce partner fit",
+        "If outreach sounds like replacing their core camera business, it will be misaligned",
+        "Need to avoid generic partner language without product-stack evidence",
+        "Should not assume they are a service integrator"
+      ]
+    },
+    {
+      "companyName": "VA Imaging",
+      "domain": "http://www.va-imaging.com",
+      "country": "Netherlands",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with likely hardware-led value and no strong proprietary Vision AI software layer, making it a good fit.",
+      "overview": "VA Imaging appears to be a hardware-first industrial imaging/camera vendor rather than a company with a clearly commercialized own Vision AI software layer. That makes them a plausible complement for ONE WARE if they want to add embeddable Vision AI capability to cameras, inspection systems, or OEM offerings without building a large internal ML team. The fit is strongest if they sell into industrial inspection or OEM imaging and want to improve product value rather than replace their core hardware business.",
+      "qualificationSummary": "Qualified as a potential hardware partner, not as a software competitor. The key question is whether VA Imaging has OEM, embedded, or inspection-product lines where Vision AI could be added as a product feature. No clear evidence here suggests a dominant proprietary Vision AI software commercialization angle, so the account should be approached as a complement-to-hardware opportunity.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI als Feature in Kamera- oder Imaging-Produkte zu integrieren? Gerade Modellgenerierung und Hardware-Optimierung kosten oft viel Zeit. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele industrielle Kamera- und Imaging-Anbieter sehen Vision-AI als sinnvolle Produkt-Erweiterung, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nMit ONE WARE entstehen aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher, schneller und mit weniger Entwicklungsaufwand in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei VA Imaging produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Kamera- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei VA Imaging aktuell ein Thema?",
+      "riskFlags": [
+        "No confirmed evidence of a specific product line or OEM program in the provided description",
+        "If VA Imaging has a hidden proprietary AI software stack, the fit would weaken",
+        "Hardware vendors may have limited appetite for software partnership unless there is a clear product monetization path",
+        "Need to avoid positioning ONE WARE as replacing their imaging or camera business"
+      ]
+    },
+    {
+      "companyName": "The Imaging Source",
+      "domain": "http://www.theimagingsource.com",
+      "country": "Germany",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging/camera vendor with clear hardware relevance and likely need for Vision AI delivery partnerships rather than a strong competing software layer.",
+      "overview": "The Imaging Source is a strong fit as an industrial camera and imaging hardware vendor, but not as a primary Vision AI software competitor. The likely opportunity is complementing their camera stack with easier OEM/embedded Vision AI enablement for customers and partners who need production-ready models without building a large ML team.",
+      "qualificationSummary": "Qualified as a hardware partner target. The company appears to monetize cameras, imaging, optics, and industrial vision components rather than a dominant proprietary Vision AI software layer. ONE WARE can position as an add-on that helps their customers and OEM partners turn camera data into deployable Vision AI faster, with less trial and error and better hardware fit.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Gerade Modellgenerierung und Hardware-Optimierung kosten oft viel Zeit. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Kamera- und Imaging-Anbieter sehen Vision-AI als sinnvolle Ergänzung ihrer Produkte, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Kamera- und OEM-Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Kamera- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen ein aktuelles Thema?",
+      "riskFlags": [
+        "No clear evidence of a commercial Vision AI software platform to personalize against",
+        "Could be a pure hardware vendor, so outreach must avoid implying they need to replace their core business",
+        "If they already have hidden AI software offerings, that would reduce fit and require caution",
+        "Personalization should stay at product-stack level, not service-integrator language"
+      ]
+    },
+    {
+      "companyName": "Allied Vision",
+      "domain": "http://www.alliedvision.com",
+      "country": "Germany",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with strong fit as a hardware partner and no obvious competing Vision AI software layer.",
+      "overview": "Allied Vision is a strong fit for the hardware-partner category: industrial camera and imaging vendor with clear OEM/embedded relevance, but no obvious dominant commercial Vision AI software layer. ONE WARE can complement their stack by making it easier for customers and partners to add production-ready Vision AI on top of Allied Vision hardware without building a large internal ML team.",
+      "qualificationSummary": "Qualified as a hardware/imaging partner. The likely value is product enhancement and partner enablement, not replacement of their core camera business. Best angle: help Allied Vision make Vision AI easier to deploy on or with their cameras, especially for OEMs and industrial inspection use cases. No strong evidence here of a competing AI software commercialization layer, so complementarity looks plausible.",
+      "linkedInMessage": "Wie aufwendig ist es aktuell, Vision-AI in kamerabasierte Produkte oder OEM-Lösungen produktionsreif zu integrieren? Gerade Modellgenerierung und Hardware-Optimierung kosten oft viel Zeit. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher mit industriellen Kameras integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Kamera- und Imaging-Anbieter sehen Vision-AI als sinnvolle Ergänzung, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nMit ONE WARE entstehen aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI einfacher und mit weniger Trial-and-Error in bestehende Kamera- und OEM-Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Kamera- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Gerade für OEM- und Inspektionsanwendungen kann das Entwicklungszeit sparen. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If they already bundle a substantial proprietary AI software layer, that would reduce fit",
+        "Need to avoid messaging that sounds like replacing their camera business",
+        "No clear evidence of a delivery-led AI services motion; treat as hardware partner, not integrator",
+        "Personalization should stay limited to camera/OEM/imaging context unless a specific product line is confirmed"
+      ]
+    },
+    {
+      "companyName": "IDS Imaging Development Systems GmbH",
+      "domain": "http://www.ids-imaging.com",
+      "country": "Germany",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with strong camera hardware fit and no obvious competing Vision AI software layer.",
+      "overview": "IDS Imaging Development Systems GmbH appears to be a strong industrial camera and imaging hardware vendor, with a clear fit for embedded Vision AI enablement but no obvious commercial Vision AI software platform that would make ONE WARE redundant. The likely opportunity is product enhancement and OEM/partner enablement: helping IDS or its ecosystem add production-ready Vision AI faster without building a large internal ML team.",
+      "qualificationSummary": "Qualified as a hardware partner target. Strong fit if IDS is looking to expand camera-based product value with embedded Vision AI, inspection, or OEM-ready solutions. Lower risk of direct software competition based on the provided description. Outreach should stay focused on complementing imaging hardware, not replacing core camera business.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Wir sehen oft, dass Modellwahl, Hardware-Optimierung und Iterationen den größten Aufwand erzeugen. Genau das automatisieren wir mit ONE WARE, damit Teams schneller zu belastbaren, hardware-effizienten Modellen kommen.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele industrielle Kamera- und Imaging-Anbieter sehen Vision-AI als sinnvolle Ergänzung ihrer Produkte, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher, schneller und mit weniger Entwicklungsaufwand in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Kamera- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen aktuell ein Thema, etwa für OEM-, Embedded- oder Inspection-Anwendungen?",
+      "riskFlags": [
+        "Could have internal or partner-led vision software capabilities not visible in the short description",
+        "If they already bundle a mature AI layer with cameras, the fit becomes weaker",
+        "Need to avoid messaging that implies replacing their hardware value proposition"
+      ]
+    },
+    {
+      "companyName": "Polytec",
+      "domain": null,
+      "country": "Germany",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Polytec appears to be an industrial imaging/camera vendor with strong fit as a hardware partner and no obvious competing Vision AI software layer.",
+      "overview": "Polytec appears to fit the industrial imaging / camera vendor profile rather than a company with a dominant commercial Vision AI software layer. That makes them a plausible complement for ONE WARE if they want to add Vision AI capability to cameras, inspection systems, or OEM/embedded offerings without building a large internal ML team. The outreach should stay hardware-centric and position ONE WARE as an enabler for faster product integration, smaller hardware-efficient models, and less trial and error in customer projects.",
+      "qualificationSummary": "Good fit as a hardware/imaging partner candidate. The likely value is product enhancement and partner enablement, not replacing an existing AI software business. Best angle is to explore whether Polytec wants to make Vision AI easier to embed into camera, optics, or inspection solutions for OEM customers. No strong evidence here of a competing AI software commercialization layer, so complementarity looks plausible.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in industrielle Kameras oder Imaging-Produkte produktionsreif zu integrieren? Gerade Modellwahl und Hardware-Optimierung kosten oft viel Zeit. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in industrielle Kameras integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Anbieter von industrieller Bildverarbeitung und Kameratechnik sehen Vision-AI als sinnvolle Produkt-Erweiterung, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Produkte oder OEM-Lösungen integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Industrie- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Gerade bei Kameras, Imaging oder OEM-Lösungen kann das Entwicklungszeit und Trial-and-Error deutlich reduzieren. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If Polytec has a hidden or growing proprietary AI software stack, that would reduce partner fit",
+        "Hardware vendors may prioritize sensor performance over software add-ons, so relevance may depend on OEM roadmap",
+        "Need to avoid framing them like a systems integrator or service delivery firm"
+      ]
+    },
+    {
+      "companyName": "FRAMOS",
+      "domain": "http://www.framos.com",
+      "country": "Germany",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with strong hardware relevance and no obvious competing Vision AI software layer, making it a good fit.",
+      "overview": "FRAMOS is a strong fit for the hardware-partner category: industrial imaging, camera, and vision components are central to its business, while there is no clear signal of a dominant proprietary Vision AI software commercialization layer. That makes ONE WARE relevant as a complement for OEMs and machine builders that want to add production-ready Vision AI without building a large internal ML team. The best angle is product enhancement and partner enablement, not replacing FRAMOS' core imaging business.",
+      "qualificationSummary": "Qualified as a hardware/imaging partner with plausible complementarity. FRAMOS appears to sit close to OEM and embedded vision use cases, where faster model creation, local training, and hardware-optimized deployment can reduce integration effort for customers. No strong evidence here of a competing Vision AI software platform that would make outreach risky.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in industrielle Imaging- oder OEM-Produkte zu integrieren? Gerade Modellgenerierung und Hardware-Optimierung erzeugen oft den größten Aufwand. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in industrielle Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nbei industriellen Imaging- und Kamera-Produkten sehen viele Teams Vision-AI als sinnvolle Erweiterung, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft viel Zeit.\n\nMit ONE WARE entstehen aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher, schneller und mit weniger Trial-and-Error in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei FRAMOS produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Gerade für OEM- oder Inspektionsanwendungen kann das Entwicklungszeit und Trial-and-Error deutlich reduzieren. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If FRAMOS has an under-the-radar proprietary AI software layer, that could change partner fit",
+        "Outreach should not imply they are a service integrator or software delivery house",
+        "Do not position ONE WARE as replacing their camera or imaging value proposition",
+        "Need to avoid generic partner language without a concrete product-stack hook"
+      ]
+    },
+    {
+      "companyName": "Vexcel Imaging",
+      "domain": "http://www.vexcel-imaging.com",
+      "country": "Austria",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with strong hardware fit and no obvious competing Vision AI software layer.",
+      "overview": "Vexcel Imaging appears to be a hardware-first industrial imaging/camera vendor, which makes it a plausible complement for ONE WARE if they want to add Vision AI capability without building a full internal ML software stack. The fit is strongest where their imaging products are embedded into OEM systems or inspection workflows and where customers need production-ready, hardware-optimized Vision AI rather than a standalone AI platform.",
+      "qualificationSummary": "Qualified as a hardware partner target, not as a software competitor. The likely opportunity is product enhancement and partner enablement: helping Vexcel Imaging or its OEM customers integrate Vision AI faster, with less trial and error, smaller hardware-efficient models, and more predictable delivery timelines. No clear evidence here of a dominant own Vision AI commercialization layer, so complementarity looks plausible.",
+      "linkedInMessage": "Wie aufwendig ist es für Sie aktuell, Vision-AI in Ihre Imaging- oder Kameraprodukte produktionsreif zu integrieren? Wir sehen oft, dass gerade Modellwahl und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir.",
+      "emailSubject": "Vision-AI einfacher in Ihre Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Maschinenbauer und Hardwareanbieter sehen Vision-AI als spannendes Feature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Imaging- oder Kameraprodukte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If Vexcel Imaging has a hidden or growing proprietary Vision AI software layer, that could reduce partner fit",
+        "If their business is purely imaging hardware with no software roadmap, the immediate AI commercialization need may be limited",
+        "No clear public delivery bottleneck or named Vision AI product line provided in the source context",
+        "Need to avoid positioning ONE WARE as replacing their core camera/imaging business"
+      ]
+    },
+    {
+      "companyName": "Teledyne Adimec",
+      "domain": "http://www.adimec.com",
+      "country": "Netherlands",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with strong hardware relevance and no obvious competing Vision AI software layer, making it a good fit for ONE WARE.",
+      "overview": "Teledyne Adimec appears to be a strong industrial imaging/camera vendor with hardware and optics credibility, but without a clearly visible own Vision AI software commercialization layer. That makes them a plausible complement partner for ONE WARE if the goal is to add embeddable Vision AI capability to camera or inspection products without building a large internal ML team.",
+      "qualificationSummary": "Qualified as a hardware-first partner candidate. The fit is strongest if Teledyne Adimec is selling industrial cameras, imaging systems, or OEM components into inspection and automation use cases. ONE WARE should be positioned as a way to make Vision AI easier to embed, faster to deliver, and more hardware-efficient, rather than as a replacement for their core imaging business.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in industrielle Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Wir sehen oft, dass Modellgenerierung und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in industrielle Kameras und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nbei industriellen Kameras und Imaging-Produkten ist Vision-AI oft ein starkes Feature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern schnell viel Zeit.\n\nMit ONE WARE entstehen aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher, schneller und mit weniger Entwicklungsaufwand in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, ob das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If Teledyne Adimec has an internal AI software stack not visible in the provided description, partnership fit could weaken",
+        "Could be primarily a hardware vendor, so messaging must avoid sounding like a generic AI platform pitch",
+        "Need to avoid implying replacement of their camera or imaging business",
+        "If their commercial focus is only on sensors/cameras without product-enablement ambitions, urgency may be limited"
+      ]
+    },
+    {
+      "companyName": "MILabs",
+      "domain": "http://www.milabs.com",
+      "country": "Netherlands",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 88,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with likely strong fit for Vision AI delivery partnerships and no obvious competing AI software layer.",
+      "overview": "MILabs appears to fit the industrial imaging / camera vendor category rather than a Vision AI software vendor. Based on the provided description, the likely opportunity is complementing their hardware stack with embeddable Vision AI capability for OEMs, inspection, or partner-enabled products, not replacing an existing software business.",
+      "qualificationSummary": "Qualified as a hardware-first partner candidate with good complementarity potential. The key question is whether MILabs has OEM, embedded, or inspection-oriented product lines where Vision AI would strengthen the offering without conflicting with a proprietary AI software layer.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Gerade Modellgenerierung und Hardware-Optimierung erzeugen oft den größten Aufwand. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele industrielle Kamera- und Imaging-Anbieter sehen Vision-AI als sinnvolle Ergänzung ihres Produktportfolios, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Kamera- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen ein aktuelles Thema?",
+      "riskFlags": [
+        "No confirmed evidence of a commercial Vision AI software layer, so avoid assuming software partnership depth",
+        "If MILabs is purely hardware-focused, messaging must stay on product enhancement rather than partner platform expansion",
+        "Need to verify whether they already bundle third-party AI or have internal ML capabilities",
+        "Do not position ONE WARE as replacing their core imaging or camera business"
+      ]
+    },
+    {
+      "companyName": "iniVation",
+      "domain": "http://www.inivation.com",
+      "country": "Switzerland",
+      "category": "software_integrator",
+      "relevanceScore": 86,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging/camera vendor with clear potential to benefit from Vision AI delivery partnerships and QC automation.",
+      "overview": "iniVation is best treated as a hardware-adjacent industrial imaging partner rather than a clear software-integrator target. The company appears relevant to Vision AI and edge imaging workflows, but the known description does not show a strong customer-specific AI delivery motion or a clear commercialization angle for its own Vision AI software. That makes it a weaker fit than a delivery-led integrator, though still potentially useful as a partner if they support customer projects around industrial imaging, inspection, robotics, or embedded vision.",
+      "qualificationSummary": "Medium fit. Relevant because of industrial imaging and likely recurring vision/edge use cases, but qualification is limited by the lack of evidence that iniVation owns delivery-heavy Vision AI projects or needs a model-generation multiplier. Best approach is cautious partner-style outreach focused on faster project delivery and less tuning effort, not on replacing any software stack.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell industrielle Bildverarbeitungs- oder Edge-Vision-Projekte produktionsbereit? Wir sehen oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. ONE WARE automatisiert genau diesen Teil und reduziert Trial-and-Error deutlich. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\narbeiten Sie aktuell an industriellen Bildverarbeitungs- oder Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren und Imaging-Partnern: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Partnern im industriellen Imaging, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil und machen die Modelle schneller produktionsbereit. Wie ist das bei Ihnen aktuell?",
+      "riskFlags": [
+        "Not clearly a delivery-led software integrator",
+        "May be primarily a camera or imaging hardware vendor rather than a project-owning AI services partner",
+        "Limited evidence of customer-specific model development ownership",
+        "Could have weak fit if they mainly sell hardware and not implementation services",
+        "Potentially low urgency unless they actively support industrial AI deployments"
+      ]
+    },
+    {
+      "companyName": "Photonfocus AG",
+      "domain": "http://www.photonfocus.com",
+      "country": "Switzerland",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 86,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with clear hardware relevance and no strong own Vision AI software layer, making it a plausible ONE WARE fit.",
+      "overview": "Photonfocus AG fits the industrial imaging / camera vendor profile well. The company appears to be strong on hardware, sensors, and imaging components, while there is no clear signal of a dominant proprietary Vision AI software commercialization layer. That makes ONE WARE a plausible complement for OEMs and product teams that want to add Vision AI capability without building a large internal ML stack.",
+      "qualificationSummary": "Qualified as a hardware-first partner candidate. Best angle is product enhancement and embedded enablement for camera-based inspection or machine vision applications. Do not position ONE WARE as replacing Photonfocus' core business; position it as a way to make their imaging products easier to use in AI-enabled systems and to shorten customer delivery cycles.",
+      "linkedInMessage": "Wie aufwendig ist es für Sie aktuell, Vision-AI produktionsreif in Kameras oder OEM-/Industrieprodukte zu integrieren? Gerade Modellwahl und Hardware-Optimierung erzeugen oft den größten Aufwand. Genau das automatisieren wir bei ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kameras und OEM-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele industrielle Kamera- und Imaging-Anbieter sehen Vision-AI als sinnvolle Ergänzung im Produktportfolio, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Kameras, OEM-Lösungen oder Inspektionsprodukte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Gerade für Kameras oder OEM-Lösungen kann das Entwicklungszeit und Trial-and-Error deutlich reduzieren. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If Photonfocus has an under-the-radar AI software offering, that could reduce fit",
+        "Hardware vendors may prefer to stay neutral and avoid software-layer commitments",
+        "Need to avoid implying they are a systems integrator or AI delivery shop",
+        "Partner outreach should stay focused on product fit, not broad alliance language"
+      ]
+    },
+    {
+      "companyName": "TOMTEC Imaging Systems",
+      "domain": "http://www.tomtec.de",
+      "country": "Germany",
+      "category": "software_integrator",
+      "relevanceScore": 86,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with clear camera/vision hardware relevance and no obvious competing Vision AI software layer.",
+      "overview": "TOMTEC Imaging Systems appears to be an industrial imaging/camera vendor rather than a clear delivery-led Vision AI software integrator. Based on the provided description, the fit is weaker for a partner motion because there is no visible own Vision AI software commercialization angle or strong evidence of customer-specific AI project delivery. The account may still be relevant if they support medtech imaging workflows or embedded inspection use cases, but the current signal is closer to hardware/vendor than integrator.",
+      "qualificationSummary": "Borderline / lower-priority. The company may have adjacent relevance through imaging and medtech, but there is not enough evidence of recurring customer-specific Vision AI delivery ownership, fixed-price project pressure, or limited internal AI specialization. Treat as a cautious prospect and avoid assuming they are a software integrator partner.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei imaging-nahen Projekten oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren und imaging-nahen Teams, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "riskFlags": [
+        "Described as an industrial imaging or camera vendor, not a clear software integrator",
+        "No clear own Vision AI software commercialization angle",
+        "May be primarily a hardware/vendor business rather than a delivery partner",
+        "Insufficient evidence of customer-specific AI project ownership",
+        "Potentially weak fit for the software-integrator outreach motion"
+      ]
+    },
+    {
+      "companyName": "Nikon Europe",
+      "domain": "http://www.nikoneurope.com",
+      "country": "Netherlands",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 86,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Nikon Europe fits as an industrial imaging/camera vendor without a strong proprietary Vision AI software layer, making it a plausible ONE WARE partner.",
+      "overview": "Nikon Europe is a strong industrial imaging and camera brand, which makes it a plausible hardware-adjacent partner for embedded Vision AI use cases. Based on the category context, there is no clear indication that Nikon Europe is primarily monetizing its own Vision AI software stack, so ONE WARE should be positioned as a complement that helps add production-ready Vision AI to imaging products faster, with less internal ML effort and better hardware fit.",
+      "qualificationSummary": "Qualified as a hardware/imaging partner with complementarity potential. The fit is strongest if Nikon Europe is involved in industrial cameras, inspection, OEM imaging, or embedded vision products. The outreach should focus on enabling Vision AI features in hardware offerings without implying replacement of Nikon's core imaging business.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Gerade Modellwahl und Hardware-Optimierung erzeugen oft den größten Aufwand. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Industrie- und Imaging-Anbieter sehen Vision-AI als sinnvolles Feature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher, mit weniger Trial-and-Error und geringerem Entwicklungsaufwand in bestehende Kamera- oder Imaging-Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Gerade bei Kamera- oder OEM-Produkten kann das Entwicklungszeit sparen. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "If Nikon Europe has a hidden or growing proprietary AI software stack, that could reduce partner fit",
+        "Messaging must not imply they are a systems integrator or delivery consultancy",
+        "Avoid positioning ONE WARE as replacing core camera, optics, or imaging value",
+        "Need to verify whether the relevant contact owns product, OEM, or business development rather than pure sales"
+      ]
+    },
+    {
+      "companyName": "Aurea Imaging",
+      "domain": "http://www.aureaimaging.com",
+      "country": "Netherlands",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 86,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with likely hardware-led value and no strong competing Vision AI software layer, making it a plausible ONE WARE fit.",
+      "overview": "Aurea Imaging appears to fit the industrial imaging / camera vendor category rather than a software-led Vision AI provider. That makes them a plausible complement for ONE WARE if they want to add embeddable Vision AI capability to their hardware stack without building a large internal ML team. The outreach should stay focused on product enhancement, OEM enablement, and hardware-fit, not on replacing their core imaging business.",
+      "qualificationSummary": "Qualified as a hardware partner prospect with moderate-to-strong fit. The key question is whether Aurea Imaging has any own commercial Vision AI software layer; based on the category description, they likely do not. That makes ONE WARE relevant for enabling Vision AI features in cameras, inspection systems, or embedded imaging products with less trial and error, faster delivery, smaller hardware-efficient models, and more predictable timelines.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Wir sehen oft, dass gerade Modellwahl und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Maschinenbauer und Hardwareanbieter sehen Vision-AI als spannendes Feature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Produkte integrieren.\n\nFalls bei Aurea Imaging Themen rund um Kamera-, Imaging- oder OEM-Produkte relevant sind, wäre ein kurzer Austausch interessant, um zu prüfen, wo das produktseitig sinnvoll sein könnte.\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Falls Sie an Kamera- oder OEM-Produkten arbeiten, bei denen Vision-AI relevant werden könnte, wäre das bei Ihnen ein aktuelles Thema?",
+      "riskFlags": [
+        "No clear evidence of a specific AI software product line to personalize against",
+        "If they already bundle proprietary analytics or vision software, ONE WARE positioning must stay complementary",
+        "Hardware vendors may prioritize sensor performance over ML workflow pain unless a concrete product use case is identified"
+      ]
+    },
+    {
+      "companyName": "ivii GmbH",
+      "domain": "http://www.ivii.eu",
+      "country": "Austria",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 84,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with clear potential to benefit from Vision AI delivery, and no strong indication of a competing own AI software layer.",
+      "overview": "ivii GmbH appears to fit the industrial camera / imaging hardware partner profile rather than a company with a dominant own Vision AI software commercialization layer. That makes them a plausible complement for ONE WARE if they want to add Vision AI capability to camera, inspection, or OEM offerings without building a large internal ML team. The outreach should stay hardware- and product-enablement-focused, not position ONE WARE as a replacement for their core imaging business.",
+      "qualificationSummary": "Good fit as a hardware partner candidate. The key question is whether ivii is primarily selling imaging/camera technology and partner/OEM enablement, with limited own AI software monetization. If so, ONE WARE can help them add production-ready Vision AI faster, with less trial and error, more predictable delivery, and hardware-optimized models. If they already commercialize a strong proprietary AI software stack, that would reduce fit.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Wir sehen oft, dass Modellwahl und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Industrie- und Imaging-Anbieter sehen Vision-AI als sinnvolle Produktfunktion, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Kamera- oder Imaging-Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Industrie- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen aktuell ein Thema für Kamera-, OEM- oder Inspektionsprodukte?",
+      "riskFlags": [
+        "If ivii already sells a proprietary Vision AI software layer, ONE WARE could be seen as overlapping",
+        "If the company is purely hardware-focused with no AI roadmap, urgency may be limited",
+        "If they are not active in OEM, embedded, or inspection-related product lines, relevance drops",
+        "Need to avoid messaging that implies replacing their camera business or core imaging value"
+      ]
+    },
+    {
+      "companyName": "OPT Machine Vision GmbH",
+      "domain": null,
+      "country": "Germany",
+      "category": "software_integrator",
+      "relevanceScore": 82,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial machine vision vendor with likely hardware-led value and a plausible need for Vision AI delivery support rather than a competing software stack.",
+      "overview": "OPT Machine Vision GmbH appears to be an industrial camera / imaging vendor rather than a clear delivery-led Vision AI software integrator. Based on the available description, the fit is weaker for a partnership-first outreach because there is no strong signal of customer-specific AI project delivery or a recurring software integration practice. The account may still be relevant if they support industrial inspection or edge imaging projects, but the current evidence points more to hardware than to a software delivery partner.",
+      "qualificationSummary": "Borderline fit. The company is in the right industrial imaging space, but the known description does not show a clear own Vision AI software commercialization angle or strong project-delivery ownership. Prioritize only if further research confirms customer-specific inspection, quality control, or edge deployment work with recurring integration pressure.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei industriellen Imaging-Projekten oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "riskFlags": [
+        "Known description suggests hardware/vendor focus rather than software integrator",
+        "No clear own Vision AI software commercialization angle",
+        "May not own customer delivery or fixed-price project pressure",
+        "Could be closer to a product vendor than a delivery partner",
+        "Limited evidence of internal AI specialization or recurring model-building work"
+      ]
+    },
+    {
+      "companyName": "Medis Medical Imaging",
+      "domain": "http://www.medisimaging.com",
+      "country": "Netherlands",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 82,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with clear vision/QC adjacency and no obvious competing Vision AI software layer.",
+      "overview": "Medis Medical Imaging appears to be a hardware/imaging-focused company rather than a clear Vision AI software commercializer. That makes it a plausible complement case for ONE WARE if they want to add embedded AI or OEM-enabled inspection/imaging features without building a large internal ML team. The fit should be framed around product enhancement and hardware-optimized deployment, not replacement of their core imaging business.",
+      "qualificationSummary": "Qualified as a potential hardware partner. The available description suggests strength in industrial imaging/camera technology, with no clear signal of a dominant proprietary Vision AI software layer. This aligns with ONE WARE's partner motion: faster integration of production-ready Vision AI, smaller hardware-efficient models, and lower development effort. Main caveat is that the exact product stack and whether they already commercialize AI software should be verified before outreach.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Imaging- oder Kameraprodukte produktionsreif zu integrieren? Wir sehen oft, dass Modellwahl und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Imaging- und Hardwareanbieter sehen Vision-AI als sinnvolles Produkt-Feature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Imaging- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen aktuell ein Thema?",
+      "riskFlags": [
+        "No confirmed evidence of a specific product line or OEM program in the provided description",
+        "Need to verify whether they already sell their own Vision AI software layer",
+        "Could be a pure hardware vendor with limited appetite for AI partnerships",
+        "Medical imaging context may require stricter validation, regulatory, and integration constraints"
+      ]
+    },
+    {
+      "companyName": "PIUR IMAGING",
+      "domain": "http://www.piurimaging.com",
+      "country": "Austria",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 82,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with potential fit as a hardware partner, and no obvious competing Vision AI software layer.",
+      "overview": "PIUR IMAGING appears to fit the hardware/imaging partner category: strong imaging/camera orientation, but no clear indication of a commercial Vision AI software layer that would make ONE WARE redundant. This makes them a plausible complement partner if they want to add Vision AI capability to imaging products or OEM offerings without building a large internal ML team.",
+      "qualificationSummary": "Qualified as a hardware-first imaging vendor with potential OEM/embedded fit. The main opportunity is product enhancement and partner enablement, not replacing an existing AI software business. Outreach should stay focused on making Vision AI easier to embed, faster to production, and more hardware-efficient.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Imaging- oder OEM-Produkte zu integrieren? Wir sehen oft, dass Modellgenerierung und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Maschinenbauer und Hardwareanbieter sehen Vision-AI als spannendes Feature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Produkte integrieren.\n\nFalls bei PIUR IMAGING gerade OEM-, Embedded- oder Produkt-Erweiterungen in diese Richtung relevant sind, wäre ein kurzer Austausch sinnvoll.\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Hardware- und Imaging-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen aktuell ein Thema, etwa für OEM- oder Embedded-Anwendungen?",
+      "riskFlags": [
+        "No verified evidence of a strong own Vision AI software commercialization angle",
+        "If their core business is purely hardware, AI may be secondary and require careful positioning",
+        "Need to avoid implying they are a software integrator or service delivery firm",
+        "No clear public signal of partner-enablement or embedded AI strategy from the provided description"
+      ]
+    },
+    {
+      "companyName": "MBJ Imaging GmbH",
+      "domain": "http://www.mbj-imaging.com",
+      "country": "Germany",
+      "category": "industrial_camera_vendor_without_ai_software",
+      "relevanceScore": 82,
+      "sourceFilter": "Europe Industrial Camera Partners",
+      "rationale": "Industrial imaging vendor with likely hardware-led value and no obvious competing Vision AI software layer, making it a strong fit.",
+      "overview": "MBJ Imaging GmbH appears to fit the industrial camera / imaging partner category well: hardware and imaging capability first, with no clear indication of a dominant proprietary Vision AI software commercialization layer. That makes them a plausible complement partner for ONE WARE, especially if they support OEM, embedded, or inspection-oriented use cases where customers want Vision AI without building a large ML team.",
+      "qualificationSummary": "Qualified as a hardware-fit partner, not as a software competitor. The likely value is enabling MBJ Imaging to add Vision AI capability to camera or imaging solutions faster, with less trial and error and more predictable delivery. Personalization should stay focused on camera, imaging, OEM, or inspection integration and avoid implying they are a software-led AI vendor.",
+      "linkedInMessage": "Wie aufwendig ist es bei Ihnen aktuell, Vision-AI in Kamera- oder Imaging-Produkte produktionsreif zu integrieren? Wir sehen oft, dass Modellgenerierung und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir mit ONE WARE.",
+      "emailSubject": "Vision-AI einfacher in Kamera- und Imaging-Produkte integrieren",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nviele Kamera- und Imaging-Anbieter sehen Vision-AI als sinnvolles Produktfeature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Kamera- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen ein aktuelles Thema?",
+      "riskFlags": [
+        "If they have a hidden proprietary AI software stack, that would reduce partner fit",
+        "If their business is purely hardware sales with no product-enablement motion, outreach may be less relevant",
+        "Need to avoid framing ONE WARE as replacing their core imaging business",
+        "No verified public signal here of active AI commercialization, so personalization should remain light"
+      ]
+    }
+  ],
+  "searchHistory": [
+    {
+      "timestamp": "2026-05-10T11:00:07.414Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 12,
+      "relevanceRatio": 0.8,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T11:00:21.302Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 50,
+      "relevantCount": 35,
+      "relevanceRatio": 0.7,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    }
+  ]
+}

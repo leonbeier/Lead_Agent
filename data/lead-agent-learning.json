@@ -1,0 +1,198 @@
+{
+  "companyFeedback": [
+    {
+      "companyName": "InfinitiBit",
+      "domain": "infinitibit.com",
+      "verdict": "reject",
+      "reason": "AI infrastructure/framework vendor, not a Vision AI delivery integrator or industrial end customer.",
+      "createdAt": "2026-05-09T16:58:52.962Z"
+    },
+    {
+      "companyName": "Mech-Mind Robotics",
+      "domain": "mech-mind.com",
+      "verdict": "reject",
+      "reason": "Sells its own machine vision and deep learning software stack; treated as direct competitor rather than delivery partner.",
+      "createdAt": "2026-05-09T16:58:52.951Z"
+    },
+    {
+      "companyName": "JOIN",
+      "domain": "join.com",
+      "verdict": "reject",
+      "reason": "Recruiting software and applicant tracking platform, not a ONE WARE target.",
+      "createdAt": "2026-05-09T16:57:28.113Z"
+    }
+  ],
+  "filterPerformance": {
+    "Germany Industrial Software Integrators": {
+      "runs": 3,
+      "averageRelevanceRatio": 0.48979591836734687,
+      "earlyStopCount": 1
+    },
+    "Germany AI Delivery Integrators": {
+      "runs": 5,
+      "averageRelevanceRatio": 0.5176870748299319,
+      "earlyStopCount": 2
+    },
+    "Germany Industrial Customers With QC Need": {
+      "runs": 3,
+      "averageRelevanceRatio": 0.13333333333333333,
+      "earlyStopCount": 3
+    },
+    "Germany Machine Builders With Vision Upside": {
+      "runs": 3,
+      "averageRelevanceRatio": 0.3917233560090703,
+      "earlyStopCount": 1
+    },
+    "Europe Industrial Camera Partners": {
+      "runs": 5,
+      "averageRelevanceRatio": 0.5892307692307692,
+      "earlyStopCount": 1
+    }
+  },
+  "searchHistory": [
+    {
+      "timestamp": "2026-05-10T11:00:07.414Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 12,
+      "relevanceRatio": 0.8,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T11:00:21.302Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 50,
+      "relevantCount": 35,
+      "relevanceRatio": 0.7,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T10:59:10.263Z",
+      "filterName": "Germany AI Delivery Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T10:59:13.888Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 12,
+      "relevanceRatio": 0.8,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T10:59:28.182Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 50,
+      "relevantCount": 35,
+      "relevanceRatio": 0.7,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T10:58:24.176Z",
+      "filterName": "Germany AI Delivery Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T10:58:27.935Z",
+      "filterName": "Europe Industrial Camera Partners",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T10:58:31.957Z",
+      "filterName": "Germany Industrial Software Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T10:58:35.983Z",
+      "filterName": "Germany Machine Builders With Vision Upside",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T10:58:40.984Z",
+      "filterName": "Germany Industrial Customers With QC Need",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-10T10:55:48.660Z",
+      "filterName": "Germany AI Delivery Integrators",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 15,
+      "relevantCount": 15,
+      "relevanceRatio": 1,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-10T10:55:48.661Z",
+      "filterName": "Germany AI Delivery Integrators",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 50,
+      "relevantCount": 50,
+      "relevanceRatio": 1,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    }
+  ]
+}

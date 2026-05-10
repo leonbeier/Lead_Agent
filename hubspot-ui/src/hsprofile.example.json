@@ -1,0 +1,7 @@
+{
+  "accountId": 123456789,
+  "variables": {
+    "LEAD_AGENT_API_BASE_URL": "https://your-public-lead-agent-url.example.com",
+    "LEAD_AGENT_SHARED_KEY": "replace-with-your-shared-key"
+  }
+}
