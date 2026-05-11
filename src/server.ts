@@ -9,6 +9,17 @@ import { LeadPipelineAgent } from "./agents/lead-pipeline";
 import { CATEGORY_EXECUTION_CONTEXT } from "./prompting/one-ware-playbook";
 
 const app = express();
+
+type LeadRunStatus = {
+  running: boolean;
+  startedAt?: string;
+  finishedAt?: string;
+  lastError?: string;
+};
+
+const leadRunStatus: LeadRunStatus = {
+  running: false
+};
 const leadPipelineAgent = new LeadPipelineAgent();
 const controlPlaneStore = new ControlPlaneStore();
 const hubSpotConsolePath = path.join(process.cwd(), "public", "hubspot-ui", "index.html");
@@ -273,6 +284,12 @@ app.get("/api/control/latest-lead-run", async (_request, response, next) => {
   }
 });
 
+app.get("/api/control/run-status", (_request, response) => {
+  response.json({
+    runStatus: leadRunStatus
+  });
+});
+
 app.post("/api/control/learning/feedback", async (request, response, next) => {
   try {
     response.json({
@@ -316,12 +333,39 @@ app.post("/api/lead-jobs/run", async (request, response, next) => {
 
 app.post("/api/hubspot/workflow-trigger", async (request, response, next) => {
   try {
+    if (leadRunStatus.running) {
+      response.status(409).json({
+        trigger: "hubspot-ui",
+        accepted: false,
+        runStatus: leadRunStatus,
+        error: "A lead run is already in progress."
+      });
+      return;
+    }
+
     const payload = await buildLeadJobPayload(request.body as Record<string, unknown>);
 
-    const result = await leadPipelineAgent.run(payload);
+    leadRunStatus.running = true;
+    leadRunStatus.startedAt = new Date().toISOString();
+    leadRunStatus.finishedAt = undefined;
+    leadRunStatus.lastError = undefined;
+
+    void leadPipelineAgent.run(payload)
+      .then(() => {
+        leadRunStatus.running = false;
+        leadRunStatus.finishedAt = new Date().toISOString();
+      })
+      .catch((error) => {
+        leadRunStatus.running = false;
+        leadRunStatus.finishedAt = new Date().toISOString();
+        leadRunStatus.lastError = error instanceof Error ? error.message : "Unknown error";
+        console.error("Lead run failed", error);
+      });
+
     response.status(202).json({
       trigger: "hubspot-ui",
-      result
+      accepted: true,
+      runStatus: leadRunStatus
     });
   } catch (error) {
     next(error);

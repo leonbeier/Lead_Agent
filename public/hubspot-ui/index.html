@@ -930,6 +930,28 @@
         renderFilterPerformance(learningPayload.learning?.filterPerformance || {}, learningPayload.learning?.searchHistory || []);
       }
 
+      async function waitForBackgroundRunCompletion() {
+        const start = Date.now();
+
+        while (Date.now() - start < 60 * 60 * 1000) {
+          const statusPayload = await requestJson("/api/control/run-status");
+          const runStatus = statusPayload.runStatus || {};
+
+          if (!runStatus.running) {
+            if (runStatus.lastError) {
+              throw new Error(runStatus.lastError);
+            }
+
+            return runStatus;
+          }
+
+          resultOutput.textContent = `Live-Run laeuft seit ${runStatus.startedAt || "unbekannt"}...`;
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+        }
+
+        throw new Error("Live-Run hat das Polling-Zeitlimit ueberschritten.");
+      }
+
       async function triggerRun(endpoint) {
         try {
           resultOutput.textContent = "Lauf wird gestartet...";
@@ -937,6 +959,11 @@
             method: "POST",
             body: JSON.stringify(collectSettings())
           });
+
+          if (endpoint === "/api/hubspot/workflow-trigger" && result.accepted) {
+            await waitForBackgroundRunCompletion();
+          }
+
           await refreshRunSurfaces();
           resultOutput.textContent = JSON.stringify(result, null, 2);
         } catch (error) {
