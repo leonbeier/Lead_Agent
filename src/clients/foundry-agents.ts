@@ -141,7 +141,7 @@ export class FoundryAgentsClient {
     description: string,
     mainContext: string | undefined,
     prequalification: PrequalificationConfig | undefined,
-    targetCategories: LeadCategory[] | undefined,
+    _targetCategories: LeadCategory[] | undefined,
     dryRun: boolean
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null> {
     if (dryRun || !readiness.foundryConfigured) {
@@ -155,8 +155,7 @@ export class FoundryAgentsClient {
           `Company: ${name}`,
           `Description: ${description}`,
           `Target regions: ${TARGET_REGIONS.join(", ")}`,
-          buildPrequalificationContextBlock(prequalification, targetCategories, mainContext),
-          targetCategories?.length ? `Active target categories: ${targetCategories.join(", ")}` : undefined
+          buildPrequalificationContextBlock(prequalification, undefined, mainContext)
         ]
           .filter(Boolean)
           .join("\n")

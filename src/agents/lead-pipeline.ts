@@ -396,11 +396,13 @@ export class LeadPipelineAgent {
     const finalShortlist = await this.excludeExistingHubSpotDomains(replenishedShortlist, dryRun);
     const uniqueShortlist = finalShortlist.slice(0, request.targetLeadCount);
 
-    const researchBriefs = request.runDeepResearch === false
+    const researchBriefs = dryRun
       ? []
       : await this.mapWithConcurrency(
           uniqueShortlist.map((company) =>
-            () => this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning)
+            () => this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
+              includeWebResearch: request.runDeepResearch !== false
+            })
           ),
           AZURE_WORKER_CONCURRENCY
         );

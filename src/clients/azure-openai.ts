@@ -29,11 +29,16 @@ interface RunChatOptions {
   maxTokens?: number;
 }
 
+interface BuildResearchBriefOptions {
+  includeWebResearch?: boolean;
+}
+
 const MAX_AZURE_RETRIES = 3;
 const AZURE_RETRY_DELAYS_MS = [500, 1000, 2000];
 const QUICK_QUALIFICATION_CONTEXT = [
   "You classify lead fit for ONE WARE.",
   "Classify conservatively and completely unbiased before preferring any positive category.",
+  "All categories are always available during classification; selected run categories are applied only after classification as a filtering step, never as a hint for the category choice.",
   "First identify the firm archetype: implementation-led integrator, industrial end customer, camera/imaging manufacturer, machine builder/OEM, software platform, or clearly irrelevant profile.",
   "Then decide whether the company is genuinely relevant, clearly irrelevant, or too ambiguous.",
   "Do not infer delivery ownership or category fit from the Apollo filter name, source filter, or a vague company name alone.",
@@ -72,7 +77,7 @@ export class AzureOpenAIClient {
       description,
       mainContext,
       prequalification,
-      targetCategories,
+      undefined,
       dryRun
     );
     if (foundryCategorization) {
@@ -83,14 +88,13 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${QUICK_QUALIFICATION_CONTEXT}\n\n${buildPrequalificationContextBlock(prequalification, targetCategories, mainContext)}`
+          content: `${QUICK_QUALIFICATION_CONTEXT}\n\n${buildPrequalificationContextBlock(prequalification, undefined, mainContext)}`
         },
         {
           role: "user",
           content: [
             `Company=${name}`,
             `Description=${description}`,
-            targetCategories?.length ? `Active target categories=${targetCategories.join(", ")}` : undefined,
             prequalification?.mainContext ? `Prequalification main context=${prequalification.mainContext}` : undefined,
             learning ? this.buildLearningContext(learning) : undefined
           ]
@@ -118,12 +122,16 @@ export class AzureOpenAIClient {
     company: PreCategorizedCompany,
     dryRun: boolean,
     mainContext?: string,
-    learning?: LeadLearningData
+    learning?: LeadLearningData,
+    options: BuildResearchBriefOptions = {}
   ): Promise<ResearchBrief> {
+    const includeWebResearch = options.includeWebResearch !== false;
     const template = getTemplateForCategory(company.category);
     const executionContext = buildExecutionContextBlock(company.category, mainContext);
 
-    const foundryResearchBrief = await this.foundryAgentsClient.buildResearchBrief(company, mainContext, dryRun);
+    const foundryResearchBrief = includeWebResearch
+      ? await this.foundryAgentsClient.buildResearchBrief(company, mainContext, dryRun)
+      : null;
     if (foundryResearchBrief) {
       return foundryResearchBrief;
     }
@@ -132,13 +140,15 @@ export class AzureOpenAIClient {
       return this.buildFallbackResearchBrief(company, template, executionContext, mainContext);
     }
 
-    const webResearchEvidence = await this.webSearchAgent.buildResearchContext(company);
+    const webResearchEvidence = includeWebResearch
+      ? await this.webSearchAgent.buildResearchContext(company)
+      : undefined;
 
     try {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(mainContext)}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Estimate whether the decision-makers or likely target contacts are German-speaking. If yes, produce outreach in German; otherwise produce it in English. Estimate all three commercial rankings on a 0-10 scale: customer, serviceProvider, partner. Estimate businessPotentialEUR as a realistic euro value, not a score. Use the following commercial framing: a single AI use case often starts around 7000 EUR, can be 20000 to 40000 EUR per AI for more complex or production-grade deployments, can multiply across many use cases, and OEM or camera-manufacturer partner rollouts can be much larger, including six- or seven-figure potential in recurring machine volumes. Also return targetIndustry and productsOffered. Use any supplied web evidence as your factual grounding. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
+          content: `${buildMainContextBlock(mainContext)}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Estimate whether the decision-makers or likely target contacts are German-speaking. If yes, produce outreach in German; otherwise produce it in English. Estimate all three commercial rankings on a 0-10 scale: customer, serviceProvider, partner. Estimate businessPotentialEUR as a realistic euro value, not a score. Use the following commercial framing: a single AI use case often starts around 7000 EUR, can be 20000 to 40000 EUR per AI for more complex or production-grade deployments, can multiply across many use cases, and OEM or camera-manufacturer partner rollouts can be much larger, including six- or seven-figure potential in recurring machine volumes. Also return targetIndustry and productsOffered. Use any supplied web evidence as your factual grounding. If no web evidence is supplied, reason only from the provided company facts and keep uncertainty explicit. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
         },
         {
           role: "user",
@@ -538,13 +548,22 @@ export class AzureOpenAIClient {
       "customised",
       "engineering services",
       "consultancy",
-      "services",
       "delivering",
       "providing",
       "implementing",
       "implementation",
       "project delivery",
       "integration services"
+    ];
+    const softwarePlatformSignals = [
+      "software platform",
+      "platform tools",
+      "developer tools",
+      "development environment",
+      "runtime system",
+      "control runtime",
+      "sdk",
+      "api"
     ];
     const visionDeliverySignals = [
       "machine vision",
@@ -642,6 +661,12 @@ export class AzureOpenAIClient {
       lowered.includes("manufacturer") ||
       lowered.includes("optics");
     const serviceHits = serviceSignals.filter((signal) => lowered.includes(signal)).length;
+    const negatesServiceLedModel =
+      lowered.includes("not a pure implementation-led services firm") ||
+      lowered.includes("not a pure implementation led services firm") ||
+      lowered.includes("not an implementation-led services firm") ||
+      lowered.includes("product vendor, not a pure implementation-led services firm") ||
+      lowered.includes("primarily sells software products");
 
     if (hasPlaceholderDescription && productBrandSignals.some((signal) => lowered.includes(signal)) && serviceHits === 0) {
       return {
@@ -673,6 +698,15 @@ export class AzureOpenAIClient {
         category: "integrator_vision_industrial_ai",
         relevanceScore: 88,
         rationale: "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+      };
+    }
+
+    const softwarePlatformHits = softwarePlatformSignals.filter((signal) => lowered.includes(signal)).length;
+    if (softwarePlatformHits >= 2 && (serviceHits === 0 || negatesServiceLedModel) && nonIndustrialHits === 0) {
+      return {
+        category: "software_platform_embedding",
+        relevanceScore: 82,
+        rationale: "Company description looks like an industrial software platform or developer-tool business with partner or embedding potential."
       };
     }
 
