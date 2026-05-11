@@ -544,6 +544,7 @@
               ${contact.outreachLanguage ? `<span class="mini-meta">Sprache: ${contact.outreachLanguage.toUpperCase()} · Rankings C/S/P: ${(contact.rankings?.customer ?? "-")}/${(contact.rankings?.serviceProvider ?? "-")}/${(contact.rankings?.partner ?? "-")}</span>` : ""}
               ${typeof contact.businessPotentialEUR === "number" ? `<span class="mini-meta">Potential: EUR ${Math.round(contact.businessPotentialEUR).toLocaleString("de-DE")}</span>` : ""}
               ${contact.targetIndustry ? `<span class="mini-meta">Target Industry: ${contact.targetIndustry}</span>` : ""}
+              ${contact.productsOffered ? `<span class="mini-meta">Products Offered: ${contact.productsOffered}</span>` : ""}
               ${contact.publicContactEmails?.length ? `<span class="mini-meta">E-Mail: ${contact.publicContactEmails.slice(0, 2).join(", ")}</span>` : ""}
               ${contact.publicContactPhones?.length ? `<span class="mini-meta">Telefon: ${contact.publicContactPhones.slice(0, 2).join(", ")}</span>` : ""}
             </div>
