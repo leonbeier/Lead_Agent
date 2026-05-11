@@ -29,35 +29,62 @@ export class OpenAIWebSearchClient {
       return [];
     }
 
-    const prompt = [
-      "Find public company websites for ONE WARE lead discovery.",
-      "Use only organization-level information.",
-      "Do not return employee names, emails, phone numbers, LinkedIn profiles, or any other personal data.",
-      "Only return companies when public evidence suggests real software delivery, system integration, automation engineering, embedded development, industrial implementation, or customer project ownership.",
-      "Exclude robot manufacturers, hardware vendors, OEM product brands, magazines, publishers, media portals, events, associations, universities, research institutes, investors, banks, insurers, recruiters, generic consultancies, and direct competing AI software vendors.",
-      "Prefer official company websites over directories, news sites, glossaries, job boards, and social networks.",
-      `Return up to ${limit} companies for page variant ${page}.`,
-      `Apollo-style filter JSON: ${JSON.stringify(filter)}`,
-      "Return strict JSON with {\"companies\":[{\"name\":\"...\",\"domain\":\"https://...\",\"country\":\"...\",\"shortDescription\":\"...\",\"whyRelevant\":\"...\"}]}."
-    ].join("\n\n");
+    const companies: CompanySample[] = [];
+    const seenKeys = new Set<string>();
 
-    try {
-      const response = await this.runWebSearch(prompt, 2200);
-      const parsed = this.parseJson<{ companies?: Array<{
-        name?: string;
-        domain?: string;
-        country?: string;
-        shortDescription?: string;
-        whyRelevant?: string;
-      }> }>(response.text);
+    for (let attempt = 0; attempt < 3 && companies.length < limit; attempt += 1) {
+      const excludedDomains = companies
+        .map((company) => company.domain)
+        .filter((domain): domain is string => Boolean(domain));
+      const prompt = [
+        "Find public company websites for ONE WARE lead discovery.",
+        "Use only organization-level information.",
+        "Do not return employee names, emails, phone numbers, LinkedIn profiles, or any other personal data.",
+        "Only return companies when public evidence suggests real software delivery, system integration, automation engineering, embedded development, industrial implementation, or customer project ownership.",
+        "Exclude robot manufacturers, hardware vendors, OEM product brands, magazines, publishers, media portals, events, associations, universities, research institutes, investors, banks, insurers, recruiters, generic consultancies, and direct competing AI software vendors.",
+        "Prefer official company websites over directories, news sites, glossaries, job boards, and social networks.",
+        `Return up to ${limit} companies for page variant ${page}.${attempt + 1}.`,
+        excludedDomains.length > 0 ? `Do not repeat these websites: ${excludedDomains.join(", ")}` : undefined,
+        `Apollo-style filter JSON: ${JSON.stringify(filter)}`,
+        "Return strict JSON with {\"companies\":[{\"name\":\"...\",\"domain\":\"https://...\",\"country\":\"...\",\"shortDescription\":\"...\",\"whyRelevant\":\"...\"}]}."
+      ].filter(Boolean).join("\n\n");
 
-      return (parsed.companies ?? [])
-        .map((company) => this.normalizeCompany(company, filter))
-        .filter((company): company is CompanySample => Boolean(company))
-        .slice(0, limit);
-    } catch {
-      return [];
+      try {
+        const response = await this.runWebSearch(prompt, 2200);
+        const parsed = this.parseJson<{ companies?: Array<{
+          name?: string;
+          domain?: string;
+          country?: string;
+          shortDescription?: string;
+          whyRelevant?: string;
+        }> }>(response.text);
+
+        for (const company of parsed.companies ?? []) {
+          const normalizedCompany = this.normalizeCompany(company, filter);
+          if (!normalizedCompany) {
+            continue;
+          }
+
+          const companyKey = `${normalizedCompany.name.toLowerCase()}::${normalizedCompany.domain?.toLowerCase() ?? ""}`;
+          if (seenKeys.has(companyKey)) {
+            continue;
+          }
+
+          seenKeys.add(companyKey);
+          companies.push(normalizedCompany);
+
+          if (companies.length >= limit) {
+            break;
+          }
+        }
+      } catch {
+        if (companies.length > 0) {
+          break;
+        }
+      }
     }
+
+    return companies.slice(0, limit);
   }
 
   async buildResearchContext(company: PreCategorizedCompany): Promise<SearchEvidence | null> {
