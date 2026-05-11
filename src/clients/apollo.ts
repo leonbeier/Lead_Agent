@@ -161,10 +161,17 @@ export class ApolloClient {
     const sparseIndexes = enrichedCompanies
       .map((company, index) => ({ company, index }))
       .filter(({ company }) => company.shortDescription.includes("No verified public company description was returned by Apollo."))
-      .slice(0, 8);
+      .slice(0, 4);
 
-    for (const { company, index } of sparseIndexes) {
-      const enrichment = await this.webSearchAgent.summarizeCompany(company);
+    const enrichments = await Promise.all(
+      sparseIndexes.map(async ({ company, index }) => ({
+        index,
+        company,
+        enrichment: await this.webSearchAgent.summarizeCompany(company)
+      }))
+    );
+
+    for (const { company, index, enrichment } of enrichments) {
       if (!enrichment?.shortDescription) {
         continue;
       }

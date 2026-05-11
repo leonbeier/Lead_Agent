@@ -170,7 +170,7 @@ export class LeadPipelineAgent {
           const reviewedCompanies: PreCategorizedCompany[] = [];
           let useWebSearchForExpansion = creditLessMode;
           const probeSample = this.excludeRejectedCompanies(
-            await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
+            await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1, creditLessMode),
             learning
           );
           let categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalification, targetCategories, learning);
@@ -487,6 +487,10 @@ export class LeadPipelineAgent {
   ) {
     const baselineFilters = buildSuggestedFilters(market, customGoal)
       .filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
+    if (this.shouldReuseLearnedFilters(baselineFilters, learning, customGoal, mainContext, searchStrategyContext)) {
+      return baselineFilters;
+    }
+
     const generatedFilters = await this.azureClient.generateSuggestedFilters(
       market,
       customGoal,
@@ -908,6 +912,30 @@ export class LeadPipelineAgent {
     return [...filters].sort(
       (left, right) => this.getFilterRank(right.name, learning, market, customGoal) - this.getFilterRank(left.name, learning, market, customGoal)
     );
+  }
+
+  private shouldReuseLearnedFilters(
+    baselineFilters: import("../types").ApolloOrganizationFilter[],
+    learning: LeadLearningData | undefined,
+    customGoal?: string,
+    mainContext?: string,
+    searchStrategyContext?: string
+  ): boolean {
+    if (!learning || customGoal?.trim() || mainContext?.trim() || searchStrategyContext?.trim()) {
+      return false;
+    }
+
+    const strongBaselineFilters = baselineFilters.filter((filter) => {
+      const stats = learning.filterPerformance[filter.name];
+      if (!stats || stats.runs < 1) {
+        return false;
+      }
+
+      const earlyStopRate = stats.earlyStopCount / stats.runs;
+      return stats.averageRelevanceRatio >= 0.55 && earlyStopRate <= 0.4;
+    });
+
+    return strongBaselineFilters.length >= 2;
   }
 
   private getFilterRank(filterName: string, learning: LeadLearningData, market?: string, customGoal?: string): number {

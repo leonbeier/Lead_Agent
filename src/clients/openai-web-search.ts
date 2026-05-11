@@ -50,7 +50,7 @@ export class OpenAIWebSearchClient {
       ].filter(Boolean).join("\n\n");
 
       try {
-        const response = await this.runWebSearch(prompt, 2200);
+        const response = await this.runWebSearch(prompt, Math.min(1200, 250 + limit * 55));
         const parsed = this.parseJson<{ companies?: Array<{
           name?: string;
           domain?: string;
@@ -155,7 +155,7 @@ export class OpenAIWebSearchClient {
     ].filter(Boolean).join("\n\n");
 
     try {
-      const response = await this.runWebSearch(prompt, 900);
+      const response = await this.runWebSearch(prompt, 320);
       const parsed = this.parseJson<{ country?: string; shortDescription?: string }>(response.text);
       const shortDescription = parsed.shortDescription?.trim();
 
