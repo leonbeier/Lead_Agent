@@ -372,7 +372,22 @@ export class LeadPipelineAgent {
     const filteredShortlist = creditLessMode
       ? toppedUpShortlist
       : await this.excludeExistingHubSpotDomains(toppedUpShortlist, dryRun);
-    const uniqueShortlist = filteredShortlist.slice(0, request.targetLeadCount);
+    const replenishedShortlist = creditLessMode || filteredShortlist.length >= request.targetLeadCount
+      ? filteredShortlist
+      : await this.topUpWithWebDiscovery(
+          filteredShortlist,
+          shortlistedKeys,
+          suggestedFilters,
+          request,
+          mainContext,
+          prequalification,
+          targetCategories,
+          learning
+        );
+    const finalShortlist = creditLessMode
+      ? replenishedShortlist
+      : await this.excludeExistingHubSpotDomains(replenishedShortlist, dryRun);
+    const uniqueShortlist = finalShortlist.slice(0, request.targetLeadCount);
 
     const researchBriefs = request.runDeepResearch === false
       ? []
