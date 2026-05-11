@@ -530,11 +530,19 @@ export class AzureOpenAIClient {
       "system integrator",
       "systems integrator",
       "solution provider",
+      "provider of turnkey",
+      "turnkey",
       "software development",
       "custom software",
+      "customized",
+      "customised",
       "engineering services",
       "consultancy",
       "services",
+      "delivering",
+      "providing",
+      "implementing",
+      "implementation",
       "project delivery",
       "integration services"
     ];
@@ -543,10 +551,15 @@ export class AzureOpenAIClient {
       "industrial image processing",
       "image processing",
       "inspection systems",
+      "inspection solutions",
+      "inspection automation",
       "quality assurance systems",
       "aoi",
       "inspection",
       "vision systems",
+      "quality inspection",
+      "inline",
+      "end-of-line",
       "computer vision"
     ];
     const automationDeliverySignals = [
