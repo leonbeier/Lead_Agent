@@ -219,10 +219,28 @@ export class ControlPlaneStore {
   async getTemplates(): Promise<Record<string, OutreachTemplate>> {
     await this.ensureSeedData();
     const templates = await readJsonFile<Record<string, OutreachTemplate>>(templatesPath);
-    return templateRecordSchema.parse({
+    const mergedTemplates = {
       ...OUTREACH_TEMPLATES,
       ...templates
-    });
+    };
+
+    const supportedTemplateKeys = new Set(Object.keys(OUTREACH_TEMPLATES));
+    const sanitizedTemplates = templateRecordSchema.parse(
+      Object.fromEntries(
+        Object.entries(mergedTemplates).filter(([key]) => supportedTemplateKeys.has(key))
+      )
+    );
+
+    const persistedTemplateKeys = Object.keys(templates);
+    const expectedTemplateKeys = Object.keys(sanitizedTemplates);
+    const hasLegacyKeys = persistedTemplateKeys.some((key) => !supportedTemplateKeys.has(key));
+    const missingCurrentKeys = expectedTemplateKeys.some((key) => !persistedTemplateKeys.includes(key));
+
+    if (hasLegacyKeys || missingCurrentKeys) {
+      await writeJsonFile(templatesPath, sanitizedTemplates);
+    }
+
+    return sanitizedTemplates;
   }
 
   async getLearning(): Promise<LeadLearningData> {
