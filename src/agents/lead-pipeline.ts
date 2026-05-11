@@ -356,9 +356,22 @@ export class LeadPipelineAgent {
       .sort((left, right) => right.relevanceScore - left.relevanceScore)
       .filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index);
 
-    const filteredShortlist = creditLessMode
+    const toppedUpShortlist = creditLessMode || sortedShortlist.length >= request.targetLeadCount
       ? sortedShortlist
-      : await this.excludeExistingHubSpotDomains(sortedShortlist, dryRun);
+      : await this.topUpWithWebDiscovery(
+          sortedShortlist,
+          shortlistedKeys,
+          suggestedFilters,
+          request,
+          mainContext,
+          prequalification,
+          targetCategories,
+          learning
+        );
+
+    const filteredShortlist = creditLessMode
+      ? toppedUpShortlist
+      : await this.excludeExistingHubSpotDomains(toppedUpShortlist, dryRun);
     const uniqueShortlist = filteredShortlist.slice(0, request.targetLeadCount);
 
     const researchBriefs = request.runDeepResearch === false
@@ -814,6 +827,59 @@ export class LeadPipelineAgent {
         return sameName || sameDomain;
       });
     });
+  }
+
+  private async topUpWithWebDiscovery(
+    currentShortlist: PreCategorizedCompany[],
+    shortlistedKeys: Set<string>,
+    filters: import("../types").ApolloOrganizationFilter[],
+    request: LeadJobRequest,
+    mainContext: string | undefined,
+    prequalification: PrequalificationConfig | undefined,
+    targetCategories: LeadCategory[],
+    learning: LeadLearningData
+  ): Promise<PreCategorizedCompany[]> {
+    const toppedUp = [...currentShortlist];
+
+    for (const filter of filters) {
+      if (toppedUp.length >= request.targetLeadCount) {
+        break;
+      }
+
+      for (let page = 1; page <= 5; page += 1) {
+        const discoveredCompanies = this.excludeRejectedCompanies(
+          await this.apolloClient.fetchOrganizationSample(filter, EXPANSION_BATCH_SIZE, Boolean(request.dryRun), page, true),
+          learning
+        );
+
+        if (discoveredCompanies.length === 0) {
+          break;
+        }
+
+        const unseenCompanies = this.excludeAlreadyReviewedCompanies(discoveredCompanies, toppedUp);
+        if (unseenCompanies.length === 0) {
+          continue;
+        }
+
+        const categorizedCompanies = await this.categorizeCompanies(
+          unseenCompanies,
+          Boolean(request.dryRun),
+          mainContext,
+          prequalification,
+          targetCategories,
+          learning
+        );
+
+        const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, filter, targetCategories, request.market);
+        this.addUniqueCompanies(toppedUp, relevantCompanies, shortlistedKeys);
+
+        if (toppedUp.length >= request.targetLeadCount) {
+          break;
+        }
+      }
+    }
+
+    return toppedUp;
   }
 
   private orderFiltersByLearning(
