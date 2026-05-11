@@ -367,7 +367,7 @@ export class LeadPipelineAgent {
       .sort((left, right) => right.relevanceScore - left.relevanceScore)
       .filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index);
 
-    const toppedUpShortlist = creditLessMode || sortedShortlist.length >= request.targetLeadCount
+    const toppedUpShortlist = sortedShortlist.length >= request.targetLeadCount
       ? sortedShortlist
       : await this.topUpWithWebDiscovery(
           sortedShortlist,
@@ -380,10 +380,8 @@ export class LeadPipelineAgent {
           learning
         );
 
-    const filteredShortlist = creditLessMode
-      ? toppedUpShortlist
-      : await this.excludeExistingHubSpotDomains(toppedUpShortlist, dryRun);
-    const replenishedShortlist = creditLessMode || filteredShortlist.length >= request.targetLeadCount
+    const filteredShortlist = await this.excludeExistingHubSpotDomains(toppedUpShortlist, dryRun);
+    const replenishedShortlist = filteredShortlist.length >= request.targetLeadCount
       ? filteredShortlist
       : await this.topUpWithWebDiscovery(
           filteredShortlist,
@@ -395,9 +393,7 @@ export class LeadPipelineAgent {
           targetCategories,
           learning
         );
-    const finalShortlist = creditLessMode
-      ? replenishedShortlist
-      : await this.excludeExistingHubSpotDomains(replenishedShortlist, dryRun);
+    const finalShortlist = await this.excludeExistingHubSpotDomains(replenishedShortlist, dryRun);
     const uniqueShortlist = finalShortlist.slice(0, request.targetLeadCount);
 
     const researchBriefs = request.runDeepResearch === false
@@ -413,17 +409,7 @@ export class LeadPipelineAgent {
       ? new Map<string, PublicContactCandidate[]>()
       : await this.collectPublicContacts(uniqueShortlist, dryRun);
 
-    const hubspotSync = creditLessMode
-      ? {
-          attempted: false,
-          mode: "dry-run" as const,
-          candidateCount: uniqueShortlist.length,
-          syncedCount: 0,
-          companySyncedCount: 0,
-          contactSyncedCount: 0,
-          errors: undefined
-        }
-      : await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, !syncToHubSpot);
+    const hubspotSync = await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, !syncToHubSpot);
     await this.controlPlaneStore.recordFilterEvaluations(evaluations);
     await this.controlPlaneStore.recordSearchHistory(searchHistory);
     await this.controlPlaneStore.writeLatestLeadRun({
