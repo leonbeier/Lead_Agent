@@ -106,7 +106,7 @@ curl -X POST http://localhost:3000/api/hubspot/workflow-trigger \
 - Azure OpenAI endpoint, key und deployment name
 - optional: Foundry project endpoint fuer agentische Filteroptimierung, Vorqualifikation und Deep Research mit Web Search oder Bing Grounding
 - optional: Foundry Bing connection name, wenn statt allgemeinem Web Search die neue Grounding-with-Bing-Resource verwendet werden soll
-- optional: kein zusaetzlicher Search-API-Key noetig, wenn ihr den eingebauten DuckDuckGo-basierten Web-Search-Agent-Fallback nutzt
+- optional: OpenAI API key fuer firmenbezogene Web Search im credit-less Unternehmensmodus
 
 ## Foundry Agent Setup
 
@@ -134,27 +134,25 @@ Empfohlene Umgebungsvariablen:
 
 Wenn `FOUNDRY_BING_CONNECTION_NAME` gesetzt ist, verwendet der Deep Research Agent eure Grounding-with-Bing-Resource. Wenn nicht, faellt er auf den Foundry-Web-Search-Toolpfad zurueck.
 
-## Eigener Web-Search-Agent ohne Zusatz-API
+## Firmen-Web-Search
 
-Wenn Foundry oder Bing Grounding nicht verfuegbar sind, nutzt der Azure-Research-Fallback jetzt einen eingebauten Web-Search-Agent auf Basis von `duck-duck-scrape`.
+Wenn Apollo fuer Unternehmenssuche nicht verfuegbar ist oder im `creditLessMode` gearbeitet wird, nutzt die Pipeline jetzt den OpenAI-Responses-Web-Search-Pfad fuer reine Firmendaten.
 
-Der Ablauf ist bewusst einfach gehalten:
+Wichtige Regeln:
 
-1. Es werden mehrere Firmen-Queries gegen DuckDuckGo erzeugt.
-2. Die besten Treffer werden dedupliziert.
-3. Fuer die ersten Treffer werden Seiteninhalte direkt abgerufen und als Evidenzblock an Azure OpenAI uebergeben.
-4. Das Modell erzeugt daraus den bestehenden `ResearchBrief` mit echten Web-Citations.
+1. Es werden nur organisationsbezogene Daten uebergeben, zum Beispiel Firmenname, Website, Land, Kurzbeschreibung, Kategorie und Filterdefinitionen.
+2. Es werden keine personenbezogenen Daten an OpenAI-Web-Search geschickt, also keine Namen, E-Mails, Telefonnummern oder Profil-URLs von Personen.
+3. Kontaktanreicherung bleibt am Ende bei Apollo und laeuft nicht ueber OpenAI-Web-Search.
 
 Relevante Umgebungsvariablen:
 
-- `WEB_SEARCH_AGENT_ENABLED=true`
-- `WEB_SEARCH_AGENT_MAX_RESULTS=5`
-
-Damit bekommt ihr echten externen Web-Search im bestehenden Pipeline-Pfad, ohne zusaetzliche Search-Provider-API. Die Grenzen liegen eher bei Trefferqualitaet, Rate-Limits oder HTML-Struktur einzelner Seiten als bei Azure selbst.
+- `OPENAI_API_KEY`
+- `OPENAI_WEB_SEARCH_ENABLED=true`
+- `OPENAI_WEB_SEARCH_MODEL=gpt-5.4-mini`
 
 Wichtige Betriebshinweise:
 
-- fuer Bing Grounding in Foundry Agents (classic) sollte kein `gpt-5`-Deployment verwendet werden; ein verifizierter kompatibler Pfad in diesem Setup ist `gpt-4.1-mini`
+- fuer den kostenarmen Standardpfad sind `gpt-5.4-mini` fuer OpenAI-Web-Search und nach Moeglichkeit auch fuer Azure-/Foundry-Deployments hinterlegt
 - die aktuelle Implementierung unter `src/clients/foundry-agents.ts` authentifiziert sich mit `DefaultAzureCredential`; fuer echten Betrieb braucht der Runtime-Host deshalb eine funktionierende Entra-ID-Credential-Kette und die Rolle `Azure AI User` auf der Foundry-Resource bzw. dem Projektpfad
 
 ## HubSpot- und Operator-Kontext

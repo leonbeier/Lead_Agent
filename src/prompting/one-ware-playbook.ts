@@ -1,4 +1,10 @@
-import { LeadCategory, PrequalificationConfig, SelectableLeadCategory } from "../types";
+import {
+  EditableExecutionContext,
+  EditablePrequalificationCategoryContext,
+  LeadCategory,
+  PrequalificationConfig,
+  SelectableLeadCategory
+} from "../types";
 
 export interface OutreachTemplate {
   key: string;
@@ -58,54 +64,56 @@ export const NON_TARGET_SIGNALS = [
 export const ONE_WARE_PROMPT_CONTEXT = `
 You represent ONE WARE GmbH.
 
-Core positioning:
-- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.
-- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.
-- Focus on real delivery problems, not generic AI enthusiasm.
+ONE WARE provides software that turns customer data into production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of long manual iteration cycles.
 
-Primary ICP focus:
-1. Software integrators that visibly offer Vision AI, Industrial AI, or embedded AI services.
-2. Software integrators with AI messaging, especially where they deliver projects instead of selling a packaged AI platform.
-3. Software integrators working on industrial automation, robotics, surveillance, defence, medtech vision, drones, agriculture, or automotive systems.
-4. Industrial companies with clear internal use cases like quality control, inspection, process automation, and enough scale for their own engineering team.
+Core value:
+- Reduce trial and error in model development.
+- Shorten time to production.
+- Make delivery timelines more predictable.
+- Enable smaller and more hardware-efficient models.
+- Lower engineering effort and deployment friction.
+- Support local training and vendor-independent deployment.
 
-Secondary focus:
-- Machine builders or hardware vendors that can embed ONE WARE into their products.
-- Partners without a strong competing own Vision AI software layer.
-
-Deprioritize or disqualify:
-- VC, PE, banks, generic finance, broad consulting without delivery ownership.
-- Companies outside Germany as first focus unless there is a very strong fit in EU, US, Japan, or Korea.
-- Companies that mainly sell their own competing Vision AI software stack.
-- Companies that are strong AI platform competitors rather than integrators or delivery partners.
-
-Messaging rules:
-- Do not rewrite outreach from scratch every time.
-- Start from the segment template and personalize only where there is a clear factual hook.
-- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.
-- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.
+When evaluating or writing about companies, anchor on concrete business problems ONE WARE can solve rather than generic AI excitement.
 `;
 
 export const DEFAULT_MAIN_CONTEXT = ONE_WARE_PROMPT_CONTEXT.trim();
 
+export const DEFAULT_SEARCH_STRATEGY_CONTEXT =
+  "Prioritize firms where public evidence suggests real delivery ownership, industrial deployment relevance, recurring implementation work, or a credible partner/embed path for ONE WARE. Search broadly enough to discover strong-fit companies, then filter conservatively based on concrete signals rather than generic AI claims.";
+
 export const DEFAULT_PREQUALIFICATION_MAIN_CONTEXT =
   "Decide relevance conservatively. A company is relevant only when there is evidence for real delivery ownership, industrial applicability, or a credible ONE WARE partner path. Reject weak-fit finance, recruiting, HR, generic non-industrial SaaS, and vague consulting profiles without implementation responsibility.";
 
-export const DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS: Record<SelectableLeadCategory, string> = {
-  integrator_vision_industrial_ai:
-    "Require explicit evidence for Vision AI, machine vision, industrial inspection, edge AI deployment, or comparable delivery work. Relevance is strongest when the company implements custom projects for customers instead of just reselling products.",
-  integrator_general_ai:
-    "Only treat as relevant when the company clearly delivers AI projects and there is a plausible path into Vision AI or industrial deployment. Generic AI branding alone is not enough.",
-  integrator_relevant_focus:
-    "Require both project-delivery ownership and a relevant vertical such as robotics, surveillance, medtech vision, agriculture tech, defence, automotive, or industrial automation. The vertical should make camera-, inspection-, or edge-AI use cases plausible.",
-  industrial_end_customer_scaled:
-    "Treat as relevant only when the company has its own production, operational scale, and a believable quality-control, inspection, or process-automation need. Look for factories, plants, manufacturing lines, engineering teams, or industrial operations.",
-  camera_manufacturer_partner:
-    "Treat as relevant when the company manufactures cameras, imaging modules, or machine-vision hardware and could benefit from offering AI-ready solutions to customers. Exclude firms whose core monetization is already their own competing vision software stack.",
-  machine_builder_ai_enablement:
-    "Treat as relevant when the company builds machines, OEM systems, production equipment, or industrial fixtures and could add Vision AI as an option or product enhancement. Require real machine-building capability, not just distribution.",
-  software_platform_embedding:
-    "Treat as relevant when the company operates a software platform with a credible integration surface where ONE WARE could be embedded as a model-generation backend. Require an actual platform product or workflow layer, not a services-only company."
+export const DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS: Record<SelectableLeadCategory, EditablePrequalificationCategoryContext> = {
+  integrator_vision_industrial_ai: {
+    addOnContext:
+      "Require explicit evidence for Vision AI, machine vision, industrial inspection, edge AI deployment, or comparable delivery work. Relevance is strongest when the company implements custom projects for customers instead of just reselling products."
+  },
+  integrator_general_ai: {
+    addOnContext:
+      "Only treat as relevant when the company clearly delivers AI projects and there is a plausible path into Vision AI or industrial deployment. Generic AI branding alone is not enough."
+  },
+  integrator_relevant_focus: {
+    addOnContext:
+      "Require both project-delivery ownership and a relevant vertical such as robotics, surveillance, medtech vision, agriculture tech, defence, automotive, or industrial automation. The vertical should make camera-, inspection-, or edge-AI use cases plausible."
+  },
+  industrial_end_customer_scaled: {
+    addOnContext:
+      "Treat as relevant only when the company has its own production, operational scale, and a believable quality-control, inspection, or process-automation need. Look for factories, plants, manufacturing lines, engineering teams, or industrial operations."
+  },
+  camera_manufacturer_partner: {
+    addOnContext:
+      "Treat as relevant when the company manufactures cameras, imaging modules, or machine-vision hardware and could benefit from offering AI-ready solutions to customers. Exclude firms whose core monetization is already their own competing vision software stack."
+  },
+  machine_builder_ai_enablement: {
+    addOnContext:
+      "Treat as relevant when the company builds machines, OEM systems, production equipment, or industrial fixtures and could add Vision AI as an option or product enhancement. Require real machine-building capability, not just distribution."
+  },
+  software_platform_embedding: {
+    addOnContext:
+      "Treat as relevant when the company operates a software platform with a credible integration surface where ONE WARE could be embedded as a model-generation backend. Require an actual platform product or workflow layer, not a services-only company."
+  }
 };
 
 export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
@@ -406,21 +414,41 @@ export function buildMainContextBlock(mainContext?: string): string {
   return mainContext?.trim() || DEFAULT_MAIN_CONTEXT;
 }
 
-export function buildExecutionContextBlock(category: LeadCategory, mainContext?: string): string {
+export function buildSearchStrategyContextBlock(searchStrategyContext?: string, mainContext?: string): string {
+  return [
+    "Main context:",
+    buildMainContextBlock(mainContext),
+    "Search strategy:",
+    searchStrategyContext?.trim() || DEFAULT_SEARCH_STRATEGY_CONTEXT
+  ].join("\n\n");
+}
+
+export function buildExecutionContextBlock(
+  category: LeadCategory,
+  mainContext?: string,
+  override?: EditableExecutionContext
+): string {
   const context = getExecutionContextForCategory(category);
+  const mergedContext = {
+    ...context,
+    researchPriorities: override?.researchPriorities?.length ? override.researchPriorities : context.researchPriorities,
+    outreachPriorities: override?.outreachPriorities?.length ? override.outreachPriorities : context.outreachPriorities,
+    personalizationRules: override?.personalizationRules?.length ? override.personalizationRules : context.personalizationRules,
+    avoidSignals: override?.avoidSignals?.length ? override.avoidSignals : context.avoidSignals
+  };
 
   return [
     "Main context:",
     buildMainContextBlock(mainContext),
-    `Category context: ${context.label}`,
+    `Category context: ${mergedContext.label}`,
     "Research priorities:",
-    ...context.researchPriorities.map((item) => `- ${item}`),
+    ...mergedContext.researchPriorities.map((item) => `- ${item}`),
     "Outreach priorities:",
-    ...context.outreachPriorities.map((item) => `- ${item}`),
+    ...mergedContext.outreachPriorities.map((item) => `- ${item}`),
     "Personalization rules:",
-    ...context.personalizationRules.map((item) => `- ${item}`),
+    ...mergedContext.personalizationRules.map((item) => `- ${item}`),
     "Avoid signals:",
-    ...context.avoidSignals.map((item) => `- ${item}`)
+    ...mergedContext.avoidSignals.map((item) => `- ${item}`)
   ]
     .filter(Boolean)
     .join("\n");
@@ -437,9 +465,18 @@ export function buildPrequalificationContextBlock(
   const categoryRules = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
     .filter((context) => activeCategorySet.has(context.category))
     .map((context) => {
-      const categoryAddOn = context.category !== "irrelevant" && context.category !== "other"
-        ? prequalification?.categoryContexts?.[context.category as SelectableLeadCategory]?.trim()
-        : "";
+      const categoryOverride = context.category !== "irrelevant" && context.category !== "other"
+        ? prequalification?.categoryContexts?.[context.category as SelectableLeadCategory]
+        : undefined;
+      const classificationRules = [
+        ...context.classificationRules,
+        ...(categoryOverride?.classificationRules ?? [])
+      ];
+      const disqualifiers = [
+        ...context.disqualifiers,
+        ...(categoryOverride?.disqualifiers ?? [])
+      ];
+      const categoryAddOn = categoryOverride?.addOnContext?.trim() ?? "";
 
       return [
         `Category: ${context.category} (${context.label})`,
@@ -448,8 +485,8 @@ export function buildPrequalificationContextBlock(
           : context.category !== "irrelevant" && context.category !== "other"
             ? "- Active for this run: no"
             : undefined,
-        ...context.classificationRules.map((rule) => `- Rule: ${rule}`),
-        ...context.disqualifiers.map((rule) => `- Disqualifier: ${rule}`),
+        ...classificationRules.map((rule) => `- Rule: ${rule}`),
+        ...disqualifiers.map((rule) => `- Disqualifier: ${rule}`),
         categoryAddOn ? `- Operator add-on: ${categoryAddOn}` : undefined
       ].join("\n");
     })

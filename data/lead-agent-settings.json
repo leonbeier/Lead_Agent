@@ -1,8 +1,220 @@
 {
   "targetLeadCount": 50,
   "market": "DE",
-  "customGoal": "Find ONE WARE targets with clear Vision AI delivery upside.",
-  "agentContext": "",
+  "mainContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+  "searchStrategyContext": "You are steering the search and qualification loop for ONE WARE, not writing final outreach.\n\nSearch-loop behavior:\n- Start with Apollo company lists in 15-company probe batches.\n- A probe is successful only when at least 50% of reviewed companies are relevant.\n- Relevant means: the company fits one of the active target categories and is in Europe-first geography unless there is an unusually strong exception.\n- If a probe falls below 50%, tighten the search strategy instead of widening it. Keep already-found relevant companies for later research.\n- If a probe is above threshold, continue with 50-company expansion batches and stop when relevance drops.\n- Once enough good-fit companies are collected, the later research step should go deep on those companies only.\n\nTargeting priorities:\n- Germany first, then DACH, Benelux, Nordics, and the rest of Europe.\n- Strongest fit is usually software or automation companies with real delivery ownership, industrial end customers with clear operational use cases, machine builders, camera/imaging manufacturers, or software platforms with a credible embedding surface.\n- Prefer delivery and integration ownership over advisory-only positioning.\n- Deprioritize finance, HR, recruiting, generic consulting, investors, pure resellers, and direct competing AI-platform vendors.\n\nFilter quality rules:\n- Build practical Apollo filters with realistic industries, keywords, employee ranges, and locations.\n- Favor filters that are narrow enough to hit a strong category but broad enough to scale if the probe succeeds.\n- Avoid filters that depend on vague AI buzzwords alone.",
+  "creditLessMode": false,
+  "prequalification": {
+    "mainContext": "Decide relevance conservatively. A company is relevant only when there is evidence for real delivery ownership, industrial applicability, or a credible ONE WARE partner path. Reject weak-fit finance, recruiting, HR, generic non-industrial SaaS, and vague consulting profiles without implementation responsibility.",
+    "categoryContexts": {
+      "integrator_vision_industrial_ai": {
+        "classificationRules": [
+          "Relevant when the website explicitly mentions Vision AI, machine vision, industrial AI delivery, inspection AI, computer vision integration, or edge-vision deployment.",
+          "Delivery ownership should be visible through implementation services, custom projects, deployment language, system integration, or customer solution references.",
+          "Signals like integrator, solution provider, automation partner, inspection projects, or hardware/software deployment strengthen relevance."
+        ],
+        "disqualifiers": [
+          "Pure product vendor without implementation ownership",
+          "Direct competing own vision platform as the primary business",
+          "Generic AI marketing with no real delivery proof"
+        ],
+        "addOnContext": "Require explicit evidence for Vision AI, machine vision, industrial inspection, edge AI deployment, or comparable delivery work. Relevance is strongest when the company implements custom projects for customers instead of just reselling products."
+      },
+      "integrator_general_ai": {
+        "classificationRules": [
+          "Relevant when the company clearly delivers AI projects or software implementations but is not strongly Vision-AI-specific yet.",
+          "There should be evidence for project execution, implementation ownership, or customer-specific delivery rather than advisory-only positioning.",
+          "Use this bucket when Vision AI is plausible but not explicit, and the company still looks like a real delivery partner."
+        ],
+        "disqualifiers": [
+          "AI consulting without implementation",
+          "Generic SaaS AI features without project delivery",
+          "Thought leadership or training-only AI firms"
+        ],
+        "addOnContext": "Only treat as relevant when the company clearly delivers AI projects and there is a plausible path into Vision AI or industrial deployment. Generic AI branding alone is not enough."
+      },
+      "integrator_relevant_focus": {
+        "classificationRules": [
+          "Relevant when the company delivers projects in surveillance, defence, medtech vision, robotics, drones, agriculture tech, automotive tech, or industrial automation.",
+          "The vertical should make camera, inspection, perception, tracking, or edge-AI use cases plausible from the company description.",
+          "Delivery ownership still matters; do not use this bucket for pure component vendors or research organizations."
+        ],
+        "disqualifiers": [
+          "No project-delivery signals",
+          "Irrelevant vertical without vision or automation tie-in",
+          "Pure R&D lab with no commercial delivery path"
+        ],
+        "addOnContext": "Require both project-delivery ownership and a relevant vertical such as robotics, surveillance, medtech vision, agriculture tech, defence, automotive, or industrial automation. The vertical should make camera-, inspection-, or edge-AI use cases plausible."
+      },
+      "industrial_end_customer_scaled": {
+        "classificationRules": [
+          "Relevant when the company runs its own manufacturing, production lines, plants, or industrial operations at meaningful scale.",
+          "Look for evidence of quality control, inspection, defect detection, process automation, packaging, assembly, or engineering-led operations.",
+          "Engineering ownership, factory footprint, multi-site production, or industrial equipment references strengthen relevance."
+        ],
+        "disqualifiers": [
+          "Small workshop without engineering capacity",
+          "No own production context",
+          "Distributor or trader with no industrial operations"
+        ],
+        "addOnContext": "Treat as relevant only when the company has its own production, operational scale, and a believable quality-control, inspection, or process-automation need. Look for factories, plants, manufacturing lines, engineering teams, or industrial operations."
+      },
+      "camera_manufacturer_partner": {
+        "classificationRules": [
+          "Relevant when the company manufactures cameras, imaging systems, machine-vision components, or related hardware sold into customer solutions.",
+          "There should be a credible partner path where ONE WARE could upgrade the hardware offer with AI-ready capabilities.",
+          "Choose this bucket only when partner fit is stronger than competition risk."
+        ],
+        "disqualifiers": [
+          "Strong own competing vision software monetization",
+          "Pure reseller without product control",
+          "Imaging distributor with no manufacturer or OEM role"
+        ],
+        "addOnContext": "Treat as relevant when the company manufactures cameras, imaging modules, or machine-vision hardware and could benefit from offering AI-ready solutions to customers. Exclude firms whose core monetization is already their own competing vision software stack."
+      },
+      "machine_builder_ai_enablement": {
+        "classificationRules": [
+          "Relevant when the company builds machines, OEM systems, manufacturing equipment, production cells, or industrial fixtures that could gain from embedded Vision AI.",
+          "Look for OEM, Sondermaschinenbau, industrial equipment, packaging, assembly, inspection stations, or production-line language.",
+          "Relevance is strongest when the company could offer AI as an option, module, retrofit, or performance upgrade to customers."
+        ],
+        "disqualifiers": [
+          "Pure distributor without machine-building capability",
+          "Component seller with no system integration ownership",
+          "No visible OEM or industrial equipment context"
+        ],
+        "addOnContext": "Treat as relevant when the company builds machines, OEM systems, production equipment, or industrial fixtures and could add Vision AI as an option or product enhancement. Require real machine-building capability, not just distribution."
+      },
+      "software_platform_embedding": {
+        "classificationRules": [
+          "Relevant when the company operates a software platform, workflow product, or developer-facing environment that could embed model-generation capabilities.",
+          "A credible integration path should be visible through APIs, extensions, workflow automation, platform modules, or customer-configurable tooling.",
+          "Use this only when there is real product surface for embedding, not just service delivery."
+        ],
+        "disqualifiers": [
+          "No extensibility or integration path",
+          "Direct platform competitor with no partner incentive",
+          "Pure agency or service shop with no platform product"
+        ],
+        "addOnContext": "Treat as relevant when the company operates a software platform with a credible integration surface where ONE WARE could be embedded as a model-generation backend. Require an actual platform product or workflow layer, not a services-only company."
+      }
+    }
+  },
+  "executionContexts": {
+    "integrator_vision_industrial_ai": {
+      "researchPriorities": [
+        "Validate recurring vision-heavy delivery ownership.",
+        "Look for fixed-price pressure and repeatable project patterns."
+      ],
+      "outreachPriorities": [
+        "Lead with throughput and margin improvements.",
+        "Keep partner framing and project efficiency language."
+      ],
+      "personalizationRules": [
+        "Personalize only with concrete delivery hooks.",
+        "Retain template backbone and ONE WARE USP wording."
+      ],
+      "avoidSignals": [
+        "Generic AI buzzwords without delivery context"
+      ]
+    },
+    "integrator_general_ai": {
+      "researchPriorities": [
+        "Identify where generic AI delivery can benefit from faster vision model cycles.",
+        "Check if they implement projects, not only advise."
+      ],
+      "outreachPriorities": [
+        "Connect ONE WARE to project speed and predictability."
+      ],
+      "personalizationRules": [
+        "Personalize around current delivery workflow gaps."
+      ],
+      "avoidSignals": [
+        "Treating them as AI beginners"
+      ]
+    },
+    "integrator_relevant_focus": {
+      "researchPriorities": [
+        "Pinpoint vertical-specific delivery bottlenecks and hardware constraints.",
+        "Validate recurring vision/edge components."
+      ],
+      "outreachPriorities": [
+        "Anchor message in vertical project risk reduction."
+      ],
+      "personalizationRules": [
+        "Use factual vertical hooks only."
+      ],
+      "avoidSignals": [
+        "Over-generalized messaging"
+      ]
+    },
+    "industrial_end_customer_scaled": {
+      "researchPriorities": [
+        "Confirm production scale and internal engineering capability.",
+        "Find QC, inspection, and process automation leverage points."
+      ],
+      "outreachPriorities": [
+        "Lead with economics, feasibility, and speed to production."
+      ],
+      "personalizationRules": [
+        "Ground in concrete production context."
+      ],
+      "avoidSignals": [
+        "Abstract transformation talk"
+      ]
+    },
+    "camera_manufacturer_partner": {
+      "researchPriorities": [
+        "Validate partner fit and customer AI-enablement potential."
+      ],
+      "outreachPriorities": [
+        "Focus on enabling customer-ready AI setups."
+      ],
+      "personalizationRules": [
+        "Personalize with product-line evidence only."
+      ],
+      "avoidSignals": [
+        "Positioning as replacement of core hardware business"
+      ]
+    },
+    "machine_builder_ai_enablement": {
+      "researchPriorities": [
+        "Validate OEM integration pathways and customer-facing AI option potential."
+      ],
+      "outreachPriorities": [
+        "Position ONE WARE as fast AI enablement layer for machine offerings."
+      ],
+      "personalizationRules": [
+        "Use machine/product context, not generic AI language."
+      ],
+      "avoidSignals": [
+        "Ignoring mechanical integration realities"
+      ]
+    },
+    "software_platform_embedding": {
+      "researchPriorities": [
+        "Validate embeddability and partner incentives."
+      ],
+      "outreachPriorities": [
+        "Lead with integration leverage and user value lift."
+      ],
+      "personalizationRules": [
+        "Tie outreach to concrete platform workflows."
+      ],
+      "avoidSignals": [
+        "Overpromising without integration fit"
+      ]
+    }
+  },
+  "targetCategories": [
+    "integrator_vision_industrial_ai",
+    "integrator_general_ai",
+    "integrator_relevant_focus",
+    "industrial_end_customer_scaled",
+    "camera_manufacturer_partner",
+    "machine_builder_ai_enablement",
+    "software_platform_embedding"
+  ],
   "runDeepResearch": true,
   "dryRun": true,
   "earlyStopEnabled": true,

@@ -18,9 +18,12 @@ const envSchema = z.object({
   APOLLO_BASE_URL: z.string().url().default("https://api.apollo.io/api/v1"),
   HUBSPOT_PRIVATE_APP_TOKEN: z.string().optional(),
   HUBSPOT_BASE_URL: z.string().url().default("https://api.hubapi.com"),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_WEB_SEARCH_MODEL: z.string().default("gpt-5.4-mini"),
+  OPENAI_WEB_SEARCH_ENABLED: booleanFlag().default("true"),
   AZURE_OPENAI_API_KEY: z.string().optional(),
   AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
-  AZURE_OPENAI_DEPLOYMENT: z.string().default("gpt-4.1-mini"),
+  AZURE_OPENAI_DEPLOYMENT: z.string().default("gpt-5.4-mini"),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
   FOUNDRY_PROJECT_ENDPOINT: z.string().url().optional(),
   FOUNDRY_MODEL_DEPLOYMENT: z.string().optional(),
@@ -28,8 +31,6 @@ const envSchema = z.object({
   FOUNDRY_USE_AGENT_FILTERS: booleanFlag().default("false"),
   FOUNDRY_USE_AGENT_QUALIFICATION: booleanFlag().default("false"),
   FOUNDRY_USE_AGENT_RESEARCH: booleanFlag().default("false"),
-  WEB_SEARCH_AGENT_ENABLED: booleanFlag().default("true"),
-  WEB_SEARCH_AGENT_MAX_RESULTS: z.coerce.number().int().positive().default(5),
   AZURE_RESEARCH_ENABLED: z
     .string()
     .transform((value) => value.toLowerCase() === "true")
@@ -43,9 +44,10 @@ export const readiness = {
   sharedKeyConfigured: Boolean(env.LEAD_AGENT_SHARED_KEY),
   apolloConfigured: Boolean(env.APOLLO_API_KEY),
   hubspotConfigured: Boolean(env.HUBSPOT_PRIVATE_APP_TOKEN),
+  openAIWebSearchConfigured: Boolean(env.OPENAI_WEB_SEARCH_ENABLED && env.OPENAI_API_KEY),
   azureConfigured: Boolean(env.AZURE_OPENAI_API_KEY && env.AZURE_OPENAI_ENDPOINT),
   researchConfigured: Boolean(env.AZURE_RESEARCH_ENABLED && env.AZURE_RESEARCH_ENDPOINT),
   foundryConfigured: Boolean(env.FOUNDRY_PROJECT_ENDPOINT),
   foundryBingConfigured: Boolean(env.FOUNDRY_PROJECT_ENDPOINT && env.FOUNDRY_BING_CONNECTION_NAME),
-  webSearchConfigured: Boolean(env.WEB_SEARCH_AGENT_ENABLED)
+  webSearchConfigured: Boolean(env.OPENAI_WEB_SEARCH_ENABLED && env.OPENAI_API_KEY)
 };

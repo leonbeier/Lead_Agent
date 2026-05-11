@@ -7,16 +7,20 @@ import {
   DEFAULT_MAIN_CONTEXT,
   DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS,
   DEFAULT_PREQUALIFICATION_MAIN_CONTEXT,
+  DEFAULT_SEARCH_STRATEGY_CONTEXT,
   OUTREACH_TEMPLATES,
   OutreachTemplate
 } from "./prompting/one-ware-playbook";
 import {
   CompanyFeedbackEntry,
+  EditableExecutionContext,
+  EditablePrequalificationCategoryContext,
   FilterEvaluation,
   LatestLeadRunRecord,
   LeadAgentSettings,
   LeadLearningData,
-  SearchHistoryEntry
+  SearchHistoryEntry,
+  SelectableLeadCategory
 } from "./types";
 
 const selectableCategorySchema = z.enum([
@@ -40,19 +44,93 @@ const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
   market: z.string().min(1),
   mainContext: z.string().max(12000).optional(),
+  searchStrategyContext: z.string().max(12000).optional(),
+  creditLessMode: z.boolean(),
   prequalification: z.object({
     mainContext: z.string().max(6000).optional(),
     categoryContexts: z.object({
-      integrator_vision_industrial_ai: z.string().max(3000).optional(),
-      integrator_general_ai: z.string().max(3000).optional(),
-      integrator_relevant_focus: z.string().max(3000).optional(),
-      industrial_end_customer_scaled: z.string().max(3000).optional(),
-      camera_manufacturer_partner: z.string().max(3000).optional(),
-      machine_builder_ai_enablement: z.string().max(3000).optional(),
-      software_platform_embedding: z.string().max(3000).optional()
+      integrator_vision_industrial_ai: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      integrator_general_ai: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      integrator_relevant_focus: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      industrial_end_customer_scaled: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      camera_manufacturer_partner: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      machine_builder_ai_enablement: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      software_platform_embedding: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional()
     }).optional()
   }).optional(),
   prequalificationContext: z.string().max(4000).optional(),
+  executionContexts: z.object({
+    integrator_vision_industrial_ai: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    integrator_general_ai: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    integrator_relevant_focus: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    industrial_end_customer_scaled: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    camera_manufacturer_partner: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    machine_builder_ai_enablement: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    software_platform_embedding: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional()
+  }).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean(),
   dryRun: z.boolean(),
@@ -145,9 +223,20 @@ const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 50,
   market: "DE",
   mainContext: DEFAULT_MAIN_CONTEXT,
+  searchStrategyContext: DEFAULT_SEARCH_STRATEGY_CONTEXT,
+  creditLessMode: false,
   prequalification: {
     mainContext: DEFAULT_PREQUALIFICATION_MAIN_CONTEXT,
     categoryContexts: DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS
+  },
+  executionContexts: {
+    integrator_vision_industrial_ai: CATEGORY_EXECUTION_CONTEXT.integrator_vision_industrial_ai,
+    integrator_general_ai: CATEGORY_EXECUTION_CONTEXT.integrator_general_ai,
+    integrator_relevant_focus: CATEGORY_EXECUTION_CONTEXT.integrator_relevant_focus,
+    industrial_end_customer_scaled: CATEGORY_EXECUTION_CONTEXT.industrial_end_customer_scaled,
+    camera_manufacturer_partner: CATEGORY_EXECUTION_CONTEXT.camera_manufacturer_partner,
+    machine_builder_ai_enablement: CATEGORY_EXECUTION_CONTEXT.machine_builder_ai_enablement,
+    software_platform_embedding: CATEGORY_EXECUTION_CONTEXT.software_platform_embedding
   },
   targetCategories: [
     "integrator_vision_industrial_ai",
@@ -190,8 +279,11 @@ const suggestedControls = [
   "targetLeadCount",
   "market",
   "mainContext",
+  "searchStrategyContext",
+  "creditLessMode",
   "prequalification.mainContext",
   "prequalification.categoryContexts",
+  "executionContexts",
   "targetCategories",
   "runDeepResearch",
   "dryRun",

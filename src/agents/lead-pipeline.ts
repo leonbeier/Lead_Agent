@@ -120,6 +120,7 @@ export class LeadPipelineAgent {
   async run(request: LeadJobRequest): Promise<LeadJobResult> {
     const dryRun = request.dryRun ?? true;
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
+    const creditLessMode = request.creditLessMode ?? false;
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
     const mainContext = request.mainContext ?? request.agentContext;
     const learning = await this.controlPlaneStore.getLearning();
@@ -329,7 +330,9 @@ export class LeadPipelineAgent {
       .sort((left, right) => right.relevanceScore - left.relevanceScore)
       .filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index);
 
-    const filteredShortlist = await this.excludeExistingHubSpotDomains(sortedShortlist, dryRun);
+    const filteredShortlist = creditLessMode
+      ? sortedShortlist
+      : await this.excludeExistingHubSpotDomains(sortedShortlist, dryRun);
     const uniqueShortlist = filteredShortlist.slice(0, request.targetLeadCount);
 
     const researchBriefs = request.runDeepResearch === false
@@ -341,9 +344,21 @@ export class LeadPipelineAgent {
           AZURE_WORKER_CONCURRENCY
         );
 
-    const publicContactsByCompany = await this.collectPublicContacts(uniqueShortlist, dryRun);
+    const publicContactsByCompany = creditLessMode
+      ? new Map<string, PublicContactCandidate[]>()
+      : await this.collectPublicContacts(uniqueShortlist, dryRun);
 
-    const hubspotSync = await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, !syncToHubSpot);
+    const hubspotSync = creditLessMode
+      ? {
+          attempted: false,
+          mode: "dry-run" as const,
+          candidateCount: uniqueShortlist.length,
+          syncedCount: 0,
+          companySyncedCount: 0,
+          contactSyncedCount: 0,
+          errors: undefined
+        }
+      : await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, !syncToHubSpot);
     await this.controlPlaneStore.recordFilterEvaluations(evaluations);
     await this.controlPlaneStore.recordSearchHistory(searchHistory);
     await this.controlPlaneStore.writeLatestLeadRun({

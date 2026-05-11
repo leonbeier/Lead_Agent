@@ -11,9 +11,22 @@ export type LeadCategory =
 
 export type SelectableLeadCategory = Exclude<LeadCategory, "irrelevant" | "other">;
 
+export interface EditablePrequalificationCategoryContext {
+  classificationRules?: string[];
+  disqualifiers?: string[];
+  addOnContext?: string;
+}
+
+export interface EditableExecutionContext {
+  researchPriorities?: string[];
+  outreachPriorities?: string[];
+  personalizationRules?: string[];
+  avoidSignals?: string[];
+}
+
 export interface PrequalificationConfig {
   mainContext?: string;
-  categoryContexts?: Partial<Record<SelectableLeadCategory, string>>;
+  categoryContexts?: Partial<Record<SelectableLeadCategory, EditablePrequalificationCategoryContext>>;
 }
 
 export interface ApolloOrganizationFilter {
@@ -46,6 +59,8 @@ export interface ResearchBrief {
   website?: string;
   citations?: string[];
   appliedAgentContext?: string;
+  stillQualified?: boolean;
+  qualificationDecisionReason?: string;
   overview: string;
   qualificationSummary: string;
   qualifyingSignals: string[];
@@ -87,6 +102,9 @@ export interface LeadAgentSettings {
   targetLeadCount: number;
   market: string;
   mainContext?: string;
+  searchStrategyContext?: string;
+  executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
+  creditLessMode: boolean;
   prequalification?: PrequalificationConfig;
   prequalificationContext?: string;
   targetCategories?: LeadCategory[];
@@ -167,6 +185,8 @@ export interface GeneratedLeadRecord {
   targetIndustry?: string;
   productsOffered?: string;
   overview?: string;
+  stillQualified?: boolean;
+  qualificationDecisionReason?: string;
   qualificationSummary?: string;
   linkedInMessage?: string;
   emailSubject?: string;
@@ -201,6 +221,9 @@ export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
   mainContext?: string;
+  searchStrategyContext?: string;
+  executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
+  creditLessMode?: boolean;
   prequalification?: PrequalificationConfig;
   prequalificationContext?: string;
   customGoal?: string;

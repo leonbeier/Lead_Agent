@@ -52,7 +52,7 @@ export class FoundryAgentsClient {
     dryRun: boolean,
     learning?: LeadLearningData
   ): Promise<ApolloOrganizationFilter[]> {
-    if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_FILTERS) {
+    if (dryRun || !readiness.foundryConfigured) {
       return baseFilters;
     }
 
@@ -141,7 +141,7 @@ export class FoundryAgentsClient {
     targetCategories: LeadCategory[] | undefined,
     dryRun: boolean
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null> {
-    if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_QUALIFICATION) {
+    if (dryRun || !readiness.foundryConfigured) {
       return null;
     }
 
@@ -184,7 +184,7 @@ export class FoundryAgentsClient {
     mainContext: string | undefined,
     dryRun: boolean
   ): Promise<ResearchBrief | null> {
-    if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_RESEARCH) {
+    if (dryRun || !readiness.foundryConfigured) {
       return null;
     }
 

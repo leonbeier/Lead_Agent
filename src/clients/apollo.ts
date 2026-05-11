@@ -1,15 +1,23 @@
 import { env, readiness } from "../config";
 import { ApolloOrganizationFilter, CompanySample } from "../types";
+import { WebSearchAgent } from "./web-search-agent";
 
 export class ApolloClient {
+  private readonly webSearchAgent = new WebSearchAgent();
+
   async fetchOrganizationSample(
     filter: ApolloOrganizationFilter,
     limit: number,
     dryRun: boolean,
-    page = 1
+    page = 1,
+    creditLessMode = false
   ): Promise<CompanySample[]> {
-    if (dryRun || !readiness.apolloConfigured) {
+    if (dryRun) {
       return this.buildDryRunSample(filter, limit);
+    }
+
+    if (creditLessMode || !readiness.apolloConfigured) {
+      return this.searchOrganizationsWithoutCredits(filter, limit, page);
     }
 
     const body = JSON.stringify({
@@ -21,7 +29,16 @@ export class ApolloClient {
       q_organization_industry_tags: filter.industries
     });
 
-    const response = await this.searchOrganizations(body);
+    let response: Response;
+    try {
+      response = await this.searchOrganizations(body);
+    } catch (error) {
+      if (this.isApolloCreditError(error)) {
+        return this.searchOrganizationsWithoutCredits(filter, limit, page);
+      }
+
+      throw error;
+    }
 
     const payload = (await response.json()) as {
       organizations?: Array<{
@@ -72,6 +89,23 @@ export class ApolloClient {
       },
       body
     });
+  }
+
+  private async searchOrganizationsWithoutCredits(
+    filter: ApolloOrganizationFilter,
+    limit: number,
+    page: number
+  ): Promise<CompanySample[]> {
+    const companies = await this.webSearchAgent.discoverCompaniesForFilter(filter, limit, page);
+    return companies.length > 0 ? companies : this.buildDryRunSample(filter, limit);
+  }
+
+  private isApolloCreditError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return /insufficient credits/i.test(error.message);
   }
 
   private buildDryRunSample(filter: ApolloOrganizationFilter, limit: number): CompanySample[] {

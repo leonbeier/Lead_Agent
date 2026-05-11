@@ -23,25 +23,51 @@ const selectableCategorySchema = z.enum([
   "software_platform_embedding"
 ]);
 
+const prequalificationCategoryContextSchema = z.object({
+  classificationRules: z.array(z.string().min(1)).max(12).optional(),
+  disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+  addOnContext: z.string().max(3000).optional()
+});
+
+const executionCategoryContextSchema = z.object({
+  researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+  outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+  personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+  avoidSignals: z.array(z.string().min(1)).max(12).optional()
+});
+
 const prequalificationConfigSchema = z.object({
   mainContext: z.string().max(6000).optional(),
   categoryContexts: z.object({
-    integrator_vision_industrial_ai: z.string().max(3000).optional(),
-    integrator_general_ai: z.string().max(3000).optional(),
-    integrator_relevant_focus: z.string().max(3000).optional(),
-    industrial_end_customer_scaled: z.string().max(3000).optional(),
-    camera_manufacturer_partner: z.string().max(3000).optional(),
-    machine_builder_ai_enablement: z.string().max(3000).optional(),
-    software_platform_embedding: z.string().max(3000).optional()
+    integrator_vision_industrial_ai: prequalificationCategoryContextSchema.optional(),
+    integrator_general_ai: prequalificationCategoryContextSchema.optional(),
+    integrator_relevant_focus: prequalificationCategoryContextSchema.optional(),
+    industrial_end_customer_scaled: prequalificationCategoryContextSchema.optional(),
+    camera_manufacturer_partner: prequalificationCategoryContextSchema.optional(),
+    machine_builder_ai_enablement: prequalificationCategoryContextSchema.optional(),
+    software_platform_embedding: prequalificationCategoryContextSchema.optional()
   }).optional()
+});
+
+const executionContextsSchema = z.object({
+  integrator_vision_industrial_ai: executionCategoryContextSchema.optional(),
+  integrator_general_ai: executionCategoryContextSchema.optional(),
+  integrator_relevant_focus: executionCategoryContextSchema.optional(),
+  industrial_end_customer_scaled: executionCategoryContextSchema.optional(),
+  camera_manufacturer_partner: executionCategoryContextSchema.optional(),
+  machine_builder_ai_enablement: executionCategoryContextSchema.optional(),
+  software_platform_embedding: executionCategoryContextSchema.optional()
 });
 
 const leadJobSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000),
   market: z.string().optional(),
   mainContext: z.string().max(12000).optional(),
+  searchStrategyContext: z.string().max(12000).optional(),
+  creditLessMode: z.boolean().optional(),
   prequalification: prequalificationConfigSchema.optional(),
   prequalificationContext: z.string().max(4000).optional(),
+  executionContexts: executionContextsSchema.optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
@@ -55,8 +81,11 @@ const settingsUpdateSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000).optional(),
   market: z.string().min(1).optional(),
   mainContext: z.string().max(12000).optional(),
+  searchStrategyContext: z.string().max(12000).optional(),
+  creditLessMode: z.boolean().optional(),
   prequalification: prequalificationConfigSchema.optional(),
   prequalificationContext: z.string().max(4000).optional(),
+  executionContexts: executionContextsSchema.optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
@@ -125,8 +154,11 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     targetLeadCount: body.targetLeadCount ?? settings.targetLeadCount ?? env.DEFAULT_TARGET_LEADS,
     market: body.market ?? settings.market ?? env.DEFAULT_MARKET,
     mainContext: body.mainContext ?? settings.mainContext,
+    searchStrategyContext: body.searchStrategyContext ?? settings.searchStrategyContext,
+    creditLessMode: body.creditLessMode ?? settings.creditLessMode,
     prequalification,
     prequalificationContext: legacyPrequalificationContext,
+    executionContexts: body.executionContexts ?? settings.executionContexts,
     targetCategories: body.targetCategories ?? settings.targetCategories,
     runDeepResearch: body.runDeepResearch ?? settings.runDeepResearch,
     dryRun: body.dryRun ?? settings.dryRun,
