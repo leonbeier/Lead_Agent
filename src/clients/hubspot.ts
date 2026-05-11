@@ -122,7 +122,7 @@ export class HubSpotClient {
     const properties = this.pickAvailableProperties(
       {
         name: company.name,
-        domain: company.domain,
+        domain: this.normalizeDomain(company.domain),
         country: company.country,
         description: company.shortDescription,
         ai_cc_summary_short: brief?.qualificationSummary ?? company.rationale,
