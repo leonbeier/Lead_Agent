@@ -46,6 +46,7 @@ export class FoundryAgentsClient {
     market: string | undefined,
     customGoal: string | undefined,
     agentContext: string | undefined,
+    targetCategories: LeadCategory[] | undefined,
     baseFilters: ApolloOrganizationFilter[],
     dryRun: boolean
   ): Promise<ApolloOrganizationFilter[]> {
@@ -58,6 +59,7 @@ export class FoundryAgentsClient {
         `Market focus: ${market ?? "Germany"}`,
         customGoal ? `Custom goal: ${customGoal}` : "Custom goal: Keep focus on the highest-conviction ICP.",
         agentContext ? `Operator context: ${agentContext}` : undefined,
+        targetCategories?.length ? `Target categories: ${targetCategories.join(", ")}` : undefined,
         `Existing Apollo filters JSON:\n${JSON.stringify(baseFilters)}`
       ].filter(Boolean).join("\n\n"));
 

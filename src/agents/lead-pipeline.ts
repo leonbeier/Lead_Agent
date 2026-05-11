@@ -24,6 +24,14 @@ const RELEVANT_CATEGORIES: LeadCategory[] = [
   "industrial_camera_vendor_without_ai_software"
 ];
 
+const FILTER_CATEGORY_FALLBACKS: Array<{ match: RegExp; categories: LeadCategory[] }> = [
+  { match: /software integrators/i, categories: ["software_integrator"] },
+  { match: /ai delivery integrators/i, categories: ["ai_software_integrator", "software_integrator"] },
+  { match: /industrial customers/i, categories: ["machine_builder_with_vision_ai_need"] },
+  { match: /machine builders/i, categories: ["machine_builder_with_vision_ai_need"] },
+  { match: /camera partners/i, categories: ["industrial_camera_vendor_without_ai_software"] }
+];
+
 const FULL_SAMPLE_SIZE = 50;
 const DEFAULT_EARLY_STOP_REVIEW_COUNT = 15;
 const MIN_EARLY_STOP_REVIEW_COUNT = 5;
@@ -106,6 +114,7 @@ export class LeadPipelineAgent {
   async run(request: LeadJobRequest): Promise<LeadJobResult> {
     const dryRun = request.dryRun ?? true;
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
+    const targetCategories = this.getActiveTargetCategories(request.targetCategories);
     const learning = await this.controlPlaneStore.getLearning();
     const earlyStopEnabled = request.earlyStopEnabled ?? true;
     const earlyStopReviewCount = Math.min(
@@ -114,7 +123,7 @@ export class LeadPipelineAgent {
     );
     const earlyStopThreshold = request.earlyStopThreshold ?? DEFAULT_EARLY_STOP_THRESHOLD;
     const suggestedFilters = this.orderFiltersByLearning(
-      await this.getSuggestedFilters(request.market, request.customGoal, request.agentContext, dryRun, learning),
+      await this.getSuggestedFilters(request.market, request.customGoal, request.agentContext, targetCategories, dryRun, learning),
       learning,
       request.market,
       request.customGoal
@@ -143,6 +152,7 @@ export class LeadPipelineAgent {
           activeFilter.name,
           categorizedInitialSample,
           activeFilter,
+          targetCategories,
           categorizedInitialSample.length,
           false
         );
@@ -155,11 +165,12 @@ export class LeadPipelineAgent {
             earlyStopReviewCount,
             categorizedInitialSample,
             activeFilter,
+            targetCategories,
             earlyStopThreshold
           )
         );
 
-        shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedInitialSample, activeFilter));
+        shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedInitialSample, activeFilter, targetCategories));
 
         if (earlyStopEnabled && initialEvaluation.relevanceRatio < earlyStopThreshold) {
           const skippedCount = Math.max(0, FULL_SAMPLE_SIZE - categorizedInitialSample.length);
@@ -185,7 +196,7 @@ export class LeadPipelineAgent {
               request.agentContext
             );
 
-            if (revisedFilter) {
+            if (revisedFilter && this.filterSupportsTargetCategories(revisedFilter, targetCategories)) {
               candidateFilters.push(revisedFilter);
               revisionCount += 1;
             }
@@ -224,12 +235,13 @@ export class LeadPipelineAgent {
             learning
           );
           reviewedCompanies.push(...categorizedExpandedSample);
-          shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedExpandedSample, activeFilter));
+          shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedExpandedSample, activeFilter, targetCategories));
 
           const batchEvaluation = this.evaluateFilter(
             activeFilter.name,
             categorizedExpandedSample,
             activeFilter,
+            targetCategories,
             earlyStopReviewCount,
             false
           );
@@ -242,6 +254,7 @@ export class LeadPipelineAgent {
               EXPANSION_BATCH_SIZE,
               categorizedExpandedSample,
               activeFilter,
+              targetCategories,
               earlyStopThreshold
             )
           );
@@ -260,6 +273,7 @@ export class LeadPipelineAgent {
             activeFilter.name,
             reviewedCompanies,
             activeFilter,
+            targetCategories,
             categorizedInitialSample.length,
             false
           )
@@ -334,12 +348,18 @@ export class LeadPipelineAgent {
   }
 
   async preview(request: LeadJobRequest): Promise<Pick<LeadJobResult, "requested" | "suggestedFilters">> {
+    const targetCategories = this.getActiveTargetCategories(request.targetCategories);
+
     return {
-      requested: request,
+      requested: {
+        ...request,
+        targetCategories
+      },
       suggestedFilters: await this.getSuggestedFilters(
         request.market,
         request.customGoal,
         request.agentContext,
+        targetCategories,
         request.dryRun ?? true
       )
     };
@@ -349,17 +369,21 @@ export class LeadPipelineAgent {
     market: string | undefined,
     customGoal: string | undefined,
     agentContext: string | undefined,
+    targetCategories: LeadCategory[],
     dryRun: boolean,
     learning?: LeadLearningData
   ) {
-    return this.azureClient.generateSuggestedFilters(
+    const filters = await this.azureClient.generateSuggestedFilters(
       market,
       customGoal,
       agentContext,
+      targetCategories,
       buildSuggestedFilters(market, customGoal),
       dryRun,
       learning
     );
+
+    return filters.filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
   }
 
   private async categorizeCompanies(
@@ -622,10 +646,11 @@ export class LeadPipelineAgent {
 
   private getRelevantEuropeanCompanies(
     companies: PreCategorizedCompany[],
-    filter: import("../types").ApolloOrganizationFilter
+    filter: import("../types").ApolloOrganizationFilter,
+    targetCategories: LeadCategory[]
   ): PreCategorizedCompany[] {
     return companies.filter(
-      (company) => RELEVANT_CATEGORIES.includes(company.category) && this.isEuropeanCompany(company, filter)
+      (company) => targetCategories.includes(company.category) && this.isEuropeanCompany(company, filter)
     );
   }
 
@@ -657,9 +682,10 @@ export class LeadPipelineAgent {
     requestedCount: number,
     companies: PreCategorizedCompany[],
     filter: import("../types").ApolloOrganizationFilter,
+    targetCategories: LeadCategory[],
     threshold: number
   ): SearchHistoryEntry {
-    const relevantCount = this.getRelevantEuropeanCompanies(companies, filter).length;
+    const relevantCount = this.getRelevantEuropeanCompanies(companies, filter, targetCategories).length;
     const relevanceRatio = companies.length === 0 ? 0 : relevantCount / companies.length;
 
     return {
@@ -764,6 +790,7 @@ export class LeadPipelineAgent {
     filterName: string,
     companies: PreCategorizedCompany[],
     filter: import("../types").ApolloOrganizationFilter,
+    targetCategories: LeadCategory[],
     initialReviewCount: number,
     stoppedEarly: boolean
   ): FilterEvaluation {
@@ -782,7 +809,7 @@ export class LeadPipelineAgent {
       }
     );
 
-    const relevantCount = this.getRelevantEuropeanCompanies(companies, filter).length;
+    const relevantCount = this.getRelevantEuropeanCompanies(companies, filter, targetCategories).length;
     const relevanceRatio = companies.length === 0 ? 0 : relevantCount / companies.length;
 
     return {
@@ -801,5 +828,20 @@ export class LeadPipelineAgent {
             ? "Keep testing with tighter keywords and geography constraints."
             : "Low signal. Replace or significantly revise the filter."
     };
+  }
+
+  private getActiveTargetCategories(input: LeadCategory[] | undefined): LeadCategory[] {
+    const selectedCategories = (input ?? []).filter((category) => RELEVANT_CATEGORIES.includes(category));
+    return selectedCategories.length > 0 ? selectedCategories : [...RELEVANT_CATEGORIES];
+  }
+
+  private filterSupportsTargetCategories(filter: ApolloOrganizationFilter, targetCategories: LeadCategory[]): boolean {
+    const filterCategories = filter.targetCategories?.length ? filter.targetCategories : this.inferTargetCategories(filter.name);
+    return filterCategories.some((category) => targetCategories.includes(category));
+  }
+
+  private inferTargetCategories(filterName: string): LeadCategory[] {
+    const matchedEntry = FILTER_CATEGORY_FALLBACKS.find((entry) => entry.match.test(filterName));
+    return matchedEntry ? matchedEntry.categories : [...RELEVANT_CATEGORIES];
   }
 }

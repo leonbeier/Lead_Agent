@@ -11,6 +11,13 @@ import {
   SearchHistoryEntry
 } from "./types";
 
+const selectableCategorySchema = z.enum([
+  "software_integrator",
+  "ai_software_integrator",
+  "machine_builder_with_vision_ai_need",
+  "industrial_camera_vendor_without_ai_software"
+]);
+
 const dataDirectory = path.join(process.cwd(), "data");
 const settingsPath = path.join(dataDirectory, "lead-agent-settings.json");
 const templatesPath = path.join(dataDirectory, "outreach-templates.json");
@@ -23,6 +30,7 @@ const settingsSchema = z.object({
   market: z.string().min(1),
   customGoal: z.string().optional(),
   agentContext: z.string().max(4000).optional(),
+  targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean(),
   dryRun: z.boolean(),
   earlyStopEnabled: z.boolean(),
@@ -96,6 +104,12 @@ const defaultSettings: LeadAgentSettings = {
   market: "DE",
   customGoal: "Find ONE WARE targets with clear Vision AI delivery upside.",
   agentContext: "Prioritize Germany first. Favor software integrators with delivery ownership, industrial QC/process automation teams, and machine builders with clear Vision-AI upside. Avoid VCs, broad consultancies, and direct competing AI software vendors.",
+  targetCategories: [
+    "software_integrator",
+    "ai_software_integrator",
+    "machine_builder_with_vision_ai_need",
+    "industrial_camera_vendor_without_ai_software"
+  ],
   runDeepResearch: true,
   dryRun: true,
   earlyStopEnabled: true,
@@ -129,6 +143,7 @@ const suggestedControls = [
   "market",
   "customGoal",
   "agentContext",
+  "targetCategories",
   "runDeepResearch",
   "dryRun",
   "earlyStopEnabled",
@@ -169,7 +184,10 @@ export class ControlPlaneStore {
   async getSettings(): Promise<LeadAgentSettings> {
     await this.ensureSeedData();
     const settings = await readJsonFile<LeadAgentSettings>(settingsPath);
-    return settingsSchema.parse(settings);
+    return settingsSchema.parse({
+      ...defaultSettings,
+      ...settings
+    });
   }
 
   async updateSettings(input: Partial<LeadAgentSettings>): Promise<LeadAgentSettings> {
@@ -300,6 +318,7 @@ export class ControlPlaneStore {
     settings: LeadAgentSettings;
     templates: Record<string, OutreachTemplate>;
     categoryContexts: typeof CATEGORY_EXECUTION_CONTEXT;
+    selectableCategories: Array<{ value: string; label: string }>;
     suggestedControls: string[];
     learning: LeadLearningData;
     latestLeadRun: LatestLeadRunRecord;
@@ -308,6 +327,12 @@ export class ControlPlaneStore {
       settings: await this.getSettings(),
       templates: await this.getTemplates(),
       categoryContexts: CATEGORY_EXECUTION_CONTEXT,
+      selectableCategories: [
+        { value: "software_integrator", label: "Software Dienstleister / Integratoren" },
+        { value: "ai_software_integrator", label: "AI-Software-Dienstleister" },
+        { value: "machine_builder_with_vision_ai_need", label: "Industrie-Kunden / Maschinenbauer" },
+        { value: "industrial_camera_vendor_without_ai_software", label: "Kamerahersteller / Imaging-Partner" }
+      ],
       suggestedControls,
       learning: await this.getLearning(),
       latestLeadRun: await this.getLatestLeadRun()

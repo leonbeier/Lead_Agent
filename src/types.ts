@@ -13,6 +13,7 @@ export interface ApolloOrganizationFilter {
   keywords: string[];
   locations: string[];
   employeeRanges: string[];
+  targetCategories?: LeadCategory[];
   notes: string;
 }
 
@@ -66,6 +67,7 @@ export interface LeadAgentSettings {
   market: string;
   customGoal?: string;
   agentContext?: string;
+  targetCategories?: LeadCategory[];
   runDeepResearch: boolean;
   dryRun: boolean;
   earlyStopEnabled: boolean;
@@ -156,6 +158,7 @@ export interface LeadJobRequest {
   market?: string;
   customGoal?: string;
   agentContext?: string;
+  targetCategories?: LeadCategory[];
   runDeepResearch?: boolean;
   dryRun?: boolean;
   syncToHubSpot?: boolean;

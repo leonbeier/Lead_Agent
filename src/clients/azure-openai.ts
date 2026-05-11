@@ -163,6 +163,7 @@ export class AzureOpenAIClient {
     market: string | undefined,
     customGoal: string | undefined,
     agentContext: string | undefined,
+    targetCategories: LeadCategory[] | undefined,
     baseFilters: ApolloOrganizationFilter[],
     dryRun: boolean,
     learning?: LeadLearningData
@@ -171,6 +172,7 @@ export class AzureOpenAIClient {
       market,
       customGoal,
       agentContext,
+      targetCategories,
       baseFilters,
       dryRun
     );
@@ -206,6 +208,7 @@ export class AzureOpenAIClient {
               market ? `Market focus: ${market}` : undefined,
               customGoal ? `Custom goal: ${customGoal}` : undefined,
               agentContext ? `Operator context: ${agentContext}` : undefined,
+              targetCategories?.length ? `Target categories: ${targetCategories.join(", ")}` : undefined,
               `Base filters JSON:\n${JSON.stringify(baseFilters)}`,
               this.buildLearningContextForSearchStrategy(learning)
             ]
@@ -621,8 +624,21 @@ export class AzureOpenAIClient {
       keywords,
       locations,
       employeeRanges: employeeRanges.length > 0 ? employeeRanges : ["11,50", "51,200", "201,500"],
+      targetCategories: this.normalizeTargetCategories(filter.targetCategories),
       notes: filter.notes?.trim() || "Adaptive Azure search strategy"
     };
+  }
+
+  private normalizeTargetCategories(categories: LeadCategory[] | undefined): LeadCategory[] | undefined {
+    const normalized = Array.from(
+      new Set(
+        (categories ?? [])
+          .map((category) => this.normalizeCategory(category))
+          .filter((category) => category !== "irrelevant" && category !== "other")
+      )
+    );
+
+    return normalized.length > 0 ? normalized : undefined;
   }
 
   private normalizeStringList(values: string[] | undefined, maxItems: number): string[] {

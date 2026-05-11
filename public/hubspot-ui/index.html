@@ -338,6 +338,10 @@
               Agent-Kontext aus HubSpot oder Operator-UI
               <textarea id="agentContext" name="agentContext"></textarea>
             </label>
+            <label style="grid-column: 1 / -1;">
+              Gewuenschte Kundentypen
+              <div id="target-categories" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px;"></div>
+            </label>
             <label>
               Erste Stichprobe
               <input id="earlyStopReviewCount" name="earlyStopReviewCount" type="number" min="5" max="15" required />
@@ -471,6 +475,9 @@
         document.getElementById("market").value = settings.market;
         document.getElementById("customGoal").value = settings.customGoal || "";
         document.getElementById("agentContext").value = settings.agentContext || "";
+        document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
+          checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
+        });
         document.getElementById("runDeepResearch").checked = Boolean(settings.runDeepResearch);
         document.getElementById("dryRun").checked = Boolean(settings.dryRun);
         document.getElementById("syncToHubSpot").checked = false;
@@ -485,6 +492,7 @@
           market: document.getElementById("market").value.trim(),
           customGoal: document.getElementById("customGoal").value.trim(),
           agentContext: document.getElementById("agentContext").value.trim(),
+          targetCategories: Array.from(document.querySelectorAll("input[name='targetCategories']:checked")).map((checkbox) => checkbox.value),
           runDeepResearch: document.getElementById("runDeepResearch").checked,
           dryRun: document.getElementById("dryRun").checked,
           syncToHubSpot: document.getElementById("syncToHubSpot").checked,
@@ -501,6 +509,7 @@
           { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
           { label: "Templates", value: String(Object.keys(templates).length) },
           { label: "Kontext", value: settings.agentContext ? "gesetzt" : "leer" },
+          { label: "Kundentypen", value: String((settings.targetCategories || []).length) },
           { label: "Letzte Treffer", value: String(latestLeadRun?.summary?.foundCandidates ?? 0) }
         ];
 
@@ -518,6 +527,19 @@
 
       function renderSuggestedControls(items) {
         suggestedControlsList.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
+      }
+
+      function renderTargetCategories(options) {
+        document.getElementById("target-categories").innerHTML = options
+          .map(
+            (option) => `
+              <div class="checkbox-row" style="padding-top: 0; margin: 0;">
+                <input id="cat-${option.value}" name="targetCategories" type="checkbox" value="${option.value}" />
+                <label for="cat-${option.value}">${option.label}</label>
+              </div>
+            `
+          )
+          .join("");
       }
 
       function renderLatestRun(latestLeadRun) {
@@ -643,6 +665,7 @@
           }
           const data = await requestJson("/api/control-plane/bootstrap");
           bootstrapData = data;
+          renderTargetCategories(data.selectableCategories || []);
           fillSettingsForm(data.settings);
           renderSummary(data.settings, data.templates, data.latestLeadRun);
           renderSuggestedControls(data.suggestedControls);
@@ -671,6 +694,7 @@
             bootstrapData.settings = result.settings;
           }
           fillSettingsForm(result.settings);
+          renderSummary(result.settings, bootstrapData?.templates || {}, bootstrapData?.latestLeadRun);
           setStatus(settingsStatus, "Settings gespeichert");
           resultOutput.textContent = JSON.stringify(result, null, 2);
         } catch (error) {

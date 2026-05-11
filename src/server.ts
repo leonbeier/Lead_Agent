@@ -13,12 +13,19 @@ const leadPipelineAgent = new LeadPipelineAgent();
 const controlPlaneStore = new ControlPlaneStore();
 const hubSpotConsolePath = path.join(process.cwd(), "public", "hubspot-ui", "index.html");
 const publicRoutes = new Set(["/health", "/oauth-callback"]);
+const selectableCategorySchema = z.enum([
+  "software_integrator",
+  "ai_software_integrator",
+  "machine_builder_with_vision_ai_need",
+  "industrial_camera_vendor_without_ai_software"
+]);
 
 const leadJobSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000),
   market: z.string().optional(),
   customGoal: z.string().optional(),
   agentContext: z.string().max(4000).optional(),
+  targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   syncToHubSpot: z.boolean().optional(),
@@ -32,6 +39,7 @@ const settingsUpdateSchema = z.object({
   market: z.string().min(1).optional(),
   customGoal: z.string().optional(),
   agentContext: z.string().max(4000).optional(),
+  targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   earlyStopEnabled: z.boolean().optional(),
@@ -95,6 +103,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     market: body.market ?? settings.market ?? env.DEFAULT_MARKET,
     customGoal: body.customGoal ?? settings.customGoal,
     agentContext: body.agentContext ?? settings.agentContext,
+    targetCategories: body.targetCategories ?? settings.targetCategories,
     runDeepResearch: body.runDeepResearch ?? settings.runDeepResearch,
     dryRun: body.dryRun ?? settings.dryRun,
     syncToHubSpot: body.syncToHubSpot,

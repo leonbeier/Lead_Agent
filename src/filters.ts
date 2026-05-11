@@ -8,6 +8,7 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
     keywords: ["system integrator", "industrial automation", "embedded systems", "inspection systems", "robotics"],
     locations: ["Germany"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
+    targetCategories: ["software_integrator"],
     notes: "Primary ICP. Prefer delivery-oriented service providers over generic consultancies or AI product vendors."
   },
   {
@@ -17,6 +18,7 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
     keywords: ["computer vision", "image processing", "industrial ai", "embedded ai", "automation software"],
     locations: ["Germany"],
     employeeRanges: ["11,50", "51,200", "201,500"],
+    targetCategories: ["ai_software_integrator", "software_integrator"],
     notes: "Use only if the company behaves like a service provider. Deprioritize firms selling their own dominant AI integration platform."
   },
   {
@@ -26,6 +28,7 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
     keywords: ["quality control", "visual inspection", "process automation", "production line", "machine vision"],
     locations: ["Germany"],
     employeeRanges: ["51,200", "201,500", "501,1000", "1001,5000"],
+    targetCategories: ["machine_builder_with_vision_ai_need"],
     notes: "Primary ICP. Prefer firms large enough for own development teams and visible production or inspection workflows."
   },
   {
@@ -35,6 +38,7 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
     keywords: ["special machinery", "robotics", "inspection systems", "automation equipment", "oem machine"],
     locations: ["Germany"],
     employeeRanges: ["51,200", "201,500", "501,1000"],
+    targetCategories: ["machine_builder_with_vision_ai_need"],
     notes: "Secondary ICP. Good when hardware is strong but the own AI software layer is weak or absent."
   },
   {
@@ -44,6 +48,7 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
     keywords: ["industrial camera", "machine vision", "imaging", "inspection camera", "embedded vision"],
     locations: ["Germany", "Netherlands", "Switzerland", "Austria"],
     employeeRanges: ["11,50", "51,200", "201,500"],
+    targetCategories: ["industrial_camera_vendor_without_ai_software"],
     notes: "Secondary partner search. Avoid companies whose main growth story is selling their own competing Vision AI software stack."
   }
 ];
