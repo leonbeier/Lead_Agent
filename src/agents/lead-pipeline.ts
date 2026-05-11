@@ -168,6 +168,7 @@ export class LeadPipelineAgent {
         while (candidateFilters.length > 0) {
           const activeFilter = candidateFilters.shift() as ApolloOrganizationFilter;
           const reviewedCompanies: PreCategorizedCompany[] = [];
+          let useWebSearchForExpansion = creditLessMode;
           const probeSample = this.excludeRejectedCompanies(
             await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
             learning
@@ -193,6 +194,7 @@ export class LeadPipelineAgent {
 
               if (relevantFromWebFallback.length > initialRelevantFromApollo.length) {
                 categorizedInitialSample = categorizedWebFallbackProbe;
+                useWebSearchForExpansion = true;
               }
             }
           }
@@ -261,7 +263,7 @@ export class LeadPipelineAgent {
 
           for (let page = 1; page <= 10; page += 1) {
             const expandedSample = this.excludeRejectedCompanies(
-              await this.apolloClient.fetchOrganizationSample(activeFilter, EXPANSION_BATCH_SIZE, dryRun, page),
+              await this.apolloClient.fetchOrganizationSample(activeFilter, EXPANSION_BATCH_SIZE, dryRun, page, useWebSearchForExpansion),
               learning
             );
 
