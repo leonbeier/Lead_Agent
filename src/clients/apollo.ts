@@ -16,8 +16,18 @@ export class ApolloClient {
       return this.buildDryRunSample(filter, limit);
     }
 
-    if (creditLessMode || !readiness.apolloConfigured) {
-      return this.searchOrganizationsWithoutCredits(filter, limit, page);
+    if (creditLessMode) {
+      const webSearchCompanies = readiness.openAIWebSearchConfigured
+        ? await this.searchOrganizationsWithoutCredits(filter, limit, page)
+        : [];
+
+      if (webSearchCompanies.length > 0 || !readiness.apolloConfigured) {
+        return webSearchCompanies;
+      }
+    }
+
+    if (!readiness.apolloConfigured) {
+      return [];
     }
 
     const body = JSON.stringify({
