@@ -497,18 +497,21 @@ export class LeadPipelineAgent {
     dryRun: boolean,
     learning?: LeadLearningData
   ) {
-    const filters = await this.azureClient.generateSuggestedFilters(
+    const baselineFilters = buildSuggestedFilters(market, customGoal)
+      .filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
+    const generatedFilters = await this.azureClient.generateSuggestedFilters(
       market,
       customGoal,
       mainContext,
       searchStrategyContext,
       targetCategories,
-      buildSuggestedFilters(market, customGoal),
+      baselineFilters,
       dryRun,
       learning
     );
 
-    return filters.filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
+    return [...baselineFilters, ...generatedFilters.filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories))]
+      .filter((filter, index, all) => all.findIndex((candidate) => candidate.name === filter.name) === index);
   }
 
   private async categorizeCompanies(
