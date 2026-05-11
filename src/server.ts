@@ -14,17 +14,19 @@ const controlPlaneStore = new ControlPlaneStore();
 const hubSpotConsolePath = path.join(process.cwd(), "public", "hubspot-ui", "index.html");
 const publicRoutes = new Set(["/health", "/oauth-callback"]);
 const selectableCategorySchema = z.enum([
-  "software_integrator",
-  "ai_software_integrator",
-  "machine_builder_with_vision_ai_need",
-  "industrial_camera_vendor_without_ai_software"
+  "integrator_vision_industrial_ai",
+  "integrator_general_ai",
+  "integrator_relevant_focus",
+  "industrial_end_customer_scaled",
+  "camera_manufacturer_partner",
+  "machine_builder_ai_enablement",
+  "software_platform_embedding"
 ]);
 
 const leadJobSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000),
   market: z.string().optional(),
-  customGoal: z.string().optional(),
-  agentContext: z.string().max(4000).optional(),
+  prequalificationContext: z.string().max(4000).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
@@ -37,8 +39,7 @@ const leadJobSchema = z.object({
 const settingsUpdateSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000).optional(),
   market: z.string().min(1).optional(),
-  customGoal: z.string().optional(),
-  agentContext: z.string().max(4000).optional(),
+  prequalificationContext: z.string().max(4000).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
@@ -101,8 +102,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
   return leadJobSchema.parse({
     targetLeadCount: body.targetLeadCount ?? settings.targetLeadCount ?? env.DEFAULT_TARGET_LEADS,
     market: body.market ?? settings.market ?? env.DEFAULT_MARKET,
-    customGoal: body.customGoal ?? settings.customGoal,
-    agentContext: body.agentContext ?? settings.agentContext,
+    prequalificationContext: body.prequalificationContext ?? settings.prequalificationContext,
     targetCategories: body.targetCategories ?? settings.targetCategories,
     runDeepResearch: body.runDeepResearch ?? settings.runDeepResearch,
     dryRun: body.dryRun ?? settings.dryRun,

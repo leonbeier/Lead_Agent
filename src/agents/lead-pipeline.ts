@@ -18,18 +18,23 @@ import {
 } from "../types";
 
 const RELEVANT_CATEGORIES: LeadCategory[] = [
-  "software_integrator",
-  "ai_software_integrator",
-  "machine_builder_with_vision_ai_need",
-  "industrial_camera_vendor_without_ai_software"
+  "integrator_vision_industrial_ai",
+  "integrator_general_ai",
+  "integrator_relevant_focus",
+  "industrial_end_customer_scaled",
+  "camera_manufacturer_partner",
+  "machine_builder_ai_enablement",
+  "software_platform_embedding"
 ];
 
 const FILTER_CATEGORY_FALLBACKS: Array<{ match: RegExp; categories: LeadCategory[] }> = [
-  { match: /software integrators/i, categories: ["software_integrator"] },
-  { match: /ai delivery integrators/i, categories: ["ai_software_integrator", "software_integrator"] },
-  { match: /industrial customers/i, categories: ["machine_builder_with_vision_ai_need"] },
-  { match: /machine builders/i, categories: ["machine_builder_with_vision_ai_need"] },
-  { match: /camera partners/i, categories: ["industrial_camera_vendor_without_ai_software"] }
+  { match: /vision\s*\/\s*industrial ai integrators/i, categories: ["integrator_vision_industrial_ai"] },
+  { match: /general ai integrators/i, categories: ["integrator_general_ai"] },
+  { match: /relevant-vertical integrators/i, categories: ["integrator_relevant_focus"] },
+  { match: /scaled industrial end customers/i, categories: ["industrial_end_customer_scaled"] },
+  { match: /camera manufacturers/i, categories: ["camera_manufacturer_partner"] },
+  { match: /machine builders for ai options/i, categories: ["machine_builder_ai_enablement"] },
+  { match: /software platforms for embedding/i, categories: ["software_platform_embedding"] }
 ];
 
 const FULL_SAMPLE_SIZE = 50;
@@ -122,180 +127,212 @@ export class LeadPipelineAgent {
       Math.max(MIN_EARLY_STOP_REVIEW_COUNT, request.earlyStopReviewCount ?? DEFAULT_EARLY_STOP_REVIEW_COUNT)
     );
     const earlyStopThreshold = request.earlyStopThreshold ?? DEFAULT_EARLY_STOP_THRESHOLD;
+    const prequalificationContext = request.prequalificationContext ?? request.agentContext;
     const suggestedFilters = this.orderFiltersByLearning(
-      await this.getSuggestedFilters(request.market, request.customGoal, request.agentContext, targetCategories, dryRun, learning),
+      await this.getSuggestedFilters(request.market, request.customGoal, prequalificationContext, targetCategories, dryRun, learning),
       learning,
       request.market,
       request.customGoal
     );
     const evaluations: FilterEvaluation[] = [];
     const shortlistedCompanies: PreCategorizedCompany[] = [];
+    const shortlistedKeys = new Set<string>();
     const searchHistory: SearchHistoryEntry[] = [];
+    const categoryQuotas = this.buildCategoryQuotas(request.targetLeadCount, targetCategories);
+    const categoryCounts = new Map<LeadCategory, number>(targetCategories.map((category) => [category, 0]));
     let filtersStoppedEarly = 0;
     let companiesSkippedAfterEarlyStop = 0;
 
-    for (const filter of suggestedFilters) {
-      const candidateFilters: ApolloOrganizationFilter[] = [filter];
-      let revisionCount = 0;
+    for (const activeCategory of targetCategories) {
+      const categoryTarget = categoryQuotas[activeCategory] ?? 0;
+      if (categoryTarget <= 0) {
+        continue;
+      }
 
-      while (candidateFilters.length > 0) {
-        const activeFilter = candidateFilters.shift() as ApolloOrganizationFilter;
-        const reviewedCompanies: PreCategorizedCompany[] = [];
-        const probeSample = this.excludeRejectedCompanies(
-          await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
-          learning
-        );
-        const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, request.agentContext, learning);
-        reviewedCompanies.push(...categorizedInitialSample);
+      const categoryFilters = suggestedFilters.filter((filter) => this.filterSupportsTargetCategories(filter, [activeCategory]));
+      for (const filter of categoryFilters) {
+        if ((categoryCounts.get(activeCategory) ?? 0) >= categoryTarget) {
+          break;
+        }
 
-        const initialEvaluation = this.evaluateFilter(
-          activeFilter.name,
-          categorizedInitialSample,
-          activeFilter,
-          targetCategories,
-          categorizedInitialSample.length,
-          false
-        );
+        if (shortlistedCompanies.length >= request.targetLeadCount) {
+          break;
+        }
 
-        searchHistory.push(
-          this.buildSearchHistoryEntry(
+        const candidateFilters: ApolloOrganizationFilter[] = [filter];
+        let revisionCount = 0;
+
+        while (candidateFilters.length > 0) {
+          const activeFilter = candidateFilters.shift() as ApolloOrganizationFilter;
+          const reviewedCompanies: PreCategorizedCompany[] = [];
+          const probeSample = this.excludeRejectedCompanies(
+            await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
+            learning
+          );
+          const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, prequalificationContext, learning);
+          reviewedCompanies.push(...categorizedInitialSample);
+
+          const initialEvaluation = this.evaluateFilter(
             activeFilter.name,
-            "probe_15",
-            1,
-            earlyStopReviewCount,
             categorizedInitialSample,
             activeFilter,
             targetCategories,
-            earlyStopThreshold
-          )
-        );
-
-        shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedInitialSample, activeFilter, targetCategories));
-
-        if (earlyStopEnabled && initialEvaluation.relevanceRatio < earlyStopThreshold) {
-          const skippedCount = Math.max(0, FULL_SAMPLE_SIZE - categorizedInitialSample.length);
-          const stoppedEvaluation: FilterEvaluation = {
-            ...initialEvaluation,
-            stoppedEarly: true,
-            skippedAfterEarlyStop: skippedCount,
-            recommendation: `${initialEvaluation.recommendation} Early stop triggered after ${categorizedInitialSample.length} reviews.`
-          };
-
-          evaluations.push(stoppedEvaluation);
-          filtersStoppedEarly += 1;
-          companiesSkippedAfterEarlyStop += skippedCount;
-
-          if (revisionCount < MAX_FILTER_REVISIONS) {
-            const revisedFilter = await this.azureClient.reviseSearchFilter(
-              activeFilter,
-              stoppedEvaluation,
-              dryRun,
-              learning,
-              request.market,
-              request.customGoal,
-              request.agentContext
-            );
-
-            if (revisedFilter && this.filterSupportsTargetCategories(revisedFilter, targetCategories)) {
-              candidateFilters.push(revisedFilter);
-              revisionCount += 1;
-            }
-          }
-
-          if (this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
-            break;
-          }
-
-          continue;
-        }
-
-        for (let page = 1; page <= 10; page += 1) {
-          const expandedSample = this.excludeRejectedCompanies(
-            await this.apolloClient.fetchOrganizationSample(activeFilter, EXPANSION_BATCH_SIZE, dryRun, page),
-            learning
-          );
-
-          if (expandedSample.length === 0) {
-            break;
-          }
-
-          const unseenExpandedSample = this.excludeAlreadyReviewedCompanies(expandedSample, reviewedCompanies);
-          if (unseenExpandedSample.length === 0) {
-            if (expandedSample.length < EXPANSION_BATCH_SIZE) {
-              break;
-            }
-
-            continue;
-          }
-
-          const categorizedExpandedSample = await this.categorizeCompanies(
-            unseenExpandedSample,
-            dryRun,
-            request.agentContext,
-            learning
-          );
-          reviewedCompanies.push(...categorizedExpandedSample);
-          shortlistedCompanies.push(...this.getRelevantEuropeanCompanies(categorizedExpandedSample, activeFilter, targetCategories));
-
-          const batchEvaluation = this.evaluateFilter(
-            activeFilter.name,
-            categorizedExpandedSample,
-            activeFilter,
-            targetCategories,
-            earlyStopReviewCount,
+            categorizedInitialSample.length,
             false
           );
 
           searchHistory.push(
             this.buildSearchHistoryEntry(
               activeFilter.name,
-              "expand_50",
-              page,
-              EXPANSION_BATCH_SIZE,
-              categorizedExpandedSample,
+              activeCategory,
+              "probe_15",
+              1,
+              earlyStopReviewCount,
+              categorizedInitialSample,
               activeFilter,
               targetCategories,
               earlyStopThreshold
             )
           );
 
-          if (batchEvaluation.relevanceRatio < earlyStopThreshold) {
-            break;
+          const initialRelevant = this.getRelevantEuropeanCompanies(categorizedInitialSample, activeFilter, targetCategories);
+          const addedFromProbe = this.addUniqueCompanies(shortlistedCompanies, initialRelevant, shortlistedKeys);
+          categoryCounts.set(activeCategory, (categoryCounts.get(activeCategory) ?? 0) + addedFromProbe);
+
+          if (earlyStopEnabled && initialEvaluation.relevanceRatio < earlyStopThreshold) {
+            const skippedCount = Math.max(0, FULL_SAMPLE_SIZE - categorizedInitialSample.length);
+            const stoppedEvaluation: FilterEvaluation = {
+              ...initialEvaluation,
+              stoppedEarly: true,
+              skippedAfterEarlyStop: skippedCount,
+              recommendation: `${initialEvaluation.recommendation} Early stop triggered after ${categorizedInitialSample.length} reviews.`
+            };
+
+            evaluations.push(stoppedEvaluation);
+            filtersStoppedEarly += 1;
+            companiesSkippedAfterEarlyStop += skippedCount;
+
+            if (revisionCount < MAX_FILTER_REVISIONS) {
+              const revisedFilter = await this.azureClient.reviseSearchFilter(
+                activeFilter,
+                stoppedEvaluation,
+                dryRun,
+                learning,
+                request.market,
+                request.customGoal,
+                prequalificationContext
+              );
+
+              if (revisedFilter && this.filterSupportsTargetCategories(revisedFilter, [activeCategory])) {
+                candidateFilters.push(revisedFilter);
+                revisionCount += 1;
+              }
+            }
+
+            continue;
           }
 
-          if (expandedSample.length < EXPANSION_BATCH_SIZE || this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
-            break;
+          for (let page = 1; page <= 10; page += 1) {
+            const expandedSample = this.excludeRejectedCompanies(
+              await this.apolloClient.fetchOrganizationSample(activeFilter, EXPANSION_BATCH_SIZE, dryRun, page),
+              learning
+            );
+
+            if (expandedSample.length === 0) {
+              break;
+            }
+
+            const unseenExpandedSample = this.excludeAlreadyReviewedCompanies(expandedSample, reviewedCompanies);
+            if (unseenExpandedSample.length === 0) {
+              if (expandedSample.length < EXPANSION_BATCH_SIZE) {
+                break;
+              }
+
+              continue;
+            }
+
+            const categorizedExpandedSample = await this.categorizeCompanies(
+              unseenExpandedSample,
+              dryRun,
+              prequalificationContext,
+              learning
+            );
+            reviewedCompanies.push(...categorizedExpandedSample);
+            const expandedRelevant = this.getRelevantEuropeanCompanies(categorizedExpandedSample, activeFilter, targetCategories);
+            const addedFromExpansion = this.addUniqueCompanies(shortlistedCompanies, expandedRelevant, shortlistedKeys);
+            categoryCounts.set(activeCategory, (categoryCounts.get(activeCategory) ?? 0) + addedFromExpansion);
+
+            const batchEvaluation = this.evaluateFilter(
+              activeFilter.name,
+              categorizedExpandedSample,
+              activeFilter,
+              targetCategories,
+              earlyStopReviewCount,
+              false
+            );
+
+            searchHistory.push(
+              this.buildSearchHistoryEntry(
+                activeFilter.name,
+                activeCategory,
+                "expand_50",
+                page,
+                EXPANSION_BATCH_SIZE,
+                categorizedExpandedSample,
+                activeFilter,
+                targetCategories,
+                earlyStopThreshold
+              )
+            );
+
+            if (batchEvaluation.relevanceRatio < earlyStopThreshold) {
+              break;
+            }
+
+            if (expandedSample.length < EXPANSION_BATCH_SIZE) {
+              break;
+            }
+
+            if ((categoryCounts.get(activeCategory) ?? 0) >= categoryTarget || shortlistedCompanies.length >= request.targetLeadCount) {
+              break;
+            }
           }
+
+          evaluations.push(
+            this.evaluateFilter(
+              activeFilter.name,
+              reviewedCompanies,
+              activeFilter,
+              targetCategories,
+              categorizedInitialSample.length,
+              false
+            )
+          );
+          break;
         }
 
-        evaluations.push(
-          this.evaluateFilter(
-            activeFilter.name,
-            reviewedCompanies,
-            activeFilter,
-            targetCategories,
-            categorizedInitialSample.length,
-            false
-          )
-        );
-        break;
+        if ((categoryCounts.get(activeCategory) ?? 0) >= categoryTarget || shortlistedCompanies.length >= request.targetLeadCount) {
+          break;
+        }
       }
 
-      if (this.getUniqueCompanyCount(shortlistedCompanies) >= request.targetLeadCount) {
+      if (shortlistedCompanies.length >= request.targetLeadCount) {
         break;
       }
     }
 
-    const uniqueShortlist = shortlistedCompanies
+    const sortedShortlist = shortlistedCompanies
       .sort((left, right) => right.relevanceScore - left.relevanceScore)
-      .filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index)
-      .slice(0, request.targetLeadCount);
+      .filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index);
+
+    const filteredShortlist = await this.excludeExistingHubSpotDomains(sortedShortlist, dryRun);
+    const uniqueShortlist = filteredShortlist.slice(0, request.targetLeadCount);
 
     const researchBriefs = request.runDeepResearch === false
       ? []
       : await this.mapWithConcurrency(
           uniqueShortlist.map((company) =>
-            () => this.azureClient.buildResearchBrief(company, dryRun, request.agentContext, learning)
+            () => this.azureClient.buildResearchBrief(company, dryRun, undefined, learning)
           ),
           AZURE_WORKER_CONCURRENCY
         );
@@ -349,6 +386,7 @@ export class LeadPipelineAgent {
 
   async preview(request: LeadJobRequest): Promise<Pick<LeadJobResult, "requested" | "suggestedFilters">> {
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
+    const prequalificationContext = request.prequalificationContext ?? request.agentContext;
 
     return {
       requested: {
@@ -358,7 +396,7 @@ export class LeadPipelineAgent {
       suggestedFilters: await this.getSuggestedFilters(
         request.market,
         request.customGoal,
-        request.agentContext,
+        prequalificationContext,
         targetCategories,
         request.dryRun ?? true
       )
@@ -549,12 +587,12 @@ export class LeadPipelineAgent {
       };
     }
 
-    if (company.sourceFilter.includes("Industrial Camera Partners")) {
+    if (company.sourceFilter.includes("Camera Manufacturers")) {
       return categorization;
     }
 
     if (
-      (categorization.category === "software_integrator" || categorization.category === "ai_software_integrator") &&
+      (categorization.category === "integrator_vision_industrial_ai" || categorization.category === "integrator_general_ai") &&
       !industrialSignals.some((signal) => text.includes(signal))
     ) {
       return {
@@ -613,15 +651,15 @@ export class LeadPipelineAgent {
     const normalizedGoal = customGoal?.toLowerCase() ?? "";
     let bias = 0;
 
-    if (normalizedName.includes("software integrators")) {
+    if (normalizedName.includes("vision") && normalizedName.includes("integrators")) {
       bias += 0.45;
     }
 
-    if (normalizedName.includes("ai delivery integrators")) {
+    if (normalizedName.includes("general ai integrators")) {
       bias += 0.05;
     }
 
-    if (normalizedName.includes("industrial customers")) {
+    if (normalizedName.includes("scaled industrial end customers")) {
       bias += 0.35;
     }
 
@@ -629,7 +667,7 @@ export class LeadPipelineAgent {
       bias += 0.25;
     }
 
-    if (normalizedName.includes("camera partners")) {
+    if (normalizedName.includes("camera manufacturers")) {
       bias -= 0.15;
     }
 
@@ -637,7 +675,7 @@ export class LeadPipelineAgent {
       bias -= 0.05;
     }
 
-    if (/(software integrator|industrial|quality control|qc|process automation)/.test(normalizedGoal) && normalizedName.includes("camera partners")) {
+    if (/(software integrator|industrial|quality control|qc|process automation)/.test(normalizedGoal) && normalizedName.includes("camera manufacturers")) {
       bias -= 0.1;
     }
 
@@ -677,6 +715,7 @@ export class LeadPipelineAgent {
 
   private buildSearchHistoryEntry(
     filterName: string,
+    targetCategory: LeadCategory,
     batchType: "probe_15" | "expand_50",
     page: number,
     requestedCount: number,
@@ -691,6 +730,7 @@ export class LeadPipelineAgent {
     return {
       timestamp: new Date().toISOString(),
       filterName,
+      targetCategory,
       batchType,
       page,
       requestedCount,
@@ -702,6 +742,65 @@ export class LeadPipelineAgent {
         ? "Continue expanding this search."
         : "Revise the search before spending more credits."
     };
+  }
+
+  private buildCategoryQuotas(targetLeadCount: number, categories: LeadCategory[]): Record<LeadCategory, number> {
+    const baseQuota = Math.floor(targetLeadCount / categories.length);
+    const remainder = targetLeadCount % categories.length;
+    const quotas = {} as Record<LeadCategory, number>;
+
+    categories.forEach((category, index) => {
+      quotas[category] = baseQuota + (index < remainder ? 1 : 0);
+    });
+
+    return quotas;
+  }
+
+  private addUniqueCompanies(
+    target: PreCategorizedCompany[],
+    incoming: PreCategorizedCompany[],
+    knownKeys: Set<string>
+  ): number {
+    let added = 0;
+
+    for (const company of incoming) {
+      const companyKey = this.getCompanyKey(company);
+      if (knownKeys.has(companyKey)) {
+        continue;
+      }
+
+      target.push(company);
+      knownKeys.add(companyKey);
+      added += 1;
+    }
+
+    return added;
+  }
+
+  private async excludeExistingHubSpotDomains(
+    companies: PreCategorizedCompany[],
+    dryRun: boolean
+  ): Promise<PreCategorizedCompany[]> {
+    if (dryRun || companies.length === 0) {
+      return companies;
+    }
+
+    const domains = companies
+      .map((company) => company.domain)
+      .filter((domain): domain is string => Boolean(domain));
+    if (domains.length === 0) {
+      return companies;
+    }
+
+    const existingDomains = await this.hubspotClient.getExistingCompanyDomains(domains);
+    if (existingDomains.size === 0) {
+      return companies;
+    }
+
+    return companies.filter((company) => {
+      const normalizedDomain = company.domain?.trim().toLowerCase();
+      return !normalizedDomain || !existingDomains.has(normalizedDomain);
+    });
   }
 
   private getUniqueCompanyCount(companies: PreCategorizedCompany[]): number {
@@ -794,19 +893,13 @@ export class LeadPipelineAgent {
     initialReviewCount: number,
     stoppedEarly: boolean
   ): FilterEvaluation {
+    const allCategories: LeadCategory[] = [...RELEVANT_CATEGORIES, "irrelevant", "other"];
     const categoryBreakdown = companies.reduce<Record<LeadCategory, number>>(
       (accumulator, company) => {
         accumulator[company.category] += 1;
         return accumulator;
       },
-      {
-        software_integrator: 0,
-        ai_software_integrator: 0,
-        machine_builder_with_vision_ai_need: 0,
-        industrial_camera_vendor_without_ai_software: 0,
-        irrelevant: 0,
-        other: 0
-      }
+      Object.fromEntries(allCategories.map((category) => [category, 0])) as Record<LeadCategory, number>
     );
 
     const relevantCount = this.getRelevantEuropeanCompanies(companies, filter, targetCategories).length;

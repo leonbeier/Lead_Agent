@@ -19,6 +19,13 @@ export interface CategoryExecutionContext {
   avoidSignals: string[];
 }
 
+export interface CategoryPrequalificationContext {
+  category: LeadCategory;
+  label: string;
+  classificationRules: string[];
+  disqualifiers: string[];
+}
+
 export const TARGET_REGIONS = [
   "Germany",
   "Austria",
@@ -80,10 +87,10 @@ Messaging rules:
 `;
 
 export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
-  software_integrator_template: {
-    key: "software_integrator_template",
-    audience: "Software integrators and technical development service providers",
-    goal: "Position ONE WARE as a multiplier for project delivery and margin, not as a generic AI vendor.",
+  integrator_vision_industrial_ai_template: {
+    key: "integrator_vision_industrial_ai_template",
+    audience: "Software/automation integrators with clear Vision AI or Industrial AI delivery focus",
+    goal: "Position ONE WARE as a delivery multiplier for recurring industrial Vision AI projects.",
     subject: "Vision-AI ohne lange Optimierungsphasen",
     emailBody:
       "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
@@ -92,10 +99,34 @@ export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
     phoneScript:
       "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?"
   },
-  industrial_customer_template: {
-    key: "industrial_customer_template",
-    audience: "Industrial end customers with QC, inspection, or process automation use cases",
-    goal: "Position ONE WARE as a faster and lower-cost route to production-ready Vision AI for real factory use cases.",
+  integrator_general_ai_template: {
+    key: "integrator_general_ai_template",
+    audience: "Software/automation integrators with general AI focus and delivery ownership",
+    goal: "Pivot from generic AI messaging to concrete Vision AI delivery throughput and margin gains.",
+    subject: "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+    emailBody:
+      "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+    linkedInMessage:
+      "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+    phoneScript:
+      "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?"
+  },
+  integrator_relevant_focus_template: {
+    key: "integrator_relevant_focus_template",
+    audience: "Software/automation integrators with relevant vertical focus (defence, surveillance, robotics, medtech vision, agriculture, automotive)",
+    goal: "Connect ONE WARE to vertical delivery bottlenecks in vision-heavy customer projects.",
+    subject: "Vision-AI in projektnahen Verticals schneller und planbarer liefern",
+    emailBody:
+      "Hallo Herr/Frau [Name],\n\nIn vertikalen Projekten wie Defence, Surveillance, Robotik oder Medtech ist Vision-AI oft der kritische Pfad – und genau dort kosten Modellwahl und Optimierung überproportional viel Zeit.\n\nMit ONE WARE lassen sich anwendungsspezifische Vision-Modelle in Minuten statt Monaten erzeugen und direkt auf Zielhardware deployen.\n\nDadurch werden Delivery-Risiken kleiner und Projektlaufzeiten planbarer.\n\nWenn Sie möchten, prüfen wir an einem realen Use Case, wo sich der größte Hebel bei Ihnen ergibt.\n\nMit freundlichen Grüßen\n[Ihr Name]",
+    linkedInMessage:
+      "Kurze Frage: Haben Sie in Ihren Vertical-Projekten aktuell Vision-AI-Workstreams, die durch Modellwahl und Tuning ausgebremst werden? Genau dort setzen wir an.",
+    phoneScript:
+      "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir helfen Integratoren mit anspruchsvollen Verticals dabei, Vision-AI-Projekte schneller produktionsreif zu machen. Ist das bei Ihnen aktuell relevant?"
+  },
+  industrial_end_customer_scaled_template: {
+    key: "industrial_end_customer_scaled_template",
+    audience: "Industrial end customers with own production and sufficient scale for high-value QC/process-automation projects",
+    goal: "Position ONE WARE as a fast and economical path to production-ready Vision AI for scaled operations.",
     subject: "Qualitätskontrolle und Vision-AI wirtschaftlicher umsetzen",
     emailBody:
       "Hallo Herr/Frau [Name],\n\nBei vielen Industrieprojekten sehen wir, dass Vision-AI für Qualitätskontrolle oder Prozessautomation grundsätzlich sinnvoll wäre, die Umsetzung aber zu teuer, zu langsam oder technisch zu aufwendig wird.\n\nGenau dort setzen wir an: Mit ONE WARE lassen sich anwendungsspezifische Vision-AI-Modelle in Minuten statt Monaten erzeugen und direkt auf kostengünstiger Edge-Hardware einsetzen. Dadurch werden auch Anwendungen wirtschaftlich, die bisher an Entwicklungsaufwand oder Hardwarekosten gescheitert sind.\n\nWenn Sie möchten, können wir an einem Datensatz kostenlos zeigen, was unsere Software in Ihrem Anwendungsfall leisten kann.\n\nWäre ein kurzer Austausch sinnvoll?\n\nMit freundlichen Grüßen\n[Ihr Name]",
@@ -104,10 +135,22 @@ export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
     phoneScript:
       "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ganz kurz: Wir helfen Industrie-Teams dabei, Vision-AI für Qualitätskontrolle und Prozessautomation deutlich schneller und günstiger produktionsreif zu machen. Gibt es bei Ihnen aktuell solche Themen?"
   },
-  hardware_partner_template: {
-    key: "hardware_partner_template",
-    audience: "Machine builders and industrial hardware vendors without a strong own Vision AI software layer",
-    goal: "Position ONE WARE as an embeddable software layer that upgrades hardware offerings without a large AI team.",
+  camera_manufacturer_partner_template: {
+    key: "camera_manufacturer_partner_template",
+    audience: "Camera or imaging manufacturers that can offer AI-ready customer setups",
+    goal: "Position ONE WARE as the software layer to enable AI-capable camera deployments for customers.",
+    subject: "Vision-AI einfacher in Kamera- und Imaging-Lösungen integrieren",
+    emailBody:
+      "Hallo Herr/Frau [Name],\n\nViele Kamera- und Imaging-Hersteller sehen Vision-AI als starkes Differenzierungsmerkmal, aber die durchgängige Modell- und Hardware-Optimierung kostet intern häufig zu viel Zeit.\n\nMit ONE WARE entstehen aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle, optimiert für die jeweilige Zielhardware.\n\nDamit können Sie Ihren Kunden AI-fähige Vorrichtungen und Lösungen deutlich schneller anbieten.\n\nWäre ein kurzer Austausch interessant, um potenzielle Partner-Use-Cases zu prüfen?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+    linkedInMessage:
+      "Kurze Frage: Wie aufwendig ist es bei Ihnen aktuell, Vision-AI kundenseitig produktionsreif in Imaging-Setups zu integrieren? Genau diesen Teil automatisieren wir.",
+    phoneScript:
+      "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir helfen Imaging-Herstellern, Vision-AI deutlich schneller in kundenfähige Lösungen zu bringen. Ist das bei Ihnen ein Thema?"
+  },
+  machine_builder_ai_enablement_template: {
+    key: "machine_builder_ai_enablement_template",
+    audience: "Machine builders that want to offer AI options or AI-ready fixtures to customers",
+    goal: "Position ONE WARE as an AI enablement layer for machine builders without long model-development cycles.",
     subject: "Vision-AI einfacher in Maschinen und Produkte integrieren",
     emailBody:
       "Hallo Herr/Frau [Name],\n\nViele Maschinenbauer und Hardwareanbieter sehen Vision-AI als spannendes Feature, aber die Entwicklung einer belastbaren, hardware-optimierten Lösung kostet intern oft zu viel Zeit.\n\nWir haben dafür mit ONE WARE einen Ansatz entwickelt, bei dem aus Daten in wenigen Minuten produktionsreife Vision-AI-Modelle entstehen, optimiert für die jeweilige Zielhardware. So lässt sich Vision-AI deutlich einfacher und günstiger in bestehende Produkte integrieren.\n\nWäre ein kurzer Austausch interessant, um zu prüfen, wo das bei Ihnen produktseitig relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
@@ -115,167 +158,210 @@ export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
       "Wie aufwendig ist es für Sie aktuell, Vision-AI produktionsreif in Maschinen oder Hardware zu integrieren? Wir sehen oft, dass gerade Modellwahl und Hardware-Optimierung den größten Aufwand erzeugen. Genau das automatisieren wir.",
     phoneScript:
       "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Ich halte es kurz: Wir helfen Maschinenbau- und Hardware-Teams, Vision-AI deutlich einfacher in Produkte zu integrieren, weil Modellgenerierung und Hardware-Optimierung weitgehend automatisiert werden. Ist das bei Ihnen ein aktuelles Thema?"
+  },
+  software_platform_embedding_template: {
+    key: "software_platform_embedding_template",
+    audience: "Software platforms that can embed ONE WARE as model-generation alternative (e.g. Roboflow-like)",
+    goal: "Position ONE WARE as embeddable model-generation backend for platform providers.",
+    subject: "Embeddable Vision-AI Modell-Engine für Ihre Plattform",
+    emailBody:
+      "Hallo Herr/Frau [Name],\n\nWenn Ihre Plattform Vision-AI-Workflows für Kunden bereitstellt, ist die Modellgenerierung oft der zeitintensivste Teil.\n\nONE WARE kann hier als alternative Modell-Engine eingebettet werden: aus Daten in Minuten zu produktionsreifen, hardware-optimierten Modellen.\n\nDas ermöglicht zusätzliche Leistungsfähigkeit für Ihre Nutzer, ohne eigene langwierige Modell-Iterationen.\n\nWäre ein kurzer technischer Austausch sinnvoll, um Integrationsoptionen zu prüfen?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+    linkedInMessage:
+      "Kurze Frage: Prüfen Sie aktuell Optionen, wie Ihre Nutzer schneller zu produktionsreifen Vision-Modellen kommen? Wir liefern genau diesen Schritt als embeddable Engine.",
+    phoneScript:
+      "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir unterstützen Plattformanbieter dabei, Vision-Modellgenerierung als embeddable Layer anzubieten. Ist das bei Ihnen ein aktuelles Thema?"
+  }
+};
+
+export const CATEGORY_PREQUALIFICATION_CONTEXT: Record<LeadCategory, CategoryPrequalificationContext> = {
+  integrator_vision_industrial_ai: {
+    category: "integrator_vision_industrial_ai",
+    label: "Integrators with explicit Vision/Industrial AI focus",
+    classificationRules: [
+      "Classify here when services explicitly mention Vision AI, machine vision, industrial AI delivery, inspection AI, or edge vision deployment.",
+      "Delivery ownership and project implementation should be visible."
+    ],
+    disqualifiers: ["Pure product vendors without delivery ownership", "Direct competing own vision platform as primary business"]
+  },
+  integrator_general_ai: {
+    category: "integrator_general_ai",
+    label: "Integrators with general AI focus",
+    classificationRules: [
+      "Classify here when company is clearly AI-service-led but not strongly vision-specific.",
+      "Projects and implementation ownership should be visible."
+    ],
+    disqualifiers: ["AI consulting without implementation", "Generic SaaS AI features without delivery services"]
+  },
+  integrator_relevant_focus: {
+    category: "integrator_relevant_focus",
+    label: "Integrators with relevant vertical focus",
+    classificationRules: [
+      "Classify here for integrators in surveillance, defence, medtech vision, robotics, drones, agriculture tech, automotive tech, industrial automation.",
+      "Vision/edge potential should be plausible from project signals."
+    ],
+    disqualifiers: ["No project-delivery signals", "Irrelevant vertical without vision/automation tie-in"]
+  },
+  industrial_end_customer_scaled: {
+    category: "industrial_end_customer_scaled",
+    label: "Scaled industrial end customers",
+    classificationRules: [
+      "Classify here when company has own production and sufficient scale for lucrative QC/inspection/process-automation projects.",
+      "Evidence for engineering ownership is preferred."
+    ],
+    disqualifiers: ["Small workshops/manufactories without engineering capacity", "No internal production context"]
+  },
+  camera_manufacturer_partner: {
+    category: "camera_manufacturer_partner",
+    label: "Camera manufacturers as partners",
+    classificationRules: [
+      "Classify here when company is camera/imaging hardware manufacturer that can offer AI-capable setups to customers.",
+      "Partner fit should be stronger than direct competition risk."
+    ],
+    disqualifiers: ["Strong own competing vision software monetization"]
+  },
+  machine_builder_ai_enablement: {
+    category: "machine_builder_ai_enablement",
+    label: "Machine builders for AI enablement",
+    classificationRules: [
+      "Classify here when machine builder can offer AI options, fixtures, or integration pathways for customers.",
+      "OEM/industrial equipment context should be visible."
+    ],
+    disqualifiers: ["Pure distributor without machine integration capability"]
+  },
+  software_platform_embedding: {
+    category: "software_platform_embedding",
+    label: "Software platforms for embedding",
+    classificationRules: [
+      "Classify here when software platform can embed model-generation capabilities for users.",
+      "Platform integration path should be plausible."
+    ],
+    disqualifiers: ["No extensibility/integration path", "Direct platform competitor with no partner incentive"]
+  },
+  irrelevant: {
+    category: "irrelevant",
+    label: "Irrelevant",
+    classificationRules: ["Use when no plausible ONE WARE fit exists."],
+    disqualifiers: ["Non-target geography", "Finance/HR/recruiting/VC profiles", "No delivery or use-case fit"]
+  },
+  other: {
+    category: "other",
+    label: "Other / unclear",
+    classificationRules: ["Use when evidence is too weak or mixed for a strong category assignment."],
+    disqualifiers: ["None - this is an uncertainty bucket"]
   }
 };
 
 export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionContext> = {
-  software_integrator: {
-    category: "software_integrator",
-    label: "Delivery-led software integrator",
+  integrator_vision_industrial_ai: {
+    category: "integrator_vision_industrial_ai",
+    label: "Vision/Industrial AI integrator",
     researchPriorities: [
-      "Verify the company builds and delivers customer-specific industrial, embedded, automation, robotics, defence, surveillance, medtech, or machine software projects.",
-      "Check whether image, video, inspection, quality control, or edge deployment is likely to recur across projects.",
-      "Prefer firms with delivery ownership, fixed-price pressure, and limited internal AI specialization."
+      "Validate recurring vision-heavy delivery ownership.",
+      "Look for fixed-price pressure and repeatable project patterns."
     ],
     outreachPriorities: [
-      "Lead with reduced trial and error, faster delivery, and better project margins.",
-      "Frame ONE WARE as a multiplier for project throughput, not as a generic AI vendor.",
-      "Connect to repeatable customer projects and time-to-delivery pressure."
+      "Lead with throughput and margin improvements.",
+      "Keep partner framing and project efficiency language."
     ],
     personalizationRules: [
-      "Only personalize with a concrete service, industry project, or delivery signal from the website or recent activity.",
-      "Keep the base outreach template structure and wording direction intact.",
-      "If no strong hook exists, stay close to the standard software-integrator template."
+      "Personalize only with concrete delivery hooks.",
+      "Retain template backbone and ONE WARE USP wording."
     ],
-    avoidSignals: [
-      "Do not position ONE WARE as replacing the integrator's business.",
-      "Avoid over-personalized compliments without a delivery-relevant fact.",
-      "Avoid focusing first on APIs or hosting before the project-efficiency pain is established."
-    ]
+    avoidSignals: ["Generic AI buzzwords without delivery context"]
   },
-  ai_software_integrator: {
-    category: "ai_software_integrator",
-    label: "AI-aware integrator without strong competing product layer",
+  integrator_general_ai: {
+    category: "integrator_general_ai",
+    label: "General AI integrator",
     researchPriorities: [
-      "Verify whether the company mainly delivers AI projects as a service rather than monetizing its own dominant AI integration platform.",
-      "Look for clues that they already solve customer projects but still face iteration, deployment, or hardware-efficiency pain.",
-      "Disqualify or heavily downgrade if they mainly sell their own competing Vision AI software stack."
+      "Identify where generic AI delivery can benefit from faster vision model cycles.",
+      "Check if they implement projects, not only advise."
     ],
-    outreachPriorities: [
-      "Acknowledge they already know AI and focus on delivery efficiency, model fit, and hardware optimization.",
-      "Position ONE WARE as a way to increase throughput and reduce manual iteration in client delivery.",
-      "Use partner-like language rather than basic AI education."
-    ],
-    personalizationRules: [
-      "Personalize only around visible AI delivery focus, edge deployment, or real project references.",
-      "Do not rewrite the message as if the target is AI-inexperienced.",
-      "If the company appears too product-led and competitive, make the risk explicit instead of forcing outreach fit."
-    ],
-    avoidSignals: [
-      "Avoid generic AI buzzwords without operational relevance.",
-      "Avoid claims that imply they cannot build AI themselves.",
-      "Avoid strong partnership framing if the company clearly looks like a direct software competitor."
-    ]
+    outreachPriorities: ["Connect ONE WARE to project speed and predictability."],
+    personalizationRules: ["Personalize around current delivery workflow gaps."],
+    avoidSignals: ["Treating them as AI beginners"]
   },
-  machine_builder_with_vision_ai_need: {
-    category: "machine_builder_with_vision_ai_need",
-    label: "Industrial customer or machine builder with concrete use-case pressure",
+  integrator_relevant_focus: {
+    category: "integrator_relevant_focus",
+    label: "Integrator with relevant vertical focus",
     researchPriorities: [
-      "Look for quality control, inspection, process automation, robotics, machine optimization, or hardware-product integration opportunities.",
-      "Check whether the company is large enough to have internal engineering ownership and realistic deployment paths.",
-      "Look for evidence that current solutions may be too expensive, too slow, or still technically limited."
+      "Pinpoint vertical-specific delivery bottlenecks and hardware constraints.",
+      "Validate recurring vision/edge components."
     ],
-    outreachPriorities: [
-      "Lead with business and engineering impact: faster path to production-ready models, lower deployment cost, and new feasibility on cheaper hardware.",
-      "Use the free-dataset-test angle when there is a clear QC or inspection hook.",
-      "Highlight where previous attempts may have been too costly or not accurate enough."
-    ],
-    personalizationRules: [
-      "Personalize around a concrete production, inspection, process, or product context only if clearly visible.",
-      "Keep the outreach grounded in operational bottlenecks, not in generic innovation messaging.",
-      "Where possible, connect the use case to cost, throughput, or deployment simplicity."
-    ],
-    avoidSignals: [
-      "Avoid abstract AI transformation language.",
-      "Avoid heavy partner framing if the company is more likely an end customer.",
-      "Avoid feature lists without tying them to QC, automation, or product economics."
-    ]
+    outreachPriorities: ["Anchor message in vertical project risk reduction."],
+    personalizationRules: ["Use factual vertical hooks only."],
+    avoidSignals: ["Over-generalized messaging"]
   },
-  industrial_camera_vendor_without_ai_software: {
-    category: "industrial_camera_vendor_without_ai_software",
-    label: "Hardware or imaging partner without dominant AI software monetization",
+  industrial_end_customer_scaled: {
+    category: "industrial_end_customer_scaled",
+    label: "Scaled industrial end customer",
     researchPriorities: [
-      "Verify the company is strong in hardware, imaging, optics, or cameras but weak in its own commercial Vision AI software layer.",
-      "Assess whether ONE WARE could complement the product stack rather than cannibalize an existing software business.",
-      "Look for embedded, OEM, or partner-enablement signals."
+      "Confirm production scale and internal engineering capability.",
+      "Find QC, inspection, and process automation leverage points."
     ],
-    outreachPriorities: [
-      "Lead with embeddable value: add Vision AI capability without building a large internal ML team.",
-      "Focus on product enhancement, partner enablement, and hardware-fit.",
-      "Use partner language carefully and only if the complementarity is plausible."
-    ],
-    personalizationRules: [
-      "Personalize around camera, imaging, OEM, or inspection product lines only if a clear fit is visible.",
-      "Do not personalize in a way that suggests replacing their core hardware business.",
-      "If they clearly sell their own AI software stack, treat that as a risk flag."
-    ],
-    avoidSignals: [
-      "Avoid targeting strong existing AI software commercialization as a positive signal.",
-      "Avoid writing like they are a service integrator if they are clearly a hardware company.",
-      "Avoid generic broad partner claims without product-stack evidence."
-    ]
+    outreachPriorities: ["Lead with economics, feasibility, and speed to production."],
+    personalizationRules: ["Ground in concrete production context."],
+    avoidSignals: ["Abstract transformation talk"]
+  },
+  camera_manufacturer_partner: {
+    category: "camera_manufacturer_partner",
+    label: "Camera manufacturer partner",
+    researchPriorities: ["Validate partner fit and customer AI-enablement potential."],
+    outreachPriorities: ["Focus on enabling customer-ready AI setups."],
+    personalizationRules: ["Personalize with product-line evidence only."],
+    avoidSignals: ["Positioning as replacement of core hardware business"]
+  },
+  machine_builder_ai_enablement: {
+    category: "machine_builder_ai_enablement",
+    label: "Machine builder AI enablement",
+    researchPriorities: ["Validate OEM integration pathways and customer-facing AI option potential."],
+    outreachPriorities: ["Position ONE WARE as fast AI enablement layer for machine offerings."],
+    personalizationRules: ["Use machine/product context, not generic AI language."],
+    avoidSignals: ["Ignoring mechanical integration realities"]
+  },
+  software_platform_embedding: {
+    category: "software_platform_embedding",
+    label: "Software platform embedding partner",
+    researchPriorities: ["Validate embeddability and partner incentives."],
+    outreachPriorities: ["Lead with integration leverage and user value lift."],
+    personalizationRules: ["Tie outreach to concrete platform workflows."],
+    avoidSignals: ["Overpromising without integration fit"]
   },
   irrelevant: {
     category: "irrelevant",
     label: "Irrelevant or excluded profile",
-    researchPriorities: [
-      "Confirm why the company is out of scope and capture that reason clearly.",
-      "Prefer explicit disqualification over speculative fit creation.",
-      "Use geography, business model, and competitor status as primary exclusion reasons."
-    ],
-    outreachPriorities: [
-      "Do not force outreach preparation when the company is a bad fit.",
-      "Summarize the exclusion reason cleanly.",
-      "Protect research time for stronger ICP candidates."
-    ],
-    personalizationRules: [
-      "Do not personalize outreach for disqualified leads.",
-      "Keep the summary concise and factual.",
-      "Return the no-fit reason clearly."
-    ],
-    avoidSignals: [
-      "Avoid optimistic interpretation of weak signals.",
-      "Avoid creating templates or hooks where no fit exists.",
-      "Avoid forcing a category upgrade without objective evidence."
-    ]
+    researchPriorities: ["Capture disqualification reason."],
+    outreachPriorities: ["Do not prepare outreach."],
+    personalizationRules: ["Return concise exclusion reason."],
+    avoidSignals: ["Forcing fit"]
   },
   other: {
     category: "other",
     label: "Mixed or unclear fit",
-    researchPriorities: [
-      "Resolve ambiguity by checking whether the company owns delivery, has repeatable vision-relevant projects, and fits target geographies.",
-      "Look for concrete clues that justify moving the company into one of the primary ICP categories.",
-      "If ambiguity remains, keep the score conservative."
-    ],
-    outreachPriorities: [
-      "Only produce outreach if a concrete hook and plausible business fit exist.",
-      "Keep the message conservative and template-led.",
-      "Favor operational relevance over speculative strategic fit."
-    ],
-    personalizationRules: [
-      "Personalize only when a specific application, delivery pattern, or product fit is visible.",
-      "Do not overcommit on fit if the evidence is mixed.",
-      "Use the most adjacent template and explain remaining uncertainty."
-    ],
-    avoidSignals: [
-      "Avoid broad assumptions from weak website wording.",
-      "Avoid strong competitive claims without evidence.",
-      "Avoid treating vague AI interest as a sufficient buying trigger."
-    ]
+    researchPriorities: ["Resolve ambiguity conservatively."],
+    outreachPriorities: ["Use cautious template-led messaging only if needed."],
+    personalizationRules: ["Avoid overcommitment."],
+    avoidSignals: ["Speculative assumptions"]
   }
 };
 
 export function getTemplateKeyForCategory(category: LeadCategory): string {
   switch (category) {
-    case "software_integrator":
-    case "ai_software_integrator":
-      return "software_integrator_template";
-    case "machine_builder_with_vision_ai_need":
-      return "industrial_customer_template";
-    case "industrial_camera_vendor_without_ai_software":
-      return "hardware_partner_template";
+    case "integrator_vision_industrial_ai":
+      return "integrator_vision_industrial_ai_template";
+    case "integrator_general_ai":
+      return "integrator_general_ai_template";
+    case "integrator_relevant_focus":
+      return "integrator_relevant_focus_template";
+    case "industrial_end_customer_scaled":
+      return "industrial_end_customer_scaled_template";
+    case "camera_manufacturer_partner":
+      return "camera_manufacturer_partner_template";
+    case "machine_builder_ai_enablement":
+      return "machine_builder_ai_enablement_template";
+    case "software_platform_embedding":
+      return "software_platform_embedding_template";
     default:
-      return "software_integrator_template";
+      return "integrator_vision_industrial_ai_template";
   }
 }
 
@@ -300,8 +386,28 @@ export function buildExecutionContextBlock(category: LeadCategory, agentContext?
     ...context.personalizationRules.map((item) => `- ${item}`),
     "Avoid signals:",
     ...context.avoidSignals.map((item) => `- ${item}`),
-    agentContext ? `Operator context from HubSpot or workflow:\n${agentContext}` : undefined
+    agentContext ? `Category-specific operator context:\n${agentContext}` : undefined
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+export function buildPrequalificationContextBlock(agentContext?: string): string {
+  const categoryRules = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
+    .map((context) => {
+      return [
+        `Category: ${context.category} (${context.label})`,
+        ...context.classificationRules.map((rule) => `- Rule: ${rule}`),
+        ...context.disqualifiers.map((rule) => `- Disqualifier: ${rule}`)
+      ].join("\n");
+    })
+    .join("\n\n");
+
+  return [
+    "Prequalification categories:",
+    categoryRules,
+    agentContext ? `Prequalification operator context:\n${agentContext}` : undefined
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }

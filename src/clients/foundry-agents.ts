@@ -236,7 +236,7 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Classify companies into exactly one category: software_integrator, ai_software_integrator, machine_builder_with_vision_ai_need, industrial_camera_vendor_without_ai_software, irrelevant, other. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Classify companies into exactly one category: integrator_vision_industrial_ai, integrator_general_ai, integrator_relevant_focus, industrial_end_customer_scaled, camera_manufacturer_partner, machine_builder_ai_enablement, software_platform_embedding, irrelevant, other. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
         };
       case "research": {
         const tools = await this.buildResearchTools();

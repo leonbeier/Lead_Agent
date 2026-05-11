@@ -331,12 +331,8 @@
               <input id="market" name="market" type="text" required />
             </label>
             <label style="grid-column: 1 / -1;">
-              Kampagnenziel
-              <textarea id="customGoal" name="customGoal"></textarea>
-            </label>
-            <label style="grid-column: 1 / -1;">
-              Agent-Kontext aus HubSpot oder Operator-UI
-              <textarea id="agentContext" name="agentContext"></textarea>
+              Kontext fuer Vorsortierungs-Agent (optional)
+              <textarea id="prequalificationContext" name="prequalificationContext"></textarea>
             </label>
             <label style="grid-column: 1 / -1;">
               Gewuenschte Kundentypen
@@ -372,16 +368,6 @@
             <button id="run-preview" type="button" class="secondary">Preview starten</button>
             <button id="run-live" type="button">Lead-Run starten</button>
           </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <h2>Operator-Hinweise</h2>
-              <p>Diese zusaetzlichen Hebel sind sinnvoll, sobald ihr die naechste Iteration der Filtersteuerung erweitert.</p>
-            </div>
-          </div>
-          <ol class="hint-list" id="suggested-controls"></ol>
           <div style="height: 18px;"></div>
           <h3>Letzte Antwort</h3>
           <p style="margin-bottom: 12px;">Preview- oder Run-Ergebnisse werden hier komprimiert angezeigt.</p>
@@ -441,7 +427,6 @@
       const templatesStatus = document.getElementById("templates-status");
       const resultOutput = document.getElementById("result-output");
       const summaryCards = document.getElementById("summary-cards");
-      const suggestedControlsList = document.getElementById("suggested-controls");
       const templateList = document.getElementById("template-list");
       const contextList = document.getElementById("context-list");
       const latestRunList = document.getElementById("latest-run-list");
@@ -473,8 +458,7 @@
       function fillSettingsForm(settings) {
         document.getElementById("targetLeadCount").value = settings.targetLeadCount;
         document.getElementById("market").value = settings.market;
-        document.getElementById("customGoal").value = settings.customGoal || "";
-        document.getElementById("agentContext").value = settings.agentContext || "";
+        document.getElementById("prequalificationContext").value = settings.prequalificationContext || "";
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
           checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
         });
@@ -490,8 +474,7 @@
         return {
           targetLeadCount: Number(document.getElementById("targetLeadCount").value),
           market: document.getElementById("market").value.trim(),
-          customGoal: document.getElementById("customGoal").value.trim(),
-          agentContext: document.getElementById("agentContext").value.trim(),
+          prequalificationContext: document.getElementById("prequalificationContext").value.trim(),
           targetCategories: Array.from(document.querySelectorAll("input[name='targetCategories']:checked")).map((checkbox) => checkbox.value),
           runDeepResearch: document.getElementById("runDeepResearch").checked,
           dryRun: document.getElementById("dryRun").checked,
@@ -508,7 +491,7 @@
           { label: "Lead-Ziel", value: String(settings.targetLeadCount) },
           { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
           { label: "Templates", value: String(Object.keys(templates).length) },
-          { label: "Kontext", value: settings.agentContext ? "gesetzt" : "leer" },
+          { label: "Vorsortierungskontext", value: settings.prequalificationContext ? "gesetzt" : "leer" },
           { label: "Kundentypen", value: String((settings.targetCategories || []).length) },
           { label: "Letzte Treffer", value: String(latestLeadRun?.summary?.foundCandidates ?? 0) }
         ];
@@ -523,10 +506,6 @@
             `
           )
           .join("");
-      }
-
-      function renderSuggestedControls(items) {
-        suggestedControlsList.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
       }
 
       function renderTargetCategories(options) {
@@ -571,7 +550,7 @@
         searchHistoryList.innerHTML = entries.slice(0, 8).map((entry) => `
           <div class="history-item">
             <strong>${entry.filterName}</strong>
-            <span class="mini-meta">${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page}</span>
+            <span class="mini-meta">${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page} · Zielkategorie: ${entry.targetCategory || "n/a"}</span>
             <span class="mini-meta">Relevant: ${entry.relevantCount}/${entry.returnedCount} (${Math.round(entry.relevanceRatio * 100)}%)</span>
             <span class="mini-meta">${entry.recommendation}</span>
           </div>
@@ -668,7 +647,6 @@
           renderTargetCategories(data.selectableCategories || []);
           fillSettingsForm(data.settings);
           renderSummary(data.settings, data.templates, data.latestLeadRun);
-          renderSuggestedControls(data.suggestedControls);
           renderTemplates(data.templates);
           renderContexts(data.categoryContexts);
           renderLatestRun(data.latestLeadRun);

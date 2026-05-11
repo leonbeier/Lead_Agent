@@ -1,17 +1,21 @@
 import React from "react";
 import { Button, Divider, Flex, Text, hubspot } from "@hubspot/ui-extensions";
 
-hubspot.extend(({ actions, context }) => (
-  <LeadAgentCard
-    openIframe={actions.openIframeModal}
-    portalId={String(context.portal.id)}
-    baseUrl={String(context.variables.LEAD_AGENT_API_BASE_URL || "")}
-    sharedKey={String(context.variables.LEAD_AGENT_SHARED_KEY || "")}
-  />
-));
+hubspot.extend(({ actions, context }) => {
+  const openIframe = "openIframeModal" in actions ? actions.openIframeModal : undefined;
+
+  return (
+    <LeadAgentCard
+      openIframe={openIframe}
+      portalId={String(context.portal.id)}
+      baseUrl={String(context.variables?.LEAD_AGENT_API_BASE_URL || "")}
+      sharedKey={String(context.variables?.LEAD_AGENT_SHARED_KEY || "")}
+    />
+  );
+});
 
 type LeadAgentCardProps = {
-  openIframe: (payload: { uri: string; height: number; width: number; title: string; flush?: boolean }) => void;
+  openIframe?: (payload: { uri: string; height: number; width: number; title: string; flush?: boolean }) => void;
   portalId: string;
   baseUrl: string;
   sharedKey: string;
@@ -20,7 +24,7 @@ type LeadAgentCardProps = {
 function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCardProps) {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
   const consoleUrl = `${normalizedBaseUrl}/hubspot/ui?portalId=${encodeURIComponent(portalId)}&key=${encodeURIComponent(sharedKey)}`;
-  const canOpenConsole = Boolean(normalizedBaseUrl && sharedKey);
+  const canOpenConsole = Boolean(normalizedBaseUrl && sharedKey && openIframe);
 
   return (
     <Flex direction="column" gap="small">
@@ -29,15 +33,19 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       <Divider />
       <Button
         disabled={!canOpenConsole}
-        onClick={() =>
+        onClick={() => {
+          if (!openIframe) {
+            return;
+          }
+
           openIframe({
             uri: consoleUrl,
             height: 900,
             width: 1400,
             title: "ONE WARE Lead Console",
             flush: true
-          })
-        }
+          });
+        }}
       >
         Lead-Konsole oeffnen
       </Button>

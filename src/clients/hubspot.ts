@@ -23,6 +23,30 @@ interface HubSpotSyncResult {
 export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
 
+  async getExistingCompanyDomains(domains: string[]): Promise<Set<string>> {
+    if (!readiness.hubspotConfigured || domains.length === 0) {
+      return new Set();
+    }
+
+    const uniqueDomains = Array.from(
+      new Set(
+        domains
+          .map((domain) => this.normalizeDomain(domain))
+          .filter((domain): domain is string => Boolean(domain))
+      )
+    );
+
+    const existingDomains = new Set<string>();
+    for (const domain of uniqueDomains) {
+      const existingCompany = await this.searchObject("companies", "domain", domain);
+      if (existingCompany) {
+        existingDomains.add(domain);
+      }
+    }
+
+    return existingDomains;
+  }
+
   async findPublicContactsForCompany(company: PreCategorizedCompany): Promise<PublicContactCandidate[]> {
     return this.findPublicContacts(company);
   }
@@ -219,6 +243,19 @@ export class HubSpotClient {
     );
 
     return response.results?.[0] ?? null;
+  }
+
+  private normalizeDomain(domain: string | undefined): string | undefined {
+    if (!domain) {
+      return undefined;
+    }
+
+    return domain
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/\/$/, "");
   }
 
   private async getAvailableProperties(objectType: "companies" | "contacts"): Promise<Set<string>> {
@@ -426,14 +463,14 @@ export class HubSpotClient {
     rankingType: "partner" | "serviceprovider" | "customer"
   ): string | undefined {
     if (rankingType === "partner") {
-      return category === "industrial_camera_vendor_without_ai_software" ? "85" : undefined;
+      return category === "camera_manufacturer_partner" || category === "software_platform_embedding" ? "85" : undefined;
     }
 
     if (rankingType === "serviceprovider") {
-      return category === "software_integrator" || category === "ai_software_integrator" ? "85" : undefined;
+      return category === "integrator_vision_industrial_ai" || category === "integrator_general_ai" || category === "integrator_relevant_focus" ? "85" : undefined;
     }
 
-    return category === "machine_builder_with_vision_ai_need" ? "85" : undefined;
+    return category === "machine_builder_ai_enablement" || category === "industrial_end_customer_scaled" ? "85" : undefined;
   }
 
   private async requestJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {

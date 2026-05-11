@@ -51,10 +51,13 @@ Dieser Schritt nimmt zuerst die ersten 5 bis 15 Firmen pro Filterset und ordnet 
 
 Zielkategorien:
 
-- `software_integrator`
-- `ai_software_integrator`
-- `machine_builder_with_vision_ai_need`
-- `industrial_camera_vendor_without_ai_software`
+- `integrator_vision_industrial_ai`
+- `integrator_general_ai`
+- `integrator_relevant_focus`
+- `industrial_end_customer_scaled`
+- `camera_manufacturer_partner`
+- `machine_builder_ai_enablement`
+- `software_platform_embedding`
 - `irrelevant`
 - `other`
 

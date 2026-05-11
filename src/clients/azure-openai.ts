@@ -8,6 +8,7 @@ import {
   ResearchBrief
 } from "../types";
 import {
+  buildPrequalificationContextBlock,
   buildExecutionContextBlock,
   getTemplateForCategory,
   ONE_WARE_PROMPT_CONTEXT,
@@ -29,7 +30,7 @@ const MAX_AZURE_RETRIES = 3;
 const AZURE_RETRY_DELAYS_MS = [500, 1000, 2000];
 const QUICK_QUALIFICATION_CONTEXT = [
   "You classify lead fit for ONE WARE.",
-  "Prefer industrial software or AI delivery integrators, machine builders with clear vision/QC upside, and industrial camera vendors without a strong own AI software layer.",
+  "Prefer the defined campaign categories and classify conservatively.",
   "Reject finance, HR tech, recruiting, applicant tracking, generic consulting without delivery ownership, and direct competing AI software vendors.",
   "Return JSON only with category, relevanceScore 0-100, rationale.",
   "Keep rationale to one short sentence."
@@ -65,7 +66,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: QUICK_QUALIFICATION_CONTEXT
+          content: `${QUICK_QUALIFICATION_CONTEXT}\n\n${buildPrequalificationContextBlock(agentContext)}`
         },
         {
           role: "user",
@@ -349,31 +350,47 @@ export class AzureOpenAIClient {
 
     if (lowered.includes("camera") || lowered.includes("imaging") || lowered.includes("optics")) {
       return {
-        category: "industrial_camera_vendor_without_ai_software",
+        category: "camera_manufacturer_partner",
         relevanceScore: 73,
         rationale: "Description suggests imaging hardware where AI software upsell may be relevant."
       };
     }
 
-    if (lowered.includes("ai") || lowered.includes("machine learning") || lowered.includes("computer vision")) {
+    if (lowered.includes("computer vision") || lowered.includes("machine vision") || lowered.includes("industrial ai")) {
       return {
-        category: "ai_software_integrator",
+        category: "integrator_vision_industrial_ai",
         relevanceScore: 87,
-        rationale: "Description signals AI or computer vision delivery capability."
+        rationale: "Description signals vision or industrial AI delivery capability."
       };
     }
 
-    if (lowered.includes("machine") || lowered.includes("quality") || lowered.includes("inspection")) {
+    if (lowered.includes("platform") || lowered.includes("api") || lowered.includes("workflow")) {
       return {
-        category: "machine_builder_with_vision_ai_need",
+        category: "software_platform_embedding",
         relevanceScore: 78,
-        rationale: "Description suggests manufacturing workflow and potential QC or inspection use cases."
+        rationale: "Description suggests software-platform structure that could embed model generation capabilities."
+      };
+    }
+
+    if (lowered.includes("machine") || lowered.includes("oem") || lowered.includes("inspection")) {
+      return {
+        category: "machine_builder_ai_enablement",
+        relevanceScore: 76,
+        rationale: "Description suggests machine-building profile with AI-upgrade potential."
+      };
+    }
+
+    if (lowered.includes("production") || lowered.includes("quality") || lowered.includes("factory")) {
+      return {
+        category: "industrial_end_customer_scaled",
+        relevanceScore: 75,
+        rationale: "Description suggests industrial production context where QC/process automation is relevant."
       };
     }
 
     if (lowered.includes("integrator") || lowered.includes("automation") || lowered.includes("software")) {
       return {
-        category: "software_integrator",
+        category: "integrator_general_ai",
         relevanceScore: 75,
         rationale: "Description suggests implementation or integration services."
       };
@@ -479,7 +496,7 @@ export class AzureOpenAIClient {
 
     if ((hardwareHits >= 2 || (mentionsImagingOrCamera && mentionsVendorOrHardware)) && serviceHits === 0) {
       return {
-        category: "industrial_camera_vendor_without_ai_software",
+        category: "camera_manufacturer_partner",
         relevanceScore: 90,
         rationale: "Company description strongly matches an industrial imaging or camera vendor without a clear delivery-led services profile."
       };
@@ -655,10 +672,13 @@ export class AzureOpenAIClient {
     const normalizedCategory = category.trim().toLowerCase();
 
     const aliases: Array<[LeadCategory, string[]]> = [
-      ["software_integrator", ["software_integrator", "industrial software / delivery integrator", "industrial software / ai delivery integrator", "delivery integrator", "software integrator", "relevant", "fit", "strong fit", "good fit"]],
-      ["ai_software_integrator", ["ai_software_integrator", "ai integrator", "ai delivery integrator", "industrial software / ai delivery integrator"]],
-      ["machine_builder_with_vision_ai_need", ["machine_builder_with_vision_ai_need", "machine_builder", "machine_builder_oem", "industrial_end_customer", "potential_fit"]],
-      ["industrial_camera_vendor_without_ai_software", ["industrial_camera_vendor_without_ai_software", "industrial camera vendor", "industrial_camera_vendor", "industrial camera/vendor", "industrial_vision_vendor"]],
+      ["integrator_vision_industrial_ai", ["integrator_vision_industrial_ai", "software_integrator", "ai_software_integrator", "vision ai integrator", "industrial software / ai delivery integrator", "delivery integrator", "software integrator"]],
+      ["integrator_general_ai", ["integrator_general_ai", "ai integrator", "ai delivery integrator", "general ai integrator"]],
+      ["integrator_relevant_focus", ["integrator_relevant_focus", "vertical integrator", "relevant industry integrator", "defence integrator", "surveillance integrator"]],
+      ["industrial_end_customer_scaled", ["industrial_end_customer_scaled", "industrial_end_customer", "scaled industrial customer", "industrial customer"]],
+      ["camera_manufacturer_partner", ["camera_manufacturer_partner", "industrial_camera_vendor_without_ai_software", "industrial camera vendor", "industrial_camera_vendor", "industrial camera/vendor", "industrial_vision_vendor"]],
+      ["machine_builder_ai_enablement", ["machine_builder_ai_enablement", "machine_builder_with_vision_ai_need", "machine_builder", "machine_builder_oem", "potential_fit"]],
+      ["software_platform_embedding", ["software_platform_embedding", "platform embedding", "software platform partner", "roboflow-like"]],
       ["irrelevant", ["irrelevant", "reject", "direct_competitor"]],
       ["other", ["other"]]
     ];

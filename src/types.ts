@@ -1,8 +1,11 @@
 export type LeadCategory =
-  | "software_integrator"
-  | "ai_software_integrator"
-  | "machine_builder_with_vision_ai_need"
-  | "industrial_camera_vendor_without_ai_software"
+  | "integrator_vision_industrial_ai"
+  | "integrator_general_ai"
+  | "integrator_relevant_focus"
+  | "industrial_end_customer_scaled"
+  | "camera_manufacturer_partner"
+  | "machine_builder_ai_enablement"
+  | "software_platform_embedding"
   | "irrelevant"
   | "other";
 
@@ -65,8 +68,7 @@ export interface PublicContactCandidate {
 export interface LeadAgentSettings {
   targetLeadCount: number;
   market: string;
-  customGoal?: string;
-  agentContext?: string;
+  prequalificationContext?: string;
   targetCategories?: LeadCategory[];
   runDeepResearch: boolean;
   dryRun: boolean;
@@ -104,6 +106,7 @@ export interface FilterLearningStat {
 export interface SearchHistoryEntry {
   timestamp: string;
   filterName: string;
+  targetCategory?: LeadCategory;
   batchType: "probe_15" | "expand_50";
   page: number;
   requestedCount: number;
@@ -156,6 +159,7 @@ export interface LeadLearningData {
 export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
+  prequalificationContext?: string;
   customGoal?: string;
   agentContext?: string;
   targetCategories?: LeadCategory[];

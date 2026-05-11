@@ -22,7 +22,7 @@ Der Workflow ist in vier Stufen aufgeteilt:
 
 ## Beispielablauf
 
-1. HubSpot oder ein internes UI sendet `targetLeadCount`, `market` und optional `customGoal` an `POST /api/hubspot/workflow-trigger`.
+1. HubSpot oder ein internes UI sendet `targetLeadCount`, `market`, optionale `prequalificationContext` und `targetCategories` an `POST /api/hubspot/workflow-trigger`.
 2. Das Backend erzeugt passende Apollo Filter-Vorschlaege.
 3. Fuer jedes Filter-Set werden erst 5 bis 15 Firmen schnell angeprueft; nur bei gutem Signal wird bis 50 erweitert.
 4. Eine Vorqualifikation zaehlt relevante Kategorien, bricht schwache Filter frueh ab und bewertet die Filterqualitaet.
@@ -31,10 +31,13 @@ Der Workflow ist in vier Stufen aufgeteilt:
 
 ## Relevante Kategorien
 
-- software_integrator
-- ai_software_integrator
-- machine_builder_with_vision_ai_need
-- industrial_camera_vendor_without_ai_software
+- integrator_vision_industrial_ai
+- integrator_general_ai
+- integrator_relevant_focus
+- industrial_end_customer_scaled
+- camera_manufacturer_partner
+- machine_builder_ai_enablement
+- software_platform_embedding
 - irrelevant
 - other
 
@@ -63,7 +66,7 @@ Wichtige optionale Request-Parameter:
 - `earlyStopEnabled`: standardmaessig `true`
 - `earlyStopReviewCount`: zwischen 5 und 15, standardmaessig `10`
 - `earlyStopThreshold`: Mindestquote relevanter Firmen in der Vorprobe, standardmaessig `0.35`
-- `agentContext`: freier Operator- oder HubSpot-Kontext fuer Filterstrategie, Qualifikation und Deep Research
+- `prequalificationContext`: optionaler Kontext fuer den Vorsortierungs-Agenten
 
 Prompt- und Template-Logik:
 
@@ -71,7 +74,7 @@ Prompt- und Template-Logik:
 - VCs, Banken, reine Berater und direkte konkurrierende Plattformprofile werden aktiv abgewertet oder ausgeschlossen
 - Outreach wird nicht mehr frei neu geschrieben, sondern pro Segment aus festen Templates mit kontrollierter Personalisierung abgeleitet
 - pro Firmenkategorie gibt es jetzt eigenen Agent-Kontext fuer Research-Prioritaeten, Outreach-Prioritaeten, Personalisierungsregeln und No-Go-Signale
-- dieser Kontext kann ueber `agentContext` aus HubSpot oder dem Operator-UI erweitert werden
+- der Vorsortierungs-Kontext kann ueber `prequalificationContext` aus HubSpot oder dem Operator-UI erweitert werden
 
 ## Lokal starten
 

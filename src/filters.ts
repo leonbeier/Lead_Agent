@@ -2,54 +2,74 @@ import { ApolloOrganizationFilter } from "./types";
 
 export const defaultApolloFilters: ApolloOrganizationFilter[] = [
   {
-    name: "Germany Industrial Software Integrators",
-    persona: "Software integrator with delivery ownership in industrial automation or embedded projects",
+    name: "DACH Vision / Industrial AI Integrators",
+    persona: "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
     industries: ["Industrial Automation", "System Integration", "Industrial Software", "Machinery"],
     keywords: ["system integrator", "industrial automation", "embedded systems", "inspection systems", "robotics"],
-    locations: ["Germany"],
+    locations: ["Germany", "Austria", "Switzerland"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
-    targetCategories: ["software_integrator"],
-    notes: "Primary ICP. Prefer delivery-oriented service providers over generic consultancies or AI product vendors."
+    targetCategories: ["integrator_vision_industrial_ai"],
+    notes: "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects."
   },
   {
-    name: "Germany AI Delivery Integrators",
-    persona: "Software integrator that mentions AI or computer vision but mainly sells services and project delivery",
+    name: "DACH General AI Integrators",
+    persona: "Software or consulting integrator with general AI focus and real implementation ownership",
     industries: ["Industrial Automation", "Computer Vision", "Robotics", "Embedded Software"],
     keywords: ["computer vision", "image processing", "industrial ai", "embedded ai", "automation software"],
-    locations: ["Germany"],
+    locations: ["Germany", "Austria", "Switzerland"],
     employeeRanges: ["11,50", "51,200", "201,500"],
-    targetCategories: ["ai_software_integrator", "software_integrator"],
-    notes: "Use only if the company behaves like a service provider. Deprioritize firms selling their own dominant AI integration platform."
+    targetCategories: ["integrator_general_ai"],
+    notes: "Use when AI capability is visible, even if vision specialization is not explicit yet."
   },
   {
-    name: "Germany Industrial Customers With QC Need",
-    persona: "Industrial company with internal engineering and likely QC, inspection, or process automation use cases",
+    name: "Europe Relevant-Vertical Integrators",
+    persona: "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+    industries: ["Industrial Automation", "Robotics", "Aerospace", "Medical Devices", "Automotive"],
+    keywords: ["surveillance", "defence", "robotics", "drones", "medtech imaging", "automotive vision"],
+    locations: ["Germany", "Netherlands", "France", "Belgium", "Sweden"],
+    employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
+    targetCategories: ["integrator_relevant_focus"],
+    notes: "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks."
+  },
+  {
+    name: "DACH Scaled Industrial End Customers",
+    persona: "Industrial end customer with own production scale and likely QC/process-automation upside",
     industries: ["Food Production", "Machinery", "Industrial Automation", "Automotive", "Electrical Manufacturing"],
     keywords: ["quality control", "visual inspection", "process automation", "production line", "machine vision"],
-    locations: ["Germany"],
-    employeeRanges: ["51,200", "201,500", "501,1000", "1001,5000"],
-    targetCategories: ["machine_builder_with_vision_ai_need"],
-    notes: "Primary ICP. Prefer firms large enough for own development teams and visible production or inspection workflows."
+    locations: ["Germany", "Austria", "Switzerland"],
+    employeeRanges: ["201,500", "501,1000", "1001,5000", "5001,10000"],
+    targetCategories: ["industrial_end_customer_scaled"],
+    notes: "Prefer companies with visible production engineering ownership and enough scale for high-value projects."
   },
   {
-    name: "Germany Machine Builders With Vision Upside",
-    persona: "Machine builder or OEM that can embed Vision AI into products but is not already strongly positioned around its own Vision AI software",
-    industries: ["Machinery", "Industrial Automation", "Electrical Manufacturing", "Robotics"],
-    keywords: ["special machinery", "robotics", "inspection systems", "automation equipment", "oem machine"],
-    locations: ["Germany"],
-    employeeRanges: ["51,200", "201,500", "501,1000"],
-    targetCategories: ["machine_builder_with_vision_ai_need"],
-    notes: "Secondary ICP. Good when hardware is strong but the own AI software layer is weak or absent."
-  },
-  {
-    name: "Europe Industrial Camera Partners",
-    persona: "Industrial imaging or camera vendor without a clear own Vision AI software commercialization angle",
+    name: "Europe Camera Manufacturers",
+    persona: "Industrial imaging or camera manufacturer that can partner on AI-ready customer offerings",
     industries: ["Industrial Automation", "Electrical Manufacturing", "Hardware"],
     keywords: ["industrial camera", "machine vision", "imaging", "inspection camera", "embedded vision"],
-    locations: ["Germany", "Netherlands", "Switzerland", "Austria"],
+    locations: ["Germany", "Netherlands", "Switzerland", "Austria", "France"],
     employeeRanges: ["11,50", "51,200", "201,500"],
-    targetCategories: ["industrial_camera_vendor_without_ai_software"],
-    notes: "Secondary partner search. Avoid companies whose main growth story is selling their own competing Vision AI software stack."
+    targetCategories: ["camera_manufacturer_partner"],
+    notes: "Partner search. Deprioritize manufacturers monetizing a strong competing AI software stack."
+  },
+  {
+    name: "DACH Machine Builders For AI Options",
+    persona: "Machine builder or OEM that can offer AI options, fixtures, or AI-ready integrations to customers",
+    industries: ["Machinery", "Industrial Automation", "Electrical Manufacturing", "Robotics"],
+    keywords: ["special machinery", "oem", "inspection systems", "automation equipment", "production machines"],
+    locations: ["Germany", "Austria", "Switzerland"],
+    employeeRanges: ["51,200", "201,500", "501,1000", "1001,5000"],
+    targetCategories: ["machine_builder_ai_enablement"],
+    notes: "Prefer builders with modular products and clear customer integration pathways."
+  },
+  {
+    name: "Europe Software Platforms For Embedding",
+    persona: "Software platform where model generation can be embedded as capability layer",
+    industries: ["Computer Software", "Developer Tools", "Industrial Software", "Cloud Services"],
+    keywords: ["platform", "api", "workflow", "annotation", "model deployment", "computer vision platform"],
+    locations: ["Germany", "Netherlands", "France", "UK", "Sweden"],
+    employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
+    targetCategories: ["software_platform_embedding"],
+    notes: "Seek extensible platforms where ONE WARE can be integrated as model-generation backend."
   }
 ];
 

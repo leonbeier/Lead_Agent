@@ -12,10 +12,13 @@ import {
 } from "./types";
 
 const selectableCategorySchema = z.enum([
-  "software_integrator",
-  "ai_software_integrator",
-  "machine_builder_with_vision_ai_need",
-  "industrial_camera_vendor_without_ai_software"
+  "integrator_vision_industrial_ai",
+  "integrator_general_ai",
+  "integrator_relevant_focus",
+  "industrial_end_customer_scaled",
+  "camera_manufacturer_partner",
+  "machine_builder_ai_enablement",
+  "software_platform_embedding"
 ]);
 
 const dataDirectory = path.join(process.cwd(), "data");
@@ -28,8 +31,7 @@ const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-revie
 const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
   market: z.string().min(1),
-  customGoal: z.string().optional(),
-  agentContext: z.string().max(4000).optional(),
+  prequalificationContext: z.string().max(4000).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean(),
   dryRun: z.boolean(),
@@ -70,6 +72,17 @@ const filterLearningStatSchema = z.object({
 const searchHistoryEntrySchema = z.object({
   timestamp: z.string().min(1),
   filterName: z.string().min(1),
+  targetCategory: z.enum([
+    "integrator_vision_industrial_ai",
+    "integrator_general_ai",
+    "integrator_relevant_focus",
+    "industrial_end_customer_scaled",
+    "camera_manufacturer_partner",
+    "machine_builder_ai_enablement",
+    "software_platform_embedding",
+    "irrelevant",
+    "other"
+  ]).optional(),
   batchType: z.enum(["probe_15", "expand_50"]),
   page: z.number().int().positive(),
   requestedCount: z.number().int().positive(),
@@ -102,13 +115,16 @@ const latestLeadRunSchema = z.object({
 const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 50,
   market: "DE",
-  customGoal: "Find ONE WARE targets with clear Vision AI delivery upside.",
-  agentContext: "Prioritize Germany first. Favor software integrators with delivery ownership, industrial QC/process automation teams, and machine builders with clear Vision-AI upside. Avoid VCs, broad consultancies, and direct competing AI software vendors.",
+  prequalificationContext:
+    "Prioritize delivery ownership and industrial applicability. Exclude weak-fit finance, recruiting, HR, and generic non-industrial SaaS profiles.",
   targetCategories: [
-    "software_integrator",
-    "ai_software_integrator",
-    "machine_builder_with_vision_ai_need",
-    "industrial_camera_vendor_without_ai_software"
+    "integrator_vision_industrial_ai",
+    "integrator_general_ai",
+    "integrator_relevant_focus",
+    "industrial_end_customer_scaled",
+    "camera_manufacturer_partner",
+    "machine_builder_ai_enablement",
+    "software_platform_embedding"
   ],
   runDeepResearch: true,
   dryRun: true,
@@ -141,8 +157,7 @@ const defaultLatestLeadRun: LatestLeadRunRecord = {
 const suggestedControls = [
   "targetLeadCount",
   "market",
-  "customGoal",
-  "agentContext",
+  "prequalificationContext",
   "targetCategories",
   "runDeepResearch",
   "dryRun",
@@ -204,7 +219,10 @@ export class ControlPlaneStore {
   async getTemplates(): Promise<Record<string, OutreachTemplate>> {
     await this.ensureSeedData();
     const templates = await readJsonFile<Record<string, OutreachTemplate>>(templatesPath);
-    return templateRecordSchema.parse(templates);
+    return templateRecordSchema.parse({
+      ...OUTREACH_TEMPLATES,
+      ...templates
+    });
   }
 
   async getLearning(): Promise<LeadLearningData> {
@@ -328,10 +346,13 @@ export class ControlPlaneStore {
       templates: await this.getTemplates(),
       categoryContexts: CATEGORY_EXECUTION_CONTEXT,
       selectableCategories: [
-        { value: "software_integrator", label: "Software Dienstleister / Integratoren" },
-        { value: "ai_software_integrator", label: "AI-Software-Dienstleister" },
-        { value: "machine_builder_with_vision_ai_need", label: "Industrie-Kunden / Maschinenbauer" },
-        { value: "industrial_camera_vendor_without_ai_software", label: "Kamerahersteller / Imaging-Partner" }
+        { value: "integrator_vision_industrial_ai", label: "Software Integratoren mit Vision/Industrial AI Fokus" },
+        { value: "integrator_general_ai", label: "Software Integratoren mit allgemeinem AI Fokus" },
+        { value: "integrator_relevant_focus", label: "Integratoren in relevanten Industriezweigen" },
+        { value: "industrial_end_customer_scaled", label: "Industrie-Endkunden mit ausreichender Projektgroesse" },
+        { value: "camera_manufacturer_partner", label: "Kamera-/Imaging-Hersteller als Partner" },
+        { value: "machine_builder_ai_enablement", label: "Maschinenbauer mit AI-Option Potenzial" },
+        { value: "software_platform_embedding", label: "Softwareplattformen fuer Embedding-Partnerschaften" }
       ],
       suggestedControls,
       learning: await this.getLearning(),
