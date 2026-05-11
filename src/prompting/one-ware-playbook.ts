@@ -86,6 +86,8 @@ Messaging rules:
 - Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.
 `;
 
+export const DEFAULT_MAIN_CONTEXT = ONE_WARE_PROMPT_CONTEXT.trim();
+
 export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
   integrator_vision_industrial_ai_template: {
     key: "integrator_vision_industrial_ai_template",
@@ -373,10 +375,16 @@ export function getExecutionContextForCategory(category: LeadCategory): Category
   return CATEGORY_EXECUTION_CONTEXT[category];
 }
 
-export function buildExecutionContextBlock(category: LeadCategory, agentContext?: string): string {
+export function buildMainContextBlock(mainContext?: string): string {
+  return mainContext?.trim() || DEFAULT_MAIN_CONTEXT;
+}
+
+export function buildExecutionContextBlock(category: LeadCategory, mainContext?: string): string {
   const context = getExecutionContextForCategory(category);
 
   return [
+    "Main context:",
+    buildMainContextBlock(mainContext),
     `Category context: ${context.label}`,
     "Research priorities:",
     ...context.researchPriorities.map((item) => `- ${item}`),
@@ -385,15 +393,20 @@ export function buildExecutionContextBlock(category: LeadCategory, agentContext?
     "Personalization rules:",
     ...context.personalizationRules.map((item) => `- ${item}`),
     "Avoid signals:",
-    ...context.avoidSignals.map((item) => `- ${item}`),
-    agentContext ? `Category-specific operator context:\n${agentContext}` : undefined
+    ...context.avoidSignals.map((item) => `- ${item}`)
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-export function buildPrequalificationContextBlock(agentContext?: string): string {
+export function buildPrequalificationContextBlock(
+  prequalificationContext?: string,
+  activeCategories?: LeadCategory[],
+  mainContext?: string
+): string {
+  const activeCategorySet = new Set(activeCategories?.length ? [...activeCategories, "irrelevant", "other"] : Object.keys(CATEGORY_PREQUALIFICATION_CONTEXT));
   const categoryRules = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
+    .filter((context) => activeCategorySet.has(context.category))
     .map((context) => {
       return [
         `Category: ${context.category} (${context.label})`,
@@ -404,9 +417,12 @@ export function buildPrequalificationContextBlock(agentContext?: string): string
     .join("\n\n");
 
   return [
+    "Main context:",
+    buildMainContextBlock(mainContext),
+    activeCategories?.length ? `Active positive-match categories: ${activeCategories.join(", ")}` : undefined,
     "Prequalification categories:",
     categoryRules,
-    agentContext ? `Prequalification operator context:\n${agentContext}` : undefined
+    prequalificationContext ? `Prequalification operator context:\n${prequalificationContext}` : undefined
   ]
     .filter(Boolean)
     .join("\n\n");

@@ -75,7 +75,9 @@ export class FoundryAgentsClient {
   async categorizeCompany(
     name: string,
     description: string,
-    agentContext: string | undefined,
+    mainContext: string | undefined,
+    prequalificationContext: string | undefined,
+    targetCategories: LeadCategory[] | undefined,
     dryRun: boolean
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null> {
     if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_QUALIFICATION) {
@@ -89,7 +91,9 @@ export class FoundryAgentsClient {
           `Company: ${name}`,
           `Description: ${description}`,
           `Target regions: ${TARGET_REGIONS.join(", ")}`,
-          agentContext ? `Operator context: ${agentContext}` : undefined
+          mainContext ? `Main context: ${mainContext}` : undefined,
+          prequalificationContext ? `Prequalification context: ${prequalificationContext}` : undefined,
+          targetCategories?.length ? `Active target categories: ${targetCategories.join(", ")}` : undefined
         ]
           .filter(Boolean)
           .join("\n")
@@ -117,7 +121,7 @@ export class FoundryAgentsClient {
 
   async buildResearchBrief(
     company: PreCategorizedCompany,
-    agentContext: string | undefined,
+    mainContext: string | undefined,
     dryRun: boolean
   ): Promise<ResearchBrief | null> {
     if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_RESEARCH) {
@@ -135,7 +139,7 @@ export class FoundryAgentsClient {
           company.country ? `Country: ${company.country}` : "Country: unknown",
           `Known description: ${company.shortDescription}`,
           `Category: ${company.category}`,
-          buildExecutionContextBlock(company.category, agentContext),
+          buildExecutionContextBlock(company.category, mainContext),
           `Source filter: ${company.sourceFilter}`,
           `Relevance score: ${company.relevanceScore}`,
           `Template key: ${template.key}`,
@@ -150,7 +154,7 @@ export class FoundryAgentsClient {
 
       return {
         companyName: company.name,
-        appliedAgentContext: agentContext,
+        appliedAgentContext: mainContext,
         citations: response.citations,
         ...parsed
       };
@@ -230,20 +234,20 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Apollo Filter Strategy Agent. Generate 4 to 6 Apollo company search filters focused on Germany first. Prioritize service-led software integrators, industrial automation firms, embedded/robotics players, and industrial end-customers with clear QC or process automation needs. Focus strongest on software integrators, AI-capable service providers, industrial customers with own engineering, and machine builders with plausible need. Avoid VCs, banks, broad consultancies, China, Saudi Arabia, and competing AI platform vendors. Return strict JSON: {"filters":[{"name":"...","persona":"...","industries":[...],"keywords":[...],"locations":[...],"employeeRanges":[...],"notes":"..."}]}. Keep industries and keywords practical for Apollo.`
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Apollo Filter Strategy Agent. Follow any supplied main context strictly. Generate 4 to 6 Apollo company search filters focused on Germany first. Prioritize service-led software integrators, industrial automation firms, embedded/robotics players, and industrial end-customers with clear QC or process automation needs. Focus strongest on software integrators, AI-capable service providers, industrial customers with own engineering, and machine builders with plausible need. Avoid VCs, banks, broad consultancies, China, Saudi Arabia, and competing AI platform vendors. Return strict JSON: {"filters":[{"name":"...","persona":"...","industries":[...],"keywords":[...],"locations":[...],"employeeRanges":[...],"notes":"..."}]}. Keep industries and keywords practical for Apollo.`
         };
       case "qualification":
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Classify companies into exactly one category: integrator_vision_industrial_ai, integrator_general_ai, integrator_relevant_focus, industrial_end_customer_scaled, camera_manufacturer_partner, machine_builder_ai_enablement, software_platform_embedding, irrelevant, other. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Follow any supplied main context and prequalification context strictly. Classify companies into exactly one category: integrator_vision_industrial_ai, integrator_general_ai, integrator_relevant_focus, industrial_end_customer_scaled, camera_manufacturer_partner, machine_builder_ai_enablement, software_platform_embedding, irrelevant, other. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
         };
       case "research": {
         const tools = await this.buildResearchTools();
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Deep Research Agent. Use web grounding to verify the company, identify its business model, target customers, recent signals, likely Vision-AI or process-automation relevance, and clear outreach hooks. Always adapt your reasoning to the supplied category-specific execution context. Use the provided segment template as the base. Personalize only if there is a clear factual hook. Do not rewrite the outreach from scratch. Make the output steerable by preserving the template direction while sharpening the most relevant business pain. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.` ,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Deep Research Agent. Use web grounding to verify the company, identify its business model, target customers, recent signals, likely Vision-AI or process-automation relevance, and clear outreach hooks. Always adapt your reasoning to the supplied main context and category-specific execution context. Estimate whether likely target contacts are German-speaking. If yes, produce outreach in German, otherwise in English. Estimate rankings on a 0-10 scale for customer, serviceProvider, and partner. Estimate businessPotentialEUR as a euro value. Return targetIndustry and productsOffered. Use the provided segment template as the base. Personalize only if there is a clear factual hook. Do not rewrite the outreach from scratch. Make the output steerable by preserving the template direction while sharpening the most relevant business pain. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.` ,
           tools
         };
       }

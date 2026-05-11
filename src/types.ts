@@ -43,6 +43,17 @@ export interface ResearchBrief {
   qualificationSummary: string;
   qualifyingSignals: string[];
   riskFlags: string[];
+  likelyGermanSpeaking: boolean;
+  outreachLanguage: "de" | "en";
+  rankings: {
+    customer: number;
+    serviceProvider: number;
+    partner: number;
+  };
+  businessPotentialEUR: number;
+  businessPotentialReasoning: string;
+  targetIndustry: string;
+  productsOffered: string;
   recommendedTemplateKey: string;
   personalizationRule: string;
   linkedInAngle: string;
@@ -68,6 +79,7 @@ export interface PublicContactCandidate {
 export interface LeadAgentSettings {
   targetLeadCount: number;
   market: string;
+  mainContext?: string;
   prequalificationContext?: string;
   targetCategories?: LeadCategory[];
   runDeepResearch: boolean;
@@ -125,6 +137,17 @@ export interface GeneratedLeadRecord {
   relevanceScore: number;
   sourceFilter: string;
   rationale: string;
+  likelyGermanSpeaking?: boolean;
+  outreachLanguage?: "de" | "en";
+  rankings?: {
+    customer: number;
+    serviceProvider: number;
+    partner: number;
+  };
+  businessPotentialEUR?: number;
+  businessPotentialReasoning?: string;
+  targetIndustry?: string;
+  productsOffered?: string;
   overview?: string;
   qualificationSummary?: string;
   linkedInMessage?: string;
@@ -159,6 +182,7 @@ export interface LeadLearningData {
 export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
+  mainContext?: string;
   prequalificationContext?: string;
   customGoal?: string;
   agentContext?: string;

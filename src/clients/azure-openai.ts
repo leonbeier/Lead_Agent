@@ -8,6 +8,7 @@ import {
   ResearchBrief
 } from "../types";
 import {
+  buildMainContextBlock,
   buildPrequalificationContextBlock,
   buildExecutionContextBlock,
   getTemplateForCategory,
@@ -45,7 +46,9 @@ export class AzureOpenAIClient {
     name: string,
     description: string,
     dryRun: boolean,
-    agentContext?: string,
+    mainContext?: string,
+    prequalificationContext?: string,
+    targetCategories?: LeadCategory[],
     learning?: LeadLearningData
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">> {
     const deterministicCategory = this.categorizeDeterministic(name, description, learning);
@@ -57,7 +60,14 @@ export class AzureOpenAIClient {
       return this.categorizeDryRun(description);
     }
 
-    const foundryCategorization = await this.foundryAgentsClient.categorizeCompany(name, description, agentContext, dryRun);
+    const foundryCategorization = await this.foundryAgentsClient.categorizeCompany(
+      name,
+      description,
+      mainContext,
+      prequalificationContext,
+      targetCategories,
+      dryRun
+    );
     if (foundryCategorization) {
       return foundryCategorization;
     }
@@ -66,14 +76,15 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${QUICK_QUALIFICATION_CONTEXT}\n\n${buildPrequalificationContextBlock(agentContext)}`
+          content: `${QUICK_QUALIFICATION_CONTEXT}\n\n${buildPrequalificationContextBlock(prequalificationContext, targetCategories, mainContext)}`
         },
         {
           role: "user",
           content: [
             `Company=${name}`,
             `Description=${description}`,
-            agentContext ? `Context=${agentContext}` : undefined,
+            targetCategories?.length ? `Active target categories=${targetCategories.join(", ")}` : undefined,
+            prequalificationContext ? `Prequalification context=${prequalificationContext}` : undefined,
             learning ? this.buildLearningContext(learning) : undefined
           ]
             .filter(Boolean)
@@ -99,19 +110,19 @@ export class AzureOpenAIClient {
   async buildResearchBrief(
     company: PreCategorizedCompany,
     dryRun: boolean,
-    agentContext?: string,
+    mainContext?: string,
     learning?: LeadLearningData
   ): Promise<ResearchBrief> {
     const template = getTemplateForCategory(company.category);
-    const executionContext = buildExecutionContextBlock(company.category, agentContext);
+    const executionContext = buildExecutionContextBlock(company.category, mainContext);
 
-    const foundryResearchBrief = await this.foundryAgentsClient.buildResearchBrief(company, agentContext, dryRun);
+    const foundryResearchBrief = await this.foundryAgentsClient.buildResearchBrief(company, mainContext, dryRun);
     if (foundryResearchBrief) {
       return foundryResearchBrief;
     }
 
     if (dryRun || !readiness.azureConfigured) {
-      return this.buildFallbackResearchBrief(company, template, executionContext, agentContext);
+      return this.buildFallbackResearchBrief(company, template, executionContext, mainContext);
     }
 
     const webResearchEvidence = await this.webSearchAgent.buildResearchContext(company);
@@ -120,7 +131,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${ONE_WARE_PROMPT_CONTEXT}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Use any supplied web evidence as your factual grounding. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
+          content: `${buildMainContextBlock(mainContext)}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Estimate whether the decision-makers or likely target contacts are German-speaking. If yes, produce outreach in German; otherwise produce it in English. Estimate all three commercial rankings on a 0-10 scale: customer, serviceProvider, partner. Estimate businessPotentialEUR as a realistic euro value, not a score. Use the following commercial framing: a single AI use case often starts around 7000 EUR, can be 20000 to 40000 EUR per AI for more complex or production-grade deployments, can multiply across many use cases, and OEM or camera-manufacturer partner rollouts can be much larger, including six- or seven-figure potential in recurring machine volumes. Also return targetIndustry and productsOffered. Use any supplied web evidence as your factual grounding. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
         },
         {
           role: "user",
@@ -147,7 +158,7 @@ export class AzureOpenAIClient {
       const parsed = this.parseJsonObject<Omit<ResearchBrief, "companyName">>(content);
       return {
         companyName: company.name,
-        appliedAgentContext: agentContext,
+        appliedAgentContext: mainContext,
         citations: webResearchEvidence?.citations?.length
           ? webResearchEvidence.citations
           : company.domain
@@ -156,14 +167,14 @@ export class AzureOpenAIClient {
         ...parsed
       };
     } catch {
-      return this.buildFallbackResearchBrief(company, template, executionContext, agentContext, webResearchEvidence?.citations);
+      return this.buildFallbackResearchBrief(company, template, executionContext, mainContext, webResearchEvidence?.citations);
     }
   }
 
   async generateSuggestedFilters(
     market: string | undefined,
     customGoal: string | undefined,
-    agentContext: string | undefined,
+    mainContext: string | undefined,
     targetCategories: LeadCategory[] | undefined,
     baseFilters: ApolloOrganizationFilter[],
     dryRun: boolean,
@@ -172,7 +183,7 @@ export class AzureOpenAIClient {
     const foundryFilters = await this.foundryAgentsClient.generateSuggestedFilters(
       market,
       customGoal,
-      agentContext,
+      mainContext,
       targetCategories,
       baseFilters,
       dryRun
@@ -192,7 +203,7 @@ export class AzureOpenAIClient {
           {
             role: "system",
             content: [
-              ONE_WARE_PROMPT_CONTEXT,
+              buildMainContextBlock(mainContext),
               "You are the Apollo Search Strategy Agent.",
               "Return strict JSON with {\"filters\":[...]}",
               "Produce 4 to 6 practical Apollo company filters for ONE WARE.",
@@ -208,7 +219,7 @@ export class AzureOpenAIClient {
             content: [
               market ? `Market focus: ${market}` : undefined,
               customGoal ? `Custom goal: ${customGoal}` : undefined,
-              agentContext ? `Operator context: ${agentContext}` : undefined,
+              mainContext ? `Main context: ${mainContext}` : undefined,
               targetCategories?.length ? `Target categories: ${targetCategories.join(", ")}` : undefined,
               `Base filters JSON:\n${JSON.stringify(baseFilters)}`,
               this.buildLearningContextForSearchStrategy(learning)
@@ -238,7 +249,7 @@ export class AzureOpenAIClient {
     learning?: LeadLearningData,
     market?: string,
     customGoal?: string,
-    agentContext?: string
+    mainContext?: string
   ): Promise<ApolloOrganizationFilter | null> {
     if (dryRun || !readiness.azureConfigured) {
       return null;
@@ -250,7 +261,7 @@ export class AzureOpenAIClient {
           {
             role: "system",
             content: [
-              ONE_WARE_PROMPT_CONTEXT,
+              buildMainContextBlock(mainContext),
               "You revise one failing Apollo company search filter.",
               "Return strict JSON with {\"filter\":{...}}.",
               "The revised filter must aim for at least 50% relevant firms in the next 15-company probe.",
@@ -263,7 +274,7 @@ export class AzureOpenAIClient {
             content: [
               market ? `Market focus: ${market}` : undefined,
               customGoal ? `Custom goal: ${customGoal}` : undefined,
-              agentContext ? `Operator context: ${agentContext}` : undefined,
+              mainContext ? `Main context: ${mainContext}` : undefined,
               `Failing filter JSON:\n${JSON.stringify(failedFilter)}`,
               `Evaluation JSON:\n${JSON.stringify(evaluation)}`,
               this.buildLearningContextForSearchStrategy(learning)
@@ -696,12 +707,18 @@ export class AzureOpenAIClient {
     company: PreCategorizedCompany,
     template: ReturnType<typeof getTemplateForCategory>,
     executionContext: string,
-    agentContext?: string,
+    mainContext?: string,
     citations?: string[]
   ): ResearchBrief {
+    const likelyGermanSpeaking = this.isLikelyGermanSpeaking(company);
+    const outreachLanguage = likelyGermanSpeaking ? "de" as const : "en" as const;
+    const localizedTemplate = this.localizeTemplate(template, outreachLanguage);
+    const rankings = this.estimateRankings(company.category);
+    const businessPotentialEUR = this.estimateBusinessPotentialEUR(company.category, company.shortDescription);
+
     return {
       companyName: company.name,
-      appliedAgentContext: agentContext,
+      appliedAgentContext: mainContext,
       citations: citations?.length ? citations : company.domain ? [company.domain] : [],
       overview: `${company.name} appears relevant based on its positioning around ${company.shortDescription.toLowerCase()}.`,
       qualificationSummary: "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
@@ -712,17 +729,198 @@ export class AzureOpenAIClient {
         `Execution context applied: ${executionContext.split("\n")[0]}`
       ],
       riskFlags: ["Needs manual verification against direct competing own Vision AI software before outreach."],
-      recommendedTemplateKey: template.key,
+      likelyGermanSpeaking,
+      outreachLanguage,
+      rankings,
+      businessPotentialEUR,
+      businessPotentialReasoning: this.buildBusinessPotentialReasoning(company.category, businessPotentialEUR),
+      targetIndustry: this.estimateTargetIndustry(company.category),
+      productsOffered: this.estimateProductsOffered(company.category),
+      recommendedTemplateKey: localizedTemplate.key,
       personalizationRule: "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
       linkedInAngle: "Use a short question around delivery bottlenecks, not a generic compliment.",
       emailAngle: "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
       phoneAngle: "Lead with the operational bottleneck, not platform features.",
-      linkedInMessage: template.linkedInMessage,
-      emailSubject: template.subject,
-      emailBody: template.emailBody,
-      phoneScript: template.phoneScript,
+      linkedInMessage: localizedTemplate.linkedInMessage,
+      emailSubject: localizedTemplate.subject,
+      emailBody: localizedTemplate.emailBody,
+      phoneScript: localizedTemplate.phoneScript,
       eventIdea: "Check for presence at SPS, Automatica, Vision, or regional automation events."
     };
+  }
+
+  private isLikelyGermanSpeaking(company: Pick<PreCategorizedCompany, "country" | "domain" | "name">): boolean {
+    const normalizedCountry = company.country?.trim().toLowerCase();
+    if (["germany", "austria", "switzerland", "de", "at", "ch"].includes(normalizedCountry ?? "")) {
+      return true;
+    }
+
+    const normalizedDomain = company.domain?.trim().toLowerCase() ?? "";
+    if (normalizedDomain.includes(".de") || normalizedDomain.includes(".at") || normalizedDomain.includes(".ch")) {
+      return true;
+    }
+
+    return /[äöüß]/i.test(company.name);
+  }
+
+  private localizeTemplate(template: ReturnType<typeof getTemplateForCategory>, language: "de" | "en") {
+    if (language === "de") {
+      return template;
+    }
+
+    const englishVariants: Record<string, { subject: string; emailBody: string; linkedInMessage: string; phoneScript: string }> = {
+      integrator_vision_industrial_ai_template: {
+        subject: "Deploy vision AI without long optimization cycles",
+        emailBody: "Hello Mr./Ms. [Name],\n\nAre you currently running vision AI projects where it still takes many iterations until a model is actually production-ready or never becomes reliable enough?\n\nThat is exactly what we often see with integrators: weeks to months go into tuning and deployment instead of delivering the actual solution.\n\nWe built software that creates custom vision AI models in under 5 minutes and makes them production-ready right away. That helps teams iterate faster, plan project timelines more predictably, and deliver more projects with the same team.\n\nI would be interested to hear: where is the biggest bottleneck in your current vision AI projects - model generation or integration?\n\nBest regards,\n[Your Name]",
+        linkedInMessage: "Quick question: how fast do you currently get a vision AI model into production? We often see integrators lose a lot of time in model selection and optimization. We automate exactly that step.",
+        phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. I will keep it short: we speak with integrators where model selection and optimization in vision AI projects take weeks or months. We automate exactly that step. Is that relevant for you right now?"
+      },
+      integrator_general_ai_template: {
+        subject: "Move AI projects to production-ready vision AI faster",
+        emailBody: "Hello Mr./Ms. [Name],\n\nTeams with a broader AI focus often see the same bottleneck in vision projects: model selection, optimization, and deployment-side adjustments take longer than expected.\n\nONE WARE automates exactly that step. From your data, production-ready vision AI models are created within minutes and optimized for the target hardware.\n\nThat allows you to deliver more client projects with the same team and with more predictable timelines.\n\nWould a short conversation make sense to see whether this is relevant for your current delivery projects?\n\nBest regards,\n[Your Name]",
+        linkedInMessage: "Quick question: where is the biggest bottleneck in your current vision AI projects - model generation or integration? We automate exactly that step.",
+        phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. We speak with AI service providers where vision projects lose too much time in model selection and optimization. We automate exactly that step. Is that relevant for you?"
+      },
+      integrator_relevant_focus_template: {
+        subject: "Deliver vision AI faster in demanding vertical projects",
+        emailBody: "Hello Mr./Ms. [Name],\n\nIn demanding verticals like defence, surveillance, robotics, or medtech, vision AI is often on the critical path - and model selection plus optimization consume a disproportionate amount of time.\n\nWith ONE WARE, application-specific vision models can be created in minutes instead of months and deployed directly to target hardware.\n\nThat reduces delivery risk and makes project timelines more predictable.\n\nIf useful, we can look at a real use case and identify where the biggest leverage might be for your team.\n\nBest regards,\n[Your Name]",
+        linkedInMessage: "Quick question: do you currently have vision AI workstreams in your vertical projects that are slowed down by model selection and tuning? That is exactly where we help.",
+        phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. We help integrators in demanding verticals bring vision AI projects to production much faster. Is that relevant for your team right now?"
+      },
+      industrial_end_customer_scaled_template: {
+        subject: "Make quality inspection and vision AI economically viable",
+        emailBody: "Hello Mr./Ms. [Name],\n\nIn many industrial projects, vision AI makes technical sense for quality inspection or process automation, but implementation is often too expensive, too slow, or too complex.\n\nThat is where ONE WARE comes in: application-specific vision AI models can be created in minutes instead of months and deployed directly on cost-efficient edge hardware. This makes use cases viable that previously failed on development effort or hardware cost.\n\nIf helpful, we can demonstrate on one of your datasets what our software can deliver in your use case.\n\nWould a short conversation make sense?\n\nBest regards,\n[Your Name]",
+        linkedInMessage: "Quick question: are there quality inspection or process automation topics where vision AI would make sense for you, but has been too expensive or too complex so far? That is exactly where we help.",
+        phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. We help industrial teams bring vision AI for quality inspection and process automation into production much faster and at lower cost. Is that relevant for you right now?"
+      },
+      camera_manufacturer_partner_template: {
+        subject: "Integrate vision AI into camera and imaging solutions faster",
+        emailBody: "Hello Mr./Ms. [Name],\n\nMany camera and imaging manufacturers see vision AI as a strong differentiator, but end-to-end model and hardware optimization often takes too much internal effort.\n\nWith ONE WARE, production-ready vision AI models are created from data within minutes and optimized for the target hardware.\n\nThat enables you to offer AI-capable setups and solutions to customers much faster.\n\nWould a short conversation make sense to explore potential partner use cases?\n\nBest regards,\n[Your Name]",
+        linkedInMessage: "Quick question: how much effort does it currently take to make vision AI production-ready for customers in your imaging setups? We automate exactly that part.",
+        phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. We help imaging manufacturers bring vision AI into customer-ready solutions much faster. Is that relevant for you?"
+      },
+      machine_builder_ai_enablement_template: {
+        subject: "Integrate vision AI into machines and products more easily",
+        emailBody: "Hello Mr./Ms. [Name],\n\nMany machine builders and hardware vendors see vision AI as an attractive feature, but developing a robust, hardware-optimized solution internally often takes too much time.\n\nWith ONE WARE, production-ready vision AI models are created from data within minutes and optimized for the target hardware. This makes it much easier and more economical to integrate vision AI into existing products.\n\nWould a short conversation be useful to see where this could be relevant for your product portfolio?\n\nBest regards,\n[Your Name]",
+        linkedInMessage: "How much effort does it currently take for you to integrate vision AI into machines or hardware in a production-ready way? We often see model selection and hardware optimization create the biggest workload. That is exactly what we automate.",
+        phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. We help machine-building and hardware teams integrate vision AI into products much more easily because model generation and hardware optimization become largely automated. Is that relevant for you right now?"
+      },
+      software_platform_embedding_template: {
+        subject: "Embeddable vision AI model engine for your platform",
+        emailBody: "Hello Mr./Ms. [Name],\n\nIf your platform provides vision AI workflows to customers, model generation is often the most time-consuming step.\n\nONE WARE can be embedded as an alternative model engine: from data to production-ready, hardware-optimized models in minutes.\n\nThat adds meaningful capability for your users without forcing your team into long internal model-iteration cycles.\n\nWould a short technical discussion make sense to explore integration options?\n\nBest regards,\n[Your Name]",
+        linkedInMessage: "Quick question: are you currently evaluating options that help your users get to production-ready vision models faster? We provide exactly that step as an embeddable engine.",
+        phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. We help platform providers offer vision-model generation as an embeddable layer. Is that something you are looking at right now?"
+      }
+    };
+
+    const variant = englishVariants[template.key] ?? englishVariants.integrator_vision_industrial_ai_template;
+
+    return {
+      ...template,
+      ...variant
+    };
+  }
+
+  private estimateRankings(category: LeadCategory): ResearchBrief["rankings"] {
+    switch (category) {
+      case "integrator_vision_industrial_ai":
+        return { customer: 4, serviceProvider: 10, partner: 5 };
+      case "integrator_general_ai":
+        return { customer: 3, serviceProvider: 8, partner: 4 };
+      case "integrator_relevant_focus":
+        return { customer: 4, serviceProvider: 9, partner: 5 };
+      case "industrial_end_customer_scaled":
+        return { customer: 9, serviceProvider: 2, partner: 3 };
+      case "camera_manufacturer_partner":
+        return { customer: 2, serviceProvider: 3, partner: 10 };
+      case "machine_builder_ai_enablement":
+        return { customer: 5, serviceProvider: 2, partner: 9 };
+      case "software_platform_embedding":
+        return { customer: 2, serviceProvider: 4, partner: 9 };
+      default:
+        return { customer: 1, serviceProvider: 1, partner: 1 };
+    }
+  }
+
+  private estimateBusinessPotentialEUR(category: LeadCategory, description: string): number {
+    const lowered = description.toLowerCase();
+    const multiUseCaseSignals = ["multiple", "portfolio", "platform", "series", "production line", "plants", "global", "oem"];
+    const signalMultiplier = 1 + multiUseCaseSignals.filter((signal) => lowered.includes(signal)).length;
+
+    switch (category) {
+      case "integrator_vision_industrial_ai":
+        return 20000 * signalMultiplier;
+      case "integrator_general_ai":
+        return 14000 * signalMultiplier;
+      case "integrator_relevant_focus":
+        return 25000 * signalMultiplier;
+      case "industrial_end_customer_scaled":
+        return 40000 * signalMultiplier;
+      case "camera_manufacturer_partner":
+        return 150000 * signalMultiplier;
+      case "machine_builder_ai_enablement":
+        return 250000 * signalMultiplier;
+      case "software_platform_embedding":
+        return 120000 * signalMultiplier;
+      default:
+        return 7000;
+    }
+  }
+
+  private buildBusinessPotentialReasoning(category: LeadCategory, businessPotentialEUR: number): string {
+    const reasoningByCategory: Record<LeadCategory, string> = {
+      integrator_vision_industrial_ai: "Service-provider fit with recurring project delivery and room for multiple production-ready AI use cases.",
+      integrator_general_ai: "General AI integrator with likely upsell into vision projects, but less concentrated than explicit vision specialists.",
+      integrator_relevant_focus: "Vertical-specialist integrator where a few critical use cases can justify higher per-AI value.",
+      industrial_end_customer_scaled: "Industrial end-customer value driven by multiple inspection or automation use cases and higher production impact.",
+      camera_manufacturer_partner: "Partner-scale opportunity where ONE WARE can enable repeated customer deployments through the hardware vendor.",
+      machine_builder_ai_enablement: "OEM or machine-builder opportunity with recurring machine volumes and downstream AI model creation potential.",
+      software_platform_embedding: "Platform opportunity with partner leverage across many users or embedded workflows.",
+      irrelevant: "Low-fit profile; value estimate remains minimal.",
+      other: "Mixed profile; estimate remains conservative until fit is clearer."
+    };
+
+    return `${reasoningByCategory[category]} Estimated at about EUR ${businessPotentialEUR.toLocaleString("en-US")}.`;
+  }
+
+  private estimateTargetIndustry(category: LeadCategory): string {
+    switch (category) {
+      case "integrator_vision_industrial_ai":
+      case "integrator_general_ai":
+      case "integrator_relevant_focus":
+        return "Industrial automation, robotics, machine vision, and AI project delivery";
+      case "industrial_end_customer_scaled":
+        return "Manufacturing, quality inspection, and process automation";
+      case "camera_manufacturer_partner":
+        return "Industrial imaging, machine vision, and camera manufacturing";
+      case "machine_builder_ai_enablement":
+        return "Machinery, OEM equipment, and industrial production systems";
+      case "software_platform_embedding":
+        return "Vision software platforms, developer tools, and workflow platforms";
+      default:
+        return "Unclear";
+    }
+  }
+
+  private estimateProductsOffered(category: LeadCategory): string {
+    switch (category) {
+      case "integrator_vision_industrial_ai":
+        return "Vision AI integration projects, industrial AI deployment, custom software delivery";
+      case "integrator_general_ai":
+        return "AI delivery services, software implementation, applied ML projects";
+      case "integrator_relevant_focus":
+        return "Vertical-specific AI/vision systems, integration projects, edge deployments";
+      case "industrial_end_customer_scaled":
+        return "Manufactured products plus internal quality inspection and automation workflows";
+      case "camera_manufacturer_partner":
+        return "Industrial cameras, imaging components, machine vision hardware";
+      case "machine_builder_ai_enablement":
+        return "Machines, OEM equipment, fixtures, and automation systems";
+      case "software_platform_embedding":
+        return "Software platform, APIs, workflows, and embeddable vision tooling";
+      default:
+        return "Needs clarification";
+    }
   }
 
   private delay(durationMs: number): Promise<void> {

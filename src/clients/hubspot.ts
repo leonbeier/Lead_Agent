@@ -124,12 +124,15 @@ export class HubSpotClient {
         description: company.shortDescription,
         ai_cc_summary_short: brief?.qualificationSummary ?? company.rationale,
         ai_cc_summary_long: brief?.overview,
-        ai_cc_pain_points: brief?.emailAngle ?? brief?.phoneAngle,
+        ai_cc_pain_points: brief?.businessPotentialReasoning ?? brief?.emailAngle ?? brief?.phoneAngle,
         ai_cc_cold_call_email: brief?.emailBody,
-        ai_cc__ow_business_potential: String(company.relevanceScore),
-        ai_cc_ranking_partner: this.getNumericRanking(company.category, "partner"),
-        ai_cc_ranking_serviceprovider: this.getNumericRanking(company.category, "serviceprovider"),
-        ai_ranking_customer: this.getNumericRanking(company.category, "customer")
+        ai_cc__ow_business_potential: this.toNumericPropertyValue(brief?.businessPotentialEUR),
+        ai_cc_ranking_partner: this.toNumericPropertyValue(brief?.rankings.partner ?? this.getNumericRanking(company.category, "partner")),
+        ai_cc_ranking_serviceprovider: this.toNumericPropertyValue(brief?.rankings.serviceProvider ?? this.getNumericRanking(company.category, "serviceprovider")),
+        ai_cc_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
+        ai_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
+        ai_cc_customer_products_offered: brief?.productsOffered,
+        ai_cc_customer_target_industry: brief?.targetIndustry
       },
       availableProperties
     );
@@ -461,16 +464,71 @@ export class HubSpotClient {
   private getNumericRanking(
     category: PreCategorizedCompany["category"],
     rankingType: "partner" | "serviceprovider" | "customer"
-  ): string | undefined {
+  ): number {
     if (rankingType === "partner") {
-      return category === "camera_manufacturer_partner" || category === "software_platform_embedding" ? "85" : undefined;
+      switch (category) {
+        case "camera_manufacturer_partner":
+          return 10;
+        case "software_platform_embedding":
+          return 9;
+        case "machine_builder_ai_enablement":
+          return 9;
+        case "integrator_vision_industrial_ai":
+        case "integrator_relevant_focus":
+          return 5;
+        case "integrator_general_ai":
+          return 4;
+        case "industrial_end_customer_scaled":
+          return 3;
+        default:
+          return 1;
+      }
     }
 
     if (rankingType === "serviceprovider") {
-      return category === "integrator_vision_industrial_ai" || category === "integrator_general_ai" || category === "integrator_relevant_focus" ? "85" : undefined;
+      switch (category) {
+        case "integrator_vision_industrial_ai":
+          return 10;
+        case "integrator_relevant_focus":
+          return 9;
+        case "integrator_general_ai":
+          return 8;
+        case "software_platform_embedding":
+          return 4;
+        case "camera_manufacturer_partner":
+          return 3;
+        case "industrial_end_customer_scaled":
+        case "machine_builder_ai_enablement":
+          return 2;
+        default:
+          return 1;
+      }
     }
 
-    return category === "machine_builder_ai_enablement" || category === "industrial_end_customer_scaled" ? "85" : undefined;
+    switch (category) {
+      case "industrial_end_customer_scaled":
+        return 9;
+      case "machine_builder_ai_enablement":
+        return 5;
+      case "integrator_vision_industrial_ai":
+      case "integrator_relevant_focus":
+        return 4;
+      case "integrator_general_ai":
+        return 3;
+      case "camera_manufacturer_partner":
+      case "software_platform_embedding":
+        return 2;
+      default:
+        return 1;
+    }
+  }
+
+  private toNumericPropertyValue(value: number | undefined): string | undefined {
+    if (typeof value !== "number" || Number.isNaN(value)) {
+      return undefined;
+    }
+
+    return String(Math.round(value * 100) / 100);
   }
 
   private async requestJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {

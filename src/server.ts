@@ -26,6 +26,7 @@ const selectableCategorySchema = z.enum([
 const leadJobSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000),
   market: z.string().optional(),
+  mainContext: z.string().max(12000).optional(),
   prequalificationContext: z.string().max(4000).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
@@ -39,6 +40,7 @@ const leadJobSchema = z.object({
 const settingsUpdateSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000).optional(),
   market: z.string().min(1).optional(),
+  mainContext: z.string().max(12000).optional(),
   prequalificationContext: z.string().max(4000).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
@@ -102,6 +104,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
   return leadJobSchema.parse({
     targetLeadCount: body.targetLeadCount ?? settings.targetLeadCount ?? env.DEFAULT_TARGET_LEADS,
     market: body.market ?? settings.market ?? env.DEFAULT_MARKET,
+    mainContext: body.mainContext ?? settings.mainContext,
     prequalificationContext: body.prequalificationContext ?? settings.prequalificationContext,
     targetCategories: body.targetCategories ?? settings.targetCategories,
     runDeepResearch: body.runDeepResearch ?? settings.runDeepResearch,

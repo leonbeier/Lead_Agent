@@ -120,6 +120,7 @@ export class LeadPipelineAgent {
     const dryRun = request.dryRun ?? true;
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
+    const mainContext = request.mainContext ?? request.agentContext;
     const learning = await this.controlPlaneStore.getLearning();
     const earlyStopEnabled = request.earlyStopEnabled ?? true;
     const earlyStopReviewCount = Math.min(
@@ -127,9 +128,9 @@ export class LeadPipelineAgent {
       Math.max(MIN_EARLY_STOP_REVIEW_COUNT, request.earlyStopReviewCount ?? DEFAULT_EARLY_STOP_REVIEW_COUNT)
     );
     const earlyStopThreshold = request.earlyStopThreshold ?? DEFAULT_EARLY_STOP_THRESHOLD;
-    const prequalificationContext = request.prequalificationContext ?? request.agentContext;
+    const prequalificationContext = request.prequalificationContext;
     const suggestedFilters = this.orderFiltersByLearning(
-      await this.getSuggestedFilters(request.market, request.customGoal, prequalificationContext, targetCategories, dryRun, learning),
+      await this.getSuggestedFilters(request.market, request.customGoal, mainContext, targetCategories, dryRun, learning),
       learning,
       request.market,
       request.customGoal
@@ -169,7 +170,7 @@ export class LeadPipelineAgent {
             await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
             learning
           );
-          const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, prequalificationContext, learning);
+          const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalificationContext, targetCategories, learning);
           reviewedCompanies.push(...categorizedInitialSample);
 
           const initialEvaluation = this.evaluateFilter(
@@ -220,7 +221,7 @@ export class LeadPipelineAgent {
                 learning,
                 request.market,
                 request.customGoal,
-                prequalificationContext
+                mainContext
               );
 
               if (revisedFilter && this.filterSupportsTargetCategories(revisedFilter, [activeCategory])) {
@@ -254,7 +255,9 @@ export class LeadPipelineAgent {
             const categorizedExpandedSample = await this.categorizeCompanies(
               unseenExpandedSample,
               dryRun,
+              mainContext,
               prequalificationContext,
+              targetCategories,
               learning
             );
             reviewedCompanies.push(...categorizedExpandedSample);
@@ -332,7 +335,7 @@ export class LeadPipelineAgent {
       ? []
       : await this.mapWithConcurrency(
           uniqueShortlist.map((company) =>
-            () => this.azureClient.buildResearchBrief(company, dryRun, undefined, learning)
+            () => this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning)
           ),
           AZURE_WORKER_CONCURRENCY
         );
@@ -386,7 +389,7 @@ export class LeadPipelineAgent {
 
   async preview(request: LeadJobRequest): Promise<Pick<LeadJobResult, "requested" | "suggestedFilters">> {
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
-    const prequalificationContext = request.prequalificationContext ?? request.agentContext;
+    const mainContext = request.mainContext ?? request.agentContext;
 
     return {
       requested: {
@@ -396,7 +399,7 @@ export class LeadPipelineAgent {
       suggestedFilters: await this.getSuggestedFilters(
         request.market,
         request.customGoal,
-        prequalificationContext,
+        mainContext,
         targetCategories,
         request.dryRun ?? true
       )
@@ -406,7 +409,7 @@ export class LeadPipelineAgent {
   private async getSuggestedFilters(
     market: string | undefined,
     customGoal: string | undefined,
-    agentContext: string | undefined,
+    mainContext: string | undefined,
     targetCategories: LeadCategory[],
     dryRun: boolean,
     learning?: LeadLearningData
@@ -414,7 +417,7 @@ export class LeadPipelineAgent {
     const filters = await this.azureClient.generateSuggestedFilters(
       market,
       customGoal,
-      agentContext,
+      mainContext,
       targetCategories,
       buildSuggestedFilters(market, customGoal),
       dryRun,
@@ -427,7 +430,9 @@ export class LeadPipelineAgent {
   private async categorizeCompanies(
     companies: CompanySample[],
     dryRun: boolean,
-    agentContext?: string,
+    mainContext?: string,
+    prequalificationContext?: string,
+    targetCategories?: LeadCategory[],
     learning?: LeadLearningData
   ): Promise<PreCategorizedCompany[]> {
     return this.mapWithConcurrency(
@@ -444,7 +449,9 @@ export class LeadPipelineAgent {
           company.name,
           company.shortDescription,
           dryRun,
-          agentContext,
+          mainContext,
+          prequalificationContext,
+          targetCategories,
           learning
         );
 
@@ -841,6 +848,13 @@ export class LeadPipelineAgent {
       relevanceScore: company.relevanceScore,
       sourceFilter: company.sourceFilter,
       rationale: company.rationale,
+      likelyGermanSpeaking: researchBrief?.likelyGermanSpeaking,
+      outreachLanguage: researchBrief?.outreachLanguage,
+      rankings: researchBrief?.rankings,
+      businessPotentialEUR: researchBrief?.businessPotentialEUR,
+      businessPotentialReasoning: researchBrief?.businessPotentialReasoning,
+      targetIndustry: researchBrief?.targetIndustry,
+      productsOffered: researchBrief?.productsOffered,
       overview: researchBrief?.overview,
       qualificationSummary: researchBrief?.qualificationSummary,
       linkedInMessage: researchBrief?.linkedInMessage,

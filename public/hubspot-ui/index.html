@@ -331,7 +331,11 @@
               <input id="market" name="market" type="text" required />
             </label>
             <label style="grid-column: 1 / -1;">
-              Kontext fuer Vorsortierungs-Agent (optional)
+              Main-Kontext fuer alle Agenten
+              <textarea id="mainContext" name="mainContext" style="min-height: 220px;"></textarea>
+            </label>
+            <label style="grid-column: 1 / -1;">
+              Zusatz-Kontext fuer Vorsortierungs-Agent (optional)
               <textarea id="prequalificationContext" name="prequalificationContext"></textarea>
             </label>
             <label style="grid-column: 1 / -1;">
@@ -458,6 +462,7 @@
       function fillSettingsForm(settings) {
         document.getElementById("targetLeadCount").value = settings.targetLeadCount;
         document.getElementById("market").value = settings.market;
+        document.getElementById("mainContext").value = settings.mainContext || "";
         document.getElementById("prequalificationContext").value = settings.prequalificationContext || "";
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
           checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
@@ -474,6 +479,7 @@
         return {
           targetLeadCount: Number(document.getElementById("targetLeadCount").value),
           market: document.getElementById("market").value.trim(),
+          mainContext: document.getElementById("mainContext").value.trim(),
           prequalificationContext: document.getElementById("prequalificationContext").value.trim(),
           targetCategories: Array.from(document.querySelectorAll("input[name='targetCategories']:checked")).map((checkbox) => checkbox.value),
           runDeepResearch: document.getElementById("runDeepResearch").checked,
@@ -491,6 +497,7 @@
           { label: "Lead-Ziel", value: String(settings.targetLeadCount) },
           { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
           { label: "Templates", value: String(Object.keys(templates).length) },
+          { label: "Main-Kontext", value: settings.mainContext ? "gesetzt" : "leer" },
           { label: "Vorsortierungskontext", value: settings.prequalificationContext ? "gesetzt" : "leer" },
           { label: "Kundentypen", value: String((settings.targetCategories || []).length) },
           { label: "Letzte Treffer", value: String(latestLeadRun?.summary?.foundCandidates ?? 0) }
@@ -534,6 +541,9 @@
               <strong>${contact.companyName}</strong>
               <span class="mini-meta">${contact.category} · Score ${contact.relevanceScore}</span>
               <span class="mini-meta">${contact.sourceFilter}</span>
+              ${contact.outreachLanguage ? `<span class="mini-meta">Sprache: ${contact.outreachLanguage.toUpperCase()} · Rankings C/S/P: ${(contact.rankings?.customer ?? "-")}/${(contact.rankings?.serviceProvider ?? "-")}/${(contact.rankings?.partner ?? "-")}</span>` : ""}
+              ${typeof contact.businessPotentialEUR === "number" ? `<span class="mini-meta">Potential: EUR ${Math.round(contact.businessPotentialEUR).toLocaleString("de-DE")}</span>` : ""}
+              ${contact.targetIndustry ? `<span class="mini-meta">Target Industry: ${contact.targetIndustry}</span>` : ""}
               ${contact.publicContactEmails?.length ? `<span class="mini-meta">E-Mail: ${contact.publicContactEmails.slice(0, 2).join(", ")}</span>` : ""}
               ${contact.publicContactPhones?.length ? `<span class="mini-meta">Telefon: ${contact.publicContactPhones.slice(0, 2).join(", ")}</span>` : ""}
             </div>

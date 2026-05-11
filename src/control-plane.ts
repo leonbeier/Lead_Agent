@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { CATEGORY_EXECUTION_CONTEXT, OUTREACH_TEMPLATES, OutreachTemplate } from "./prompting/one-ware-playbook";
+import { CATEGORY_EXECUTION_CONTEXT, DEFAULT_MAIN_CONTEXT, OUTREACH_TEMPLATES, OutreachTemplate } from "./prompting/one-ware-playbook";
 import {
   CompanyFeedbackEntry,
   FilterEvaluation,
@@ -31,6 +31,7 @@ const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-revie
 const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
   market: z.string().min(1),
+  mainContext: z.string().max(12000).optional(),
   prequalificationContext: z.string().max(4000).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean(),
@@ -115,6 +116,7 @@ const latestLeadRunSchema = z.object({
 const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 50,
   market: "DE",
+  mainContext: DEFAULT_MAIN_CONTEXT,
   prequalificationContext:
     "Prioritize delivery ownership and industrial applicability. Exclude weak-fit finance, recruiting, HR, and generic non-industrial SaaS profiles.",
   targetCategories: [
@@ -157,6 +159,7 @@ const defaultLatestLeadRun: LatestLeadRunRecord = {
 const suggestedControls = [
   "targetLeadCount",
   "market",
+  "mainContext",
   "prequalificationContext",
   "targetCategories",
   "runDeepResearch",
