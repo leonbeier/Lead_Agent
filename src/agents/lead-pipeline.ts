@@ -174,10 +174,18 @@ export class LeadPipelineAgent {
             learning
           );
           let categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalification, targetCategories, learning);
+          let initialEvaluation = this.evaluateFilter(
+            activeFilter.name,
+            categorizedInitialSample,
+            activeFilter,
+            targetCategories,
+            categorizedInitialSample.length,
+            false
+          );
 
           if (!creditLessMode) {
             const initialRelevantFromApollo = this.getRelevantCompanies(categorizedInitialSample, activeFilter, targetCategories, request.market);
-            if (initialRelevantFromApollo.length === 0) {
+            if (initialRelevantFromApollo.length === 0 || initialEvaluation.relevanceRatio < earlyStopThreshold) {
               const webFallbackProbeSample = this.excludeRejectedCompanies(
                 await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1, true),
                 learning
@@ -191,24 +199,27 @@ export class LeadPipelineAgent {
                 learning
               );
               const relevantFromWebFallback = this.getRelevantCompanies(categorizedWebFallbackProbe, activeFilter, targetCategories, request.market);
+              const webFallbackEvaluation = this.evaluateFilter(
+                activeFilter.name,
+                categorizedWebFallbackProbe,
+                activeFilter,
+                targetCategories,
+                categorizedWebFallbackProbe.length,
+                false
+              );
 
-              if (relevantFromWebFallback.length > initialRelevantFromApollo.length) {
+              if (
+                relevantFromWebFallback.length > initialRelevantFromApollo.length ||
+                webFallbackEvaluation.relevanceRatio > initialEvaluation.relevanceRatio
+              ) {
                 categorizedInitialSample = categorizedWebFallbackProbe;
+                initialEvaluation = webFallbackEvaluation;
                 useWebSearchForExpansion = true;
               }
             }
           }
 
           reviewedCompanies.push(...categorizedInitialSample);
-
-          const initialEvaluation = this.evaluateFilter(
-            activeFilter.name,
-            categorizedInitialSample,
-            activeFilter,
-            targetCategories,
-            categorizedInitialSample.length,
-            false
-          );
 
           searchHistory.push(
             this.buildSearchHistoryEntry(
