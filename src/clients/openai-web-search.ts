@@ -10,6 +10,7 @@ interface OpenAIResponsesOutput {
   output_text?: string;
   output?: Array<{
     content?: Array<{
+      text?: string;
       annotations?: Array<{
         type?: string;
         url?: string;
@@ -32,6 +33,8 @@ export class OpenAIWebSearchClient {
       "Find public company websites for ONE WARE lead discovery.",
       "Use only organization-level information.",
       "Do not return employee names, emails, phone numbers, LinkedIn profiles, or any other personal data.",
+      "Only return companies when public evidence suggests real software delivery, system integration, automation engineering, embedded development, industrial implementation, or customer project ownership.",
+      "Exclude robot manufacturers, hardware vendors, OEM product brands, magazines, publishers, media portals, events, associations, universities, research institutes, investors, banks, insurers, recruiters, generic consultancies, and direct competing AI software vendors.",
       "Prefer official company websites over directories, news sites, glossaries, job boards, and social networks.",
       `Return up to ${limit} companies for page variant ${page}.`,
       `Apollo-style filter JSON: ${JSON.stringify(filter)}`,
@@ -106,6 +109,42 @@ export class OpenAIWebSearchClient {
     }
   }
 
+  async summarizeCompany(company: CompanySample): Promise<Partial<CompanySample> | null> {
+    if (!readiness.openAIWebSearchConfigured) {
+      return null;
+    }
+
+    const prompt = [
+      "Summarize this organization for lead qualification.",
+      "Use only organization-level information.",
+      "Do not include or search for personal data such as employee names, emails, direct phone numbers, or personal social profiles.",
+      "Determine the company's actual business model, whether it primarily sells products or services, and whether it appears to implement customer projects.",
+      "Be explicit if the company is mainly a product vendor, robotics maker, hardware company, publisher, media brand, investor, bank, recruiter, or other irrelevant profile instead of an implementation-led service provider.",
+      `Company name: ${company.name}`,
+      company.domain ? `Known website: ${company.domain}` : undefined,
+      company.country ? `Known country: ${company.country}` : undefined,
+      company.shortDescription ? `Current short description: ${company.shortDescription}` : undefined,
+      "Return strict JSON with {\"country\":\"...\",\"shortDescription\":\"...\"}. Keep the shortDescription factual and concise."
+    ].filter(Boolean).join("\n\n");
+
+    try {
+      const response = await this.runWebSearch(prompt, 900);
+      const parsed = this.parseJson<{ country?: string; shortDescription?: string }>(response.text);
+      const shortDescription = parsed.shortDescription?.trim();
+
+      if (!shortDescription) {
+        return null;
+      }
+
+      return {
+        country: parsed.country?.trim() || company.country,
+        shortDescription
+      };
+    } catch {
+      return null;
+    }
+  }
+
   private async runWebSearch(prompt: string, maxOutputTokens: number): Promise<{ text: string; citations: string[] }> {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -145,7 +184,14 @@ export class OpenAIWebSearchClient {
     }
 
     const payload = await response.json() as OpenAIResponsesOutput;
-    const text = payload.output_text?.trim();
+    const text = (
+      payload.output_text?.trim() ||
+      payload.output
+        ?.flatMap((item) => item.content ?? [])
+        .map((content) => content.text?.trim())
+        .find((value): value is string => Boolean(value))
+    );
+
     if (!text) {
       throw new Error("OpenAI web search returned no output text.");
     }

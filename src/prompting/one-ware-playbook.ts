@@ -51,12 +51,26 @@ export const TARGET_REGIONS = [
 ];
 
 export const NON_TARGET_SIGNALS = [
+  "magazine",
+  "publisher",
+  "media",
+  "news portal",
+  "editorial",
+  "event",
+  "association",
+  "university",
+  "research institute",
   "venture capital",
   "private equity",
+  "investor",
   "bank",
+  "insurance",
   "financial services",
   "generic consultancy",
   "reseller",
+  "robot manufacturer",
+  "robotics vendor",
+  "oem product vendor",
   "china",
   "saudi arabia"
 ];
@@ -80,15 +94,15 @@ When evaluating or writing about companies, anchor on concrete business problems
 export const DEFAULT_MAIN_CONTEXT = ONE_WARE_PROMPT_CONTEXT.trim();
 
 export const DEFAULT_SEARCH_STRATEGY_CONTEXT =
-  "Prioritize firms where public evidence suggests real delivery ownership, industrial deployment relevance, recurring implementation work, or a credible partner/embed path for ONE WARE. Search broadly enough to discover strong-fit companies, then filter conservatively based on concrete signals rather than generic AI claims.";
+  "Prioritize firms where public evidence suggests real delivery ownership, industrial deployment relevance, recurring implementation work, or a credible partner/embed path for ONE WARE. Start by identifying the firm archetype objectively before assuming fit. Prefer service-led search terms such as system integrator, implementation, engineering services, automation software, embedded development, inspection integration, and industrial software projects. Avoid broad keywords like robotics, AI, media, or platform on their own when they are likely to pull product vendors, publishers, investors, or other weak-fit profiles. Search broadly enough to discover strong-fit companies, then filter conservatively based on concrete signals rather than generic AI claims.";
 
 export const DEFAULT_PREQUALIFICATION_MAIN_CONTEXT =
-  "Decide relevance conservatively. A company is relevant only when there is evidence for real delivery ownership, industrial applicability, or a credible ONE WARE partner path. Reject weak-fit finance, recruiting, HR, generic non-industrial SaaS, and vague consulting profiles without implementation responsibility.";
+  "Decide relevance conservatively and completely unbiased. First identify the company archetype: implementation-led integrator, industrial end customer, camera/imaging manufacturer, machine builder/OEM, software platform, or clearly irrelevant profile such as media, publisher, event, association, university, research institute, VC, investor, bank, insurer, recruiter, reseller, or generic consultancy. A company is relevant only when there is evidence for real delivery ownership, industrial applicability, or a credible ONE WARE partner path. Reject weak-fit finance, recruiting, HR, generic non-industrial SaaS, vague consulting profiles without implementation responsibility, and product-led robotics or hardware brands when no delivery ownership is visible.";
 
 export const DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS: Record<SelectableLeadCategory, EditablePrequalificationCategoryContext> = {
   integrator_vision_industrial_ai: {
     addOnContext:
-      "Require explicit evidence for Vision AI, machine vision, industrial inspection, edge AI deployment, or comparable delivery work. Relevance is strongest when the company implements custom projects for customers instead of just reselling products."
+      "Require explicit evidence for Vision AI, machine vision, industrial inspection, edge AI deployment, or comparable delivery work. Relevance is strongest when the company implements custom projects for customers instead of just reselling products. Do not use this category for robot makers, OEMs, or hardware brands unless customer implementation services are clearly part of the business."
   },
   integrator_general_ai: {
     addOnContext:
@@ -96,7 +110,7 @@ export const DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS: Record<SelectableLeadCa
   },
   integrator_relevant_focus: {
     addOnContext:
-      "Require both project-delivery ownership and a relevant vertical such as robotics, surveillance, medtech vision, agriculture tech, defence, automotive, or industrial automation. The vertical should make camera-, inspection-, or edge-AI use cases plausible."
+      "Require both project-delivery ownership and a relevant vertical such as surveillance, medtech vision, agriculture tech, defence, automotive, or industrial automation. The vertical should make camera-, inspection-, or edge-AI use cases plausible. Do not use the category only because the company sells robots, drone products, or hardware into one of these verticals."
   },
   industrial_end_customer_scaled: {
     addOnContext:
@@ -497,6 +511,11 @@ export function buildPrequalificationContextBlock(
     buildMainContextBlock(mainContext),
     activeCategories?.length ? `Active positive-match categories: ${activeCategories.join(", ")}` : undefined,
     prequalification?.mainContext?.trim() ? `Prequalification main operator context:\n${prequalification.mainContext.trim()}` : undefined,
+    "Decision order:",
+    "- Step 1: Identify the company archetype completely unbiased before assuming fit.",
+    "- Step 2: Eliminate irrelevant archetypes such as media, publisher, magazine, VC, bank, recruiter, university, association, or event business immediately.",
+    "- Step 3: For positive categories, require concrete evidence of delivery ownership, implementation responsibility, or a credible partner/embed path.",
+    "- Step 4: If the company looks product-led, hardware-led, or robotics-led without service ownership, prefer machine_builder_ai_enablement, other, or irrelevant over an integrator category.",
     "Prequalification categories:",
     categoryRules
   ]

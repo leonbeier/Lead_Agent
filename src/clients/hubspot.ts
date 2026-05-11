@@ -20,6 +20,9 @@ interface HubSpotSyncResult {
   errors: string[];
 }
 
+const HUBSPOT_MAX_RETRIES = 5;
+const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
+
 export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
 
@@ -532,25 +535,44 @@ export class HubSpotClient {
   }
 
   private async requestJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(url, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${env.HUBSPOT_PRIVATE_APP_TOKEN}`,
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {})
-      }
-    });
+    for (let attempt = 0; attempt <= HUBSPOT_MAX_RETRIES; attempt += 1) {
+      const response = await fetch(url, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${env.HUBSPOT_PRIVATE_APP_TOKEN}`,
+          "Content-Type": "application/json",
+          ...(init?.headers ?? {})
+        }
+      });
 
-    if (!response.ok) {
+      if (response.ok) {
+        if (response.status === 204) {
+          return undefined as T;
+        }
+
+        return (await response.json()) as T;
+      }
+
       const errorText = await response.text();
+      if (response.status === 429 && attempt < HUBSPOT_MAX_RETRIES) {
+        const retryAfterHeader = response.headers.get("retry-after");
+        const retryAfterMs = retryAfterHeader ? Number.parseFloat(retryAfterHeader) * 1000 : Number.NaN;
+        const delayMs = Number.isFinite(retryAfterMs)
+          ? retryAfterMs
+          : HUBSPOT_RETRY_DELAYS_MS[Math.min(attempt, HUBSPOT_RETRY_DELAYS_MS.length - 1)];
+
+        await this.delay(delayMs);
+        continue;
+      }
+
       throw new Error(`HubSpot request failed: ${response.status} ${errorText}`);
     }
 
-    if (response.status === 204) {
-      return undefined as T;
-    }
+    throw new Error("HubSpot request failed after retries.");
+  }
 
-    return (await response.json()) as T;
+  private async delay(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private toErrorMessage(error: unknown): string {

@@ -11,6 +11,7 @@ import {
 import {
   buildMainContextBlock,
   buildPrequalificationContextBlock,
+  buildSearchStrategyContextBlock,
   buildExecutionContextBlock,
   getTemplateForCategory,
   ONE_WARE_PROMPT_CONTEXT,
@@ -32,8 +33,13 @@ const MAX_AZURE_RETRIES = 3;
 const AZURE_RETRY_DELAYS_MS = [500, 1000, 2000];
 const QUICK_QUALIFICATION_CONTEXT = [
   "You classify lead fit for ONE WARE.",
-  "Prefer the defined campaign categories and classify conservatively.",
-  "Reject finance, HR tech, recruiting, applicant tracking, generic consulting without delivery ownership, and direct competing AI software vendors.",
+  "Classify conservatively and completely unbiased before preferring any positive category.",
+  "First identify the firm archetype: implementation-led integrator, industrial end customer, camera/imaging manufacturer, machine builder/OEM, software platform, or clearly irrelevant profile.",
+  "Then decide whether the company is genuinely relevant, clearly irrelevant, or too ambiguous.",
+  "Do not infer delivery ownership or category fit from the Apollo filter name, source filter, or a vague company name alone.",
+  "If the company description is missing, generic, placeholder-like, or weak, return other or irrelevant unless there is strong explicit evidence for a positive category.",
+  "Reject media companies, magazines, publishers, news portals, event businesses, associations, universities, research institutes, VCs, private equity, banks, insurers, recruiting/HR tech, generic consultancies without delivery ownership, resellers, and direct competing AI software vendors.",
+  "Do not classify robot manufacturers, OEMs, hardware vendors, or product-led robotics brands as integrators unless they clearly sell implementation or integration services.",
   "Return JSON only with category, relevanceScore 0-100, rationale.",
   "Keep rationale to one short sentence."
 ].join(" ");
@@ -176,6 +182,7 @@ export class AzureOpenAIClient {
     market: string | undefined,
     customGoal: string | undefined,
     mainContext: string | undefined,
+    searchStrategyContext: string | undefined,
     targetCategories: LeadCategory[] | undefined,
     baseFilters: ApolloOrganizationFilter[],
     dryRun: boolean,
@@ -185,6 +192,7 @@ export class AzureOpenAIClient {
       market,
       customGoal,
       mainContext,
+      searchStrategyContext,
       targetCategories,
       baseFilters,
       dryRun,
@@ -205,14 +213,17 @@ export class AzureOpenAIClient {
           {
             role: "system",
             content: [
-              buildMainContextBlock(mainContext),
+              buildSearchStrategyContextBlock(searchStrategyContext, mainContext),
               "You are the Apollo Search Strategy Agent.",
               "Return strict JSON with {\"filters\":[...]}",
               "Produce 4 to 6 practical Apollo company filters for ONE WARE.",
               "Optimize for at least 50% relevant firms in the first 15-company sample.",
               "Relevant means Europe-first and a plausible ONE WARE target category.",
               "Prioritize Germany first, then strong European industrial regions.",
-              "Avoid VCs, generic consultancies, recruiting, banks, China, Saudi Arabia, and direct AI platform competitors.",
+              "Avoid magazines, publishers, media portals, event businesses, associations, universities, research institutes, VCs, generic consultancies, recruiting, banks, insurers, China, Saudi Arabia, and direct AI platform competitors.",
+              "Prefer implementation-oriented software and automation service providers over product vendors or editorial/media brands.",
+              "Do not use broad keywords like robotics or AI alone when they are likely to pull robot makers, OEMs, hardware vendors, investors, or magazines.",
+              "Prefer service-intent keywords such as system integrator, implementation, software services, engineering services, custom software, automation projects, machine vision integration, industrial inspection, embedded development, or solution provider.",
               "Keep industries, keywords, employee ranges, and locations realistic for Apollo."
             ].join(" ")
           },
@@ -309,6 +320,26 @@ export class AzureOpenAIClient {
 
   private categorizeDryRun(description: string): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> {
     const lowered = description.toLowerCase();
+    const obviouslyIrrelevantSignals = [
+      "magazine",
+      "magazin",
+      "publisher",
+      "publishing",
+      "media company",
+      "media house",
+      "news portal",
+      "newsroom",
+      "editorial",
+      "event organizer",
+      "conference",
+      "association",
+      "university",
+      "research institute",
+      "venture capital",
+      "private equity",
+      "bank",
+      "insurance"
+    ];
     const nonIndustrialPlatformSignals = [
       "enterprise software",
       "erp",
@@ -338,6 +369,14 @@ export class AzureOpenAIClient {
 
     const nonIndustrialHits = nonIndustrialPlatformSignals.filter((signal) => lowered.includes(signal)).length;
     const industrialHits = industrialSignals.filter((signal) => lowered.includes(signal)).length;
+
+    if (obviouslyIrrelevantSignals.some((signal) => lowered.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 3,
+        rationale: "Description points to a media, finance, event, academic, or other clearly non-target profile."
+      };
+    }
 
     if (nonIndustrialHits >= 1 && industrialHits === 0) {
       return {
@@ -422,6 +461,35 @@ export class AzureOpenAIClient {
     learning?: LeadLearningData
   ): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null {
     const lowered = `${name} ${description}`.toLowerCase();
+    const normalizedDescription = description.trim().toLowerCase();
+    const hasPlaceholderDescription =
+      normalizedDescription.length === 0 ||
+      normalizedDescription.includes("no verified public company description was returned by apollo");
+    const obviouslyIrrelevantSignals = [
+      "magazine",
+      "magazin",
+      "publisher",
+      "publishing",
+      "media company",
+      "media house",
+      "news portal",
+      "newsroom",
+      "editorial",
+      "blog network",
+      "event organizer",
+      "conference",
+      "association",
+      "foundation",
+      "university",
+      "research institute",
+      "institute",
+      "venture capital",
+      "private equity",
+      "investor",
+      "bank",
+      "financial services",
+      "insurance"
+    ];
     const nonIndustrialPlatformSignals = [
       "enterprise software",
       "erp",
@@ -466,6 +534,26 @@ export class AzureOpenAIClient {
       "project delivery",
       "integration services"
     ];
+    const productBrandSignals = [
+      "robotics",
+      "robot",
+      "automation",
+      "systems",
+      "machine",
+      "industrial"
+    ];
+    const productOnlySignals = [
+      "humanoid robot",
+      "mobile robot",
+      "robot arm",
+      "service robot",
+      "open-source robot",
+      "pre-order",
+      "hardware platform",
+      "robot platform",
+      "robotics platform",
+      "robot manufacturer"
+    ];
     const recruitingSignals = [
       "recruiting software",
       "applicant tracking",
@@ -479,6 +567,14 @@ export class AzureOpenAIClient {
     ];
 
     const recruitingHits = recruitingSignals.filter((signal) => lowered.includes(signal)).length;
+    if (obviouslyIrrelevantSignals.some((signal) => lowered.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 2,
+        rationale: "Company description strongly matches a media, finance, event, academic, or other clearly non-target profile."
+      };
+    }
+
     if (recruitingHits >= 2) {
       return {
         category: "irrelevant",
@@ -506,6 +602,22 @@ export class AzureOpenAIClient {
       lowered.includes("manufacturer") ||
       lowered.includes("optics");
     const serviceHits = serviceSignals.filter((signal) => lowered.includes(signal)).length;
+
+    if (hasPlaceholderDescription && productBrandSignals.some((signal) => lowered.includes(signal)) && serviceHits === 0) {
+      return {
+        category: "other",
+        relevanceScore: 25,
+        rationale: "Company name alone suggests an automation or robotics brand, but there is no verified evidence of service-led delivery ownership."
+      };
+    }
+
+    if (productOnlySignals.some((signal) => lowered.includes(signal)) && serviceHits === 0) {
+      return {
+        category: "machine_builder_ai_enablement",
+        relevanceScore: 32,
+        rationale: "Company description looks product-led or robotics-hardware-led rather than like a software integrator."
+      };
+    }
 
     if ((hardwareHits >= 2 || (mentionsImagingOrCamera && mentionsVendorOrHardware)) && serviceHits === 0) {
       return {

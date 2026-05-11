@@ -132,7 +132,7 @@ export class LeadPipelineAgent {
     const earlyStopThreshold = request.earlyStopThreshold ?? DEFAULT_EARLY_STOP_THRESHOLD;
     const prequalification = request.prequalification ?? (request.prequalificationContext ? { mainContext: request.prequalificationContext } : undefined);
     const suggestedFilters = this.orderFiltersByLearning(
-      await this.getSuggestedFilters(request.market, request.customGoal, mainContext, targetCategories, dryRun, learning),
+      await this.getSuggestedFilters(request.market, request.customGoal, mainContext, request.searchStrategyContext, targetCategories, dryRun, learning),
       learning,
       request.market,
       request.customGoal
@@ -172,7 +172,31 @@ export class LeadPipelineAgent {
             await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
             learning
           );
-          const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalification, targetCategories, learning);
+          let categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalification, targetCategories, learning);
+
+          if (!creditLessMode) {
+            const initialRelevantFromApollo = this.getRelevantCompanies(categorizedInitialSample, activeFilter, targetCategories, request.market);
+            if (initialRelevantFromApollo.length === 0) {
+              const webFallbackProbeSample = this.excludeRejectedCompanies(
+                await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1, true),
+                learning
+              );
+              const categorizedWebFallbackProbe = await this.categorizeCompanies(
+                webFallbackProbeSample,
+                dryRun,
+                mainContext,
+                prequalification,
+                targetCategories,
+                learning
+              );
+              const relevantFromWebFallback = this.getRelevantCompanies(categorizedWebFallbackProbe, activeFilter, targetCategories, request.market);
+
+              if (relevantFromWebFallback.length > initialRelevantFromApollo.length) {
+                categorizedInitialSample = categorizedWebFallbackProbe;
+              }
+            }
+          }
+
           reviewedCompanies.push(...categorizedInitialSample);
 
           const initialEvaluation = this.evaluateFilter(
@@ -198,7 +222,7 @@ export class LeadPipelineAgent {
             )
           );
 
-          const initialRelevant = this.getRelevantEuropeanCompanies(categorizedInitialSample, activeFilter, targetCategories);
+          const initialRelevant = this.getRelevantCompanies(categorizedInitialSample, activeFilter, targetCategories, request.market);
           const addedFromProbe = this.addUniqueCompanies(shortlistedCompanies, initialRelevant, shortlistedKeys);
           categoryCounts.set(activeCategory, (categoryCounts.get(activeCategory) ?? 0) + addedFromProbe);
 
@@ -263,7 +287,7 @@ export class LeadPipelineAgent {
               learning
             );
             reviewedCompanies.push(...categorizedExpandedSample);
-            const expandedRelevant = this.getRelevantEuropeanCompanies(categorizedExpandedSample, activeFilter, targetCategories);
+            const expandedRelevant = this.getRelevantCompanies(categorizedExpandedSample, activeFilter, targetCategories, request.market);
             const addedFromExpansion = this.addUniqueCompanies(shortlistedCompanies, expandedRelevant, shortlistedKeys);
             categoryCounts.set(activeCategory, (categoryCounts.get(activeCategory) ?? 0) + addedFromExpansion);
 
@@ -416,6 +440,7 @@ export class LeadPipelineAgent {
         request.market,
         request.customGoal,
         mainContext,
+        request.searchStrategyContext,
         targetCategories,
         request.dryRun ?? true
       )
@@ -426,6 +451,7 @@ export class LeadPipelineAgent {
     market: string | undefined,
     customGoal: string | undefined,
     mainContext: string | undefined,
+    searchStrategyContext: string | undefined,
     targetCategories: LeadCategory[],
     dryRun: boolean,
     learning?: LeadLearningData
@@ -434,6 +460,7 @@ export class LeadPipelineAgent {
       market,
       customGoal,
       mainContext,
+      searchStrategyContext,
       targetCategories,
       buildSuggestedFilters(market, customGoal),
       dryRun,
@@ -484,6 +511,10 @@ export class LeadPipelineAgent {
     company: CompanySample
   ): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null {
     const text = `${company.name} ${company.shortDescription} ${company.domain ?? ""}`.toLowerCase();
+    const normalizedDescription = company.shortDescription.trim().toLowerCase();
+    const hasPlaceholderDescription =
+      normalizedDescription.length === 0 ||
+      normalizedDescription.includes("no verified public company description was returned by apollo");
     const normalizedCountry = company.country?.trim().toLowerCase();
     const industrialSignals = [
       "industrial",
@@ -509,6 +540,48 @@ export class LeadPipelineAgent {
       "employment",
       "hr software"
     ];
+    const obviouslyIrrelevantSignals = [
+      "magazine",
+      "magazin",
+      "publisher",
+      "publishing",
+      "media company",
+      "media house",
+      "news portal",
+      "newsroom",
+      "editorial",
+      "conference",
+      "event organizer",
+      "association",
+      "foundation",
+      "university",
+      "research institute",
+      "venture capital",
+      "private equity",
+      "investor",
+      "bank",
+      "financial services",
+      "insurance"
+    ];
+    const serviceSignals = [
+      "system integrator",
+      "systems integrator",
+      "integration services",
+      "software services",
+      "software development",
+      "custom software",
+      "project delivery",
+      "engineering services",
+      "solution provider",
+      "implementation"
+    ];
+    const productBrandSignals = [
+      "robotics",
+      "robot",
+      "automation",
+      "machine",
+      "industrial"
+    ];
     const nonIndustrialPlatformSignals = [
       "erp",
       "crm",
@@ -530,6 +603,18 @@ export class LeadPipelineAgent {
       "labeling platform",
       "computer vision platform"
     ];
+    const productOnlySignals = [
+      "humanoid robot",
+      "mobile robot",
+      "robot arm",
+      "service robot",
+      "open-source robot",
+      "pre-order",
+      "hardware platform",
+      "robot platform",
+      "robotics platform",
+      "robot manufacturer"
+    ];
 
     const industrialHits = industrialSignals.filter((signal) => text.includes(signal)).length;
 
@@ -538,6 +623,22 @@ export class LeadPipelineAgent {
         category: "irrelevant",
         relevanceScore: 5,
         rationale: "Company is outside the European target geography for this campaign."
+      };
+    }
+
+    if (obviouslyIrrelevantSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 3,
+        rationale: "Company appears to be a media, finance, event, academic, or otherwise clearly irrelevant profile."
+      };
+    }
+
+    if (hasPlaceholderDescription && productBrandSignals.some((signal) => text.includes(signal)) && !serviceSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "other",
+        relevanceScore: 25,
+        rationale: "Only a product- or brand-like company name is available, without verified evidence of service-led delivery ownership."
       };
     }
 
@@ -554,6 +655,14 @@ export class LeadPipelineAgent {
         category: "irrelevant",
         relevanceScore: 5,
         rationale: "Company appears closer to an AI platform competitor than to a delivery-led ONE WARE target."
+      };
+    }
+
+    if (productOnlySignals.some((signal) => text.includes(signal)) && !serviceSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "machine_builder_ai_enablement",
+        relevanceScore: 28,
+        rationale: "Company appears to be a product-led robotics or hardware builder rather than a software integrator."
       };
     }
 
@@ -589,6 +698,23 @@ export class LeadPipelineAgent {
       "process automation"
     ];
     const clearlyBadSignals = [
+      "magazine",
+      "magazin",
+      "publisher",
+      "publishing",
+      "media",
+      "news",
+      "editorial",
+      "conference",
+      "association",
+      "university",
+      "research institute",
+      "venture capital",
+      "private equity",
+      "investor",
+      "bank",
+      "financial services",
+      "insurance",
       "staffing",
       "recruit",
       "talent",
@@ -601,12 +727,54 @@ export class LeadPipelineAgent {
       "marketing",
       "payments"
     ];
+    const serviceSignals = [
+      "system integrator",
+      "systems integrator",
+      "integration services",
+      "software services",
+      "software development",
+      "custom software",
+      "project delivery",
+      "engineering services",
+      "solution provider",
+      "implementation"
+    ];
+    const productVendorSignals = [
+      "manufacturer",
+      "oem",
+      "robot platform",
+      "robotics platform",
+      "industrial robots",
+      "mobile robots",
+      "humanoid robot",
+      "robot arm",
+      "service robot",
+      "open-source robot",
+      "pre-order",
+      "hardware platform",
+      "product portfolio",
+      "autonomous robot"
+    ];
 
     if (clearlyBadSignals.some((signal) => text.includes(signal))) {
       return {
         category: "irrelevant",
         relevanceScore: 8,
         rationale: "Company profile signals a non-industrial service or platform segment outside ONE WARE's ICP."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_vision_industrial_ai" ||
+        categorization.category === "integrator_general_ai" ||
+        categorization.category === "integrator_relevant_focus") &&
+      productVendorSignals.some((signal) => text.includes(signal)) &&
+      !serviceSignals.some((signal) => text.includes(signal))
+    ) {
+      return {
+        category: "machine_builder_ai_enablement",
+        relevanceScore: Math.min(categorization.relevanceScore, 48),
+        rationale: "Company looks more like a product-led robotics or OEM vendor than a service-led software integrator."
       };
     }
 
@@ -705,23 +873,40 @@ export class LeadPipelineAgent {
     return bias;
   }
 
-  private getRelevantEuropeanCompanies(
+  private getRelevantCompanies(
     companies: PreCategorizedCompany[],
     filter: import("../types").ApolloOrganizationFilter,
-    targetCategories: LeadCategory[]
+    targetCategories: LeadCategory[],
+    market?: string
   ): PreCategorizedCompany[] {
     return companies.filter(
-      (company) => targetCategories.includes(company.category) && this.isEuropeanCompany(company, filter)
+      (company) => targetCategories.includes(company.category) && this.isCompanyInScope(company, filter, market)
     );
   }
 
-  private isEuropeanCompany(
+  private isCompanyInScope(
     company: Pick<PreCategorizedCompany, "country" | "domain">,
-    filter: import("../types").ApolloOrganizationFilter
+    filter: import("../types").ApolloOrganizationFilter,
+    market?: string
   ): boolean {
+    const normalizedMarket = market?.trim().toLowerCase();
     const normalizedCountry = company.country?.trim().toLowerCase();
+
+    if (normalizedMarket === "de") {
+      if (normalizedCountry) {
+        return normalizedCountry === "germany";
+      }
+
+      const normalizedDomain = company.domain?.trim().toLowerCase();
+      return Boolean(normalizedDomain?.includes(".de"));
+    }
+
     if (normalizedCountry && EUROPEAN_COUNTRIES.has(normalizedCountry)) {
       return true;
+    }
+
+    if (normalizedCountry && !EUROPEAN_COUNTRIES.has(normalizedCountry)) {
+      return false;
     }
 
     const normalizedDomain = company.domain?.trim().toLowerCase();
@@ -747,7 +932,7 @@ export class LeadPipelineAgent {
     targetCategories: LeadCategory[],
     threshold: number
   ): SearchHistoryEntry {
-    const relevantCount = this.getRelevantEuropeanCompanies(companies, filter, targetCategories).length;
+    const relevantCount = this.getRelevantCompanies(companies, filter, targetCategories).length;
     const relevanceRatio = companies.length === 0 ? 0 : relevantCount / companies.length;
 
     return {
@@ -940,7 +1125,7 @@ export class LeadPipelineAgent {
       Object.fromEntries(allCategories.map((category) => [category, 0])) as Record<LeadCategory, number>
     );
 
-    const relevantCount = this.getRelevantEuropeanCompanies(companies, filter, targetCategories).length;
+    const relevantCount = this.getRelevantCompanies(companies, filter, targetCategories).length;
     const relevanceRatio = companies.length === 0 ? 0 : relevantCount / companies.length;
 
     return {

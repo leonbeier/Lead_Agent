@@ -20,4 +20,8 @@ export class WebSearchAgent {
   async buildResearchContext(company: PreCategorizedCompany): Promise<SearchEvidence | null> {
     return this.openAIWebSearchClient.buildResearchContext(company);
   }
+
+  async summarizeCompany(company: CompanySample): Promise<Partial<CompanySample> | null> {
+    return this.openAIWebSearchClient.summarizeCompany(company);
+  }
 }

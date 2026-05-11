@@ -521,6 +521,18 @@
         filterPerformance: []
       };
 
+      function getPrequalificationAddOnValue(value) {
+        if (!value) {
+          return "";
+        }
+
+        if (typeof value === "string") {
+          return value;
+        }
+
+        return value.addOnContext || "";
+      }
+
       async function requestJson(url, options = {}) {
         const response = await fetch(url, {
           headers: {
@@ -551,7 +563,7 @@
           checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
         });
         document.querySelectorAll("textarea[data-prequalification-category]").forEach((field) => {
-          field.value = settings.prequalification?.categoryContexts?.[field.dataset.prequalificationCategory] || "";
+          field.value = getPrequalificationAddOnValue(settings.prequalification?.categoryContexts?.[field.dataset.prequalificationCategory]);
         });
         document.getElementById("runDeepResearch").checked = Boolean(settings.runDeepResearch);
         document.getElementById("dryRun").checked = Boolean(settings.dryRun);
@@ -566,7 +578,9 @@
         const categoryContexts = Object.fromEntries(
           Array.from(document.querySelectorAll("textarea[data-prequalification-category]")).map((field) => [
             field.dataset.prequalificationCategory,
-            field.value.trim()
+            {
+              addOnContext: field.value.trim()
+            }
           ])
         );
 
@@ -589,7 +603,9 @@
       }
 
       function renderSummary(settings, templates, latestLeadRun) {
-        const prequalificationAddOnCount = Object.values(settings.prequalification?.categoryContexts || {}).filter((value) => value && value.trim()).length;
+        const prequalificationAddOnCount = Object.values(settings.prequalification?.categoryContexts || {})
+          .filter((value) => getPrequalificationAddOnValue(value).trim())
+          .length;
         const cards = [
           { label: "Default Markt", value: settings.market },
           { label: "Lead-Ziel", value: String(settings.targetLeadCount) },

@@ -7,6 +7,7 @@ import {
   TARGET_REGIONS,
   buildExecutionContextBlock,
   buildPrequalificationContextBlock,
+  buildSearchStrategyContextBlock,
   getTemplateForCategory
 } from "../prompting/one-ware-playbook";
 
@@ -47,6 +48,7 @@ export class FoundryAgentsClient {
     market: string | undefined,
     customGoal: string | undefined,
     agentContext: string | undefined,
+    searchStrategyContext: string | undefined,
     targetCategories: LeadCategory[] | undefined,
     baseFilters: ApolloOrganizationFilter[],
     dryRun: boolean,
@@ -61,6 +63,7 @@ export class FoundryAgentsClient {
         `Market focus: ${market ?? "Germany"}`,
         customGoal ? `Custom goal: ${customGoal}` : "Custom goal: Keep focus on the highest-conviction ICP.",
         agentContext ? `Operator context: ${agentContext}` : undefined,
+        buildSearchStrategyContextBlock(searchStrategyContext, agentContext),
         targetCategories?.length ? `Target categories: ${targetCategories.join(", ")}` : undefined,
         `Existing Apollo filters JSON:\n${JSON.stringify(baseFilters)}`,
         this.buildLearningContextForSearchStrategy(learning)
@@ -294,13 +297,13 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Apollo Filter Strategy Agent. Follow any supplied main context strictly. Generate 4 to 6 Apollo company search filters focused on Germany first. Prioritize service-led software integrators, industrial automation firms, embedded/robotics players, and industrial end-customers with clear QC or process automation needs. Focus strongest on software integrators, AI-capable service providers, industrial customers with own engineering, and machine builders with plausible need. Avoid VCs, banks, broad consultancies, China, Saudi Arabia, and competing AI platform vendors. Return strict JSON: {"filters":[{"name":"...","persona":"...","industries":[...],"keywords":[...],"locations":[...],"employeeRanges":[...],"notes":"..."}]}. Keep industries and keywords practical for Apollo.`
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Apollo Filter Strategy Agent. Follow any supplied main context strictly. Generate 4 to 6 Apollo company search filters focused on Germany first. Start unbiased by identifying which firm archetypes are most likely to contain service-led delivery companies for the requested categories. Focus strongest on software integrators, automation engineering firms, embedded/industrial software service providers, industrial customers with own engineering, and machine builders with plausible need. Avoid magazines, publishers, media brands, event businesses, associations, universities, research institutes, VCs, banks, insurers, broad consultancies, China, Saudi Arabia, and competing AI platform vendors. Avoid broad keywords like robotics or AI alone when they are likely to pull robot makers, product startups, hardware vendors, or editorial brands. Prefer service-intent keywords such as system integrator, implementation, engineering services, software services, machine vision integration, inspection integration, embedded development, automation projects, and solution provider. Return strict JSON: {"filters":[{"name":"...","persona":"...","industries":[...],"keywords":[...],"locations":[...],"employeeRanges":[...],"notes":"..."}]}. Keep industries and keywords practical for Apollo.`
         };
       case "qualification":
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Follow any supplied main context and prequalification context strictly. Classify companies into exactly one category: integrator_vision_industrial_ai, integrator_general_ai, integrator_relevant_focus, industrial_end_customer_scaled, camera_manufacturer_partner, machine_builder_ai_enablement, software_platform_embedding, irrelevant, other. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Follow any supplied main context and prequalification context strictly. Analyze completely unbiased before choosing any positive category. First determine the firm archetype: implementation-led integrator, industrial end customer, camera/imaging manufacturer, machine builder/OEM, software platform, or clearly irrelevant profile. Classify companies into exactly one category: integrator_vision_industrial_ai, integrator_general_ai, integrator_relevant_focus, industrial_end_customer_scaled, camera_manufacturer_partner, machine_builder_ai_enablement, software_platform_embedding, irrelevant, other. Do not infer delivery ownership or fit from the Apollo filter name, source filter, or a vague company name alone. If the supplied company description is missing, generic, or placeholder-like, return other or irrelevant unless there is strong explicit evidence for a positive category. Treat magazines, publishers, media portals, editorial brands, event businesses, associations, universities, research institutes, VCs, banks, insurers, recruiters, generic consultancies without implementation ownership, and direct AI-platform competitors as irrelevant. Do not classify robot manufacturers, product-led robotics brands, OEMs, or hardware vendors as integrators unless clear implementation services are visible. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
         };
       case "research": {
         const tools = await this.buildResearchTools();

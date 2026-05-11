@@ -50,13 +50,15 @@ export class ApolloClient {
       }>;
     };
 
-    return (payload.organizations ?? []).map((organization, index) => ({
+    const companies = (payload.organizations ?? []).map((organization, index) => ({
       name: organization.name ?? `${filter.name} Company ${index + 1}`,
       domain: organization.website_url,
       country: organization.primary_location?.country ?? organization.country,
-      shortDescription: organization.short_description ?? filter.persona,
+      shortDescription: organization.short_description?.trim() || "No verified public company description was returned by Apollo.",
       sourceFilter: filter.name
     }));
+
+    return this.enrichSparseCompanies(companies);
   }
 
   private async searchOrganizations(body: string): Promise<Response> {
@@ -97,7 +99,7 @@ export class ApolloClient {
     page: number
   ): Promise<CompanySample[]> {
     const companies = await this.webSearchAgent.discoverCompaniesForFilter(filter, limit, page);
-    return companies.length > 0 ? companies : this.buildDryRunSample(filter, limit);
+    return companies;
   }
 
   private isApolloCreditError(error: unknown): boolean {
@@ -152,5 +154,28 @@ export class ApolloClient {
     }
 
     return `${filter.persona}. Keywords: ${filter.keywords.slice(0, 3).join(", ")}`;
+  }
+
+  private async enrichSparseCompanies(companies: CompanySample[]): Promise<CompanySample[]> {
+    const enrichedCompanies = [...companies];
+    const sparseIndexes = enrichedCompanies
+      .map((company, index) => ({ company, index }))
+      .filter(({ company }) => company.shortDescription.includes("No verified public company description was returned by Apollo."))
+      .slice(0, 8);
+
+    for (const { company, index } of sparseIndexes) {
+      const enrichment = await this.webSearchAgent.summarizeCompany(company);
+      if (!enrichment?.shortDescription) {
+        continue;
+      }
+
+      enrichedCompanies[index] = {
+        ...company,
+        country: enrichment.country ?? company.country,
+        shortDescription: enrichment.shortDescription
+      };
+    }
+
+    return enrichedCompanies;
   }
 }

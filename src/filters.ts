@@ -4,8 +4,8 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
   {
     name: "DACH Vision / Industrial AI Integrators",
     persona: "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
-    industries: ["Industrial Automation", "System Integration", "Industrial Software", "Machinery"],
-    keywords: ["system integrator", "industrial automation", "embedded systems", "inspection systems", "robotics"],
+    industries: ["Industrial Automation", "System Integration", "Industrial Software", "Embedded Software"],
+    keywords: ["system integrator", "industrial automation", "machine vision integration", "inspection systems", "embedded software"],
     locations: ["Germany", "Austria", "Switzerland"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
     targetCategories: ["integrator_vision_industrial_ai"],
@@ -14,8 +14,8 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
   {
     name: "DACH General AI Integrators",
     persona: "Software or consulting integrator with general AI focus and real implementation ownership",
-    industries: ["Industrial Automation", "Computer Vision", "Robotics", "Embedded Software"],
-    keywords: ["computer vision", "image processing", "industrial ai", "embedded ai", "automation software"],
+    industries: ["Industrial Automation", "Computer Vision", "Embedded Software", "Industrial Software"],
+    keywords: ["computer vision integration", "image processing", "industrial ai", "automation software", "engineering services"],
     locations: ["Germany", "Austria", "Switzerland"],
     employeeRanges: ["11,50", "51,200", "201,500"],
     targetCategories: ["integrator_general_ai"],
@@ -24,8 +24,8 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
   {
     name: "Europe Relevant-Vertical Integrators",
     persona: "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
-    industries: ["Industrial Automation", "Robotics", "Aerospace", "Medical Devices", "Automotive"],
-    keywords: ["surveillance", "defence", "robotics", "drones", "medtech imaging", "automotive vision"],
+    industries: ["Industrial Automation", "Aerospace", "Medical Devices", "Automotive", "Industrial Software"],
+    keywords: ["surveillance integration", "defence systems integration", "medtech imaging", "industrial inspection", "automotive vision"],
     locations: ["Germany", "Netherlands", "France", "Belgium", "Sweden"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
     targetCategories: ["integrator_relevant_focus"],
