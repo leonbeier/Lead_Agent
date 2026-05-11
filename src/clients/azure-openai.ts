@@ -528,11 +528,38 @@ export class AzureOpenAIClient {
     ];
     const serviceSignals = [
       "system integrator",
+      "systems integrator",
+      "solution provider",
       "software development",
+      "custom software",
+      "engineering services",
       "consultancy",
       "services",
       "project delivery",
       "integration services"
+    ];
+    const visionDeliverySignals = [
+      "machine vision",
+      "industrial image processing",
+      "image processing",
+      "inspection systems",
+      "quality assurance systems",
+      "aoi",
+      "inspection",
+      "vision systems",
+      "computer vision"
+    ];
+    const automationDeliverySignals = [
+      "industrial automation",
+      "automation software",
+      "mes",
+      "scada",
+      "plc",
+      "embedded software",
+      "embedded systems",
+      "industrial software",
+      "commissioning",
+      "software engineering"
     ];
     const productBrandSignals = [
       "robotics",
@@ -624,6 +651,24 @@ export class AzureOpenAIClient {
         category: "camera_manufacturer_partner",
         relevanceScore: 90,
         rationale: "Company description strongly matches an industrial imaging or camera vendor without a clear delivery-led services profile."
+      };
+    }
+
+    const visionDeliveryHits = visionDeliverySignals.filter((signal) => lowered.includes(signal)).length;
+    if (serviceHits >= 1 && visionDeliveryHits >= 1) {
+      return {
+        category: "integrator_vision_industrial_ai",
+        relevanceScore: 88,
+        rationale: "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+      };
+    }
+
+    const automationDeliveryHits = automationDeliverySignals.filter((signal) => lowered.includes(signal)).length;
+    if (serviceHits >= 1 && automationDeliveryHits >= 2) {
+      return {
+        category: "integrator_general_ai",
+        relevanceScore: 78,
+        rationale: "Company description shows service-led industrial automation or industrial software implementation ownership."
       };
     }
 

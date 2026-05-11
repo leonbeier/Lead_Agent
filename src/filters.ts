@@ -2,34 +2,34 @@ import { ApolloOrganizationFilter } from "./types";
 
 export const defaultApolloFilters: ApolloOrganizationFilter[] = [
   {
-    name: "DACH Vision / Industrial AI Integrators",
-    persona: "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
-    industries: ["Industrial Automation", "System Integration", "Industrial Software", "Embedded Software"],
-    keywords: ["system integrator", "industrial automation", "machine vision integration", "inspection systems", "embedded software"],
-    locations: ["Germany", "Austria", "Switzerland"],
+    name: "Germany Machine Vision System Integrators",
+    persona: "German system integrator delivering machine vision inspection and industrial image processing projects for customers",
+    industries: ["Industrial Automation", "System Integration", "Industrial Software", "Machinery"],
+    keywords: ["machine vision integrator", "industrial image processing", "inspection systems", "quality inspection", "system integrator"],
+    locations: ["Germany"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
     targetCategories: ["integrator_vision_industrial_ai"],
-    notes: "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects."
+    notes: "Primary ICP. Target delivery-oriented German machine-vision and inspection integrators with customer project ownership."
   },
   {
-    name: "DACH General AI Integrators",
-    persona: "Software or consulting integrator with general AI focus and real implementation ownership",
-    industries: ["Industrial Automation", "Computer Vision", "Embedded Software", "Industrial Software"],
-    keywords: ["computer vision integration", "image processing", "industrial ai", "automation software", "engineering services"],
-    locations: ["Germany", "Austria", "Switzerland"],
-    employeeRanges: ["11,50", "51,200", "201,500"],
-    targetCategories: ["integrator_general_ai"],
-    notes: "Use when AI capability is visible, even if vision specialization is not explicit yet."
-  },
-  {
-    name: "Europe Relevant-Vertical Integrators",
-    persona: "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
-    industries: ["Industrial Automation", "Aerospace", "Medical Devices", "Automotive", "Industrial Software"],
-    keywords: ["surveillance integration", "defence systems integration", "medtech imaging", "industrial inspection", "automotive vision"],
-    locations: ["Germany", "Netherlands", "France", "Belgium", "Sweden"],
+    name: "Germany Automation Software Integrators",
+    persona: "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects with customer implementation ownership",
+    industries: ["Industrial Automation", "System Integration", "Industrial Software", "Information Technology and Services"],
+    keywords: ["automation software", "mes integration", "scada integration", "industrial software", "system integrator"],
+    locations: ["Germany"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
-    targetCategories: ["integrator_relevant_focus"],
-    notes: "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks."
+    targetCategories: ["integrator_general_ai"],
+    notes: "German industrial software and automation implementation partners with clear delivery ownership."
+  },
+  {
+    name: "Germany Embedded Vision Engineering Firms",
+    persona: "German embedded software and computer vision engineering services company serving industrial customers",
+    industries: ["Embedded Software", "Industrial Automation", "Computer Vision", "Electronics"],
+    keywords: ["embedded vision", "computer vision engineering", "embedded software services", "industrial ai", "edge ai"],
+    locations: ["Germany"],
+    employeeRanges: ["11,50", "51,200", "201,500"],
+    targetCategories: ["integrator_relevant_focus", "integrator_general_ai"],
+    notes: "German engineering service providers with embedded, edge, or computer-vision delivery capability for industrial customers."
   },
   {
     name: "DACH Scaled Industrial End Customers",
