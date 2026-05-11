@@ -1,4 +1,4 @@
-import { LeadCategory } from "../types";
+import { LeadCategory, PrequalificationConfig, SelectableLeadCategory } from "../types";
 
 export interface OutreachTemplate {
   key: string;
@@ -87,6 +87,26 @@ Messaging rules:
 `;
 
 export const DEFAULT_MAIN_CONTEXT = ONE_WARE_PROMPT_CONTEXT.trim();
+
+export const DEFAULT_PREQUALIFICATION_MAIN_CONTEXT =
+  "Decide relevance conservatively. A company is relevant only when there is evidence for real delivery ownership, industrial applicability, or a credible ONE WARE partner path. Reject weak-fit finance, recruiting, HR, generic non-industrial SaaS, and vague consulting profiles without implementation responsibility.";
+
+export const DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS: Record<SelectableLeadCategory, string> = {
+  integrator_vision_industrial_ai:
+    "Require explicit evidence for Vision AI, machine vision, industrial inspection, edge AI deployment, or comparable delivery work. Relevance is strongest when the company implements custom projects for customers instead of just reselling products.",
+  integrator_general_ai:
+    "Only treat as relevant when the company clearly delivers AI projects and there is a plausible path into Vision AI or industrial deployment. Generic AI branding alone is not enough.",
+  integrator_relevant_focus:
+    "Require both project-delivery ownership and a relevant vertical such as robotics, surveillance, medtech vision, agriculture tech, defence, automotive, or industrial automation. The vertical should make camera-, inspection-, or edge-AI use cases plausible.",
+  industrial_end_customer_scaled:
+    "Treat as relevant only when the company has its own production, operational scale, and a believable quality-control, inspection, or process-automation need. Look for factories, plants, manufacturing lines, engineering teams, or industrial operations.",
+  camera_manufacturer_partner:
+    "Treat as relevant when the company manufactures cameras, imaging modules, or machine-vision hardware and could benefit from offering AI-ready solutions to customers. Exclude firms whose core monetization is already their own competing vision software stack.",
+  machine_builder_ai_enablement:
+    "Treat as relevant when the company builds machines, OEM systems, production equipment, or industrial fixtures and could add Vision AI as an option or product enhancement. Require real machine-building capability, not just distribution.",
+  software_platform_embedding:
+    "Treat as relevant when the company operates a software platform with a credible integration surface where ONE WARE could be embedded as a model-generation backend. Require an actual platform product or workflow layer, not a services-only company."
+};
 
 export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
   integrator_vision_industrial_ai_template: {
@@ -180,64 +200,71 @@ export const CATEGORY_PREQUALIFICATION_CONTEXT: Record<LeadCategory, CategoryPre
     category: "integrator_vision_industrial_ai",
     label: "Integrators with explicit Vision/Industrial AI focus",
     classificationRules: [
-      "Classify here when services explicitly mention Vision AI, machine vision, industrial AI delivery, inspection AI, or edge vision deployment.",
-      "Delivery ownership and project implementation should be visible."
+      "Relevant when the website explicitly mentions Vision AI, machine vision, industrial AI delivery, inspection AI, computer vision integration, or edge-vision deployment.",
+      "Delivery ownership should be visible through implementation services, custom projects, deployment language, system integration, or customer solution references.",
+      "Signals like integrator, solution provider, automation partner, inspection projects, or hardware/software deployment strengthen relevance."
     ],
-    disqualifiers: ["Pure product vendors without delivery ownership", "Direct competing own vision platform as primary business"]
+    disqualifiers: ["Pure product vendor without implementation ownership", "Direct competing own vision platform as the primary business", "Generic AI marketing with no real delivery proof"]
   },
   integrator_general_ai: {
     category: "integrator_general_ai",
     label: "Integrators with general AI focus",
     classificationRules: [
-      "Classify here when company is clearly AI-service-led but not strongly vision-specific.",
-      "Projects and implementation ownership should be visible."
+      "Relevant when the company clearly delivers AI projects or software implementations but is not strongly Vision-AI-specific yet.",
+      "There should be evidence for project execution, implementation ownership, or customer-specific delivery rather than advisory-only positioning.",
+      "Use this bucket when Vision AI is plausible but not explicit, and the company still looks like a real delivery partner."
     ],
-    disqualifiers: ["AI consulting without implementation", "Generic SaaS AI features without delivery services"]
+    disqualifiers: ["AI consulting without implementation", "Generic SaaS AI features without project delivery", "Thought leadership or training-only AI firms"]
   },
   integrator_relevant_focus: {
     category: "integrator_relevant_focus",
     label: "Integrators with relevant vertical focus",
     classificationRules: [
-      "Classify here for integrators in surveillance, defence, medtech vision, robotics, drones, agriculture tech, automotive tech, industrial automation.",
-      "Vision/edge potential should be plausible from project signals."
+      "Relevant when the company delivers projects in surveillance, defence, medtech vision, robotics, drones, agriculture tech, automotive tech, or industrial automation.",
+      "The vertical should make camera, inspection, perception, tracking, or edge-AI use cases plausible from the company description.",
+      "Delivery ownership still matters; do not use this bucket for pure component vendors or research organizations."
     ],
-    disqualifiers: ["No project-delivery signals", "Irrelevant vertical without vision/automation tie-in"]
+    disqualifiers: ["No project-delivery signals", "Irrelevant vertical without vision or automation tie-in", "Pure R&D lab with no commercial delivery path"]
   },
   industrial_end_customer_scaled: {
     category: "industrial_end_customer_scaled",
     label: "Scaled industrial end customers",
     classificationRules: [
-      "Classify here when company has own production and sufficient scale for lucrative QC/inspection/process-automation projects.",
-      "Evidence for engineering ownership is preferred."
+      "Relevant when the company runs its own manufacturing, production lines, plants, or industrial operations at meaningful scale.",
+      "Look for evidence of quality control, inspection, defect detection, process automation, packaging, assembly, or engineering-led operations.",
+      "Engineering ownership, factory footprint, multi-site production, or industrial equipment references strengthen relevance."
     ],
-    disqualifiers: ["Small workshops/manufactories without engineering capacity", "No internal production context"]
+    disqualifiers: ["Small workshop without engineering capacity", "No own production context", "Distributor or trader with no industrial operations"]
   },
   camera_manufacturer_partner: {
     category: "camera_manufacturer_partner",
     label: "Camera manufacturers as partners",
     classificationRules: [
-      "Classify here when company is camera/imaging hardware manufacturer that can offer AI-capable setups to customers.",
-      "Partner fit should be stronger than direct competition risk."
+      "Relevant when the company manufactures cameras, imaging systems, machine-vision components, or related hardware sold into customer solutions.",
+      "There should be a credible partner path where ONE WARE could upgrade the hardware offer with AI-ready capabilities.",
+      "Choose this bucket only when partner fit is stronger than competition risk."
     ],
-    disqualifiers: ["Strong own competing vision software monetization"]
+    disqualifiers: ["Strong own competing vision software monetization", "Pure reseller without product control", "Imaging distributor with no manufacturer or OEM role"]
   },
   machine_builder_ai_enablement: {
     category: "machine_builder_ai_enablement",
     label: "Machine builders for AI enablement",
     classificationRules: [
-      "Classify here when machine builder can offer AI options, fixtures, or integration pathways for customers.",
-      "OEM/industrial equipment context should be visible."
+      "Relevant when the company builds machines, OEM systems, manufacturing equipment, production cells, or industrial fixtures that could gain from embedded Vision AI.",
+      "Look for OEM, Sondermaschinenbau, industrial equipment, packaging, assembly, inspection stations, or production-line language.",
+      "Relevance is strongest when the company could offer AI as an option, module, retrofit, or performance upgrade to customers."
     ],
-    disqualifiers: ["Pure distributor without machine integration capability"]
+    disqualifiers: ["Pure distributor without machine-building capability", "Component seller with no system integration ownership", "No visible OEM or industrial equipment context"]
   },
   software_platform_embedding: {
     category: "software_platform_embedding",
     label: "Software platforms for embedding",
     classificationRules: [
-      "Classify here when software platform can embed model-generation capabilities for users.",
-      "Platform integration path should be plausible."
+      "Relevant when the company operates a software platform, workflow product, or developer-facing environment that could embed model-generation capabilities.",
+      "A credible integration path should be visible through APIs, extensions, workflow automation, platform modules, or customer-configurable tooling.",
+      "Use this only when there is real product surface for embedding, not just service delivery."
     ],
-    disqualifiers: ["No extensibility/integration path", "Direct platform competitor with no partner incentive"]
+    disqualifiers: ["No extensibility or integration path", "Direct platform competitor with no partner incentive", "Pure agency or service shop with no platform product"]
   },
   irrelevant: {
     category: "irrelevant",
@@ -400,18 +427,30 @@ export function buildExecutionContextBlock(category: LeadCategory, mainContext?:
 }
 
 export function buildPrequalificationContextBlock(
-  prequalificationContext?: string,
+  prequalification?: PrequalificationConfig,
   activeCategories?: LeadCategory[],
   mainContext?: string
 ): string {
+  const activePositiveCategories = (activeCategories?.filter((category) => category !== "irrelevant" && category !== "other") ??
+    Object.keys(DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS)) as SelectableLeadCategory[];
   const activeCategorySet = new Set(activeCategories?.length ? [...activeCategories, "irrelevant", "other"] : Object.keys(CATEGORY_PREQUALIFICATION_CONTEXT));
   const categoryRules = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
     .filter((context) => activeCategorySet.has(context.category))
     .map((context) => {
+      const categoryAddOn = context.category !== "irrelevant" && context.category !== "other"
+        ? prequalification?.categoryContexts?.[context.category as SelectableLeadCategory]?.trim()
+        : "";
+
       return [
         `Category: ${context.category} (${context.label})`,
+        context.category !== "irrelevant" && context.category !== "other" && activePositiveCategories.includes(context.category as SelectableLeadCategory)
+          ? "- Active for this run: yes"
+          : context.category !== "irrelevant" && context.category !== "other"
+            ? "- Active for this run: no"
+            : undefined,
         ...context.classificationRules.map((rule) => `- Rule: ${rule}`),
-        ...context.disqualifiers.map((rule) => `- Disqualifier: ${rule}`)
+        ...context.disqualifiers.map((rule) => `- Disqualifier: ${rule}`),
+        categoryAddOn ? `- Operator add-on: ${categoryAddOn}` : undefined
       ].join("\n");
     })
     .join("\n\n");
@@ -420,9 +459,9 @@ export function buildPrequalificationContextBlock(
     "Main context:",
     buildMainContextBlock(mainContext),
     activeCategories?.length ? `Active positive-match categories: ${activeCategories.join(", ")}` : undefined,
+    prequalification?.mainContext?.trim() ? `Prequalification main operator context:\n${prequalification.mainContext.trim()}` : undefined,
     "Prequalification categories:",
-    categoryRules,
-    prequalificationContext ? `Prequalification operator context:\n${prequalificationContext}` : undefined
+    categoryRules
   ]
     .filter(Boolean)
     .join("\n\n");

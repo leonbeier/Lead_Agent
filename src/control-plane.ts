@@ -1,7 +1,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { CATEGORY_EXECUTION_CONTEXT, DEFAULT_MAIN_CONTEXT, OUTREACH_TEMPLATES, OutreachTemplate } from "./prompting/one-ware-playbook";
+import {
+  CATEGORY_EXECUTION_CONTEXT,
+  CATEGORY_PREQUALIFICATION_CONTEXT,
+  DEFAULT_MAIN_CONTEXT,
+  DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS,
+  DEFAULT_PREQUALIFICATION_MAIN_CONTEXT,
+  OUTREACH_TEMPLATES,
+  OutreachTemplate
+} from "./prompting/one-ware-playbook";
 import {
   CompanyFeedbackEntry,
   FilterEvaluation,
@@ -32,6 +40,18 @@ const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
   market: z.string().min(1),
   mainContext: z.string().max(12000).optional(),
+  prequalification: z.object({
+    mainContext: z.string().max(6000).optional(),
+    categoryContexts: z.object({
+      integrator_vision_industrial_ai: z.string().max(3000).optional(),
+      integrator_general_ai: z.string().max(3000).optional(),
+      integrator_relevant_focus: z.string().max(3000).optional(),
+      industrial_end_customer_scaled: z.string().max(3000).optional(),
+      camera_manufacturer_partner: z.string().max(3000).optional(),
+      machine_builder_ai_enablement: z.string().max(3000).optional(),
+      software_platform_embedding: z.string().max(3000).optional()
+    }).optional()
+  }).optional(),
   prequalificationContext: z.string().max(4000).optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean(),
@@ -117,8 +137,10 @@ const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 50,
   market: "DE",
   mainContext: DEFAULT_MAIN_CONTEXT,
-  prequalificationContext:
-    "Prioritize delivery ownership and industrial applicability. Exclude weak-fit finance, recruiting, HR, and generic non-industrial SaaS profiles.",
+  prequalification: {
+    mainContext: DEFAULT_PREQUALIFICATION_MAIN_CONTEXT,
+    categoryContexts: DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS
+  },
   targetCategories: [
     "integrator_vision_industrial_ai",
     "integrator_general_ai",
@@ -160,7 +182,8 @@ const suggestedControls = [
   "targetLeadCount",
   "market",
   "mainContext",
-  "prequalificationContext",
+  "prequalification.mainContext",
+  "prequalification.categoryContexts",
   "targetCategories",
   "runDeepResearch",
   "dryRun",
@@ -201,10 +224,23 @@ export class ControlPlaneStore {
 
   async getSettings(): Promise<LeadAgentSettings> {
     await this.ensureSeedData();
-    const settings = await readJsonFile<LeadAgentSettings>(settingsPath);
+    const settings = await readJsonFile<LeadAgentSettings & { prequalificationContext?: string }>(settingsPath);
+
+    const normalizedPrequalification = {
+      ...defaultSettings.prequalification,
+      ...(settings.prequalification ?? {}),
+      mainContext:
+        settings.prequalification?.mainContext ?? settings.prequalificationContext ?? defaultSettings.prequalification?.mainContext,
+      categoryContexts: {
+        ...defaultSettings.prequalification?.categoryContexts,
+        ...(settings.prequalification?.categoryContexts ?? {})
+      }
+    };
+
     return settingsSchema.parse({
       ...defaultSettings,
-      ...settings
+      ...settings,
+      prequalification: normalizedPrequalification
     });
   }
 
@@ -357,6 +393,7 @@ export class ControlPlaneStore {
     settings: LeadAgentSettings;
     templates: Record<string, OutreachTemplate>;
     categoryContexts: typeof CATEGORY_EXECUTION_CONTEXT;
+    prequalificationCategoryContexts: typeof CATEGORY_PREQUALIFICATION_CONTEXT;
     selectableCategories: Array<{ value: string; label: string }>;
     suggestedControls: string[];
     learning: LeadLearningData;
@@ -366,6 +403,7 @@ export class ControlPlaneStore {
       settings: await this.getSettings(),
       templates: await this.getTemplates(),
       categoryContexts: CATEGORY_EXECUTION_CONTEXT,
+      prequalificationCategoryContexts: CATEGORY_PREQUALIFICATION_CONTEXT,
       selectableCategories: [
         { value: "integrator_vision_industrial_ai", label: "Software Integratoren mit Vision/Industrial AI Fokus" },
         { value: "integrator_general_ai", label: "Software Integratoren mit allgemeinem AI Fokus" },

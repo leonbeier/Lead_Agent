@@ -13,6 +13,7 @@ import {
   LeadJobRequest,
   LeadJobResult,
   PreCategorizedCompany,
+  PrequalificationConfig,
   PublicContactCandidate,
   SearchHistoryEntry
 } from "../types";
@@ -128,7 +129,7 @@ export class LeadPipelineAgent {
       Math.max(MIN_EARLY_STOP_REVIEW_COUNT, request.earlyStopReviewCount ?? DEFAULT_EARLY_STOP_REVIEW_COUNT)
     );
     const earlyStopThreshold = request.earlyStopThreshold ?? DEFAULT_EARLY_STOP_THRESHOLD;
-    const prequalificationContext = request.prequalificationContext;
+    const prequalification = request.prequalification ?? (request.prequalificationContext ? { mainContext: request.prequalificationContext } : undefined);
     const suggestedFilters = this.orderFiltersByLearning(
       await this.getSuggestedFilters(request.market, request.customGoal, mainContext, targetCategories, dryRun, learning),
       learning,
@@ -170,7 +171,7 @@ export class LeadPipelineAgent {
             await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1),
             learning
           );
-          const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalificationContext, targetCategories, learning);
+          const categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalification, targetCategories, learning);
           reviewedCompanies.push(...categorizedInitialSample);
 
           const initialEvaluation = this.evaluateFilter(
@@ -256,7 +257,7 @@ export class LeadPipelineAgent {
               unseenExpandedSample,
               dryRun,
               mainContext,
-              prequalificationContext,
+              prequalification,
               targetCategories,
               learning
             );
@@ -431,7 +432,7 @@ export class LeadPipelineAgent {
     companies: CompanySample[],
     dryRun: boolean,
     mainContext?: string,
-    prequalificationContext?: string,
+    prequalification?: PrequalificationConfig,
     targetCategories?: LeadCategory[],
     learning?: LeadLearningData
   ): Promise<PreCategorizedCompany[]> {
@@ -450,7 +451,7 @@ export class LeadPipelineAgent {
           company.shortDescription,
           dryRun,
           mainContext,
-          prequalificationContext,
+          prequalification,
           targetCategories,
           learning
         );

@@ -97,6 +97,53 @@
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       }
 
+      .prequalification-shell {
+        grid-column: 1 / -1;
+        display: grid;
+        gap: 16px;
+      }
+
+      .prequalification-card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.82);
+        padding: 18px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .prequalification-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+
+      .prequalification-card.is-active {
+        border-color: rgba(15, 122, 108, 0.5);
+        box-shadow: inset 0 0 0 1px rgba(15, 122, 108, 0.18);
+      }
+
+      .prequalification-card.is-inactive {
+        opacity: 0.72;
+      }
+
+      .prequalification-badge {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(22, 32, 41, 0.08);
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+
+      .prequalification-card.is-active .prequalification-badge {
+        background: rgba(15, 122, 108, 0.14);
+        color: var(--accent-strong);
+      }
+
       .summary-grid {
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       }
@@ -335,13 +382,22 @@
               <textarea id="mainContext" name="mainContext" style="min-height: 220px;"></textarea>
             </label>
             <label style="grid-column: 1 / -1;">
-              Zusatz-Kontext fuer Vorsortierungs-Agent (optional)
-              <textarea id="prequalificationContext" name="prequalificationContext"></textarea>
-            </label>
-            <label style="grid-column: 1 / -1;">
               Gewuenschte Kundentypen
               <div id="target-categories" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px;"></div>
             </label>
+            <section class="prequalification-shell" aria-labelledby="prequalification-heading">
+              <article class="prequalification-card">
+                <div class="template-meta">
+                  <h3 id="prequalification-heading">Vorsortierungs-Agent</h3>
+                  <p>Der Haupt-Kontext gilt immer. Die 7 Zusatz-Kontexte werden nur fuer die oben aktivierten Kundentypen an den Vorsortierungs-Agenten angehaengt.</p>
+                </div>
+                <label>
+                  Haupt-Kontext fuer Vorsortierung
+                  <textarea id="prequalification-mainContext" name="prequalification-mainContext"></textarea>
+                </label>
+              </article>
+              <div class="prequalification-grid" id="prequalification-category-grid"></div>
+            </section>
             <label>
               Erste Stichprobe
               <input id="earlyStopReviewCount" name="earlyStopReviewCount" type="number" min="5" max="15" required />
@@ -433,6 +489,7 @@
       const summaryCards = document.getElementById("summary-cards");
       const templateList = document.getElementById("template-list");
       const contextList = document.getElementById("context-list");
+      const prequalificationCategoryGrid = document.getElementById("prequalification-category-grid");
       const latestRunList = document.getElementById("latest-run-list");
       const searchHistoryList = document.getElementById("search-history-list");
       const filterPerformanceList = document.getElementById("filter-performance-list");
@@ -463,9 +520,12 @@
         document.getElementById("targetLeadCount").value = settings.targetLeadCount;
         document.getElementById("market").value = settings.market;
         document.getElementById("mainContext").value = settings.mainContext || "";
-        document.getElementById("prequalificationContext").value = settings.prequalificationContext || "";
+        document.getElementById("prequalification-mainContext").value = settings.prequalification?.mainContext || settings.prequalificationContext || "";
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
           checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
+        });
+        document.querySelectorAll("textarea[data-prequalification-category]").forEach((field) => {
+          field.value = settings.prequalification?.categoryContexts?.[field.dataset.prequalificationCategory] || "";
         });
         document.getElementById("runDeepResearch").checked = Boolean(settings.runDeepResearch);
         document.getElementById("dryRun").checked = Boolean(settings.dryRun);
@@ -473,14 +533,25 @@
         document.getElementById("earlyStopEnabled").checked = Boolean(settings.earlyStopEnabled);
         document.getElementById("earlyStopReviewCount").value = settings.earlyStopReviewCount;
         document.getElementById("earlyStopThreshold").value = settings.earlyStopThreshold;
+        syncPrequalificationCardState();
       }
 
       function collectSettings() {
+        const categoryContexts = Object.fromEntries(
+          Array.from(document.querySelectorAll("textarea[data-prequalification-category]")).map((field) => [
+            field.dataset.prequalificationCategory,
+            field.value.trim()
+          ])
+        );
+
         return {
           targetLeadCount: Number(document.getElementById("targetLeadCount").value),
           market: document.getElementById("market").value.trim(),
           mainContext: document.getElementById("mainContext").value.trim(),
-          prequalificationContext: document.getElementById("prequalificationContext").value.trim(),
+          prequalification: {
+            mainContext: document.getElementById("prequalification-mainContext").value.trim(),
+            categoryContexts
+          },
           targetCategories: Array.from(document.querySelectorAll("input[name='targetCategories']:checked")).map((checkbox) => checkbox.value),
           runDeepResearch: document.getElementById("runDeepResearch").checked,
           dryRun: document.getElementById("dryRun").checked,
@@ -492,13 +563,14 @@
       }
 
       function renderSummary(settings, templates, latestLeadRun) {
+        const prequalificationAddOnCount = Object.values(settings.prequalification?.categoryContexts || {}).filter((value) => value && value.trim()).length;
         const cards = [
           { label: "Default Markt", value: settings.market },
           { label: "Lead-Ziel", value: String(settings.targetLeadCount) },
           { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
           { label: "Templates", value: String(Object.keys(templates).length) },
           { label: "Main-Kontext", value: settings.mainContext ? "gesetzt" : "leer" },
-          { label: "Vorsortierungskontext", value: settings.prequalificationContext ? "gesetzt" : "leer" },
+          { label: "Vorsortierung", value: `${settings.prequalification?.mainContext ? "Haupttext" : "leer"} + ${prequalificationAddOnCount}/7` },
           { label: "Kundentypen", value: String((settings.targetCategories || []).length) },
           { label: "Letzte Treffer", value: String(latestLeadRun?.summary?.foundCandidates ?? 0) }
         ];
@@ -526,6 +598,53 @@
             `
           )
           .join("");
+
+        syncPrequalificationCardState();
+      }
+
+      function renderPrequalificationEditors(options, contexts) {
+        prequalificationCategoryGrid.innerHTML = options
+          .map((option) => {
+            const context = contexts[option.value];
+            return `
+              <article class="prequalification-card is-inactive" data-prequalification-card="${option.value}">
+                <div class="template-meta">
+                  <div class="prequalification-badge" data-prequalification-badge="${option.value}">nur bei Auswahl aktiv</div>
+                  <h3>${option.label}</h3>
+                  <p>Dieser Zusatz-Kontext wird nur hinzugefuegt, wenn dieser Kundentyp oben ausgewaehlt ist.</p>
+                </div>
+                <div>
+                  <strong>Relevant erkennen</strong>
+                  <ul class="hint-list">${(context?.classificationRules || []).map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+                <div>
+                  <strong>Eher ausschliessen</strong>
+                  <ul class="hint-list">${(context?.disqualifiers || []).map((item) => `<li>${item}</li>`).join("")}</ul>
+                </div>
+                <label>
+                  Zusatz-Kontext fuer ${option.label}
+                  <textarea data-prequalification-category="${option.value}"></textarea>
+                </label>
+              </article>
+            `;
+          })
+          .join("");
+
+        syncPrequalificationCardState();
+      }
+
+      function syncPrequalificationCardState() {
+        const activeCategories = new Set(Array.from(document.querySelectorAll("input[name='targetCategories']:checked")).map((checkbox) => checkbox.value));
+        document.querySelectorAll("[data-prequalification-card]").forEach((card) => {
+          const category = card.dataset.prequalificationCard;
+          const badge = card.querySelector("[data-prequalification-badge]");
+          const isActive = activeCategories.has(category);
+          card.classList.toggle("is-active", isActive);
+          card.classList.toggle("is-inactive", !isActive);
+          if (badge) {
+            badge.textContent = isActive ? "bei diesem Lauf aktiv" : "nur bei Auswahl aktiv";
+          }
+        });
       }
 
       function renderLatestRun(latestLeadRun) {
@@ -656,6 +775,7 @@
           const data = await requestJson("/api/control-plane/bootstrap");
           bootstrapData = data;
           renderTargetCategories(data.selectableCategories || []);
+          renderPrequalificationEditors(data.selectableCategories || [], data.prequalificationCategoryContexts || {});
           fillSettingsForm(data.settings);
           renderSummary(data.settings, data.templates, data.latestLeadRun);
           renderTemplates(data.templates);
@@ -756,6 +876,8 @@
 
         saveTemplate(button.closest("article[data-template-key]"));
       });
+
+      document.getElementById("target-categories").addEventListener("change", syncPrequalificationCardState);
 
       loadBootstrap();
     </script>

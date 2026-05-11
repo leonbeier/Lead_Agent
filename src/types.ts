@@ -9,6 +9,13 @@ export type LeadCategory =
   | "irrelevant"
   | "other";
 
+export type SelectableLeadCategory = Exclude<LeadCategory, "irrelevant" | "other">;
+
+export interface PrequalificationConfig {
+  mainContext?: string;
+  categoryContexts?: Partial<Record<SelectableLeadCategory, string>>;
+}
+
 export interface ApolloOrganizationFilter {
   name: string;
   persona: string;
@@ -80,6 +87,7 @@ export interface LeadAgentSettings {
   targetLeadCount: number;
   market: string;
   mainContext?: string;
+  prequalification?: PrequalificationConfig;
   prequalificationContext?: string;
   targetCategories?: LeadCategory[];
   runDeepResearch: boolean;
@@ -183,6 +191,7 @@ export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
   mainContext?: string;
+  prequalification?: PrequalificationConfig;
   prequalificationContext?: string;
   customGoal?: string;
   agentContext?: string;

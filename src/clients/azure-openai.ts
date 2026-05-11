@@ -5,6 +5,7 @@ import {
   LeadCategory,
   LeadLearningData,
   PreCategorizedCompany,
+  PrequalificationConfig,
   ResearchBrief
 } from "../types";
 import {
@@ -47,7 +48,7 @@ export class AzureOpenAIClient {
     description: string,
     dryRun: boolean,
     mainContext?: string,
-    prequalificationContext?: string,
+    prequalification?: PrequalificationConfig,
     targetCategories?: LeadCategory[],
     learning?: LeadLearningData
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">> {
@@ -64,7 +65,7 @@ export class AzureOpenAIClient {
       name,
       description,
       mainContext,
-      prequalificationContext,
+      prequalification,
       targetCategories,
       dryRun
     );
@@ -76,7 +77,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${QUICK_QUALIFICATION_CONTEXT}\n\n${buildPrequalificationContextBlock(prequalificationContext, targetCategories, mainContext)}`
+          content: `${QUICK_QUALIFICATION_CONTEXT}\n\n${buildPrequalificationContextBlock(prequalification, targetCategories, mainContext)}`
         },
         {
           role: "user",
@@ -84,7 +85,7 @@ export class AzureOpenAIClient {
             `Company=${name}`,
             `Description=${description}`,
             targetCategories?.length ? `Active target categories=${targetCategories.join(", ")}` : undefined,
-            prequalificationContext ? `Prequalification context=${prequalificationContext}` : undefined,
+            prequalification?.mainContext ? `Prequalification main context=${prequalification.mainContext}` : undefined,
             learning ? this.buildLearningContext(learning) : undefined
           ]
             .filter(Boolean)

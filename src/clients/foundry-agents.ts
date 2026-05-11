@@ -1,11 +1,12 @@
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, LeadCategory, PreCategorizedCompany, ResearchBrief } from "../types";
+import { ApolloOrganizationFilter, LeadCategory, PreCategorizedCompany, PrequalificationConfig, ResearchBrief } from "../types";
 import {
   ONE_WARE_PROMPT_CONTEXT,
   TARGET_REGIONS,
   buildExecutionContextBlock,
+  buildPrequalificationContextBlock,
   getTemplateForCategory
 } from "../prompting/one-ware-playbook";
 
@@ -76,7 +77,7 @@ export class FoundryAgentsClient {
     name: string,
     description: string,
     mainContext: string | undefined,
-    prequalificationContext: string | undefined,
+    prequalification: PrequalificationConfig | undefined,
     targetCategories: LeadCategory[] | undefined,
     dryRun: boolean
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null> {
@@ -91,8 +92,7 @@ export class FoundryAgentsClient {
           `Company: ${name}`,
           `Description: ${description}`,
           `Target regions: ${TARGET_REGIONS.join(", ")}`,
-          mainContext ? `Main context: ${mainContext}` : undefined,
-          prequalificationContext ? `Prequalification context: ${prequalificationContext}` : undefined,
+          buildPrequalificationContextBlock(prequalification, targetCategories, mainContext),
           targetCategories?.length ? `Active target categories: ${targetCategories.join(", ")}` : undefined
         ]
           .filter(Boolean)
