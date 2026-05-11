@@ -620,7 +620,15 @@ export class AzureOpenAIClient {
     );
 
     const topFilters = Object.entries(learning.filterPerformance)
-      .sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio)
+      .sort((left, right) => {
+        const leftHasSnapshot = latestHistoryByName.has(left[0]) ? 1 : 0;
+        const rightHasSnapshot = latestHistoryByName.has(right[0]) ? 1 : 0;
+        if (rightHasSnapshot !== leftHasSnapshot) {
+          return rightHasSnapshot - leftHasSnapshot;
+        }
+
+        return right[1].averageRelevanceRatio - left[1].averageRelevanceRatio;
+      })
       .slice(0, MAX_FILTER_STRATEGY_HISTORY)
       .map(([name, stats]) => {
         const snapshot = latestHistoryByName.get(name)?.filterSnapshot;
@@ -633,6 +641,8 @@ export class AzureOpenAIClient {
       });
 
     const recentHistory = learning.searchHistory
+      .slice()
+      .sort((left, right) => Number(Boolean(right.filterSnapshot)) - Number(Boolean(left.filterSnapshot)))
       .slice(0, MAX_FILTER_STRATEGY_HISTORY)
       .map(
         (entry) =>

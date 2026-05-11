@@ -87,7 +87,15 @@ export class FoundryAgentsClient {
     );
 
     const topFilters = Object.entries(learning.filterPerformance)
-      .sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio)
+      .sort((left, right) => {
+        const leftHasSnapshot = latestHistoryByName.has(left[0]) ? 1 : 0;
+        const rightHasSnapshot = latestHistoryByName.has(right[0]) ? 1 : 0;
+        if (rightHasSnapshot !== leftHasSnapshot) {
+          return rightHasSnapshot - leftHasSnapshot;
+        }
+
+        return right[1].averageRelevanceRatio - left[1].averageRelevanceRatio;
+      })
       .slice(0, 8)
       .map(([name, stats]) => {
         const snapshot = latestHistoryByName.get(name)?.filterSnapshot;
@@ -98,6 +106,8 @@ export class FoundryAgentsClient {
       });
 
     const recentHistory = learning.searchHistory
+      .slice()
+      .sort((left, right) => Number(Boolean(right.filterSnapshot)) - Number(Boolean(left.filterSnapshot)))
       .slice(0, 8)
       .map((entry) => [
         `${entry.filterName} | ${entry.batchType} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}% | ${entry.recommendation}`,

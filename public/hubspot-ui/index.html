@@ -756,7 +756,15 @@
 
       function renderFilterPerformance(filterPerformance, searchHistory) {
         const latestHistoryByName = new Map((searchHistory || []).filter((entry) => entry.filterSnapshot).map((entry) => [entry.filterName, entry]));
-        const entries = Object.entries(filterPerformance || {}).sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio);
+        const entries = Object.entries(filterPerformance || {}).sort((left, right) => {
+          const leftHasSnapshot = latestHistoryByName.has(left[0]) ? 1 : 0;
+          const rightHasSnapshot = latestHistoryByName.has(right[0]) ? 1 : 0;
+          if (rightHasSnapshot !== leftHasSnapshot) {
+            return rightHasSnapshot - leftHasSnapshot;
+          }
+
+          return right[1].averageRelevanceRatio - left[1].averageRelevanceRatio;
+        });
         paginationData.filterPerformance = entries;
 
         if (entries.length === 0) {
