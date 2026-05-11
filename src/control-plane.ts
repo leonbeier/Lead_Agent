@@ -93,6 +93,14 @@ const filterLearningStatSchema = z.object({
 const searchHistoryEntrySchema = z.object({
   timestamp: z.string().min(1),
   filterName: z.string().min(1),
+  filterSnapshot: z.object({
+    persona: z.string().min(1),
+    industries: z.array(z.string().min(1)),
+    keywords: z.array(z.string().min(1)),
+    locations: z.array(z.string().min(1)),
+    employeeRanges: z.array(z.string().min(1)),
+    notes: z.string().min(1)
+  }).optional(),
   targetCategory: z.enum([
     "integrator_vision_industrial_ai",
     "integrator_general_ai",

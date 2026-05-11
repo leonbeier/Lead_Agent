@@ -278,6 +278,19 @@
         gap: 10px;
       }
 
+      .history-pagination {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .history-pagination button {
+        padding: 8px 14px;
+        box-shadow: none;
+      }
+
       .history-item {
         border: 1px solid var(--line);
         border-radius: 16px;
@@ -461,10 +474,12 @@
           <div>
             <h3>Letzte Suchschritte</h3>
             <div class="history-list" id="search-history-list"></div>
+            <div class="history-pagination" id="search-history-pagination"></div>
           </div>
           <div>
             <h3>Gelernte Filter</h3>
             <div class="history-list" id="filter-performance-list"></div>
+            <div class="history-pagination" id="filter-performance-pagination"></div>
           </div>
         </div>
       </section>
@@ -492,8 +507,19 @@
       const prequalificationCategoryGrid = document.getElementById("prequalification-category-grid");
       const latestRunList = document.getElementById("latest-run-list");
       const searchHistoryList = document.getElementById("search-history-list");
+      const searchHistoryPagination = document.getElementById("search-history-pagination");
       const filterPerformanceList = document.getElementById("filter-performance-list");
+      const filterPerformancePagination = document.getElementById("filter-performance-pagination");
       let bootstrapData = null;
+      const HISTORY_PAGE_SIZE = 5;
+      const paginationState = {
+        searchHistory: 1,
+        filterPerformance: 1
+      };
+      const paginationData = {
+        searchHistory: [],
+        filterPerformance: []
+      };
 
       async function requestJson(url, options = {}) {
         const response = await fetch(url, {
@@ -671,37 +697,89 @@
         ].join("");
       }
 
-      function renderSearchHistory(entries) {
-        if (!entries || entries.length === 0) {
-          searchHistoryList.innerHTML = '<div class="history-item"><strong>Noch keine Suchhistorie</strong><span class="mini-meta">Die 15er-Proben und 50er-Expansionen werden nach dem ersten Lauf hier aufgezeichnet.</span></div>';
+      function formatFilterSnapshot(snapshot) {
+        if (!snapshot) {
+          return '<span class="mini-meta">Filterdetails fehlen bei aelteren Laeufen. Ab diesem Deploy werden Persona, Keywords, Branchen und Regionen mitgespeichert.</span>';
+        }
+
+        const parts = [
+          snapshot.persona ? `Persona: ${snapshot.persona}` : "",
+          snapshot.industries?.length ? `Branchen: ${snapshot.industries.join(", ")}` : "",
+          snapshot.keywords?.length ? `Keywords: ${snapshot.keywords.join(", ")}` : "",
+          snapshot.locations?.length ? `Regionen: ${snapshot.locations.join(", ")}` : "",
+          snapshot.employeeRanges?.length ? `Groesse: ${snapshot.employeeRanges.join(", ")}` : "",
+          snapshot.notes ? `Notiz: ${snapshot.notes}` : ""
+        ].filter(Boolean);
+
+        return parts.map((part) => `<span class="mini-meta">${part}</span>`).join("");
+      }
+
+      function renderPagination(target, key, page, totalPages) {
+        if (totalPages <= 1) {
+          target.innerHTML = "";
           return;
         }
 
-        searchHistoryList.innerHTML = entries.slice(0, 8).map((entry) => `
+        target.innerHTML = `
+          <button type="button" class="secondary" data-page-target="${key}" data-page-action="prev" ${page <= 1 ? "disabled" : ""}>Zurueck</button>
+          <span class="mini-meta">Seite ${page} von ${totalPages}</span>
+          <button type="button" class="secondary" data-page-target="${key}" data-page-action="next" ${page >= totalPages ? "disabled" : ""}>Weiter</button>
+        `;
+      }
+
+      function renderSearchHistory(entries) {
+        paginationData.searchHistory = entries || [];
+
+        if (!entries || entries.length === 0) {
+          searchHistoryList.innerHTML = '<div class="history-item"><strong>Noch keine Suchhistorie</strong><span class="mini-meta">Die 15er-Proben und 50er-Expansionen werden nach dem ersten Lauf hier aufgezeichnet.</span></div>';
+          searchHistoryPagination.innerHTML = "";
+          return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
+        const page = Math.min(paginationState.searchHistory, totalPages);
+        paginationState.searchHistory = page;
+        const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+
+        searchHistoryList.innerHTML = pageEntries.map((entry) => `
           <div class="history-item">
             <strong>${entry.filterName}</strong>
             <span class="mini-meta">${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page} · Zielkategorie: ${entry.targetCategory || "n/a"}</span>
             <span class="mini-meta">Relevant: ${entry.relevantCount}/${entry.returnedCount} (${Math.round(entry.relevanceRatio * 100)}%)</span>
             <span class="mini-meta">${entry.recommendation}</span>
+            ${formatFilterSnapshot(entry.filterSnapshot)}
           </div>
         `).join("");
+
+        renderPagination(searchHistoryPagination, "searchHistory", page, totalPages);
       }
 
-      function renderFilterPerformance(filterPerformance) {
+      function renderFilterPerformance(filterPerformance, searchHistory) {
+        const latestHistoryByName = new Map((searchHistory || []).filter((entry) => entry.filterSnapshot).map((entry) => [entry.filterName, entry]));
         const entries = Object.entries(filterPerformance || {}).sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio);
+        paginationData.filterPerformance = entries;
 
         if (entries.length === 0) {
           filterPerformanceList.innerHTML = '<div class="history-item"><strong>Noch keine Lernhistorie</strong><span class="mini-meta">Nach den ersten echten Suchlaeufen erscheinen hier die staerksten und schwaechsten Filter.</span></div>';
+          filterPerformancePagination.innerHTML = "";
           return;
         }
 
-        filterPerformanceList.innerHTML = entries.slice(0, 8).map(([name, stats]) => `
+        const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
+        const page = Math.min(paginationState.filterPerformance, totalPages);
+        paginationState.filterPerformance = page;
+        const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+
+        filterPerformanceList.innerHTML = pageEntries.map(([name, stats]) => `
           <div class="history-item">
             <strong>${name}</strong>
             <span class="mini-meta">Durchschnitt relevant: ${Math.round(stats.averageRelevanceRatio * 100)}%</span>
             <span class="mini-meta">Laeufe: ${stats.runs} · Early stops: ${stats.earlyStopCount}</span>
+            ${formatFilterSnapshot(latestHistoryByName.get(name)?.filterSnapshot)}
           </div>
         `).join("");
+
+        renderPagination(filterPerformancePagination, "filterPerformance", page, totalPages);
       }
 
       function renderTemplates(templates) {
@@ -782,7 +860,7 @@
           renderContexts(data.categoryContexts);
           renderLatestRun(data.latestLeadRun);
           renderSearchHistory(data.learning?.searchHistory || []);
-          renderFilterPerformance(data.learning?.filterPerformance || {});
+          renderFilterPerformance(data.learning?.filterPerformance || {}, data.learning?.searchHistory || []);
           setStatus(settingsStatus, "Settings geladen");
           setStatus(templatesStatus, "Templates geladen");
         } catch (error) {
@@ -825,7 +903,7 @@
         renderSummary(collectSettings(), bootstrapData.templates, latestLeadRun);
         renderLatestRun(latestLeadRun);
         renderSearchHistory(latestLeadRun?.searchHistory || []);
-        renderFilterPerformance(learningPayload.learning?.filterPerformance || {});
+        renderFilterPerformance(learningPayload.learning?.filterPerformance || {}, learningPayload.learning?.searchHistory || []);
       }
 
       async function triggerRun(endpoint) {
@@ -878,6 +956,30 @@
       });
 
       document.getElementById("target-categories").addEventListener("change", syncPrequalificationCardState);
+
+      [searchHistoryPagination, filterPerformancePagination].forEach((element) => {
+        element.addEventListener("click", (event) => {
+          const button = event.target.closest("button[data-page-target]");
+          if (!button) {
+            return;
+          }
+
+          const target = button.dataset.pageTarget;
+          const action = button.dataset.pageAction;
+          const delta = action === "next" ? 1 : -1;
+          paginationState[target] = Math.max(1, paginationState[target] + delta);
+
+          if (target === "searchHistory") {
+            renderSearchHistory(paginationData.searchHistory);
+            return;
+          }
+
+          renderFilterPerformance(
+            Object.fromEntries(paginationData.filterPerformance),
+            bootstrapData?.learning?.searchHistory || []
+          );
+        });
+      });
 
       loadBootstrap();
     </script>

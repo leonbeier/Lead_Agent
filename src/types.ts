@@ -123,9 +123,19 @@ export interface FilterLearningStat {
   earlyStopCount: number;
 }
 
+export interface StoredFilterSnapshot {
+  persona: string;
+  industries: string[];
+  keywords: string[];
+  locations: string[];
+  employeeRanges: string[];
+  notes: string;
+}
+
 export interface SearchHistoryEntry {
   timestamp: string;
   filterName: string;
+  filterSnapshot?: StoredFilterSnapshot;
   targetCategory?: LeadCategory;
   batchType: "probe_15" | "expand_50";
   page: number;

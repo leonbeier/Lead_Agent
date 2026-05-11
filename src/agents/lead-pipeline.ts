@@ -738,6 +738,14 @@ export class LeadPipelineAgent {
     return {
       timestamp: new Date().toISOString(),
       filterName,
+      filterSnapshot: {
+        persona: filter.persona,
+        industries: [...filter.industries],
+        keywords: [...filter.keywords],
+        locations: [...filter.locations],
+        employeeRanges: [...filter.employeeRanges],
+        notes: filter.notes
+      },
       targetCategory,
       batchType,
       page,

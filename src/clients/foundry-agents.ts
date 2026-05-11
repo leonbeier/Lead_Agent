@@ -1,7 +1,7 @@
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, LeadCategory, PreCategorizedCompany, PrequalificationConfig, ResearchBrief } from "../types";
+import { ApolloOrganizationFilter, LeadCategory, LeadLearningData, PreCategorizedCompany, PrequalificationConfig, ResearchBrief, StoredFilterSnapshot } from "../types";
 import {
   ONE_WARE_PROMPT_CONTEXT,
   TARGET_REGIONS,
@@ -49,7 +49,8 @@ export class FoundryAgentsClient {
     agentContext: string | undefined,
     targetCategories: LeadCategory[] | undefined,
     baseFilters: ApolloOrganizationFilter[],
-    dryRun: boolean
+    dryRun: boolean,
+    learning?: LeadLearningData
   ): Promise<ApolloOrganizationFilter[]> {
     if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_FILTERS) {
       return baseFilters;
@@ -61,7 +62,8 @@ export class FoundryAgentsClient {
         customGoal ? `Custom goal: ${customGoal}` : "Custom goal: Keep focus on the highest-conviction ICP.",
         agentContext ? `Operator context: ${agentContext}` : undefined,
         targetCategories?.length ? `Target categories: ${targetCategories.join(", ")}` : undefined,
-        `Existing Apollo filters JSON:\n${JSON.stringify(baseFilters)}`
+        `Existing Apollo filters JSON:\n${JSON.stringify(baseFilters)}`,
+        this.buildLearningContextForSearchStrategy(learning)
       ].filter(Boolean).join("\n\n"));
 
       const parsed = JSON.parse(content) as { filters?: ApolloOrganizationFilter[] };
@@ -71,6 +73,54 @@ export class FoundryAgentsClient {
     } catch {
       return baseFilters;
     }
+  }
+
+  private buildLearningContextForSearchStrategy(learning?: LeadLearningData): string | undefined {
+    if (!learning) {
+      return undefined;
+    }
+
+    const latestHistoryByName = new Map(
+      learning.searchHistory
+        .filter((entry) => entry.filterSnapshot)
+        .map((entry) => [entry.filterName, entry])
+    );
+
+    const topFilters = Object.entries(learning.filterPerformance)
+      .sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio)
+      .slice(0, 8)
+      .map(([name, stats]) => {
+        const snapshot = latestHistoryByName.get(name)?.filterSnapshot;
+        return [
+          `${name}: avg ${(stats.averageRelevanceRatio * 100).toFixed(0)}%, runs ${stats.runs}, early stops ${stats.earlyStopCount}`,
+          snapshot ? `Snapshot: ${this.formatFilterSnapshot(snapshot)}` : undefined
+        ].filter(Boolean).join("\n");
+      });
+
+    const recentHistory = learning.searchHistory
+      .slice(0, 8)
+      .map((entry) => [
+        `${entry.filterName} | ${entry.batchType} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}% | ${entry.recommendation}`,
+        entry.filterSnapshot ? `Snapshot: ${this.formatFilterSnapshot(entry.filterSnapshot)}` : undefined
+      ].filter(Boolean).join("\n"));
+
+    const sections = [
+      topFilters.length > 0 ? ["Known filter performance:", ...topFilters].join("\n") : undefined,
+      recentHistory.length > 0 ? ["Recent search history:", ...recentHistory].join("\n") : undefined
+    ].filter(Boolean);
+
+    return sections.length > 0 ? sections.join("\n\n") : undefined;
+  }
+
+  private formatFilterSnapshot(snapshot: StoredFilterSnapshot): string {
+    return [
+      `Persona=${snapshot.persona}`,
+      `Industries=${snapshot.industries.join(", ")}`,
+      `Keywords=${snapshot.keywords.join(", ")}`,
+      `Locations=${snapshot.locations.join(", ")}`,
+      `Employees=${snapshot.employeeRanges.join(", ")}`,
+      `Notes=${snapshot.notes}`
+    ].join(" | ");
   }
 
   async categorizeCompany(

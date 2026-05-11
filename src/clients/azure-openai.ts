@@ -187,7 +187,8 @@ export class AzureOpenAIClient {
       mainContext,
       targetCategories,
       baseFilters,
-      dryRun
+      dryRun,
+      learning
     );
 
     if (foundryFilters !== baseFilters) {
@@ -612,16 +613,35 @@ export class AzureOpenAIClient {
       return undefined;
     }
 
+    const latestHistoryByName = new Map(
+      learning.searchHistory
+        .filter((entry) => entry.filterSnapshot)
+        .map((entry) => [entry.filterName, entry])
+    );
+
     const topFilters = Object.entries(learning.filterPerformance)
       .sort((left, right) => right[1].averageRelevanceRatio - left[1].averageRelevanceRatio)
       .slice(0, MAX_FILTER_STRATEGY_HISTORY)
-      .map(([name, stats]) => `${name}: avg ${(stats.averageRelevanceRatio * 100).toFixed(0)}%, runs ${stats.runs}, early stops ${stats.earlyStopCount}`);
+      .map(([name, stats]) => {
+        const snapshot = latestHistoryByName.get(name)?.filterSnapshot;
+        return [
+          `${name}: avg ${(stats.averageRelevanceRatio * 100).toFixed(0)}%, runs ${stats.runs}, early stops ${stats.earlyStopCount}`,
+          snapshot ? `  Snapshot: ${this.formatFilterSnapshot(snapshot)}` : undefined
+        ]
+          .filter(Boolean)
+          .join("\n");
+      });
 
     const recentHistory = learning.searchHistory
       .slice(0, MAX_FILTER_STRATEGY_HISTORY)
       .map(
         (entry) =>
-          `${entry.filterName} | ${entry.batchType} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}% | ${entry.recommendation}`
+          [
+            `${entry.filterName} | ${entry.batchType} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}% | ${entry.recommendation}`,
+            entry.filterSnapshot ? `  Snapshot: ${this.formatFilterSnapshot(entry.filterSnapshot)}` : undefined
+          ]
+            .filter(Boolean)
+            .join("\n")
       );
 
     const sections = [
@@ -630,6 +650,24 @@ export class AzureOpenAIClient {
     ].filter(Boolean);
 
     return sections.length > 0 ? sections.join("\n\n") : undefined;
+  }
+
+  private formatFilterSnapshot(snapshot: {
+    persona: string;
+    industries: string[];
+    keywords: string[];
+    locations: string[];
+    employeeRanges: string[];
+    notes: string;
+  }): string {
+    return [
+      `Persona=${snapshot.persona}`,
+      `Industries=${snapshot.industries.join(", ")}`,
+      `Keywords=${snapshot.keywords.join(", ")}`,
+      `Locations=${snapshot.locations.join(", ")}`,
+      `Employees=${snapshot.employeeRanges.join(", ")}`,
+      `Notes=${snapshot.notes}`
+    ].join(" | ");
   }
 
   private normalizeApolloFilter(filter: ApolloOrganizationFilter | undefined): ApolloOrganizationFilter | null {
