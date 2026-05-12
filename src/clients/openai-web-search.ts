@@ -1,4 +1,4 @@
-import { env, readiness } from "../config";
+import { env, openAIWebSearchModels, readiness } from "../config";
 import { ApolloOrganizationFilter, CompanySample, PreCategorizedCompany } from "../types";
 
 interface SearchEvidence {
@@ -18,6 +18,8 @@ interface OpenAIResponsesOutput {
     }>;
   }>;
 }
+
+type WebSearchMode = "preResearch" | "deepResearch";
 
 export class OpenAIWebSearchClient {
   async discoverCompanies(
@@ -50,7 +52,7 @@ export class OpenAIWebSearchClient {
       ].filter(Boolean).join("\n\n");
 
       try {
-        const response = await this.runWebSearch(prompt, Math.min(1200, 250 + limit * 55));
+        const response = await this.runWebSearch(prompt, Math.min(1200, 250 + limit * 55), "preResearch");
         const parsed = this.parseJson<{ companies?: Array<{
           name?: string;
           domain?: string;
@@ -106,7 +108,7 @@ export class OpenAIWebSearchClient {
     ].filter(Boolean).join("\n\n");
 
     try {
-      const response = await this.runWebSearch(prompt, 1800);
+      const response = await this.runWebSearch(prompt, 1800, "deepResearch");
       const parsed = this.parseJson<{ summary?: string; findings?: Array<{ fact?: string; url?: string }>; riskFlags?: string[] }>(response.text);
       const citations = Array.from(
         new Set(
@@ -155,7 +157,7 @@ export class OpenAIWebSearchClient {
     ].filter(Boolean).join("\n\n");
 
     try {
-      const response = await this.runWebSearch(prompt, 320);
+      const response = await this.runWebSearch(prompt, 320, "preResearch");
       const parsed = this.parseJson<{ country?: string; shortDescription?: string }>(response.text);
       const shortDescription = parsed.shortDescription?.trim();
 
@@ -172,7 +174,11 @@ export class OpenAIWebSearchClient {
     }
   }
 
-  private async runWebSearch(prompt: string, maxOutputTokens: number): Promise<{ text: string; citations: string[] }> {
+  private async runWebSearch(
+    prompt: string,
+    maxOutputTokens: number,
+    mode: WebSearchMode
+  ): Promise<{ text: string; citations: string[] }> {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -180,7 +186,7 @@ export class OpenAIWebSearchClient {
         Authorization: `Bearer ${env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: env.OPENAI_WEB_SEARCH_MODEL,
+        model: openAIWebSearchModels[mode],
         tools: [{ type: "web_search_preview" }],
         input: [
           {

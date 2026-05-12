@@ -17,9 +17,13 @@ const envSchema = z.object({
   APOLLO_API_KEY: z.string().optional(),
   APOLLO_BASE_URL: z.string().url().default("https://api.apollo.io/api/v1"),
   HUBSPOT_PRIVATE_APP_TOKEN: z.string().optional(),
+  HUBSPOT_CLIENT_ID: z.string().optional(),
+  HUBSPOT_CLIENT_SECRET: z.string().optional(),
   HUBSPOT_BASE_URL: z.string().url().default("https://api.hubapi.com"),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_WEB_SEARCH_MODEL: z.string().default("gpt-5.4-mini"),
+  OPENAI_PRE_RESEARCH_MODEL: z.string().optional(),
+  OPENAI_DEEP_RESEARCH_MODEL: z.string().optional(),
   OPENAI_WEB_SEARCH_ENABLED: booleanFlag().default("true"),
   AZURE_OPENAI_API_KEY: z.string().optional(),
   AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
@@ -40,10 +44,16 @@ const envSchema = z.object({
 
 export const env = envSchema.parse(process.env);
 
+export const openAIWebSearchModels = {
+  preResearch: env.OPENAI_PRE_RESEARCH_MODEL ?? env.OPENAI_WEB_SEARCH_MODEL,
+  deepResearch: env.OPENAI_DEEP_RESEARCH_MODEL ?? env.OPENAI_WEB_SEARCH_MODEL
+};
+
 export const readiness = {
   sharedKeyConfigured: Boolean(env.LEAD_AGENT_SHARED_KEY),
   apolloConfigured: Boolean(env.APOLLO_API_KEY),
   hubspotConfigured: Boolean(env.HUBSPOT_PRIVATE_APP_TOKEN),
+  hubspotOAuthConfigured: Boolean(env.HUBSPOT_CLIENT_ID && env.HUBSPOT_CLIENT_SECRET),
   openAIWebSearchConfigured: Boolean(env.OPENAI_WEB_SEARCH_ENABLED && env.OPENAI_API_KEY),
   azureConfigured: Boolean(env.AZURE_OPENAI_API_KEY && env.AZURE_OPENAI_ENDPOINT),
   researchConfigured: Boolean(env.AZURE_RESEARCH_ENABLED && env.AZURE_RESEARCH_ENDPOINT),
