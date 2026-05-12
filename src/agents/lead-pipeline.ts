@@ -45,6 +45,7 @@ const MAX_EARLY_STOP_REVIEW_COUNT = 15;
 const DEFAULT_EARLY_STOP_THRESHOLD = 0.5;
 const AZURE_WORKER_CONCURRENCY = 4;
 const EXPANSION_BATCH_SIZE = 50;
+const CREDITLESS_EXPANSION_BATCH_SIZE = 12;
 const MAX_FILTER_REVISIONS = 1;
 const CONTACT_DISCOVERY_CONCURRENCY = 2;
 
@@ -273,8 +274,14 @@ export class LeadPipelineAgent {
           }
 
           for (let page = 1; page <= 10; page += 1) {
+            const remainingCategorySlots = Math.max(0, categoryTarget - (categoryCounts.get(activeCategory) ?? 0));
+            const remainingGlobalSlots = Math.max(0, request.targetLeadCount - shortlistedCompanies.length);
+            const expansionBatchSize = this.getExpansionBatchSize(
+              Math.min(remainingCategorySlots || remainingGlobalSlots, remainingGlobalSlots),
+              useWebSearchForExpansion
+            );
             const expandedSample = this.excludeRejectedCompanies(
-              await this.apolloClient.fetchOrganizationSample(activeFilter, EXPANSION_BATCH_SIZE, dryRun, page, useWebSearchForExpansion),
+              await this.apolloClient.fetchOrganizationSample(activeFilter, expansionBatchSize, dryRun, page, useWebSearchForExpansion),
               learning
             );
 
@@ -319,7 +326,7 @@ export class LeadPipelineAgent {
                 activeCategory,
                 "expand_50",
                 page,
-                EXPANSION_BATCH_SIZE,
+                expansionBatchSize,
                 categorizedExpandedSample,
                 activeFilter,
                 targetCategories,
@@ -331,7 +338,7 @@ export class LeadPipelineAgent {
               break;
             }
 
-            if (expandedSample.length < EXPANSION_BATCH_SIZE) {
+            if (expandedSample.length < expansionBatchSize) {
               break;
             }
 
@@ -863,13 +870,16 @@ export class LeadPipelineAgent {
     const toppedUp = [...currentShortlist];
 
     for (const filter of filters) {
-      if (toppedUp.length >= request.targetLeadCount) {
+      const remainingSlots = request.targetLeadCount - toppedUp.length;
+      if (remainingSlots <= 0) {
         break;
       }
 
-      for (let page = 1; page <= 5; page += 1) {
+      const maxPages = remainingSlots <= 3 ? 1 : remainingSlots <= 8 ? 2 : 3;
+      for (let page = 1; page <= maxPages; page += 1) {
+        const expansionBatchSize = this.getExpansionBatchSize(request.targetLeadCount - toppedUp.length, true);
         const discoveredCompanies = this.excludeRejectedCompanies(
-          await this.apolloClient.fetchOrganizationSample(filter, EXPANSION_BATCH_SIZE, Boolean(request.dryRun), page, true),
+          await this.apolloClient.fetchOrganizationSample(filter, expansionBatchSize, Boolean(request.dryRun), page, true),
           learning
         );
 
@@ -894,13 +904,21 @@ export class LeadPipelineAgent {
         const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, filter, targetCategories, request.market);
         this.addUniqueCompanies(toppedUp, relevantCompanies, shortlistedKeys);
 
-        if (toppedUp.length >= request.targetLeadCount) {
+        if (toppedUp.length >= request.targetLeadCount || discoveredCompanies.length < expansionBatchSize) {
           break;
         }
       }
     }
 
     return toppedUp;
+  }
+
+  private getExpansionBatchSize(remainingSlots: number, useWebSearch: boolean): number {
+    const fallbackRemainingSlots = Math.max(1, remainingSlots);
+    const targetBuffer = useWebSearch ? fallbackRemainingSlots * 2 : fallbackRemainingSlots * 3;
+    const maxBatchSize = useWebSearch ? CREDITLESS_EXPANSION_BATCH_SIZE : EXPANSION_BATCH_SIZE;
+
+    return Math.max(MIN_EARLY_STOP_REVIEW_COUNT, Math.min(maxBatchSize, targetBuffer));
   }
 
   private orderFiltersByLearning(
