@@ -1,6 +1,8 @@
-import { env, readiness } from "../config";
+import { azureOpenAICostConfig, env, readiness } from "../config";
 import {
+  ApolloContactCandidate,
   ApolloOrganizationFilter,
+  AzureUsageCost,
   FilterEvaluation,
   LeadCategory,
   LeadLearningData,
@@ -53,6 +55,13 @@ const MAX_FILTER_STRATEGY_HISTORY = 8;
 export class AzureOpenAIClient {
   private readonly foundryAgentsClient = new FoundryAgentsClient();
   private readonly webSearchAgent = new WebSearchAgent();
+  private readonly usageTotals: AzureUsageCost = {
+    requests: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    estimatedCostUsd: 0
+  };
 
   async categorizeCompany(
     name: string,
@@ -186,6 +195,48 @@ export class AzureOpenAIClient {
     } catch {
       return this.buildFallbackResearchBrief(company, template, executionContext, mainContext, webResearchEvidence?.citations);
     }
+  }
+
+  async chooseApolloContacts(
+    company: PreCategorizedCompany,
+    candidates: ApolloContactCandidate[],
+    dryRun: boolean,
+    mainContext?: string,
+    brief?: ResearchBrief
+  ): Promise<ApolloContactCandidate[]> {
+    const rankedCandidates = this.rankApolloContacts(candidates).slice(0, 8);
+    if (rankedCandidates.length <= 2 || dryRun || !readiness.azureConfigured) {
+      return rankedCandidates.slice(0, 2);
+    }
+
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: `${buildMainContextBlock(mainContext)}\n\nTask: Select the best one or two Apollo contacts for outbound outreach. Prefer decision-makers and operational owners who can sponsor or own industrial AI, machine vision, automation, digitalization, engineering, operations, or innovation projects. Favor CEO, CTO, COO, Managing Director, Head of Automation, Head of Innovation, Head of Engineering, Head of Operations, and similar roles. Avoid HR, recruiting, finance, legal, support, marketing, and generic sales contacts unless no stronger option exists. Return strict JSON with {\"selectedPersonIds\":[\"...\"],\"reason\":\"...\"}.`
+        },
+        {
+          role: "user",
+          content: [
+            `Company: ${company.name}`,
+            company.domain ? `Domain: ${company.domain}` : undefined,
+            `Category: ${company.category}`,
+            brief?.qualificationSummary ? `Qualification summary: ${brief.qualificationSummary}` : undefined,
+            `Apollo candidates JSON: ${JSON.stringify(rankedCandidates)}`
+          ].filter(Boolean).join("\n\n")
+        }
+      ], { maxTokens: 160 });
+
+      const parsed = this.parseJsonObject<{ selectedPersonIds?: string[] }>(content);
+      const selected = rankedCandidates.filter((candidate) => (parsed.selectedPersonIds ?? []).includes(candidate.personId));
+      return selected.length > 0 ? selected.slice(0, 2) : rankedCandidates.slice(0, 2);
+    } catch {
+      return rankedCandidates.slice(0, 2);
+    }
+  }
+
+  getUsageTotals(): AzureUsageCost {
+    return { ...this.usageTotals };
   }
 
   async generateSuggestedFilters(
@@ -792,7 +843,20 @@ export class AzureOpenAIClient {
 
     const payload = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
     };
+
+    this.usageTotals.requests += 1;
+    this.usageTotals.promptTokens += payload.usage?.prompt_tokens ?? 0;
+    this.usageTotals.completionTokens += payload.usage?.completion_tokens ?? 0;
+    this.usageTotals.totalTokens += payload.usage?.total_tokens ?? 0;
+    this.usageTotals.estimatedCostUsd +=
+      ((payload.usage?.prompt_tokens ?? 0) / 1000) * azureOpenAICostConfig.inputCostPer1kTokens +
+      ((payload.usage?.completion_tokens ?? 0) / 1000) * azureOpenAICostConfig.outputCostPer1kTokens;
 
     const content = payload.choices?.[0]?.message?.content;
 
@@ -872,6 +936,44 @@ export class AzureOpenAIClient {
     ].filter(Boolean);
 
     return sections.length > 0 ? sections.join("\n\n") : undefined;
+  }
+
+  private rankApolloContacts(candidates: ApolloContactCandidate[]): ApolloContactCandidate[] {
+    return [...candidates].sort((left, right) => this.getApolloContactRank(right) - this.getApolloContactRank(left));
+  }
+
+  private getApolloContactRank(candidate: ApolloContactCandidate): number {
+    const title = candidate.title?.toLowerCase() ?? "";
+    const seniority = candidate.seniority?.toLowerCase() ?? "";
+    const departmentText = `${candidate.departments?.join(" ") ?? ""} ${candidate.functions?.join(" ") ?? ""}`.toLowerCase();
+
+    let score = 0;
+
+    if (/\b(ceo|cto|coo|founder|owner|geschäftsführer|managing director)\b/.test(title)) {
+      score += 12;
+    }
+
+    if (/\b(head|director|lead|vp)\b/.test(title) || /\b(head|director|vp|c_suite|founder|owner)\b/.test(seniority)) {
+      score += 7;
+    }
+
+    if (/automation|innovation|engineering|operations|production|digital|vision|inspection|factory/.test(title)) {
+      score += 6;
+    }
+
+    if (/engineering|operations|innovation|it|product/.test(departmentText)) {
+      score += 4;
+    }
+
+    if (/hr|recruit|finance|legal|marketing|support|sales development/.test(`${title} ${departmentText}`)) {
+      score -= 12;
+    }
+
+    if (candidate.hasEmail) {
+      score += 2;
+    }
+
+    return score;
   }
 
   private formatFilterSnapshot(snapshot: {

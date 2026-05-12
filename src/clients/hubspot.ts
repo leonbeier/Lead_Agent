@@ -57,6 +57,7 @@ export class HubSpotClient {
   async syncQualifiedCompanies(
     companies: PreCategorizedCompany[],
     researchBriefs: ResearchBrief[],
+    contactsByCompany: Map<string, PublicContactCandidate[]>,
     dryRun: boolean
   ): Promise<HubSpotSyncResult> {
     if (dryRun || !readiness.hubspotConfigured) {
@@ -84,8 +85,8 @@ export class HubSpotClient {
         const syncedCompany = await this.upsertCompany(company, brief, companyProperties);
         companySyncedCount += 1;
 
-        const publicContacts = await this.findPublicContacts(company);
-        for (const publicContact of publicContacts) {
+        const selectedContacts = contactsByCompany.get(this.getCompanyKey(company)) ?? [];
+        for (const publicContact of selectedContacts) {
           try {
             const syncedContact = await this.upsertContact(publicContact, contactProperties);
             if (!syncedContact) {
@@ -176,7 +177,9 @@ export class HubSpotClient {
         lastname: contact.lastName,
         phone: contact.phone,
         jobtitle: contact.jobTitle,
-        hs_lead_status: "NEW"
+        hs_lead_status: "NEW",
+        lead_source: "AI Agent",
+        lead_source_details: "AI Agent"
       },
       availableProperties
     );
@@ -220,6 +223,10 @@ export class HubSpotClient {
 
   private async findExistingContact(email: string): Promise<HubSpotObjectResponse | null> {
     return this.searchObject("contacts", "email", email);
+  }
+
+  private getCompanyKey(company: Pick<PreCategorizedCompany, "name" | "domain">): string {
+    return company.domain?.trim().toLowerCase() || company.name.trim().toLowerCase();
   }
 
   private async searchObject(

@@ -12,6 +12,7 @@ import {
   OutreachTemplate
 } from "./prompting/one-ware-playbook";
 import {
+  ApolloOrganizationFilter,
   CompanyFeedbackEntry,
   EditableExecutionContext,
   EditablePrequalificationCategoryContext,
@@ -39,6 +40,7 @@ const templatesPath = path.join(dataDirectory, "outreach-templates.json");
 const learningPath = path.join(dataDirectory, "lead-agent-learning.json");
 const latestLeadRunPath = path.join(dataDirectory, "latest-lead-run.json");
 const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-review.json");
+const apolloSearchCursorPath = path.join(dataDirectory, "apollo-search-cursors.json");
 
 const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
@@ -216,8 +218,22 @@ const latestLeadRunSchema = z.object({
     companiesSkippedAfterEarlyStop: z.number().int().nonnegative()
   }),
   contacts: z.array(z.any()),
-  searchHistory: z.array(searchHistoryEntrySchema)
+  searchHistory: z.array(searchHistoryEntrySchema),
+  costs: z.object({
+    azure: z.object({
+      requests: z.number().int().nonnegative(),
+      promptTokens: z.number().int().nonnegative(),
+      completionTokens: z.number().int().nonnegative(),
+      totalTokens: z.number().int().nonnegative(),
+      estimatedCostUsd: z.number().nonnegative()
+    }).optional()
+  }).optional()
 });
+
+const apolloSearchCursorSchema = z.record(z.object({
+  nextPage: z.number().int().positive(),
+  updatedAt: z.string().min(1)
+}));
 
 const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 50,
@@ -320,6 +336,19 @@ export class ControlPlaneStore {
     await ensureFile(learningPath, defaultLearning);
     await ensureFile(latestLeadRunPath, defaultLatestLeadRun);
     await ensureFile(latestOutreachReviewPath, defaultLatestLeadRun);
+    await ensureFile(apolloSearchCursorPath, {});
+  }
+
+  private getApolloSearchCursorKey(filter: ApolloOrganizationFilter): string {
+    return JSON.stringify({
+      persona: filter.persona,
+      industries: [...filter.industries].sort(),
+      keywords: [...filter.keywords].sort(),
+      locations: [...filter.locations].sort(),
+      employeeRanges: [...filter.employeeRanges].sort(),
+      notes: filter.notes,
+      targetCategories: [...(filter.targetCategories ?? [])].sort()
+    });
   }
 
   async getSettings(): Promise<LeadAgentSettings> {
@@ -395,6 +424,29 @@ export class ControlPlaneStore {
     await this.ensureSeedData();
     const latestLeadRun = await readJsonFile<LatestLeadRunRecord>(latestLeadRunPath);
     return latestLeadRunSchema.parse(latestLeadRun) as LatestLeadRunRecord;
+  }
+
+  async getApolloSearchCursor(filter: ApolloOrganizationFilter): Promise<number> {
+    await this.ensureSeedData();
+    const cursorMap = apolloSearchCursorSchema.parse(
+      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(apolloSearchCursorPath)
+    );
+
+    return cursorMap[this.getApolloSearchCursorKey(filter)]?.nextPage ?? 1;
+  }
+
+  async updateApolloSearchCursor(filter: ApolloOrganizationFilter, nextPage: number): Promise<void> {
+    await this.ensureSeedData();
+    const cursorMap = apolloSearchCursorSchema.parse(
+      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(apolloSearchCursorPath)
+    );
+
+    cursorMap[this.getApolloSearchCursorKey(filter)] = {
+      nextPage: Math.max(1, nextPage),
+      updatedAt: new Date().toISOString()
+    };
+
+    await writeJsonFile(apolloSearchCursorPath, cursorMap);
   }
 
   async recordCompanyFeedback(input: Omit<CompanyFeedbackEntry, "createdAt">): Promise<LeadLearningData> {

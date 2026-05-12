@@ -1,5 +1,5 @@
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, CompanySample } from "../types";
+import { ApolloContactCandidate, ApolloOrganizationFilter, CompanySample, PreCategorizedCompany, PublicContactCandidate } from "../types";
 import { WebSearchAgent } from "./web-search-agent";
 
 export class ApolloClient {
@@ -103,6 +103,143 @@ export class ApolloClient {
     });
   }
 
+  async searchContactsForCompany(company: PreCategorizedCompany, limit = 10): Promise<ApolloContactCandidate[]> {
+    const normalizedDomain = this.normalizeDomain(company.domain);
+    if (!readiness.apolloConfigured || !normalizedDomain) {
+      return [];
+    }
+
+    const response = await fetch(`${env.APOLLO_BASE_URL}/mixed_people/api_search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": env.APOLLO_API_KEY as string
+      },
+      body: JSON.stringify({
+        page: 1,
+        per_page: limit,
+        q_organization_domains_list: [normalizedDomain],
+        person_seniorities: ["owner", "founder", "c_suite", "vp", "head", "director", "manager"],
+        person_titles: [
+          "CEO",
+          "CTO",
+          "COO",
+          "Managing Director",
+          "Head of Automation",
+          "Head of Innovation",
+          "Head of Engineering",
+          "Head of Operations",
+          "Head of Production",
+          "Digitalization"
+        ],
+        include_similar_titles: true,
+        contact_email_status: ["verified", "likely to engage", "unverified"]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Apollo contact search failed: ${response.status} ${await response.text()}`);
+    }
+
+    const payload = (await response.json()) as {
+      people?: Array<{
+        id?: string;
+        first_name?: string;
+        last_name?: string;
+        last_name_obfuscated?: string;
+        name?: string;
+        title?: string | null;
+        seniority?: string | null;
+        departments?: string[];
+        functions?: string[];
+        linkedin_url?: string | null;
+        has_email?: boolean;
+        organization_id?: string;
+        organization?: { name?: string };
+      }>;
+    };
+
+    const candidates = (payload.people ?? []).map<ApolloContactCandidate | null>((person) => {
+        if (!person.id) {
+          return null;
+        }
+
+        return {
+          personId: person.id,
+          firstName: person.first_name?.trim(),
+          lastName: person.last_name?.trim() || person.last_name_obfuscated?.trim(),
+          name: person.name?.trim() || [person.first_name, person.last_name_obfuscated].filter(Boolean).join(" "),
+          title: person.title?.trim() || undefined,
+          seniority: person.seniority?.trim() || undefined,
+          departments: person.departments ?? [],
+          functions: person.functions ?? [],
+          organizationId: person.organization_id,
+          organizationName: person.organization?.name?.trim(),
+          linkedinUrl: person.linkedin_url?.trim() || undefined,
+          hasEmail: Boolean(person.has_email)
+        } satisfies ApolloContactCandidate;
+      });
+
+    return candidates.filter((person): person is ApolloContactCandidate => person !== null);
+  }
+
+  async enrichContactEmail(
+    candidate: ApolloContactCandidate,
+    company: Pick<PreCategorizedCompany, "domain" | "name">
+  ): Promise<PublicContactCandidate | null> {
+    const normalizedDomain = this.normalizeDomain(company.domain);
+    if (!readiness.apolloConfigured || !normalizedDomain) {
+      return null;
+    }
+
+    const response = await fetch(
+      `${env.APOLLO_BASE_URL}/people/match?run_waterfall_email=false&run_waterfall_phone=false&reveal_personal_emails=false&reveal_phone_number=false`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": env.APOLLO_API_KEY as string
+        },
+        body: JSON.stringify({
+          id: candidate.personId,
+          domain: normalizedDomain,
+          organization_name: company.name
+        })
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Apollo contact enrichment failed: ${response.status} ${await response.text()}`);
+    }
+
+    const payload = (await response.json()) as {
+      person?: {
+        id?: string;
+        first_name?: string;
+        last_name?: string;
+        title?: string;
+        email?: string;
+        linkedin_url?: string;
+      };
+    };
+
+    const email = payload.person?.email?.trim().toLowerCase();
+    if (!email || this.isLowValueBusinessEmail(email)) {
+      return null;
+    }
+
+    return {
+      personId: payload.person?.id ?? candidate.personId,
+      email,
+      sourceUrl: payload.person?.linkedin_url?.trim() || candidate.linkedinUrl || `apollo:person:${candidate.personId}`,
+      label: "apollo_selected_contact",
+      firstName: payload.person?.first_name?.trim() || candidate.firstName,
+      lastName: payload.person?.last_name?.trim() || candidate.lastName,
+      jobTitle: payload.person?.title?.trim() || candidate.title,
+      linkedinUrl: payload.person?.linkedin_url?.trim() || candidate.linkedinUrl
+    };
+  }
+
   private async searchOrganizationsWithoutCredits(
     filter: ApolloOrganizationFilter,
     limit: number,
@@ -118,6 +255,23 @@ export class ApolloClient {
     }
 
     return /insufficient credits/i.test(error.message);
+  }
+
+  private normalizeDomain(domain: string | undefined): string | undefined {
+    if (!domain) {
+      return undefined;
+    }
+
+    return domain
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/\/$/, "");
+  }
+
+  private isLowValueBusinessEmail(email: string): boolean {
+    return /^(info|sales|office|kontakt|contact|hello|team|support|service|mail|privacy|datenschutz|legal|career|careers|jobs|bewerbung|hr|people|invoice|billing)@/i.test(email);
   }
 
   private buildDryRunSample(filter: ApolloOrganizationFilter, limit: number): CompanySample[] {

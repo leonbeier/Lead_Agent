@@ -12,6 +12,7 @@ import {
   LeadLearningData,
   LeadJobRequest,
   LeadJobResult,
+  LeadRunProgress,
   PreCategorizedCompany,
   PrequalificationConfig,
   PublicContactCandidate,
@@ -48,6 +49,10 @@ const EXPANSION_BATCH_SIZE = 50;
 const CREDITLESS_EXPANSION_BATCH_SIZE = 12;
 const MAX_FILTER_REVISIONS = 1;
 const CONTACT_DISCOVERY_CONCURRENCY = 2;
+
+type LeadPipelineRunOptions = {
+  onProgress?: (progress: LeadRunProgress) => void;
+};
 
 const EUROPEAN_COUNTRIES = new Set([
   "germany",
@@ -118,7 +123,14 @@ export class LeadPipelineAgent {
 
   private readonly controlPlaneStore = new ControlPlaneStore();
 
-  async run(request: LeadJobRequest): Promise<LeadJobResult> {
+  async run(request: LeadJobRequest, options?: LeadPipelineRunOptions): Promise<LeadJobResult> {
+    const emitProgress = (progress: Omit<LeadRunProgress, "updatedAt">) => {
+      options?.onProgress?.({
+        ...progress,
+        updatedAt: new Date().toISOString()
+      });
+    };
+
     const dryRun = request.dryRun ?? true;
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
     const creditLessMode = request.creditLessMode ?? false;
@@ -138,6 +150,18 @@ export class LeadPipelineAgent {
       request.market,
       request.customGoal
     );
+    emitProgress({
+      stage: "screening_filters",
+      stageLabel: "Filter werden bewertet",
+      progressValue: 10,
+      progressMax: 100,
+      progressDescription: `0 von ${suggestedFilters.length} Filtern bewertet`,
+      detail: "Der Lead Agent prueft jetzt die Suchfilter und sammelt erste Kandidaten.",
+      processedFilters: 0,
+      totalFilters: suggestedFilters.length,
+      foundCandidates: 0,
+      targetLeadCount: request.targetLeadCount
+    });
     const evaluations: FilterEvaluation[] = [];
     const shortlistedCompanies: PreCategorizedCompany[] = [];
     const shortlistedKeys = new Set<string>();
@@ -146,6 +170,23 @@ export class LeadPipelineAgent {
     const categoryCounts = new Map<LeadCategory, number>(targetCategories.map((category) => [category, 0]));
     let filtersStoppedEarly = 0;
     let companiesSkippedAfterEarlyStop = 0;
+
+    const emitFilterProgress = (detail: string) => {
+      const processedFilters = evaluations.length;
+      const totalFilters = Math.max(suggestedFilters.length, processedFilters || 1);
+      emitProgress({
+        stage: "screening_filters",
+        stageLabel: "Filter werden bewertet",
+        progressValue: Math.min(70, 10 + Math.round((processedFilters / totalFilters) * 60)),
+        progressMax: 100,
+        progressDescription: `${processedFilters} von ${totalFilters} Filtern bewertet`,
+        detail,
+        processedFilters,
+        totalFilters,
+        foundCandidates: shortlistedCompanies.length,
+        targetLeadCount: request.targetLeadCount
+      });
+    };
 
     for (const activeCategory of targetCategories) {
       const categoryTarget = categoryQuotas[activeCategory] ?? 0;
@@ -170,10 +211,20 @@ export class LeadPipelineAgent {
           const activeFilter = candidateFilters.shift() as ApolloOrganizationFilter;
           const reviewedCompanies: PreCategorizedCompany[] = [];
           let useWebSearchForExpansion = creditLessMode;
-          const probeSample = this.excludeRejectedCompanies(
-            await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1, creditLessMode),
-            learning
+          let apolloExpansionPage = creditLessMode || dryRun
+            ? 1
+            : await this.controlPlaneStore.getApolloSearchCursor(activeFilter);
+          const probeFetch = await this.fetchAvailableSearchSample(
+            activeFilter,
+            earlyStopReviewCount,
+            dryRun,
+            apolloExpansionPage,
+            creditLessMode,
+            learning,
+            reviewedCompanies
           );
+          const probeSample = probeFetch.companies;
+          apolloExpansionPage = probeFetch.nextPage;
           let categorizedInitialSample = await this.categorizeCompanies(probeSample, dryRun, mainContext, prequalification, targetCategories, learning);
           let initialEvaluation = this.evaluateFilter(
             activeFilter.name,
@@ -187,10 +238,16 @@ export class LeadPipelineAgent {
           if (!creditLessMode) {
             const initialRelevantFromApollo = this.getRelevantCompanies(categorizedInitialSample, activeFilter, targetCategories, request.market);
             if (initialRelevantFromApollo.length === 0 || initialEvaluation.relevanceRatio < earlyStopThreshold) {
-              const webFallbackProbeSample = this.excludeRejectedCompanies(
-                await this.apolloClient.fetchOrganizationSample(activeFilter, earlyStopReviewCount, dryRun, 1, true),
-                learning
+              const webFallbackProbe = await this.fetchAvailableSearchSample(
+                activeFilter,
+                earlyStopReviewCount,
+                dryRun,
+                1,
+                true,
+                learning,
+                reviewedCompanies
               );
+              const webFallbackProbeSample = webFallbackProbe.companies;
               const categorizedWebFallbackProbe = await this.categorizeCompanies(
                 webFallbackProbeSample,
                 dryRun,
@@ -227,7 +284,7 @@ export class LeadPipelineAgent {
               activeFilter.name,
               activeCategory,
               "probe_15",
-              1,
+              creditLessMode ? 1 : apolloExpansionPage - 1,
               earlyStopReviewCount,
               categorizedInitialSample,
               activeFilter,
@@ -252,6 +309,9 @@ export class LeadPipelineAgent {
             evaluations.push(stoppedEvaluation);
             filtersStoppedEarly += 1;
             companiesSkippedAfterEarlyStop += skippedCount;
+            emitFilterProgress(
+              `${activeFilter.name} wurde frueh gestoppt. Bisher ${shortlistedCompanies.length} von ${request.targetLeadCount} Ziel-Firmen gesammelt.`
+            );
 
             if (revisionCount < MAX_FILTER_REVISIONS) {
               const revisedFilter = await this.azureClient.reviseSearchFilter(
@@ -280,10 +340,20 @@ export class LeadPipelineAgent {
               Math.min(remainingCategorySlots || remainingGlobalSlots, remainingGlobalSlots),
               useWebSearchForExpansion
             );
-            const expandedSample = this.excludeRejectedCompanies(
-              await this.apolloClient.fetchOrganizationSample(activeFilter, expansionBatchSize, dryRun, page, useWebSearchForExpansion),
-              learning
+            const requestedPage = useWebSearchForExpansion ? page : apolloExpansionPage;
+            const expandedFetch = await this.fetchAvailableSearchSample(
+              activeFilter,
+              expansionBatchSize,
+              dryRun,
+              requestedPage,
+              useWebSearchForExpansion,
+              learning,
+              reviewedCompanies
             );
+            const expandedSample = expandedFetch.companies;
+            if (!useWebSearchForExpansion) {
+              apolloExpansionPage = expandedFetch.nextPage;
+            }
 
             if (expandedSample.length === 0) {
               break;
@@ -325,7 +395,7 @@ export class LeadPipelineAgent {
                 activeFilter.name,
                 activeCategory,
                 "expand_50",
-                page,
+                requestedPage,
                 expansionBatchSize,
                 categorizedExpandedSample,
                 activeFilter,
@@ -356,6 +426,9 @@ export class LeadPipelineAgent {
               categorizedInitialSample.length,
               false
             )
+          );
+          emitFilterProgress(
+            `${activeFilter.name} abgeschlossen. Aktuell ${shortlistedCompanies.length} von ${request.targetLeadCount} Ziel-Firmen gefunden.`
           );
           break;
         }
@@ -403,6 +476,21 @@ export class LeadPipelineAgent {
     const finalShortlist = await this.excludeExistingHubSpotDomains(replenishedShortlist, dryRun);
     const uniqueShortlist = finalShortlist.slice(0, request.targetLeadCount);
 
+    emitProgress({
+      stage: "building_research",
+      stageLabel: "Leads werden aufbereitet",
+      progressValue: 78,
+      progressMax: 100,
+      progressDescription: `${uniqueShortlist.length} qualifizierte Firmen werden vorbereitet`,
+      detail: dryRun
+        ? "Dry-Run aktiv: Research-Briefs werden uebersprungen."
+        : "Research-Briefs und Zusatzdaten werden fuer die qualifizierten Firmen erstellt.",
+      processedFilters: evaluations.length,
+      totalFilters: suggestedFilters.length,
+      foundCandidates: uniqueShortlist.length,
+      targetLeadCount: request.targetLeadCount
+    });
+
     const researchBriefs = dryRun
       ? []
       : await this.mapWithConcurrency(
@@ -414,13 +502,39 @@ export class LeadPipelineAgent {
           AZURE_WORKER_CONCURRENCY
         );
 
-    const publicContactsByCompany = creditLessMode
-      ? new Map<string, PublicContactCandidate[]>()
-      : await this.collectPublicContacts(uniqueShortlist, dryRun);
+    const contactCandidatesByCompany = await this.collectApolloContacts(uniqueShortlist, researchBriefs, dryRun, mainContext);
 
-    const hubspotSync = await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, !syncToHubSpot);
+    emitProgress({
+      stage: "syncing_hubspot",
+      stageLabel: "HubSpot wird aktualisiert",
+      progressValue: 90,
+      progressMax: 100,
+      progressDescription: `${uniqueShortlist.length} qualifizierte Firmen werden synchronisiert`,
+      detail: syncToHubSpot
+        ? "Die qualifizierten Firmen und Kontakte werden jetzt nach HubSpot geschrieben."
+        : "Synchronisierung deaktiviert. Die Ergebnisse werden nur lokal gespeichert.",
+      processedFilters: evaluations.length,
+      totalFilters: suggestedFilters.length,
+      foundCandidates: uniqueShortlist.length,
+      targetLeadCount: request.targetLeadCount
+    });
+
+    const hubspotSync = await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, contactCandidatesByCompany, !syncToHubSpot);
+    const azureCosts = this.azureClient.getUsageTotals();
     await this.controlPlaneStore.recordFilterEvaluations(evaluations);
     await this.controlPlaneStore.recordSearchHistory(searchHistory);
+    emitProgress({
+      stage: "saving_results",
+      stageLabel: "Ergebnisse werden gespeichert",
+      progressValue: 97,
+      progressMax: 100,
+      progressDescription: `${uniqueShortlist.length} qualifizierte Firmen wurden verarbeitet`,
+      detail: "Der letzte Lauf wird gespeichert und fuer die HubSpot-Oberflaeche aktualisiert.",
+      processedFilters: evaluations.length,
+      totalFilters: suggestedFilters.length,
+      foundCandidates: uniqueShortlist.length,
+      targetLeadCount: request.targetLeadCount
+    });
     await this.controlPlaneStore.writeLatestLeadRun({
       createdAt: new Date().toISOString(),
       requested: request,
@@ -434,10 +548,13 @@ export class LeadPipelineAgent {
         this.buildGeneratedLeadRecord(
           company,
           researchBriefs,
-          publicContactsByCompany.get(this.getCompanyKey(company)) ?? []
+          contactCandidatesByCompany.get(this.getCompanyKey(company)) ?? []
         )
       ),
-      searchHistory
+      searchHistory,
+      costs: {
+        azure: azureCosts
+      }
     });
 
     return {
@@ -459,6 +576,9 @@ export class LeadPipelineAgent {
       efficiency: {
         filtersStoppedEarly,
         companiesSkippedAfterEarlyStop
+      },
+      costs: {
+        azure: azureCosts
       }
     };
   }
@@ -878,10 +998,16 @@ export class LeadPipelineAgent {
       const maxPages = remainingSlots <= 3 ? 1 : remainingSlots <= 8 ? 2 : 3;
       for (let page = 1; page <= maxPages; page += 1) {
         const expansionBatchSize = this.getExpansionBatchSize(request.targetLeadCount - toppedUp.length, true);
-        const discoveredCompanies = this.excludeRejectedCompanies(
-          await this.apolloClient.fetchOrganizationSample(filter, expansionBatchSize, Boolean(request.dryRun), page, true),
-          learning
+        const discoveredFetch = await this.fetchAvailableSearchSample(
+          filter,
+          expansionBatchSize,
+          Boolean(request.dryRun),
+          page,
+          true,
+          learning,
+          toppedUp
         );
+        const discoveredCompanies = discoveredFetch.companies;
 
         if (discoveredCompanies.length === 0) {
           break;
@@ -1150,6 +1276,91 @@ export class LeadPipelineAgent {
     });
   }
 
+  private async excludeExistingCompanySamples(
+    companies: CompanySample[],
+    dryRun: boolean
+  ): Promise<CompanySample[]> {
+    if (dryRun || companies.length === 0) {
+      return companies;
+    }
+
+    const domains = companies
+      .map((company) => company.domain)
+      .filter((domain): domain is string => Boolean(domain));
+    if (domains.length === 0) {
+      return companies;
+    }
+
+    const existingDomains = await this.hubspotClient.getExistingCompanyDomains(domains);
+    if (existingDomains.size === 0) {
+      return companies;
+    }
+
+    return companies.filter((company) => {
+      const normalizedDomain = company.domain?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+      return !normalizedDomain || !existingDomains.has(normalizedDomain);
+    });
+  }
+
+  private async fetchAvailableSearchSample(
+    filter: ApolloOrganizationFilter,
+    requestedCount: number,
+    dryRun: boolean,
+    page: number,
+    useWebSearch: boolean,
+    learning: LeadLearningData,
+    reviewedCompanies: Array<Pick<CompanySample, "name" | "domain">>
+  ): Promise<{ companies: CompanySample[]; nextPage: number }> {
+    const collected: CompanySample[] = [];
+    const seenKeys = new Set(reviewedCompanies.map((company) => this.getCompanyKey(company)));
+    const maxPages = useWebSearch ? 3 : 6;
+    const pageSize = Math.max(MIN_EARLY_STOP_REVIEW_COUNT, requestedCount);
+    let nextPage = page;
+
+    for (let attempt = 0; attempt < maxPages && collected.length < requestedCount; attempt += 1) {
+      const sample = this.excludeRejectedCompanies(
+        await this.apolloClient.fetchOrganizationSample(filter, pageSize, dryRun, nextPage, useWebSearch),
+        learning
+      );
+
+      if (!useWebSearch && !dryRun) {
+        await this.controlPlaneStore.updateApolloSearchCursor(filter, nextPage + 1);
+      }
+
+      if (sample.length === 0) {
+        break;
+      }
+
+      const unseenSample = sample.filter((company) => !seenKeys.has(this.getCompanyKey(company)));
+      const availableSample = await this.excludeExistingCompanySamples(unseenSample, dryRun);
+
+      for (const company of availableSample) {
+        const companyKey = this.getCompanyKey(company);
+        if (seenKeys.has(companyKey)) {
+          continue;
+        }
+
+        seenKeys.add(companyKey);
+        collected.push(company);
+
+        if (collected.length >= requestedCount) {
+          break;
+        }
+      }
+
+      nextPage += 1;
+
+      if (sample.length < pageSize) {
+        break;
+      }
+    }
+
+    return {
+      companies: collected,
+      nextPage
+    };
+  }
+
   private getUniqueCompanyCount(companies: PreCategorizedCompany[]): number {
     return companies.filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index).length;
   }
@@ -1218,6 +1429,44 @@ export class LeadPipelineAgent {
 
     const entries = await this.mapWithConcurrency(
       companies.map((company) => async () => [this.getCompanyKey(company), await this.hubspotClient.findPublicContactsForCompany(company)] as const),
+      CONTACT_DISCOVERY_CONCURRENCY
+    );
+
+    return new Map(entries);
+  }
+
+  private async collectApolloContacts(
+    companies: PreCategorizedCompany[],
+    researchBriefs: import("../types").ResearchBrief[],
+    dryRun: boolean,
+    mainContext?: string
+  ): Promise<Map<string, PublicContactCandidate[]>> {
+    if (dryRun) {
+      return new Map();
+    }
+
+    const entries = await this.mapWithConcurrency(
+      companies.map((company) => async () => {
+        const brief = researchBriefs.find((entry) => entry.companyName === company.name);
+        const apolloCandidates = await this.apolloClient.searchContactsForCompany(company, 10);
+        const selectedCandidates = await this.azureClient.chooseApolloContacts(company, apolloCandidates, dryRun, mainContext, brief);
+        const enrichedContacts: PublicContactCandidate[] = [];
+
+        for (const candidate of selectedCandidates) {
+          const enrichedContact = await this.apolloClient.enrichContactEmail(candidate, company);
+          if (!enrichedContact) {
+            continue;
+          }
+
+          if (enrichedContacts.some((existing) => existing.email === enrichedContact.email)) {
+            continue;
+          }
+
+          enrichedContacts.push(enrichedContact);
+        }
+
+        return [this.getCompanyKey(company), enrichedContacts] as const;
+      }),
       CONTACT_DISCOVERY_CONCURRENCY
     );
 

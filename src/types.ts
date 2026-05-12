@@ -89,6 +89,7 @@ export interface ResearchBrief {
 }
 
 export interface PublicContactCandidate {
+  personId?: string;
   email?: string;
   phone?: string;
   sourceUrl: string;
@@ -96,6 +97,30 @@ export interface PublicContactCandidate {
   firstName?: string;
   lastName?: string;
   jobTitle?: string;
+  linkedinUrl?: string;
+}
+
+export interface ApolloContactCandidate {
+  personId: string;
+  firstName?: string;
+  lastName?: string;
+  name: string;
+  title?: string;
+  seniority?: string;
+  departments?: string[];
+  functions?: string[];
+  organizationId?: string;
+  organizationName?: string;
+  linkedinUrl?: string;
+  hasEmail?: boolean;
+}
+
+export interface AzureUsageCost {
+  requests: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
 }
 
 export interface LeadAgentSettings {
@@ -209,6 +234,9 @@ export interface LatestLeadRunRecord {
   };
   contacts: GeneratedLeadRecord[];
   searchHistory: SearchHistoryEntry[];
+  costs?: {
+    azure?: AzureUsageCost;
+  };
 }
 
 export interface LeadLearningData {
@@ -237,6 +265,20 @@ export interface LeadJobRequest {
   earlyStopThreshold?: number;
 }
 
+export interface LeadRunProgress {
+  stage: string;
+  stageLabel: string;
+  progressValue: number;
+  progressMax: number;
+  progressDescription: string;
+  detail?: string;
+  processedFilters?: number;
+  totalFilters?: number;
+  foundCandidates?: number;
+  targetLeadCount?: number;
+  updatedAt: string;
+}
+
 export interface LeadJobResult {
   requested: LeadJobRequest;
   suggestedFilters: ApolloOrganizationFilter[];
@@ -256,5 +298,8 @@ export interface LeadJobResult {
   efficiency: {
     filtersStoppedEarly: number;
     companiesSkippedAfterEarlyStop: number;
+  };
+  costs?: {
+    azure: AzureUsageCost;
   };
 }

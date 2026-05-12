@@ -29,6 +29,8 @@ const envSchema = z.object({
   AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
   AZURE_OPENAI_DEPLOYMENT: z.string().default("gpt-5.4-mini"),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
+  AZURE_OPENAI_INPUT_COST_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
+  AZURE_OPENAI_OUTPUT_COST_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
   FOUNDRY_PROJECT_ENDPOINT: z.string().url().optional(),
   FOUNDRY_MODEL_DEPLOYMENT: z.string().optional(),
   FOUNDRY_BING_CONNECTION_NAME: z.string().optional(),
@@ -47,6 +49,11 @@ export const env = envSchema.parse(process.env);
 export const openAIWebSearchModels = {
   preResearch: env.OPENAI_PRE_RESEARCH_MODEL ?? env.OPENAI_WEB_SEARCH_MODEL,
   deepResearch: env.OPENAI_DEEP_RESEARCH_MODEL ?? env.OPENAI_WEB_SEARCH_MODEL
+};
+
+export const azureOpenAICostConfig = {
+  inputCostPer1kTokens: env.AZURE_OPENAI_INPUT_COST_PER_1K_TOKENS,
+  outputCostPer1kTokens: env.AZURE_OPENAI_OUTPUT_COST_PER_1K_TOKENS
 };
 
 export const readiness = {
