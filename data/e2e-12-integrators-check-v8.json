@@ -1,0 +1,436 @@
+{
+  "requested": {
+    "targetLeadCount": 12,
+    "market": "DE",
+    "mainContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+    "searchStrategyContext": "You are steering a Germany-first campaign for ONE WARE focused on software service providers and system integrators.\n\nPriority for this run:\n- Find German software integrators, automation integrators, embedded/industrial software service providers, and technical project-delivery firms.\n- Strongest fit is explicit Vision AI, Industrial AI, image processing, industrial automation, inspection, surveillance, medtech imaging, or similar project delivery.\n- Also accept firms with broader AI messaging only when they clearly deliver customer projects and a future Vision AI / Industrial AI path is plausible.\n- Prefer service-heavy, project-led, implementation-oriented firms.\n\nAvoid for this run:\n- Media, publishers, magazines, editorial brands, event businesses, associations, universities, research institutes.\n- Product-led robotics makers, OEM hardware vendors, and companies whose main business is selling robots or hardware products.\n- Own AI platform vendors or software products that make ONE WARE look like a direct competitor.\n- Pure consultancies, strategy firms, recruiting, finance, investors, resellers, distributors, and generic SaaS without delivery ownership.\n- Non-German companies unless an unusually strong German delivery footprint is visible.",
+    "creditLessMode": false,
+    "prequalification": {
+      "mainContext": "Classify completely unbiased first. First determine the company archetype. Media, publisher, magazine, event, university, research institute, investor, bank, insurer, recruiting, reseller, generic advisory, and product-led robotics or OEM hardware profiles must not land in integrator categories. Positive categories require actual delivery ownership and industrial or vision-relevant implementation signals. If no verified company description is available, default to other or irrelevant unless there is strong explicit evidence."
+    },
+    "executionContexts": {
+      "integrator_vision_industrial_ai": {
+        "researchPriorities": [
+          "Validate recurring vision-heavy delivery ownership.",
+          "Look for fixed-price pressure and repeatable project patterns."
+        ],
+        "outreachPriorities": [
+          "Lead with throughput and margin improvements.",
+          "Keep partner framing and project efficiency language."
+        ],
+        "personalizationRules": [
+          "Personalize only with concrete delivery hooks.",
+          "Retain template backbone and ONE WARE USP wording."
+        ],
+        "avoidSignals": [
+          "Generic AI buzzwords without delivery context"
+        ]
+      },
+      "integrator_general_ai": {
+        "researchPriorities": [
+          "Identify where generic AI delivery can benefit from faster vision model cycles.",
+          "Check if they implement projects, not only advise."
+        ],
+        "outreachPriorities": [
+          "Connect ONE WARE to project speed and predictability."
+        ],
+        "personalizationRules": [
+          "Personalize around current delivery workflow gaps."
+        ],
+        "avoidSignals": [
+          "Treating them as AI beginners"
+        ]
+      },
+      "integrator_relevant_focus": {
+        "researchPriorities": [
+          "Pinpoint vertical-specific delivery bottlenecks and hardware constraints.",
+          "Validate recurring vision/edge components."
+        ],
+        "outreachPriorities": [
+          "Anchor message in vertical project risk reduction."
+        ],
+        "personalizationRules": [
+          "Use factual vertical hooks only."
+        ],
+        "avoidSignals": [
+          "Over-generalized messaging"
+        ]
+      },
+      "industrial_end_customer_scaled": {
+        "researchPriorities": [
+          "Confirm production scale and internal engineering capability.",
+          "Find QC, inspection, and process automation leverage points."
+        ],
+        "outreachPriorities": [
+          "Lead with economics, feasibility, and speed to production."
+        ],
+        "personalizationRules": [
+          "Ground in concrete production context."
+        ],
+        "avoidSignals": [
+          "Abstract transformation talk"
+        ]
+      },
+      "camera_manufacturer_partner": {
+        "researchPriorities": [
+          "Validate partner fit and customer AI-enablement potential."
+        ],
+        "outreachPriorities": [
+          "Focus on enabling customer-ready AI setups."
+        ],
+        "personalizationRules": [
+          "Personalize with product-line evidence only."
+        ],
+        "avoidSignals": [
+          "Positioning as replacement of core hardware business"
+        ]
+      },
+      "machine_builder_ai_enablement": {
+        "researchPriorities": [
+          "Validate OEM integration pathways and customer-facing AI option potential."
+        ],
+        "outreachPriorities": [
+          "Position ONE WARE as fast AI enablement layer for machine offerings."
+        ],
+        "personalizationRules": [
+          "Use machine/product context, not generic AI language."
+        ],
+        "avoidSignals": [
+          "Ignoring mechanical integration realities"
+        ]
+      },
+      "software_platform_embedding": {
+        "researchPriorities": [
+          "Validate embeddability and partner incentives."
+        ],
+        "outreachPriorities": [
+          "Lead with integration leverage and user value lift."
+        ],
+        "personalizationRules": [
+          "Tie outreach to concrete platform workflows."
+        ],
+        "avoidSignals": [
+          "Overpromising without integration fit"
+        ]
+      }
+    },
+    "targetCategories": [
+      "integrator_vision_industrial_ai",
+      "integrator_general_ai",
+      "integrator_relevant_focus"
+    ],
+    "runDeepResearch": true,
+    "dryRun": false,
+    "syncToHubSpot": false,
+    "earlyStopEnabled": true,
+    "earlyStopReviewCount": 15,
+    "earlyStopThreshold": 0.5
+  },
+  "suggestedFilters": [
+    {
+      "name": "DACH Vision / Industrial AI Integrators",
+      "persona": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "industries": [
+        "Industrial Automation",
+        "System Integration",
+        "Industrial Software",
+        "Embedded Software"
+      ],
+      "keywords": [
+        "system integrator",
+        "industrial automation",
+        "machine vision integration",
+        "inspection systems",
+        "embedded software"
+      ],
+      "locations": [
+        "Germany",
+        "Austria",
+        "Switzerland"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500",
+        "501,1000"
+      ],
+      "targetCategories": [
+        "integrator_vision_industrial_ai"
+      ],
+      "notes": "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects. Market focus: DE."
+    },
+    {
+      "name": "Europe Relevant-Vertical Integrators",
+      "persona": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+      "industries": [
+        "Industrial Automation",
+        "Aerospace",
+        "Medical Devices",
+        "Automotive",
+        "Industrial Software"
+      ],
+      "keywords": [
+        "surveillance integration",
+        "defence systems integration",
+        "medtech imaging",
+        "industrial inspection",
+        "automotive vision"
+      ],
+      "locations": [
+        "Germany",
+        "Netherlands",
+        "France",
+        "Belgium",
+        "Sweden"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500",
+        "501,1000"
+      ],
+      "targetCategories": [
+        "integrator_relevant_focus"
+      ],
+      "notes": "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks. Market focus: DE."
+    },
+    {
+      "name": "DACH General AI Integrators",
+      "persona": "Software or consulting integrator with general AI focus and real implementation ownership",
+      "industries": [
+        "Industrial Automation",
+        "Computer Vision",
+        "Embedded Software",
+        "Industrial Software"
+      ],
+      "keywords": [
+        "computer vision integration",
+        "image processing",
+        "industrial ai",
+        "automation software",
+        "engineering services"
+      ],
+      "locations": [
+        "Germany",
+        "Austria",
+        "Switzerland"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500"
+      ],
+      "targetCategories": [
+        "integrator_general_ai"
+      ],
+      "notes": "Use when AI capability is visible, even if vision specialization is not explicit yet. Market focus: DE."
+    }
+  ],
+  "evaluations": [
+    {
+      "filterName": "DACH Vision / Industrial AI Integrators",
+      "totalReviewed": 14,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 0,
+        "integrator_general_ai": 0,
+        "integrator_relevant_focus": 0,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 0,
+        "software_platform_embedding": 0,
+        "irrelevant": 1,
+        "other": 13
+      },
+      "stoppedEarly": true,
+      "initialReviewCount": 14,
+      "skippedAfterEarlyStop": 36,
+      "recommendation": "Low signal. Replace or significantly revise the filter. Early stop triggered after 14 reviews."
+    },
+    {
+      "filterName": "DACH General AI Integrators",
+      "totalReviewed": 12,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 0,
+        "integrator_general_ai": 0,
+        "integrator_relevant_focus": 0,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 0,
+        "software_platform_embedding": 0,
+        "irrelevant": 3,
+        "other": 9
+      },
+      "stoppedEarly": true,
+      "initialReviewCount": 12,
+      "skippedAfterEarlyStop": 38,
+      "recommendation": "Low signal. Replace or significantly revise the filter. Early stop triggered after 12 reviews."
+    },
+    {
+      "filterName": "Europe Relevant-Vertical Integrators",
+      "totalReviewed": 11,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 0,
+        "integrator_general_ai": 0,
+        "integrator_relevant_focus": 0,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 0,
+        "software_platform_embedding": 0,
+        "irrelevant": 0,
+        "other": 11
+      },
+      "stoppedEarly": true,
+      "initialReviewCount": 11,
+      "skippedAfterEarlyStop": 39,
+      "recommendation": "Low signal. Replace or significantly revise the filter. Early stop triggered after 11 reviews."
+    }
+  ],
+  "shortlistedCompanies": [],
+  "researchBriefs": [],
+  "searchHistory": [
+    {
+      "timestamp": "2026-05-11T15:46:18.797Z",
+      "filterName": "DACH Vision / Industrial AI Integrators",
+      "filterSnapshot": {
+        "persona": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Embedded Software"
+        ],
+        "keywords": [
+          "system integrator",
+          "industrial automation",
+          "machine vision integration",
+          "inspection systems",
+          "embedded software"
+        ],
+        "locations": [
+          "Germany",
+          "Austria",
+          "Switzerland"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-11T15:47:16.595Z",
+      "filterName": "DACH General AI Integrators",
+      "filterSnapshot": {
+        "persona": "Software or consulting integrator with general AI focus and real implementation ownership",
+        "industries": [
+          "Industrial Automation",
+          "Computer Vision",
+          "Embedded Software",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "computer vision integration",
+          "image processing",
+          "industrial ai",
+          "automation software",
+          "engineering services"
+        ],
+        "locations": [
+          "Germany",
+          "Austria",
+          "Switzerland"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Use when AI capability is visible, even if vision specialization is not explicit yet. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 12,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-11T15:48:26.345Z",
+      "filterName": "Europe Relevant-Vertical Integrators",
+      "filterSnapshot": {
+        "persona": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+        "industries": [
+          "Industrial Automation",
+          "Aerospace",
+          "Medical Devices",
+          "Automotive",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "surveillance integration",
+          "defence systems integration",
+          "medtech imaging",
+          "industrial inspection",
+          "automotive vision"
+        ],
+        "locations": [
+          "Germany",
+          "Netherlands",
+          "France",
+          "Belgium",
+          "Sweden"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 11,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    }
+  ],
+  "hubspotSync": {
+    "attempted": false,
+    "mode": "dry-run",
+    "candidateCount": 0,
+    "syncedCount": 0,
+    "companySyncedCount": 0,
+    "contactSyncedCount": 0,
+    "errors": []
+  },
+  "efficiency": {
+    "filtersStoppedEarly": 3,
+    "companiesSkippedAfterEarlyStop": 113
+  }
+}

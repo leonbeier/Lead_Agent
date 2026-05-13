@@ -10,14 +10,15 @@ export class ApolloClient {
     limit: number,
     dryRun: boolean,
     page = 1,
-    creditLessMode = false
+    creditLessMode = false,
+    shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
     if (dryRun) {
       return this.buildDryRunSample(filter, limit);
     }
 
     if (creditLessMode) {
-      return this.searchOrganizationsWithoutCredits(filter, limit, page);
+      return this.searchOrganizationsWithoutCredits(filter, limit, page, shouldSkipDomain);
     }
 
     if (!readiness.apolloConfigured) {
@@ -237,9 +238,10 @@ export class ApolloClient {
   private async searchOrganizationsWithoutCredits(
     filter: ApolloOrganizationFilter,
     limit: number,
-    page: number
+    page: number,
+    shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
-    const companies = await this.webSearchAgent.discoverCompaniesForFilter(filter, limit, page);
+    const companies = await this.webSearchAgent.discoverCompaniesForFilter(filter, limit, page, shouldSkipDomain);
     return companies;
   }
 

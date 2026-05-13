@@ -144,9 +144,11 @@ export interface LeadAgentSettings {
   targetCategories?: LeadCategory[];
   runDeepResearch: boolean;
   dryRun: boolean;
+  syncToHubSpot?: boolean;
   earlyStopEnabled: boolean;
   earlyStopReviewCount: number;
   earlyStopThreshold: number;
+  earlyStopMinRelevantCount?: number;
 }
 
 export interface FilterEvaluation {
@@ -254,6 +256,25 @@ export interface LeadLearningData {
   searchHistory: SearchHistoryEntry[];
 }
 
+export interface CompanyScreeningRecord {
+  companyName: string;
+  normalizedName: string;
+  domain?: string;
+  normalizedDomain?: string;
+  category?: LeadCategory;
+  relevanceScore?: number;
+  rationale?: string;
+  sourceFilter?: string;
+  shortDescription?: string;
+  checkedAt?: string;
+  existsInHubSpot?: boolean;
+  hubspotCheckedAt?: string;
+}
+
+export interface CompanyScreeningDatabase {
+  records: CompanyScreeningRecord[];
+}
+
 export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
@@ -274,6 +295,7 @@ export interface LeadJobRequest {
   earlyStopEnabled?: boolean;
   earlyStopReviewCount?: number;
   earlyStopThreshold?: number;
+  earlyStopMinRelevantCount?: number;
 }
 
 export interface LeadRunProgress {

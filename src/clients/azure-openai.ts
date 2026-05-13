@@ -29,6 +29,7 @@ interface ChatMessage {
 
 interface RunChatOptions {
   maxTokens?: number;
+  deployment?: string;
 }
 
 interface BuildResearchBriefOptions {
@@ -37,6 +38,9 @@ interface BuildResearchBriefOptions {
 
 const MAX_AZURE_RETRIES = 3;
 const AZURE_RETRY_DELAYS_MS = [500, 1000, 2000];
+const CLASSIFIER_DEPLOYMENT = env.AZURE_OPENAI_CLASSIFIER_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT;
+const COMPANY_CLASSIFIER_INPUT_LIMIT = 700;
+const WEBSITE_CLASSIFIER_INPUT_LIMIT = 1100;
 const QUICK_QUALIFICATION_CONTEXT = [
   "You classify lead fit for ONE WARE.",
   "Classify conservatively and completely unbiased before preferring any positive category.",
@@ -45,14 +49,14 @@ const QUICK_QUALIFICATION_CONTEXT = [
   "Then decide whether the company is genuinely relevant, clearly irrelevant, or too ambiguous.",
   "Do not infer delivery ownership or category fit from the Apollo filter name, source filter, or a vague company name alone.",
   "Positive archetypes look similar to OCTUM, VEO Automation, Gestalt Automation, kubion, Strategion, visiontechnik.de, or Lachmann & Rink: customer project delivery, implementation ownership, industrial inspection or production relevance, and concrete engineering work rather than generic AI branding.",
-  "Negative reference profiles include SemsoTec Group for display/HMI product engineering and exantas for clearly non-target publication or association-style profiles.",
+  "Negative reference profiles include SemsoTec Group for display/HMI product engineering, exantas for a non-target automotive software-services profile, integralvision.eu for web/UI agency work, Eficode for DevOps/ITSM advisory, t3n for media, and CODESYS for product software/runtime tooling.",
   "High-signal fit phrases include AOI, automated optical inspection, inline inspection, optical quality control, industrial image processing, machine vision integration, embedded computer vision, feasibility study, camera calibration, lighting optimization, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering.",
   "If the company description is missing, generic, placeholder-like, or weak, return other or irrelevant unless there is strong explicit evidence for a positive category.",
   "Reject media companies, magazines, publishers, news portals, event businesses, associations, universities, research institutes, VCs, private equity, banks, insurers, recruiting/HR tech, generic consultancies without delivery ownership, resellers, and direct competing AI software vendors.",
   "Do not classify robot manufacturers, OEMs, hardware vendors, or product-led robotics brands as integrators unless they clearly sell implementation or integration services.",
   "Downgrade companies that mainly sell their own software platform, robot product, hardware portfolio, or generic consulting without visible recurring implementation responsibility.",
-  "Return JSON only with category, relevanceScore 0-100, rationale.",
-  "Keep rationale to one short sentence."
+  "Return compact JSON only with category, relevanceScore 0-100, rationale.",
+  "Keep rationale to one short sentence with at most 18 words."
 ].join(" ");
 const MAX_FILTER_STRATEGY_HISTORY = 8;
 const REFERENCE_COMPANY_CLASSIFICATIONS: Array<{
@@ -72,6 +76,12 @@ const REFERENCE_COMPANY_CLASSIFICATIONS: Array<{
     category: "integrator_general_ai",
     relevanceScore: 90,
     rationale: "Operator reference company for implementation-led automation and AI delivery."
+  },
+  {
+    match: /dataful minds/i,
+    category: "integrator_general_ai",
+    relevanceScore: 86,
+    rationale: "Operator reference company for delivery-led data and AI engineering services."
   },
   {
     match: /kubion/i,
@@ -96,6 +106,48 @@ const REFERENCE_COMPANY_CLASSIFICATIONS: Array<{
     category: "other",
     relevanceScore: 18,
     rationale: "Display, HMI, and optical product engineering profile rather than a target software integrator."
+  },
+  {
+    match: /innoge/i,
+    category: "irrelevant",
+    relevanceScore: 18,
+    rationale: "Generic software consulting, due diligence, and digitalization advisory profile without a clear ONE WARE-style delivery fit."
+  },
+  {
+    match: /integral vision|integralvision/i,
+    category: "irrelevant",
+    relevanceScore: 10,
+    rationale: "Web development and UI/UX agency profile without an industrial AI, edge AI, or automation delivery angle."
+  },
+  {
+    match: /eficode/i,
+    category: "irrelevant",
+    relevanceScore: 16,
+    rationale: "DevOps, ITSM, training, and advisory profile rather than a target AI or automation implementation partner."
+  },
+  {
+    match: /vision[\s-]*domes/i,
+    category: "irrelevant",
+    relevanceScore: 5,
+    rationale: "Geodesic domes and event/garden structures are outside the target software-integrator profile."
+  },
+  {
+    match: /\bt3n\b/i,
+    category: "irrelevant",
+    relevanceScore: 2,
+    rationale: "Digital media and publishing profile rather than a software integrator or delivery partner."
+  },
+  {
+    match: /\bcodesys\b/i,
+    category: "other",
+    relevanceScore: 15,
+    rationale: "Industrial software tooling and runtime product profile rather than a software services integrator."
+  },
+  {
+    match: /imago technologies/i,
+    category: "camera_manufacturer_partner",
+    relevanceScore: 90,
+    rationale: "Industrial camera and embedded vision product vendor profile rather than a software-integrator target."
   },
   {
     match: /exantas automotive|\bexantas\b/i,
@@ -147,6 +199,7 @@ export class AzureOpenAIClient {
     }
 
     try {
+      const compactDescription = this.compactClassificationInput(description, COMPANY_CLASSIFIER_INPUT_LIMIT);
       const content = await this.runChat([
         {
           role: "system",
@@ -156,14 +209,14 @@ export class AzureOpenAIClient {
           role: "user",
           content: [
             `Company=${name}`,
-            `Description=${description}`,
+            `Description=${compactDescription}`,
             prequalification?.mainContext ? `Prequalification main context=${prequalification.mainContext}` : undefined,
             learning ? this.buildLearningContext(learning) : undefined
           ]
             .filter(Boolean)
             .join("\n")
         }
-      ], { maxTokens: 140 });
+      ], { maxTokens: 80, deployment: CLASSIFIER_DEPLOYMENT });
 
       const parsed = this.parseJsonObject<{
         category: LeadCategory;
@@ -199,6 +252,7 @@ export class AzureOpenAIClient {
     }
 
     try {
+      const compactWebsiteSummary = this.compactClassificationInput(crawledWebsiteSummary, WEBSITE_CLASSIFIER_INPUT_LIMIT);
       const content = await this.runChat([
         {
           role: "system",
@@ -217,14 +271,14 @@ export class AzureOpenAIClient {
           content: [
             `Company=${name}`,
             domain ? `Website=${domain}` : undefined,
-            `Crawled website evidence=${crawledWebsiteSummary}`,
+            `Crawled website evidence=${compactWebsiteSummary}`,
             prequalification?.mainContext ? `Prequalification main context=${prequalification.mainContext}` : undefined,
             learning ? this.buildLearningContext(learning) : undefined
           ]
             .filter(Boolean)
             .join("\n")
         }
-      ], { maxTokens: 180 });
+      ], { maxTokens: 96, deployment: CLASSIFIER_DEPLOYMENT });
 
       const parsed = this.parseJsonObject<{
         category: LeadCategory;
@@ -330,6 +384,11 @@ export class AzureOpenAIClient {
         ]))
       );
     }
+  }
+
+  private compactClassificationInput(text: string, maxLength: number): string {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
   }
 
   async chooseApolloContacts(
@@ -941,10 +1000,62 @@ export class AzureOpenAIClient {
       "softwareprojekte",
       "it-projekthaus"
     ];
+    const advisoryOnlySignals = [
+      "unternehmensberatung",
+      "management consulting",
+      "it due diligence",
+      "due diligence",
+      "training",
+      "academy",
+      "workshop",
+      "governance",
+      "risk and compliance",
+      "itsm",
+      "service management",
+      "product management",
+      "advisory",
+      "consulting"
+    ];
+    const webAgencySignals = [
+      "ui/ux",
+      "web development",
+      "drupal",
+      "wordpress",
+      "brand design",
+      "creative studio"
+    ];
+    const implementationStrengthSignals = [
+      "custom software",
+      "full-cycle",
+      "full cycle",
+      "dedicated teams",
+      "solutions & development",
+      "solution development",
+      "software product development",
+      "platform engineering",
+      "infrastructure & engineering",
+      "infrastructure and engineering",
+      "implementieren",
+      "implements ai solutions",
+      "entwickeln von individuellen",
+      "engineering teams"
+    ];
+    const softwareToolVendorSignals = [
+      "development environment",
+      "runtime system",
+      "programming system",
+      "developer tools",
+      "software platform",
+      "control runtime",
+      "ide"
+    ];
 
     const recruitingHits = recruitingSignals.filter((signal) => lowered.includes(signal)).length;
     const serviceDeliveryHits = serviceDeliverySignals.filter((signal) => lowered.includes(signal)).length;
     const serviceHits = serviceSignals.filter((signal) => lowered.includes(signal)).length;
+    const advisoryHits = advisoryOnlySignals.filter((signal) => lowered.includes(signal)).length;
+    const webAgencyHits = webAgencySignals.filter((signal) => lowered.includes(signal)).length;
+    const implementationStrengthHits = implementationStrengthSignals.filter((signal) => lowered.includes(signal)).length;
     if (obviouslyIrrelevantSignals.some((signal) => lowered.includes(signal)) && serviceDeliveryHits === 0 && serviceHits === 0) {
       return {
         category: "irrelevant",
@@ -976,6 +1087,14 @@ export class AzureOpenAIClient {
         category: "irrelevant",
         relevanceScore: 9,
         rationale: "Company description points to pipeline inspection, generic consulting, or another non-target inspection niche instead of industrial vision integration."
+      };
+    }
+
+    if (webAgencyHits >= 2 && implementationStrengthHits < 2 && serviceDeliveryHits < 3) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 12,
+        rationale: "Company description looks like a web or UI/UX agency rather than an industrial or AI implementation partner."
       };
     }
 
@@ -1062,6 +1181,23 @@ export class AzureOpenAIClient {
       };
     }
 
+    const softwareToolVendorHits = softwareToolVendorSignals.filter((signal) => lowered.includes(signal)).length;
+    if (softwareToolVendorHits >= 2 && serviceHits === 0 && automationDeliveryHits === 0 && visionDeliveryHits === 0) {
+      return {
+        category: "other",
+        relevanceScore: 18,
+        rationale: "Company description looks like a software tooling or runtime product vendor rather than a delivery-led integrator."
+      };
+    }
+
+    if (advisoryHits >= 3 && implementationStrengthHits < 2 && automationDeliveryHits === 0 && visionDeliveryHits === 0 && serviceDeliveryHits < 4) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 18,
+        rationale: "Company description looks more like advisory, training, or transformation consulting than a target implementation partner."
+      };
+    }
+
     if (serviceDeliveryHits >= 2 && (lowered.includes("software") || lowered.includes("ai") || lowered.includes("data") || lowered.includes("engineering"))) {
       return {
         category: "integrator_general_ai",
@@ -1117,7 +1253,8 @@ export class AzureOpenAIClient {
   }
 
   private async runChat(messages: ChatMessage[], options: RunChatOptions = {}): Promise<string> {
-    const url = `${env.AZURE_OPENAI_ENDPOINT}/openai/deployments/${env.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION}`;
+    const deployment = options.deployment ?? env.AZURE_OPENAI_DEPLOYMENT;
+    const url = `${env.AZURE_OPENAI_ENDPOINT}/openai/deployments/${deployment}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION}`;
     let response: Response | undefined;
 
     for (let attempt = 0; attempt <= MAX_AZURE_RETRIES; attempt += 1) {
@@ -1129,7 +1266,7 @@ export class AzureOpenAIClient {
         },
         body: JSON.stringify({
           messages,
-          temperature: 0.2,
+          temperature: 0,
           max_completion_tokens: options.maxTokens,
           response_format: { type: "json_object" }
         })

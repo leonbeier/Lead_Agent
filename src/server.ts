@@ -93,8 +93,9 @@ const leadJobSchema = z.object({
   syncToHubSpot: z.boolean().optional(),
   disableHubSpotDeduplication: z.boolean().optional(),
   earlyStopEnabled: z.boolean().optional(),
-  earlyStopReviewCount: z.coerce.number().int().min(5).max(15).optional(),
-  earlyStopThreshold: z.coerce.number().min(0).max(1).optional()
+  earlyStopReviewCount: z.coerce.number().int().min(5).max(30).optional(),
+  earlyStopThreshold: z.coerce.number().min(0).max(1).optional(),
+  earlyStopMinRelevantCount: z.coerce.number().int().min(0).max(30).optional()
 });
 
 const settingsUpdateSchema = z.object({
@@ -110,9 +111,11 @@ const settingsUpdateSchema = z.object({
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
+  syncToHubSpot: z.boolean().optional(),
   earlyStopEnabled: z.boolean().optional(),
-  earlyStopReviewCount: z.coerce.number().int().min(5).max(15).optional(),
-  earlyStopThreshold: z.coerce.number().min(0).max(1).optional()
+  earlyStopReviewCount: z.coerce.number().int().min(5).max(30).optional(),
+  earlyStopThreshold: z.coerce.number().min(0).max(1).optional(),
+  earlyStopMinRelevantCount: z.coerce.number().int().min(0).max(30).optional()
 });
 
 const templateUpdateSchema = z.object({
@@ -189,11 +192,12 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     targetCategories: body.targetCategories ?? settings.targetCategories,
     runDeepResearch: body.runDeepResearch ?? settings.runDeepResearch,
     dryRun: body.dryRun ?? settings.dryRun,
-    syncToHubSpot: body.syncToHubSpot,
+    syncToHubSpot: body.syncToHubSpot ?? settings.syncToHubSpot ?? true,
     disableHubSpotDeduplication: body.disableHubSpotDeduplication,
     earlyStopEnabled: body.earlyStopEnabled ?? settings.earlyStopEnabled,
     earlyStopReviewCount: body.earlyStopReviewCount ?? settings.earlyStopReviewCount,
-    earlyStopThreshold: body.earlyStopThreshold ?? settings.earlyStopThreshold
+    earlyStopThreshold: body.earlyStopThreshold ?? settings.earlyStopThreshold,
+    earlyStopMinRelevantCount: body.earlyStopMinRelevantCount ?? settings.earlyStopMinRelevantCount
   });
 }
 

@@ -217,7 +217,8 @@
     "software_platform_embedding"
   ],
   "runDeepResearch": true,
-  "dryRun": true,
+  "dryRun": false,
+  "syncToHubSpot": true,
   "earlyStopEnabled": true,
   "earlyStopReviewCount": 15,
   "earlyStopThreshold": 0.15

@@ -1,0 +1,1023 @@
+{
+  "requested": {
+    "targetLeadCount": 12,
+    "market": "DE",
+    "mainContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+    "searchStrategyContext": "You are steering a Germany-first campaign for ONE WARE focused on software service providers and system integrators.\n\nPriority for this run:\n- Find German software integrators, automation integrators, embedded/industrial software service providers, and technical project-delivery firms.\n- Strongest fit is explicit Vision AI, Industrial AI, image processing, industrial automation, inspection, surveillance, medtech imaging, or similar project delivery.\n- Also accept firms with broader AI messaging only when they clearly deliver customer projects and a future Vision AI / Industrial AI path is plausible.\n- Prefer service-heavy, project-led, implementation-oriented firms.\n\nAvoid for this run:\n- Media, publishers, magazines, editorial brands, event businesses, associations, universities, research institutes.\n- Product-led robotics makers, OEM hardware vendors, and companies whose main business is selling robots or hardware products.\n- Own AI platform vendors or software products that make ONE WARE look like a direct competitor.\n- Pure consultancies, strategy firms, recruiting, finance, investors, resellers, distributors, and generic SaaS without delivery ownership.\n- Non-German companies unless an unusually strong German delivery footprint is visible.",
+    "creditLessMode": false,
+    "prequalification": {
+      "mainContext": "Classify completely unbiased first. First determine the company archetype. Media, publisher, magazine, event, university, research institute, investor, bank, insurer, recruiting, reseller, generic advisory, and product-led robotics or OEM hardware profiles must not land in integrator categories. Positive categories require actual delivery ownership and industrial or vision-relevant implementation signals. If no verified company description is available, default to other or irrelevant unless there is strong explicit evidence."
+    },
+    "executionContexts": {
+      "integrator_vision_industrial_ai": {
+        "researchPriorities": [
+          "Validate recurring vision-heavy delivery ownership.",
+          "Look for fixed-price pressure and repeatable project patterns."
+        ],
+        "outreachPriorities": [
+          "Lead with throughput and margin improvements.",
+          "Keep partner framing and project efficiency language."
+        ],
+        "personalizationRules": [
+          "Personalize only with concrete delivery hooks.",
+          "Retain template backbone and ONE WARE USP wording."
+        ],
+        "avoidSignals": [
+          "Generic AI buzzwords without delivery context"
+        ]
+      },
+      "integrator_general_ai": {
+        "researchPriorities": [
+          "Identify where generic AI delivery can benefit from faster vision model cycles.",
+          "Check if they implement projects, not only advise."
+        ],
+        "outreachPriorities": [
+          "Connect ONE WARE to project speed and predictability."
+        ],
+        "personalizationRules": [
+          "Personalize around current delivery workflow gaps."
+        ],
+        "avoidSignals": [
+          "Treating them as AI beginners"
+        ]
+      },
+      "integrator_relevant_focus": {
+        "researchPriorities": [
+          "Pinpoint vertical-specific delivery bottlenecks and hardware constraints.",
+          "Validate recurring vision/edge components."
+        ],
+        "outreachPriorities": [
+          "Anchor message in vertical project risk reduction."
+        ],
+        "personalizationRules": [
+          "Use factual vertical hooks only."
+        ],
+        "avoidSignals": [
+          "Over-generalized messaging"
+        ]
+      },
+      "industrial_end_customer_scaled": {
+        "researchPriorities": [
+          "Confirm production scale and internal engineering capability.",
+          "Find QC, inspection, and process automation leverage points."
+        ],
+        "outreachPriorities": [
+          "Lead with economics, feasibility, and speed to production."
+        ],
+        "personalizationRules": [
+          "Ground in concrete production context."
+        ],
+        "avoidSignals": [
+          "Abstract transformation talk"
+        ]
+      },
+      "camera_manufacturer_partner": {
+        "researchPriorities": [
+          "Validate partner fit and customer AI-enablement potential."
+        ],
+        "outreachPriorities": [
+          "Focus on enabling customer-ready AI setups."
+        ],
+        "personalizationRules": [
+          "Personalize with product-line evidence only."
+        ],
+        "avoidSignals": [
+          "Positioning as replacement of core hardware business"
+        ]
+      },
+      "machine_builder_ai_enablement": {
+        "researchPriorities": [
+          "Validate OEM integration pathways and customer-facing AI option potential."
+        ],
+        "outreachPriorities": [
+          "Position ONE WARE as fast AI enablement layer for machine offerings."
+        ],
+        "personalizationRules": [
+          "Use machine/product context, not generic AI language."
+        ],
+        "avoidSignals": [
+          "Ignoring mechanical integration realities"
+        ]
+      },
+      "software_platform_embedding": {
+        "researchPriorities": [
+          "Validate embeddability and partner incentives."
+        ],
+        "outreachPriorities": [
+          "Lead with integration leverage and user value lift."
+        ],
+        "personalizationRules": [
+          "Tie outreach to concrete platform workflows."
+        ],
+        "avoidSignals": [
+          "Overpromising without integration fit"
+        ]
+      }
+    },
+    "targetCategories": [
+      "integrator_vision_industrial_ai",
+      "integrator_general_ai",
+      "integrator_relevant_focus"
+    ],
+    "runDeepResearch": true,
+    "dryRun": false,
+    "syncToHubSpot": false,
+    "earlyStopEnabled": true,
+    "earlyStopReviewCount": 15,
+    "earlyStopThreshold": 0.5
+  },
+  "suggestedFilters": [
+    {
+      "name": "DACH Vision / Industrial AI Integrators",
+      "persona": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "industries": [
+        "Industrial Automation",
+        "System Integration",
+        "Industrial Software",
+        "Embedded Software"
+      ],
+      "keywords": [
+        "system integrator",
+        "industrial automation",
+        "machine vision integration",
+        "inspection systems",
+        "embedded software"
+      ],
+      "locations": [
+        "Germany",
+        "Austria",
+        "Switzerland"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500",
+        "501,1000"
+      ],
+      "targetCategories": [
+        "integrator_vision_industrial_ai"
+      ],
+      "notes": "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects. Market focus: DE."
+    },
+    {
+      "name": "Europe Relevant-Vertical Integrators",
+      "persona": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+      "industries": [
+        "Industrial Automation",
+        "Aerospace",
+        "Medical Devices",
+        "Automotive",
+        "Industrial Software"
+      ],
+      "keywords": [
+        "surveillance integration",
+        "defence systems integration",
+        "medtech imaging",
+        "industrial inspection",
+        "automotive vision"
+      ],
+      "locations": [
+        "Germany",
+        "Netherlands",
+        "France",
+        "Belgium",
+        "Sweden"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500",
+        "501,1000"
+      ],
+      "targetCategories": [
+        "integrator_relevant_focus"
+      ],
+      "notes": "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks. Market focus: DE."
+    },
+    {
+      "name": "DACH General AI Integrators",
+      "persona": "Software or consulting integrator with general AI focus and real implementation ownership",
+      "industries": [
+        "Industrial Automation",
+        "Computer Vision",
+        "Embedded Software",
+        "Industrial Software"
+      ],
+      "keywords": [
+        "computer vision integration",
+        "image processing",
+        "industrial ai",
+        "automation software",
+        "engineering services"
+      ],
+      "locations": [
+        "Germany",
+        "Austria",
+        "Switzerland"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500"
+      ],
+      "targetCategories": [
+        "integrator_general_ai"
+      ],
+      "notes": "Use when AI capability is visible, even if vision specialization is not explicit yet. Market focus: DE."
+    }
+  ],
+  "evaluations": [
+    {
+      "filterName": "DACH General AI Integrators",
+      "totalReviewed": 54,
+      "relevantCount": 8,
+      "relevanceRatio": 0.14814814814814814,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 0,
+        "integrator_general_ai": 8,
+        "integrator_relevant_focus": 0,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 0,
+        "software_platform_embedding": 0,
+        "irrelevant": 8,
+        "other": 38
+      },
+      "stoppedEarly": false,
+      "initialReviewCount": 11,
+      "skippedAfterEarlyStop": 0,
+      "recommendation": "Low signal. Replace or significantly revise the filter."
+    },
+    {
+      "filterName": "DACH Vision / Industrial AI Integrators",
+      "totalReviewed": 14,
+      "relevantCount": 2,
+      "relevanceRatio": 0.14285714285714285,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 0,
+        "integrator_general_ai": 1,
+        "integrator_relevant_focus": 1,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 0,
+        "software_platform_embedding": 0,
+        "irrelevant": 5,
+        "other": 7
+      },
+      "stoppedEarly": true,
+      "initialReviewCount": 14,
+      "skippedAfterEarlyStop": 36,
+      "recommendation": "Low signal. Replace or significantly revise the filter. Early stop triggered after 14 reviews."
+    },
+    {
+      "filterName": "Europe Relevant-Vertical Integrators",
+      "totalReviewed": 11,
+      "relevantCount": 1,
+      "relevanceRatio": 0.09090909090909091,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 1,
+        "integrator_general_ai": 0,
+        "integrator_relevant_focus": 0,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 1,
+        "machine_builder_ai_enablement": 1,
+        "software_platform_embedding": 0,
+        "irrelevant": 2,
+        "other": 6
+      },
+      "stoppedEarly": true,
+      "initialReviewCount": 11,
+      "skippedAfterEarlyStop": 39,
+      "recommendation": "Low signal. Replace or significantly revise the filter. Early stop triggered after 11 reviews."
+    }
+  ],
+  "shortlistedCompanies": [
+    {
+      "name": "SEITech Solutions",
+      "domain": "http://www.seitech-solutions.com",
+      "country": "Spain",
+      "shortDescription": "SEITech Solutions is a Spain-based engineering technology and consulting company focused on field service operations, industrial automation, and automotive services. It primarily sells services and project-based implementation, not consumer products; it also develops some proprietary products and tools.",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_relevant_focus",
+      "relevanceScore": 75,
+      "rationale": "SEITech Solutions delivers project-based implementation in industrial automation and automotive services, indicating delivery ownership in relevant verticals."
+    },
+    {
+      "name": "SEMAteq Engineering & Consulting",
+      "domain": "https://www.semateq.de",
+      "country": "Germany",
+      "shortDescription": "Industrial software, embedded systems, mechatronics, and automation engineering firm.",
+      "sourceFilter": "DACH General AI Integrators (openai-web-search)",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "gip automation GmbH",
+      "domain": "https://gip-automation.de",
+      "country": "Germany",
+      "shortDescription": "Automation and MES software provider focused on planning, engineering, installation, commissioning, and support.",
+      "sourceFilter": "DACH General AI Integrators (openai-web-search)",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "ZEUS Automation",
+      "domain": "https://zeus-automation.de",
+      "country": "Germany",
+      "shortDescription": "Process and industry automation company with embedded systems and software development.",
+      "sourceFilter": "DACH General AI Integrators (openai-web-search)",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "ZEUS Automation is a process and industry automation company with embedded systems and software development, indicating delivery ownership in industrial AI but without explicit Vision AI focus."
+    },
+    {
+      "name": "RIG Automation e.U.",
+      "domain": "https://www.rig-automation.at",
+      "country": "Austria",
+      "shortDescription": "Industrial automation and embedded software services company.",
+      "sourceFilter": "DACH General AI Integrators (openai-web-search)",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Bitronic GmbH",
+      "domain": "https://www.bitronic.at",
+      "country": "Austria",
+      "shortDescription": "Electronics development and embedded software engineering company.",
+      "sourceFilter": "DACH General AI Integrators (openai-web-search)",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Weiss Automation",
+      "domain": "https://www.weiss-automation.at",
+      "country": "Austria",
+      "shortDescription": "Automation solutions provider with digital engineering and software engineering.",
+      "sourceFilter": "DACH General AI Integrators (openai-web-search)",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "ABAB Development e.U.",
+      "domain": "https://www.abab-development.at",
+      "country": "Austria",
+      "shortDescription": "Embedded software development partner for industrial and high-tech applications.",
+      "sourceFilter": "DACH General AI Integrators (openai-web-search)",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Cegelec NDT-PSC",
+      "domain": "http://www.cegelec-ndt.com",
+      "country": "France",
+      "shortDescription": "Cegelec NDT-PSC is a France-based engineering and non-destructive testing (NDT) services company. It appears to be an implementation-led services provider that performs inspections, interventions, training, and related technical engineering work for industrial, aerospace, and nuclear customers rather than a pure product vendor.",
+      "sourceFilter": "Europe Relevant-Vertical Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 75,
+      "rationale": "Cegelec NDT-PSC provides engineering and non-destructive testing services with industrial inspection focus, indicating delivery ownership and relevance to Vision AI in industrial contexts."
+    },
+    {
+      "name": "ALTEN Switzerland",
+      "domain": "http://www.alten.ch",
+      "country": "Switzerland",
+      "shortDescription": "ALTEN Switzerland is an engineering and IT services firm that primarily sells consulting and implementation services, not products. It appears to deliver customer projects across areas like software, cloud, cybersecurity, embedded systems, quality, and project management, so it fits an implementation-led services provider profile.",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_general_ai",
+      "relevanceScore": 70,
+      "rationale": "ALTEN Switzerland is an implementation-led engineering and IT services firm with delivery ownership across software and embedded systems, fitting a general AI integrator profile without explicit Vision AI focus."
+    }
+  ],
+  "researchBriefs": [
+    {
+      "companyName": "SEITech Solutions",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://seitech-solutions.com/",
+        "https://seitech.es/en/",
+        "https://apaveprod-cd1-bbh7c5ezeaaugfae.z01.azurefd.net/-/media/Project/GroupeApave/Apave-com/News/Press-release/2025-07-Acquisition-Seitech-espagne/CP-Apave-Acquisition-SEITECH-EN.pdf?hash=BE65E154086F30859EB15A87579E544C&rev=fc52800bc70e4a5498df5ccc75ab4a35"
+      ],
+      "overview": "SEITech Solutions appears relevant based on its positioning around seitech solutions is a spain-based engineering technology and consulting company focused on field service operations, industrial automation, and automotive services. it primarily sells services and project-based implementation, not consumer products; it also develops some proprietary products and tools..",
+      "qualificationSummary": "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
+      "qualifyingSignals": [
+        "Category fit: integrator_relevant_focus",
+        "Source filter: DACH Vision / Industrial AI Integrators",
+        "Target region bias: Germany first, then wider EU/US/JP/KR.",
+        "Execution context applied: Main context:"
+      ],
+      "riskFlags": [
+        "Needs manual verification against direct competing own Vision AI software before outreach."
+      ],
+      "likelyGermanSpeaking": false,
+      "outreachLanguage": "en",
+      "rankings": {
+        "customer": 4,
+        "serviceProvider": 9,
+        "partner": 5
+      },
+      "businessPotentialEUR": 25000,
+      "businessPotentialReasoning": "Vertical-specialist integrator where a few critical use cases can justify higher per-AI value. Estimated at about EUR 25,000.",
+      "targetIndustry": "Industrial automation, robotics, machine vision, and AI project delivery",
+      "productsOffered": "Vertical-specific AI/vision systems, integration projects, edge deployments",
+      "recommendedTemplateKey": "integrator_relevant_focus_template",
+      "personalizationRule": "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
+      "linkedInAngle": "Use a short question around delivery bottlenecks, not a generic compliment.",
+      "emailAngle": "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
+      "phoneAngle": "Lead with the operational bottleneck, not platform features.",
+      "linkedInMessage": "Quick question: do you currently have vision AI workstreams in your vertical projects that are slowed down by model selection and tuning? That is exactly where we help.",
+      "emailSubject": "Deliver vision AI faster in demanding vertical projects",
+      "emailBody": "Hello Mr./Ms. [Name],\n\nIn demanding verticals like defence, surveillance, robotics, or medtech, vision AI is often on the critical path - and model selection plus optimization consume a disproportionate amount of time.\n\nWith ONE WARE, application-specific vision models can be created in minutes instead of months and deployed directly to target hardware.\n\nThat reduces delivery risk and makes project timelines more predictable.\n\nIf useful, we can look at a real use case and identify where the biggest leverage might be for your team.\n\nBest regards,\n[Your Name]",
+      "phoneScript": "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. We help integrators in demanding verticals bring vision AI projects to production much faster. Is that relevant for your team right now?",
+      "eventIdea": "Check for presence at SPS, Automatica, Vision, or regional automation events."
+    },
+    {
+      "companyName": "SEMAteq Engineering & Consulting",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://www.semateq.de/",
+        "https://www.semateq.de/Kompetenzen/IndustrialSoftware/",
+        "https://www.semateq.de/Kompetenzen/Mechatronik/",
+        "https://www.semateq.de/Impressum/"
+      ],
+      "overview": "SEMAteq Engineering & Consulting appears relevant based on its positioning around industrial software, embedded systems, mechatronics, and automation engineering firm..",
+      "qualificationSummary": "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
+      "qualifyingSignals": [
+        "Category fit: integrator_general_ai",
+        "Source filter: DACH General AI Integrators (openai-web-search)",
+        "Target region bias: Germany first, then wider EU/US/JP/KR.",
+        "Execution context applied: Main context:"
+      ],
+      "riskFlags": [
+        "Needs manual verification against direct competing own Vision AI software before outreach."
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 3,
+        "serviceProvider": 8,
+        "partner": 4
+      },
+      "businessPotentialEUR": 14000,
+      "businessPotentialReasoning": "General AI integrator with likely upsell into vision projects, but less concentrated than explicit vision specialists. Estimated at about EUR 14,000.",
+      "targetIndustry": "Industrial automation, robotics, machine vision, and AI project delivery",
+      "productsOffered": "AI delivery services, software implementation, applied ML projects",
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
+      "linkedInAngle": "Use a short question around delivery bottlenecks, not a generic compliment.",
+      "emailAngle": "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
+      "phoneAngle": "Lead with the operational bottleneck, not platform features.",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Check for presence at SPS, Automatica, Vision, or regional automation events."
+    },
+    {
+      "companyName": "gip automation GmbH",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://gip-automation.de/",
+        "https://gip-automation.de/kontakt/",
+        "https://gip-automation.de/unternehmensprofil/",
+        "https://gip-automation.de/sps-und-visualisierung/",
+        "https://gip-automation.de/wp-content/uploads/iPlus_MES_SCADA_GIP-Automation_en.pdf"
+      ],
+      "overview": "gip automation GmbH is a German industrial automation and MES software provider specializing in planning, engineering, installation, commissioning, and support for industrial production and process industries. They deliver full automation solutions from field level to MES with ERP integration, focusing on batch/process automation in sectors such as chemicals, feed, building materials, and food. Their delivery model includes strong implementation ownership across the project lifecycle.",
+      "qualificationSummary": "gip automation GmbH is a strong candidate for ONE WARE's offering as they implement automation projects end-to-end and operate in industrial environments where Vision AI could accelerate project delivery and reduce trial and error. Their focus on MES and process automation suggests potential use cases for Vision AI models in quality control, process monitoring, or equipment inspection. The company likely faces challenges in speeding up model optimization and deployment cycles, which ONE WARE can address by automating production-ready Vision AI model creation, enabling faster, more predictable project timelines with smaller, hardware-efficient models.",
+      "qualifyingSignals": [
+        "Full project lifecycle delivery including engineering, installation, commissioning, and support",
+        "Focus on industrial automation and MES software with integration to ERP systems",
+        "Specialization in batch/process automation with complex production steps",
+        "Strong implementation ownership indicating practical delivery challenges",
+        "Operating in Germany with German-speaking decision makers"
+      ],
+      "riskFlags": [
+        "Integrator-plus-software hybrid rather than pure software vendor",
+        "Focus on process and batch automation may limit discrete Vision AI use cases",
+        "No independent third-party validation of scale or revenue found",
+        "Potentially less aligned with discrete manufacturing Vision AI scenarios"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 6
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "Typical AI use cases start around 7,000 EUR, with complex production-grade deployments reaching 20,000 to 40,000 EUR. Given gip automation's full project delivery scope and industrial MES focus, initial Vision AI projects could realistically reach the upper mid-range. Potential for multiple use cases and recurring deployments exists but is moderated by their batch/process automation specialization.",
+      "targetIndustry": "Industrial Automation, Process Manufacturing, MES Software",
+      "productsOffered": "Automation technology, MES/SCADA/HMI/SPS software, proprietary MES systems (VarioBatch®, iPlus.MES), PLC/SCADA/HMI development",
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Personalize around gip automation's full project lifecycle delivery and potential bottlenecks in Vision AI model optimization and deployment speed within batch/process automation environments.",
+      "linkedInAngle": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailAngle": "Viele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant. ONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware. So lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.",
+      "phoneAngle": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Organize a technical workshop or webinar focused on accelerating Vision AI model deployment in industrial automation projects, showcasing how ONE WARE's automation software reduces trial and error and shortens project timelines, tailored for integrators like gip automation GmbH."
+    },
+    {
+      "companyName": "ZEUS Automation",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://zeus-automation.de/",
+        "https://zeus-automation.de/about.html",
+        "https://zeus-automatisierung.de/automatisierung.html",
+        "https://zeus-automation.de/projects.html"
+      ],
+      "overview": "ZEUS Automation is a Germany-based industrial automation and consulting firm with a strong focus on embedded systems, software development, and AI-enabled industrial use cases. They deliver projects in regulated environments across automotive, aerospace, process industry, pharma, oil & gas, and manufacturing sectors. Their expertise includes PLC/SCADA/HMI integration, robotics, and compliance-heavy domains. ZEUS Automation appears to be primarily a service and integration provider rather than a product vendor, making them a relevant target for ONE WARE's software that accelerates production-ready Vision AI model creation.",
+      "qualificationSummary": "ZEUS Automation implements industrial automation projects with embedded AI components, indicating they face delivery challenges typical for integrators. Their broad service scope and focus on regulated industries suggest a need for predictable, efficient AI model deployment workflows. They likely encounter bottlenecks in vision AI model optimization and integration, which ONE WARE can address by automating model generation and hardware optimization, reducing trial and error and speeding time to production.",
+      "qualifyingSignals": [
+        "Industrial automation integrator with embedded systems and AI-enabled use cases",
+        "Project delivery focus in regulated and compliance-heavy industries",
+        "Experience with PLC/SCADA/HMI and robotics integration",
+        "AI consulting and machine learning integration for industrial applications",
+        "International delivery experience indicating scalable project execution"
+      ],
+      "riskFlags": [
+        "Broad positioning across automation, software, IT security, and AI may dilute focus",
+        "No clear public evidence of product-led AI offerings; primarily service/integration-led",
+        "Marketing claims and project metrics not independently verified",
+        "No confirmed organization address on website, though Germany-based context is strong"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 6
+      },
+      "businessPotentialEUR": 30000,
+      "businessPotentialReasoning": "As a general AI integrator with multiple industrial projects, ZEUS Automation could start with a single AI use case around 7,000 EUR and scale to more complex production-grade deployments worth 20,000 to 40,000 EUR. Given their broad industry coverage and international delivery, multiple use cases and repeat projects are likely, supporting a mid-range business potential estimate.",
+      "targetIndustry": "Industrial Automation, Automotive, Aerospace, Process Industry, Pharma, Oil & Gas, Manufacturing",
+      "productsOffered": "Embedded Systems, Software Development, PLC/SCADA/HMI Integration, Robotics, AI Consulting and Integration",
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Personalize outreach around ZEUS Automation's broad industrial automation delivery scope and likely bottlenecks in vision AI model optimization and integration within regulated environments.",
+      "linkedInAngle": "Frage nach dem größten Engpass bei Vision-AI-Projekten in der Modellgenerierung oder Integration, um den automatisierten Modellgenerierungsprozess von ONE WARE vorzustellen.",
+      "emailAngle": "Hervorhebung der typischen Engpässe bei Vision-AI-Projekten in der Modellwahl und Optimierung, die sich oft verzögern, und wie ONE WARE diese Schritte automatisiert, um schnell produktionsreife Modelle zu liefern.",
+      "phoneAngle": "Direkte Ansprache der Zeitverluste bei Modellwahl und Optimierung in Vision-Projekten und Vorstellung der Automatisierungslösung von ONE WARE.",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], hier ist [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Einladung zu einem Webinar oder Workshop für industrielle AI-Integratorenteams, in dem gezeigt wird, wie ONE WARE die Vision AI Modellgenerierung und Optimierung automatisiert und so Projektlaufzeiten und Entwicklungsaufwände signifikant reduziert."
+    },
+    {
+      "companyName": "RIG Automation e.U.",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://www.rig-automation.at/"
+      ],
+      "overview": "RIG Automation e.U. appears relevant based on its positioning around industrial automation and embedded software services company..",
+      "qualificationSummary": "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
+      "qualifyingSignals": [
+        "Category fit: integrator_general_ai",
+        "Source filter: DACH General AI Integrators (openai-web-search)",
+        "Target region bias: Germany first, then wider EU/US/JP/KR.",
+        "Execution context applied: Main context:"
+      ],
+      "riskFlags": [
+        "Needs manual verification against direct competing own Vision AI software before outreach."
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 3,
+        "serviceProvider": 8,
+        "partner": 4
+      },
+      "businessPotentialEUR": 14000,
+      "businessPotentialReasoning": "General AI integrator with likely upsell into vision projects, but less concentrated than explicit vision specialists. Estimated at about EUR 14,000.",
+      "targetIndustry": "Industrial automation, robotics, machine vision, and AI project delivery",
+      "productsOffered": "AI delivery services, software implementation, applied ML projects",
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
+      "linkedInAngle": "Use a short question around delivery bottlenecks, not a generic compliment.",
+      "emailAngle": "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
+      "phoneAngle": "Lead with the operational bottleneck, not platform features.",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Check for presence at SPS, Automatica, Vision, or regional automation events."
+    },
+    {
+      "companyName": "Bitronic GmbH",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://www.bitronic.at/",
+        "https://www.bitronic.at/impressum/",
+        "https://www.bitronic.at/downloads-bitronic/"
+      ],
+      "overview": "Bitronic GmbH is an Austrian electronics development and embedded software engineering company focused on industrial applications. They provide end-to-end delivery from idea through electronics, firmware, mechanical design, prototyping, and small-series manufacturing. Their integrated approach and embedded systems expertise position them as a relevant general AI integrator candidate for production-ready Vision AI model acceleration.",
+      "qualificationSummary": "Bitronic’s full-stack delivery in electronics, embedded firmware, and mechanical assembly aligns with ONE WARE’s value proposition of accelerating production-ready Vision AI models for embedded and edge devices. Their industrial focus and prototyping capabilities suggest they implement projects rather than only advise. However, public evidence on specific AI or Vision AI projects is limited, so outreach should focus on potential delivery bottlenecks in model generation and integration.",
+      "qualifyingSignals": [
+        "End-to-end electronics and embedded software development for industrial applications",
+        "In-house prototyping and small-series manufacturing capabilities",
+        "Focus on embedded firmware and real-time logic, relevant for edge AI deployment",
+        "Integrated mechanical and enclosure design supporting hardware-efficient solutions"
+      ],
+      "riskFlags": [
+        "Limited public information on AI or Vision AI specific projects or customer verticals",
+        "No explicit mention of AI delivery or machine learning projects on public website",
+        "Gated content may hide additional capabilities, creating some uncertainty"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 6,
+        "serviceProvider": 7,
+        "partner": 5
+      },
+      "businessPotentialEUR": 20000,
+      "businessPotentialReasoning": "As a general AI integrator with embedded and industrial electronics expertise, Bitronic could realistically start with a single Vision AI use case around 7,000 EUR and scale to 20,000-40,000 EUR for production-grade deployments. Their prototyping and small-series manufacturing suggest potential for multiple use cases or repeat business, but lack of explicit AI signals tempers upside.",
+      "targetIndustry": "Industrial Electronics and Embedded Systems",
+      "productsOffered": [
+        "Custom electronics development (boards, controls, sensor systems)",
+        "Embedded software and firmware for microcontrollers and real-time systems",
+        "Mechanical and enclosure design and fabrication",
+        "Prototyping and small-series manufacturing"
+      ],
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Personalize outreach by highlighting potential delivery bottlenecks in Vision AI model generation and integration within embedded industrial projects, referencing their end-to-end delivery workflow and prototyping capabilities.",
+      "linkedInAngle": "Ask about their current biggest bottleneck in Vision AI projects—model generation or integration—and offer ONE WARE’s automation to speed up production-ready model delivery.",
+      "emailAngle": "Focus on how ONE WARE can reduce trial and error and accelerate the path from data to production-ready Vision AI models optimized for embedded hardware, improving project predictability and delivery speed.",
+      "phoneAngle": "Briefly introduce ONE WARE’s automation of Vision AI model optimization and deployment, and ask if model choice and tuning currently slow down their embedded AI projects.",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Invite Bitronic to a focused workshop or webinar on accelerating embedded Vision AI deployment with automated model generation and optimization, showcasing how ONE WARE reduces engineering overhead and shortens project timelines."
+    },
+    {
+      "companyName": "Weiss Automation",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://www.weiss-automation.at/en/",
+        "https://www.weiss-automation.at/en/company/",
+        "https://www.weiss-automation.at/en/automation/",
+        "https://www.lassnitzhoehe.gv.at/betriebe/weiss-automation/"
+      ],
+      "overview": "Weiss Automation appears relevant based on its positioning around automation solutions provider with digital engineering and software engineering..",
+      "qualificationSummary": "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
+      "qualifyingSignals": [
+        "Category fit: integrator_general_ai",
+        "Source filter: DACH General AI Integrators (openai-web-search)",
+        "Target region bias: Germany first, then wider EU/US/JP/KR.",
+        "Execution context applied: Main context:"
+      ],
+      "riskFlags": [
+        "Needs manual verification against direct competing own Vision AI software before outreach."
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 3,
+        "serviceProvider": 8,
+        "partner": 4
+      },
+      "businessPotentialEUR": 14000,
+      "businessPotentialReasoning": "General AI integrator with likely upsell into vision projects, but less concentrated than explicit vision specialists. Estimated at about EUR 14,000.",
+      "targetIndustry": "Industrial automation, robotics, machine vision, and AI project delivery",
+      "productsOffered": "AI delivery services, software implementation, applied ML projects",
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
+      "linkedInAngle": "Use a short question around delivery bottlenecks, not a generic compliment.",
+      "emailAngle": "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
+      "phoneAngle": "Lead with the operational bottleneck, not platform features.",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Check for presence at SPS, Automatica, Vision, or regional automation events."
+    },
+    {
+      "companyName": "ABAB Development e.U.",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://www.abab-development.at/"
+      ],
+      "overview": "ABAB Development e.U. is an Austrian embedded software development partner specializing in high-performance, reliable embedded solutions for automotive, rail, aerospace/defense, and industrial/medtech sectors. They offer full-lifecycle delivery from requirements engineering through software development, functional safety, firmware, AUTOSAR integration, and lifecycle management, using agile methods and modern CI/CD tooling. Their industry focus includes industrial automation and Industry 4.0 use cases, indicating relevant overlap with Vision AI deployment challenges in embedded contexts.",
+      "qualificationSummary": "ABAB Development e.U. is a strong candidate as an integrator partner for ONE WARE due to their embedded software delivery expertise in demanding industrial sectors and agile customer-centric approach. They implement projects (not just advisory), which aligns with ONE WARE’s value in accelerating production-ready Vision AI model delivery. Their focus on high-performance embedded systems and Industry 4.0 use cases suggests potential bottlenecks in model optimization and hardware-efficient deployment where ONE WARE’s automation can reduce trial and error and speed time to production.",
+      "qualifyingSignals": [
+        "Embedded software partner for industrial and high-tech applications",
+        "Full-lifecycle delivery including software development and lifecycle management",
+        "Focus on automotive, rail, aerospace/defense, and industrial/medtech sectors",
+        "Use of agile development, continuous integration/deployment, and automated testing",
+        "Industry 4.0 and industrial automation use cases mentioned",
+        "Customer-centric delivery model emphasizing reliable, high-performance embedded solutions"
+      ],
+      "riskFlags": [
+        "Limited public third-party validation or detailed case studies available",
+        "No explicit mention of AI or Vision AI projects on public website",
+        "No clear revenue, headcount, or export footprint data found",
+        "Potentially limited public evidence of AI-specific delivery bottlenecks"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 6,
+        "serviceProvider": 8,
+        "partner": 7
+      },
+      "businessPotentialEUR": 25000,
+      "businessPotentialReasoning": "As a full-lifecycle embedded software integrator in demanding industrial sectors, ABAB Development e.U. likely undertakes complex AI or Vision AI projects where faster model iteration and hardware-efficient deployment can reduce costs and delivery time. Typical AI use cases start around 7,000 EUR and can scale to 20,000-40,000 EUR for production-grade deployments. Given their industry breadth and project scope, a mid-range estimate of 25,000 EUR per AI use case is realistic, with potential to multiply across multiple projects or OEM rollouts.",
+      "targetIndustry": "Automotive, Rail, Aerospace & Defence, Industrial Automation, MedTech",
+      "productsOffered": "Embedded software development, requirements engineering, functional safety, firmware, AUTOSAR integration, lifecycle management",
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Personalize around current delivery workflow gaps in embedded Vision AI model optimization and deployment, emphasizing faster production-ready model creation and hardware efficiency to reduce engineering overhead and improve project predictability.",
+      "linkedInAngle": "Ask about their biggest bottleneck in Vision AI projects—model generation or integration—and highlight ONE WARE's automation of that step to speed delivery and reduce trial and error.",
+      "emailAngle": "Focus on the common challenge of prolonged model selection, optimization, and deployment adjustments in Vision AI projects. Present ONE WARE as the solution automating these steps to produce production-ready models in minutes, enabling more projects with better timeline predictability.",
+      "phoneAngle": "Directly address the time-consuming nature of model choice and optimization in Vision AI projects and introduce ONE WARE’s automation to accelerate these phases, asking if this is a relevant pain point for their delivery teams.",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], hier ist [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Organize a webinar or roundtable focused on accelerating embedded Vision AI deployment in industrial sectors, showcasing how automation reduces trial and error and speeds time to production-ready models, inviting ABAB Development e.U. and similar integrators to share challenges and explore solutions."
+    },
+    {
+      "companyName": "Cegelec NDT-PSC",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://www.lusha.com/business/eafe8ebb5c2aef0f/",
+        "https://www.nuclearvalley.com/annuaire/7390/vinci-energies-cegelec-ndt",
+        "https://pfce-online.com/membre/cegelec/"
+      ],
+      "overview": "Cegelec NDT-PSC is a France-based engineering and non-destructive testing (NDT) services company focused on industrial, aerospace, nuclear, and energy sectors. It operates primarily as a services-led integrator delivering inspections, interventions, process engineering, and training rather than as a product vendor. Their delivery ownership around complex inspection workflows and process qualification suggests potential fit for Vision AI automation that reduces trial and error and accelerates production readiness.",
+      "qualificationSummary": "Cegelec NDT-PSC’s core business is service delivery with strong technical execution in NDT and inspection workflows. They likely face fixed-price and repeatable project pressures typical for integrators. Their industrial and nuclear customer base implies stringent production constraints and hardware realities. However, no direct evidence of internal AI model development or software product ownership was found, so ONE WARE’s value proposition should focus on accelerating model generation and integration efficiency within their existing inspection and process automation projects.",
+      "qualifyingSignals": [
+        "Strong delivery ownership in industrial inspection and NDT workflows",
+        "Focus on engineering, process development, and on-site interventions",
+        "Serving sectors with high production constraints: nuclear, aerospace, petrochemical",
+        "Part of VINCI Energies group, indicating structured project delivery and repeatable workflows",
+        "Likely fixed-price and margin pressure typical for integrators in industrial services"
+      ],
+      "riskFlags": [
+        "No evidence of standalone AI software or product development",
+        "Positioning primarily as a service provider, not a software vendor",
+        "Public information mostly from third-party directories, not direct company sources",
+        "Possible brand and subsidiary boundary blurring within VINCI Energies group"
+      ],
+      "likelyGermanSpeaking": false,
+      "outreachLanguage": "English",
+      "rankings": {
+        "customer": 3,
+        "serviceProvider": 7,
+        "partner": 6
+      },
+      "businessPotentialEUR": 20000,
+      "businessPotentialReasoning": "As a service-led integrator in industrial inspection, a single Vision AI use case for inspection automation or workflow digitization could start around 7,000 EUR but more realistically range between 20,000 to 40,000 EUR for production-grade deployments. Given their repeatable project patterns and multiple sectors served, potential exists to scale across use cases, but no direct evidence of large-scale AI product rollouts or OEM partnerships reduces upside.",
+      "targetIndustry": "Industrial Inspection, Nuclear, Aerospace, Energy, Petrochemical",
+      "productsOffered": "Non-destructive Testing Services, Inspection Engineering, Process Development, On-site Interventions, Training",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only if a concrete delivery bottleneck in Vision AI model iteration or integration is identified; otherwise keep focus on throughput and margin improvements in inspection workflows.",
+      "linkedInAngle": "Briefly ask about current speed and pain points in getting Vision AI models production-ready for inspection tasks, highlighting common delays in model optimization among integrators.",
+      "emailAngle": "Focus on reducing weeks or months of trial and error in Vision AI model tuning and deployment for inspection workflows, emphasizing faster iteration, predictable timelines, and lower engineering overhead.",
+      "phoneAngle": "Quickly probe if model selection and optimization in Vision AI projects cause significant delays, and offer ONE WARE’s automation to speed up production readiness and improve project throughput.",
+      "linkedInMessage": "Quick question: How fast can you currently get a Vision AI model production-ready for your inspection projects? We often see integrators spend unnecessary weeks on model choice and tuning. We automate exactly that part. How is it for you?",
+      "emailSubject": "Vision AI without long optimization phases",
+      "emailBody": "Hello,\n\nAre you currently working on Vision AI projects where it takes many iterations until a model is production-ready – or where it doesn’t reliably work despite multiple attempts?\n\nWe often see integrators spending weeks to months on tuning and deployment instead of focusing on the actual solution.\n\nWe developed software that creates custom Vision AI models in under 5 minutes, ready for production deployment. This enables teams to iterate much faster, plan project timelines better, and deliver more projects with the same team.\n\nI’m curious: Where is your biggest bottleneck in Vision AI projects – model generation or integration?\n\nBest regards,\n[Your Name]",
+      "phoneScript": "Hello, this is [Your Name] from ONE WARE. I’ll keep it brief – do you have 30 seconds? We’re talking to integrators who spend weeks or months on model selection and optimization in Vision AI projects. We automate that part to speed up production readiness. How is it for you currently?",
+      "eventIdea": "Host a webinar or roundtable focused on accelerating Vision AI deployment in industrial inspection workflows, featuring case studies on reducing trial and error and improving project predictability for service-led integrators."
+    },
+    {
+      "companyName": "ALTEN Switzerland",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "https://www.alten.ch/fr/",
+        "https://www.alten.ch/services/",
+        "https://www.alten.ch/engineering/",
+        "https://www.alten.ch/services/cybersecurity/",
+        "https://www.alten.ch/it-services-1/",
+        "https://www.alten.ch/industries/",
+        "https://www.alten.ch/services/embedded-software/",
+        "https://www.alten.ch/de/jobs/887-program-manager-2/pdf"
+      ],
+      "overview": "ALTEN Switzerland is an engineering and IT services firm focused on consulting and implementation across software, cloud, cybersecurity, embedded systems, quality assurance, and project management. It delivers client projects in regulated and industrial sectors with a strong emphasis on full lifecycle engineering and digital transformation. The company operates mainly as a service provider with a consultant-heavy staffing model and local Swiss offices.",
+      "qualificationSummary": "ALTEN Switzerland fits well as an implementation-led AI integrator with broad engineering and IT delivery capabilities. Their focus on embedded software and industrial sectors suggests they face typical Vision AI delivery bottlenecks such as model optimization and hardware constraints. They are not a product vendor but a service provider, making them a suitable partner for accelerating AI project delivery through automation of model generation and deployment. The company’s broad sector coverage and delivery orientation align with ONE WARE’s value proposition of faster, predictable, production-ready Vision AI models with lower engineering overhead.",
+      "qualifyingSignals": [
+        "Engineering teams support full development cycle from concept to industrialization",
+        "Service portfolio includes data management & AI alongside embedded software",
+        "Focus on regulated and industrial sectors with constrained hardware environments",
+        "Consulting and implementation services rather than product sales",
+        "Strong emphasis on project management and quality assurance in delivery",
+        "Local Swiss footprint with consultant-based staffing model"
+      ],
+      "riskFlags": [
+        "Primarily a services provider, not a software product company",
+        "Broad industry coverage may dilute AI specialization focus",
+        "Limited independent validation of commercial traction or AI-specific projects",
+        "Public information mostly from company website, limited external references"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 6,
+        "serviceProvider": 8,
+        "partner": 7
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "As a service integrator with multiple AI and embedded software projects, ALTEN Switzerland could realistically engage in AI use cases starting at 7,000 EUR and scale to 20,000-40,000 EUR per project for production-grade Vision AI deployments. Their broad client base and project volume suggest multiple use cases, making the mid-range estimate appropriate for initial engagements.",
+      "targetIndustry": "Engineering and IT Services for Industrial, Regulated, and Digital Transformation Sectors",
+      "productsOffered": "Consulting, Software Development, Embedded Systems, Cloud & Infrastructure, Cybersecurity, Project Management, Quality Assurance, Data Management & AI",
+      "recommendedTemplateKey": "integrator_general_ai_template",
+      "personalizationRule": "Personalize outreach by referencing ALTEN Switzerland’s engineering delivery model and embedded software focus, highlighting how ONE WARE can reduce trial and error and speed up production-ready Vision AI model creation to improve project predictability and lower engineering overhead.",
+      "linkedInAngle": "Frage nach dem größten Engpass bei Vision-AI-Projekten im Modellgenerierungs- oder Integrationsschritt, um den Automatisierungsvorteil von ONE WARE anzubieten.",
+      "emailAngle": "Betonen, dass viele AI-Teams bei Vision-Projekten Zeit in Modellwahl und Optimierung verlieren, und dass ONE WARE diese Schritte automatisiert, um mit dem gleichen Team mehr Projekte schneller und planbarer zu liefern.",
+      "phoneAngle": "Kurz vorstellen, dass ONE WARE mit AI-Dienstleistern spricht, die bei Vision-Projekten Modellwahl und Optimierung als Zeitfresser erleben, und fragen, ob das auch bei ALTEN ein Thema ist.",
+      "linkedInMessage": "Kurze Frage: Wo liegt bei Ihnen aktuell der größte Engpass bei Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration? Genau diesen Schritt automatisieren wir.",
+      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nViele Teams mit allgemeinem AI-Fokus sehen in Vision-Projekten denselben Engpass: Modellwahl, Optimierung und deploymentnahe Anpassungen ziehen sich oft länger als geplant.\n\nONE WARE automatisiert genau diesen Teil. Aus Ihren Daten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware.\n\nSo lassen sich mehr Kundenprojekte mit dem gleichen Team liefern, bei besser planbaren Laufzeiten.\n\nWäre ein kurzer Austausch sinnvoll, um zu prüfen, ob das für Ihre laufenden Delivery-Projekte relevant ist?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit AI-Dienstleistern, bei denen Vision-Projekte in Modellwahl und Optimierung zu viel Zeit kosten. Genau das automatisieren wir. Ist das bei Ihnen ein Thema?",
+      "eventIdea": "Organize a webinar or roundtable for Swiss engineering and AI service providers focusing on accelerating Vision AI project delivery through automation, featuring a demo of ONE WARE’s software creating production-ready models in minutes."
+    }
+  ],
+  "searchHistory": [
+    {
+      "timestamp": "2026-05-11T15:52:15.69Z",
+      "filterName": "DACH Vision / Industrial AI Integrators",
+      "filterSnapshot": {
+        "persona": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Embedded Software"
+        ],
+        "keywords": [
+          "system integrator",
+          "industrial automation",
+          "machine vision integration",
+          "inspection systems",
+          "embedded software"
+        ],
+        "locations": [
+          "Germany",
+          "Austria",
+          "Switzerland"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 14,
+      "relevantCount": 2,
+      "relevanceRatio": 0.14285714285714285,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-11T15:53:39.472Z",
+      "filterName": "DACH General AI Integrators",
+      "filterSnapshot": {
+        "persona": "Software or consulting integrator with general AI focus and real implementation ownership",
+        "industries": [
+          "Industrial Automation",
+          "Computer Vision",
+          "Embedded Software",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "computer vision integration",
+          "image processing",
+          "industrial ai",
+          "automation software",
+          "engineering services"
+        ],
+        "locations": [
+          "Germany",
+          "Austria",
+          "Switzerland"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Use when AI capability is visible, even if vision specialization is not explicit yet. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 11,
+      "relevantCount": 7,
+      "relevanceRatio": 0.6363636363636364,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-11T15:55:01.706Z",
+      "filterName": "DACH General AI Integrators",
+      "filterSnapshot": {
+        "persona": "Software or consulting integrator with general AI focus and real implementation ownership",
+        "industries": [
+          "Industrial Automation",
+          "Computer Vision",
+          "Embedded Software",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "computer vision integration",
+          "image processing",
+          "industrial ai",
+          "automation software",
+          "engineering services"
+        ],
+        "locations": [
+          "Germany",
+          "Austria",
+          "Switzerland"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Use when AI capability is visible, even if vision specialization is not explicit yet. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 43,
+      "relevantCount": 1,
+      "relevanceRatio": 0.023255813953488372,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-11T15:55:46.668Z",
+      "filterName": "Europe Relevant-Vertical Integrators",
+      "filterSnapshot": {
+        "persona": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+        "industries": [
+          "Industrial Automation",
+          "Aerospace",
+          "Medical Devices",
+          "Automotive",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "surveillance integration",
+          "defence systems integration",
+          "medtech imaging",
+          "industrial inspection",
+          "automotive vision"
+        ],
+        "locations": [
+          "Germany",
+          "Netherlands",
+          "France",
+          "Belgium",
+          "Sweden"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 11,
+      "relevantCount": 1,
+      "relevanceRatio": 0.09090909090909091,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    }
+  ],
+  "hubspotSync": {
+    "attempted": false,
+    "mode": "dry-run",
+    "candidateCount": 10,
+    "syncedCount": 0,
+    "companySyncedCount": 0,
+    "contactSyncedCount": 0,
+    "errors": []
+  },
+  "efficiency": {
+    "filtersStoppedEarly": 2,
+    "companiesSkippedAfterEarlyStop": 75
+  }
+}

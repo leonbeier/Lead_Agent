@@ -12,9 +12,10 @@ export class WebSearchAgent {
   async discoverCompaniesForFilter(
     filter: ApolloOrganizationFilter,
     limit: number,
-    page = 1
+    page = 1,
+    shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
-    return this.openAIWebSearchClient.discoverCompanies(filter, limit, page);
+    return this.openAIWebSearchClient.discoverCompanies(filter, limit, page, shouldSkipDomain);
   }
 
   async buildResearchContext(company: PreCategorizedCompany): Promise<SearchEvidence | null> {

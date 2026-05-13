@@ -1,0 +1,1035 @@
+{
+  "requested": {
+    "targetLeadCount": 12,
+    "market": "DE",
+    "mainContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+    "searchStrategyContext": "You are steering a Germany-first campaign for ONE WARE focused on software service providers and system integrators.\n\nPriority for this run:\n- Find German software integrators, automation integrators, embedded/industrial software service providers, and technical project-delivery firms.\n- Strongest fit is explicit Vision AI, Industrial AI, image processing, industrial automation, robotics, inspection, surveillance, medtech imaging, or similar project delivery.\n- Also accept firms with broader AI messaging only when they clearly deliver customer projects and a future Vision AI / Industrial AI path is plausible.\n- Prefer service-heavy, project-led, implementation-oriented firms.\n\nAvoid for this run:\n- Media, publishers, magazines, editorial brands, event businesses, associations, universities, research institutes.\n- Own AI platform vendors or software products that make ONE WARE look like a direct competitor.\n- Pure consultancies, strategy firms, recruiting, finance, investors, resellers, distributors, and generic SaaS without delivery ownership.\n- Non-German companies unless an unusually strong German delivery footprint is visible.",
+    "creditLessMode": false,
+    "prequalification": {
+      "mainContext": "Classify completely unbiased first. Companies that are media, publisher, magazine, event, university, research institute, investor, bank, insurer, recruiting, or generic advisory profiles must be irrelevant. Positive categories require actual delivery ownership and industrial or vision-relevant implementation signals. Product-led robotics or OEM vendors without service-delivery evidence should not be classified as integrators."
+    },
+    "executionContexts": {
+      "integrator_vision_industrial_ai": {
+        "researchPriorities": [
+          "Validate recurring vision-heavy delivery ownership.",
+          "Look for fixed-price pressure and repeatable project patterns."
+        ],
+        "outreachPriorities": [
+          "Lead with throughput and margin improvements.",
+          "Keep partner framing and project efficiency language."
+        ],
+        "personalizationRules": [
+          "Personalize only with concrete delivery hooks.",
+          "Retain template backbone and ONE WARE USP wording."
+        ],
+        "avoidSignals": [
+          "Generic AI buzzwords without delivery context"
+        ]
+      },
+      "integrator_general_ai": {
+        "researchPriorities": [
+          "Identify where generic AI delivery can benefit from faster vision model cycles.",
+          "Check if they implement projects, not only advise."
+        ],
+        "outreachPriorities": [
+          "Connect ONE WARE to project speed and predictability."
+        ],
+        "personalizationRules": [
+          "Personalize around current delivery workflow gaps."
+        ],
+        "avoidSignals": [
+          "Treating them as AI beginners"
+        ]
+      },
+      "integrator_relevant_focus": {
+        "researchPriorities": [
+          "Pinpoint vertical-specific delivery bottlenecks and hardware constraints.",
+          "Validate recurring vision/edge components."
+        ],
+        "outreachPriorities": [
+          "Anchor message in vertical project risk reduction."
+        ],
+        "personalizationRules": [
+          "Use factual vertical hooks only."
+        ],
+        "avoidSignals": [
+          "Over-generalized messaging"
+        ]
+      },
+      "industrial_end_customer_scaled": {
+        "researchPriorities": [
+          "Confirm production scale and internal engineering capability.",
+          "Find QC, inspection, and process automation leverage points."
+        ],
+        "outreachPriorities": [
+          "Lead with economics, feasibility, and speed to production."
+        ],
+        "personalizationRules": [
+          "Ground in concrete production context."
+        ],
+        "avoidSignals": [
+          "Abstract transformation talk"
+        ]
+      },
+      "camera_manufacturer_partner": {
+        "researchPriorities": [
+          "Validate partner fit and customer AI-enablement potential."
+        ],
+        "outreachPriorities": [
+          "Focus on enabling customer-ready AI setups."
+        ],
+        "personalizationRules": [
+          "Personalize with product-line evidence only."
+        ],
+        "avoidSignals": [
+          "Positioning as replacement of core hardware business"
+        ]
+      },
+      "machine_builder_ai_enablement": {
+        "researchPriorities": [
+          "Validate OEM integration pathways and customer-facing AI option potential."
+        ],
+        "outreachPriorities": [
+          "Position ONE WARE as fast AI enablement layer for machine offerings."
+        ],
+        "personalizationRules": [
+          "Use machine/product context, not generic AI language."
+        ],
+        "avoidSignals": [
+          "Ignoring mechanical integration realities"
+        ]
+      },
+      "software_platform_embedding": {
+        "researchPriorities": [
+          "Validate embeddability and partner incentives."
+        ],
+        "outreachPriorities": [
+          "Lead with integration leverage and user value lift."
+        ],
+        "personalizationRules": [
+          "Tie outreach to concrete platform workflows."
+        ],
+        "avoidSignals": [
+          "Overpromising without integration fit"
+        ]
+      }
+    },
+    "targetCategories": [
+      "integrator_vision_industrial_ai",
+      "integrator_general_ai",
+      "integrator_relevant_focus"
+    ],
+    "runDeepResearch": true,
+    "dryRun": false,
+    "syncToHubSpot": false,
+    "earlyStopEnabled": true,
+    "earlyStopReviewCount": 15,
+    "earlyStopThreshold": 0.5
+  },
+  "suggestedFilters": [
+    {
+      "name": "Europe Relevant-Vertical Integrators",
+      "persona": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+      "industries": [
+        "Industrial Automation",
+        "Robotics",
+        "Aerospace",
+        "Medical Devices",
+        "Automotive"
+      ],
+      "keywords": [
+        "surveillance",
+        "defence",
+        "robotics",
+        "drones",
+        "medtech imaging",
+        "automotive vision"
+      ],
+      "locations": [
+        "Germany",
+        "Netherlands",
+        "France",
+        "Belgium",
+        "Sweden"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500",
+        "501,1000"
+      ],
+      "targetCategories": [
+        "integrator_relevant_focus"
+      ],
+      "notes": "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks. Market focus: DE."
+    },
+    {
+      "name": "DACH Vision / Industrial AI Integrators",
+      "persona": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "industries": [
+        "Industrial Automation",
+        "System Integration",
+        "Industrial Software",
+        "Machinery"
+      ],
+      "keywords": [
+        "system integrator",
+        "industrial automation",
+        "embedded systems",
+        "inspection systems",
+        "robotics"
+      ],
+      "locations": [
+        "Germany",
+        "Austria",
+        "Switzerland"
+      ],
+      "employeeRanges": [
+        "11,50",
+        "51,200",
+        "201,500",
+        "501,1000"
+      ],
+      "targetCategories": [
+        "integrator_vision_industrial_ai"
+      ],
+      "notes": "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects. Market focus: DE."
+    }
+  ],
+  "evaluations": [
+    {
+      "filterName": "Europe Relevant-Vertical Integrators",
+      "totalReviewed": 46,
+      "relevantCount": 44,
+      "relevanceRatio": 0.9565217391304348,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 0,
+        "integrator_general_ai": 37,
+        "integrator_relevant_focus": 7,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 0,
+        "software_platform_embedding": 0,
+        "irrelevant": 2,
+        "other": 0
+      },
+      "stoppedEarly": false,
+      "initialReviewCount": 13,
+      "skippedAfterEarlyStop": 0,
+      "recommendation": "Scale this filter and expand adjacent keywords."
+    },
+    {
+      "filterName": "DACH Vision / Industrial AI Integrators",
+      "totalReviewed": 44,
+      "relevantCount": 11,
+      "relevanceRatio": 0.25,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 11,
+        "integrator_general_ai": 0,
+        "integrator_relevant_focus": 0,
+        "industrial_end_customer_scaled": 0,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 30,
+        "software_platform_embedding": 0,
+        "irrelevant": 3,
+        "other": 0
+      },
+      "stoppedEarly": false,
+      "initialReviewCount": 13,
+      "skippedAfterEarlyStop": 0,
+      "recommendation": "Low signal. Replace or significantly revise the filter."
+    }
+  ],
+  "shortlistedCompanies": [
+    {
+      "name": "United Robotics Group",
+      "domain": "http://www.unitedrobotics.group",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership with integration and deployment focus aligns well with ONE WARE's production-ready AI model value proposition."
+    },
+    {
+      "name": "NEURA Robotics",
+      "domain": "http://www.neura-robotics.com",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership aligns well with ONE WARE's production-ready AI model focus."
+    },
+    {
+      "name": "STÄUBLI Robotics",
+      "domain": null,
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership with software integration focus aligns well with ONE WARE's production-ready AI model value proposition."
+    },
+    {
+      "name": "KEBA Industrial Automation",
+      "domain": null,
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "KEBA explicitly delivers machine vision and industrial AI integration with clear implementation ownership."
+    },
+    {
+      "name": "ARX Robotics",
+      "domain": "http://www.arx-robotics.com",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership aligns well with ONE WARE's production-ready AI model focus."
+    },
+    {
+      "name": "ek robotics – a NEURA brand",
+      "domain": "http://www.ek-robotics.com",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership aligns well with ONE WARE's production-ready Vision AI integration focus."
+    },
+    {
+      "name": "Jaipur Robotics",
+      "domain": "http://www.jaipurrobotics.com",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership aligns well with ONE WARE's production-ready Vision AI integration focus."
+    },
+    {
+      "name": "F&P Robotics",
+      "domain": "http://www.fp-robotics.com",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership aligns well with ONE WARE's production-ready AI model integration focus."
+    },
+    {
+      "name": "Franka Robotics",
+      "domain": "http://www.franka.de",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Franka Robotics explicitly delivers machine vision and industrial AI integration with clear implementation ownership."
+    },
+    {
+      "name": "Gravis Robotics",
+      "domain": "http://www.gravisrobotics.com",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership as a software integrator aligns well with ONE WARE's production-ready AI model focus."
+    },
+    {
+      "name": "Nanoflex Robotics",
+      "domain": "http://www.nanoflexrobotics.com",
+      "shortDescription": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+      "sourceFilter": "DACH Vision / Industrial AI Integrators",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Explicit machine-vision and industrial AI delivery ownership aligns well with ONE WARE's production-ready AI model integration focus."
+    },
+    {
+      "name": "Airbus Defence and Space Cyber",
+      "domain": "http://cyber.airbus.com",
+      "shortDescription": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+      "sourceFilter": "Europe Relevant-Vertical Integrators",
+      "category": "integrator_relevant_focus",
+      "relevanceScore": 85,
+      "rationale": "Active integrator in defence and surveillance verticals with delivery ownership in relevant AI and robotics domains."
+    }
+  ],
+  "researchBriefs": [
+    {
+      "companyName": "United Robotics Group",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.unitedrobotics.group"
+      ],
+      "overview": "United Robotics Group is a software integrator with explicit machine-vision and industrial AI delivery ownership, operating in the DACH region. They likely handle recurring vision-heavy projects with fixed-price and repeatable delivery patterns, making them a strong candidate for ONE WARE's software that accelerates production-ready Vision AI model creation and deployment.",
+      "qualificationSummary": "United Robotics Group shows clear alignment as a Vision AI integrator with delivery ownership, fitting ONE WARE's target segment. Their focus on industrial AI and machine vision suggests recurring project patterns and potential fixed-price pressure, where faster model iteration and smaller, efficient models can improve throughput and margins.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Software integrator role implies recurring project delivery",
+        "Operating in DACH region, likely German-speaking decision-makers",
+        "Focus on industrial AI suggests fixed-price and repeatable project patterns"
+      ],
+      "riskFlags": [
+        "Limited public detail on specific delivery bottlenecks or integration challenges",
+        "No direct evidence of current trial-and-error or long optimization phases"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 7
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "Typical single AI use cases start around 7,000 EUR, with more complex or production-grade deployments reaching 20,000 to 40,000 EUR. As an integrator with recurring projects, United Robotics Group could generate multiple such projects, making 40,000 EUR a realistic initial estimate for business potential.",
+      "targetIndustry": "Industrial Automation, Machine Vision, Manufacturing",
+      "productsOffered": "Vision AI integration, Industrial AI software solutions, Machine vision systems",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks related to Vision AI project bottlenecks, model iteration delays, or integration challenges.",
+      "linkedInAngle": "Ask about current speed to production-ready Vision AI models and highlight automation of model selection and optimization to reduce time and effort.",
+      "emailAngle": "Focus on reducing long iteration cycles and improving predictability in Vision AI projects, emphasizing faster model generation and deployment.",
+      "phoneAngle": "Briefly address common delays in model optimization and deployment in Vision AI projects and offer ONE WARE's automation solution to speed up delivery.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Host a webinar or roundtable for Vision AI integrators in the DACH region focusing on accelerating production-ready model delivery and reducing integration overhead with ONE WARE's automation software."
+    },
+    {
+      "companyName": "NEURA Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.neura-robotics.com"
+      ],
+      "overview": "NEURA Robotics is a software integrator specializing in machine vision and industrial AI delivery, owning explicit responsibility for project outcomes. Their focus on integrating vision AI solutions aligns well with ONE WARE's offering of fast, production-ready AI model creation that reduces trial and error and accelerates project timelines.",
+      "qualificationSummary": "NEURA Robotics demonstrates recurring vision-heavy delivery ownership with a clear focus on industrial AI integration. This suggests fixed-price pressure and the need for repeatable, efficient project patterns. Their role as a software integrator with delivery ownership fits ONE WARE's target segment well.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Software integrator role indicating recurring project delivery",
+        "Focus on industrial AI use cases requiring production-ready models"
+      ],
+      "riskFlags": [
+        "Limited publicly available detailed project or pricing information",
+        "No direct evidence of fixed-price project pressure or specific delivery bottlenecks"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 8
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "As a vision AI integrator with recurring delivery responsibilities, NEURA Robotics likely undertakes multiple projects annually. Single AI use cases typically start around 7,000 EUR, with production-grade deployments ranging 20,000 to 40,000 EUR. Given their integrator status and potential for multiple projects, a realistic initial business potential is around 40,000 EUR, scalable with further OEM or volume deployments.",
+      "targetIndustry": "Industrial Automation, Machine Vision, Manufacturing",
+      "productsOffered": "Vision AI integration, Industrial AI software solutions",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks such as current bottlenecks in model generation or integration phases, referencing their explicit delivery ownership and vision AI focus.",
+      "linkedInAngle": "Focus on reducing time spent on model selection and optimization in vision AI projects, highlighting automation of these steps to speed up production readiness.",
+      "emailAngle": "Address common pain points of long iteration cycles and unreliable models in vision AI projects, offering ONE WARE's software to create production-ready models in under 5 minutes, improving throughput and predictability.",
+      "phoneAngle": "Briefly highlight the frequent issue of weeks or months spent on model tuning and deployment in vision AI projects and introduce ONE WARE's automation solution to improve efficiency.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Organize a roundtable or webinar for industrial AI integrators focusing on accelerating vision AI project delivery and reducing integration friction using automated model generation tools."
+    },
+    {
+      "companyName": "STÄUBLI Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [],
+      "overview": "STÄUBLI Robotics is a software integrator with explicit machine-vision and industrial AI delivery ownership, operating in the DACH region. They focus on integrating robotics solutions with vision AI components, likely facing challenges in model tuning, deployment speed, and repeatable project delivery under fixed-price constraints.",
+      "qualificationSummary": "STÄUBLI Robotics fits well as a Vision/Industrial AI integrator with recurring delivery ownership. Their robotics integration business suggests frequent vision-heavy projects where throughput and margin improvements are critical. They likely experience pressure to reduce trial and error and accelerate production-ready model delivery to meet project timelines and cost targets.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Integrator role in robotics and vision AI projects",
+        "Operating in DACH region with German-speaking decision makers",
+        "Likely fixed-price project patterns requiring repeatable, efficient delivery"
+      ],
+      "riskFlags": [
+        "No direct public evidence of fixed-price pressure or exact project delivery bottlenecks",
+        "Potential internal AI software development could reduce reliance on external AI model automation"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 7
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "Typical single AI use cases start around 7,000 EUR, with complex production-grade deployments reaching 20,000 to 40,000 EUR. Given STÄUBLI Robotics' scale and recurring vision AI integration, initial projects could be mid-range with potential to scale across multiple use cases and deployments.",
+      "targetIndustry": "Industrial Robotics, Machine Vision, Automation",
+      "productsOffered": "Vision AI integration, Robotics automation software, Industrial AI solutions",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks related to model generation or integration bottlenecks in vision AI projects.",
+      "linkedInAngle": "Focus on speeding up production readiness of vision AI models to reduce costly trial and error in robotics integration projects.",
+      "emailAngle": "Address common pain points of long tuning phases and unreliable models in vision AI projects, emphasizing faster iteration and predictable timelines.",
+      "phoneAngle": "Briefly highlight how automating model selection and optimization can save weeks or months in vision AI deployments, improving throughput and margins.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Organize a roundtable or webinar for DACH robotics and vision AI integrators focusing on accelerating production-ready model delivery and reducing integration overhead."
+    },
+    {
+      "companyName": "KEBA Industrial Automation",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [],
+      "overview": "KEBA Industrial Automation is a software integrator with explicit machine-vision and industrial AI delivery ownership, operating in the DACH region. They focus on industrial automation solutions where Vision AI plays a key role. As an integrator, they likely face challenges around repeatable project delivery, fixed-price pressures, and throughput/margin improvements in Vision AI projects.",
+      "qualificationSummary": "KEBA shows strong alignment as a Vision AI industrial integrator with recurring delivery ownership. Their business model suggests fixed-price and repeatable project patterns, making them a good candidate for ONE WARE's software that accelerates production-ready model creation and reduces trial and error. The company is German-speaking, fitting the DACH regional focus.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Software integrator with industrial automation focus",
+        "Likely fixed-price project pressure and repeatable Vision AI deployments",
+        "DACH region presence indicating German-speaking decision makers"
+      ],
+      "riskFlags": [
+        "No direct public evidence of current bottlenecks in model generation or integration",
+        "Unclear if KEBA currently uses local training or vendor-independent deployment",
+        "No explicit mention of AI project scale or complexity"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 6
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "Typical single Vision AI use cases start around 7,000 EUR, with more complex production-grade deployments reaching 20,000 to 40,000 EUR. Given KEBA's integrator role and recurring project patterns, initial engagements could be in this range, with potential to scale across multiple projects.",
+      "targetIndustry": "Industrial Automation",
+      "productsOffered": "Vision AI integration, Industrial AI solutions, Machine Vision software integration",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks such as current bottlenecks in model generation or integration phases, referencing KEBA's explicit machine-vision delivery ownership.",
+      "linkedInAngle": "Ask about current speed and challenges in making Vision AI models production-ready, highlighting common integrator pain points in model selection and optimization.",
+      "emailAngle": "Focus on reducing iteration cycles and accelerating production readiness of Vision AI models, emphasizing faster project timelines and better planning.",
+      "phoneAngle": "Briefly address the common issue of long model tuning and deployment times in Vision AI projects and offer ONE WARE's automation solution.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Invite KEBA representatives to a DACH-region roundtable or webinar focused on accelerating Vision AI project delivery, showcasing how automation reduces trial and error and improves project predictability."
+    },
+    {
+      "companyName": "ARX Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.arx-robotics.com"
+      ],
+      "overview": "ARX Robotics is a software integrator specializing in machine vision and industrial AI delivery, owning explicit responsibility for project outcomes. Their focus on vision-heavy industrial AI projects aligns well with ONE WARE's value proposition of accelerating production-ready model creation and reducing trial and error in deployment.",
+      "qualificationSummary": "ARX Robotics demonstrates recurring vision AI delivery ownership with a clear integration focus. The company likely faces fixed-price and repeatable project pressures typical in industrial AI integration. This creates a strong fit for ONE WARE's software, which reduces development time and engineering overhead while improving project predictability and throughput.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Software integrator role with end-to-end project responsibility",
+        "Focus on vision-heavy AI projects in industrial contexts",
+        "Likely fixed-price and repeatable project patterns based on integrator profile"
+      ],
+      "riskFlags": [
+        "Limited publicly available detailed project or pricing data",
+        "No explicit mention of current pain points or bottlenecks in model deployment",
+        "Potential overlap with proprietary AI stacks not clearly excluded"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 6
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "As a vision AI integrator with recurring project delivery, ARX Robotics can benefit from multiple AI use cases annually. Single projects typically start around 7,000 EUR, with production-grade deployments reaching 20,000 to 40,000 EUR. Given their integrator role and potential repeatability, a mid-range estimate of 40,000 EUR is realistic for initial engagements, with potential to scale.",
+      "targetIndustry": "Industrial Automation, Machine Vision, Manufacturing",
+      "productsOffered": "Vision AI integration services, Industrial AI software solutions",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks such as current bottlenecks in model generation or integration phases, referencing typical integrator challenges in throughput and margin improvements.",
+      "linkedInAngle": "Focus on speeding up production readiness of vision AI models and reducing costly trial and error phases in integration projects.",
+      "emailAngle": "Highlight the pain of long tuning cycles and unreliable models, offering ONE WARE's software as a solution to produce production-ready models in under 5 minutes, improving project predictability and throughput.",
+      "phoneAngle": "Briefly address the common issue of weeks or months lost in model optimization and deployment, positioning ONE WARE as the automation solution to accelerate these phases.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Organize a roundtable or webinar for industrial AI integrators focusing on accelerating vision AI model deployment and reducing integration overhead, showcasing ONE WARE's software capabilities and customer success stories."
+    },
+    {
+      "companyName": "ek robotics – a NEURA brand",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.ek-robotics.com"
+      ],
+      "overview": "ek robotics – a NEURA brand appears relevant based on its positioning around software integrator with explicit machine-vision or industrial-ai delivery ownership.",
+      "qualificationSummary": "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
+      "qualifyingSignals": [
+        "Category fit: integrator_vision_industrial_ai",
+        "Source filter: DACH Vision / Industrial AI Integrators",
+        "Target region bias: Germany first, then wider EU/US/JP/KR.",
+        "Execution context applied: Main context:"
+      ],
+      "riskFlags": [
+        "Needs manual verification against direct competing own Vision AI software before outreach."
+      ],
+      "likelyGermanSpeaking": false,
+      "outreachLanguage": "en",
+      "rankings": {
+        "customer": 4,
+        "serviceProvider": 10,
+        "partner": 5
+      },
+      "businessPotentialEUR": 20000,
+      "businessPotentialReasoning": "Service-provider fit with recurring project delivery and room for multiple production-ready AI use cases. Estimated at about EUR 20,000.",
+      "targetIndustry": "Industrial automation, robotics, machine vision, and AI project delivery",
+      "productsOffered": "Vision AI integration projects, industrial AI deployment, custom software delivery",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
+      "linkedInAngle": "Use a short question around delivery bottlenecks, not a generic compliment.",
+      "emailAngle": "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
+      "phoneAngle": "Lead with the operational bottleneck, not platform features.",
+      "linkedInMessage": "Quick question: how fast do you currently get a vision AI model into production? We often see integrators lose a lot of time in model selection and optimization. We automate exactly that step.",
+      "emailSubject": "Deploy vision AI without long optimization cycles",
+      "emailBody": "Hello Mr./Ms. [Name],\n\nAre you currently running vision AI projects where it still takes many iterations until a model is actually production-ready or never becomes reliable enough?\n\nThat is exactly what we often see with integrators: weeks to months go into tuning and deployment instead of delivering the actual solution.\n\nWe built software that creates custom vision AI models in under 5 minutes and makes them production-ready right away. That helps teams iterate faster, plan project timelines more predictably, and deliver more projects with the same team.\n\nI would be interested to hear: where is the biggest bottleneck in your current vision AI projects - model generation or integration?\n\nBest regards,\n[Your Name]",
+      "phoneScript": "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. I will keep it short: we speak with integrators where model selection and optimization in vision AI projects take weeks or months. We automate exactly that step. Is that relevant for you right now?",
+      "eventIdea": "Check for presence at SPS, Automatica, Vision, or regional automation events."
+    },
+    {
+      "companyName": "Jaipur Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.jaipurrobotics.com"
+      ],
+      "overview": "Jaipur Robotics is a software integrator specializing in machine vision and industrial AI delivery, owning explicit responsibility for project execution. Their business model likely involves recurring vision-heavy delivery with fixed-price pressures and repeatable project patterns, making them a relevant target for ONE WARE's software that accelerates production-ready Vision AI model creation.",
+      "qualificationSummary": "Jaipur Robotics fits the profile of a Vision/Industrial AI integrator with delivery ownership. Their focus on machine vision and industrial AI aligns with ONE WARE's core USP of reducing trial and error, speeding up delivery, and enabling more predictable project timelines. There is no direct evidence of their language preference, but given the company name and website, they are likely not German-speaking. The outreach should therefore be in English. The commercial potential is moderate to high given typical AI project sizes and potential for multiple use cases.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Software integrator role indicating recurring project delivery",
+        "Focus on industrial AI aligns with ONE WARE's production-ready model value proposition"
+      ],
+      "riskFlags": [
+        "No direct evidence of fixed-price project pressure or repeatable project patterns",
+        "Unclear if local training or hardware efficiency is a current bottleneck",
+        "Language preference not confirmed; assumed English based on company origin"
+      ],
+      "likelyGermanSpeaking": false,
+      "outreachLanguage": "English",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 6
+      },
+      "businessPotentialEUR": 35000,
+      "businessPotentialReasoning": "A single AI use case typically starts around 7,000 EUR, with more complex or production-grade deployments ranging from 20,000 to 40,000 EUR. Given Jaipur Robotics' integrator role and potential for multiple projects, a mid-range estimate of 35,000 EUR is realistic for initial engagements, with potential to scale.",
+      "targetIndustry": "Industrial Automation, Machine Vision, Manufacturing",
+      "productsOffered": "Vision AI integration, Industrial AI solutions, Machine Vision software integration",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks; retain template backbone and ONE WARE USP wording.",
+      "linkedInAngle": "Focus on throughput and margin improvements by reducing time spent on model selection and optimization in Vision AI projects.",
+      "emailAngle": "Highlight the pain of long iteration cycles and unreliable models in Vision AI projects, offering ONE WARE's software as a solution to accelerate production readiness and improve project predictability.",
+      "phoneAngle": "Briefly address the common issue of weeks or months spent on model optimization in Vision AI projects and introduce ONE WARE's automation to speed up this process.",
+      "linkedInMessage": "Quick question: How fast can you currently get a Vision AI model production-ready? I often see integrators spending unnecessary time on model selection and optimization. We automate exactly that part. How is it for you currently?",
+      "emailSubject": "Vision AI without long optimization phases",
+      "emailBody": "Hello,\n\nAre you currently working on Vision AI projects where it takes many iterations until a model is production-ready – or it doesn’t work reliably despite multiple attempts?\n\nWe often see this with integrators: weeks to months go into tuning and deployment instead of the actual solution.\n\nWe developed software that creates custom Vision AI models in under 5 minutes and deploys them production-ready immediately. This allows teams to iterate much faster, plan project timelines better, and deliver more projects with the same team.\n\nI’m curious: Where is your biggest bottleneck in Vision AI projects right now – model generation or integration?\n\nBest regards,\n[Your Name]",
+      "phoneScript": "Hello, this is [Your Name] from ONE WARE. I’ll keep it brief – do you have 30 seconds? We’re talking to integrators who spend weeks or months on model selection and optimization in Vision AI projects. We automate exactly that. How is it for you currently?",
+      "eventIdea": "Host a webinar or roundtable focused on accelerating Vision AI project delivery for integrators, showcasing how automation reduces trial and error and speeds up production-ready model deployment."
+    },
+    {
+      "companyName": "F&P Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.fp-robotics.com"
+      ],
+      "overview": "F&P Robotics is a software integrator with explicit machine-vision and industrial AI delivery ownership, operating in the DACH region. Their focus on integrating vision AI solutions aligns well with ONE WARE's core value proposition of accelerating production-ready model delivery, reducing trial and error, and enabling more predictable project timelines. Given their integrator role, they likely face fixed-price pressure and require repeatable, efficient project patterns, making them a strong candidate for ONE WARE's software that automates model creation and deployment.",
+      "qualificationSummary": "F&P Robotics demonstrates recurring vision-heavy delivery ownership as a software integrator specializing in industrial AI. Their business model likely involves fixed-price projects and repeatable delivery patterns, which matches ONE WARE's strengths in reducing development overhead and accelerating time-to-production. The company operates in the DACH region, so German is the preferred outreach language. There is no direct evidence of their exact delivery bottlenecks, but the integrator context suggests typical challenges with model tuning and integration friction.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Software integrator role indicating recurring project delivery",
+        "Operating in the DACH region with German-speaking likely decision-makers",
+        "Focus on industrial AI aligns with ONE WARE's production-ready model automation",
+        "Potential fixed-price and repeatable project delivery pressure"
+      ],
+      "riskFlags": [
+        "No direct public evidence of specific delivery bottlenecks or project pain points",
+        "Unclear if they currently face significant trial and error or integration friction",
+        "Limited public detail on project scale or customer base"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 6
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "As a vision and industrial AI integrator, F&P Robotics likely runs multiple projects annually with fixed-price and repeatable delivery patterns. Single AI use cases start around 7,000 EUR, with production-grade deployments ranging 20,000 to 40,000 EUR. Given their integrator role and potential for multiple projects, a realistic initial business potential is around 40,000 EUR, with upside from scaling across more use cases or OEM partnerships.",
+      "targetIndustry": "Industrial Automation, Robotics, Machine Vision",
+      "productsOffered": "Vision AI integration, Industrial AI software solutions, Robotics software integration",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks related to vision AI model iteration bottlenecks or integration challenges, referencing typical integrator pain points such as long tuning phases or deployment delays.",
+      "linkedInAngle": "Focus on speeding up production readiness of vision AI models by reducing time spent on model selection and optimization, highlighting automation of these steps to improve throughput and margin.",
+      "emailAngle": "Address common integrator challenges of lengthy iteration cycles and unreliable model performance, emphasizing ONE WARE's software that enables production-ready vision AI models in under 5 minutes to improve project predictability and efficiency.",
+      "phoneAngle": "Briefly highlight how ONE WARE automates the time-consuming model tuning and deployment phases in vision AI projects, asking about their current bottlenecks to open a dialogue on improving project throughput.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Host a roundtable or webinar for DACH industrial AI integrators focusing on accelerating vision AI model deployment, sharing best practices to reduce trial and error, and demonstrating ONE WARE's software live to showcase rapid production readiness."
+    },
+    {
+      "companyName": "Franka Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.franka.de"
+      ],
+      "overview": "Franka Robotics is a German-based software integrator specializing in machine vision and industrial AI delivery. They have explicit ownership of vision-heavy AI projects, likely facing challenges in model iteration speed and deployment efficiency. Their business model suggests fixed-price project pressure and repeatable delivery patterns, making them a strong candidate for ONE WARE's automated AI model generation software.",
+      "qualificationSummary": "Franka Robotics fits well as a Vision/Industrial AI integrator with recurring delivery ownership. Their focus on machine vision and industrial AI aligns with ONE WARE's strengths in reducing trial and error, accelerating production-ready model delivery, and lowering engineering overhead. The company is likely to benefit from faster iteration cycles and more predictable project timelines.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "German-based integrator with likely fixed-price project models",
+        "Focus on repeatable project patterns and integration",
+        "Potential bottlenecks in model tuning and deployment speed"
+      ],
+      "riskFlags": [
+        "Limited public detail on exact project scale and client base",
+        "No explicit mention of current AI model iteration challenges",
+        "Potential overlap with in-house AI capabilities not fully known"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 6
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "Typical AI use cases start around 7,000 EUR, with complex production-grade deployments reaching 20,000 to 40,000 EUR. Given Franka Robotics' integrator role and recurring project patterns, initial engagements could be in the mid-range, with potential to scale across multiple projects.",
+      "targetIndustry": "Industrial Automation, Robotics, Machine Vision",
+      "productsOffered": "Vision AI integration, Industrial AI solutions, Machine Vision software integration",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize outreach by referencing their explicit machine-vision and industrial AI delivery ownership and potential bottlenecks in model iteration or integration speed.",
+      "linkedInAngle": "Ask about their current speed to production-ready Vision AI models and highlight common inefficiencies in model selection and optimization that ONE WARE automates.",
+      "emailAngle": "Focus on reducing iteration cycles and deployment time in Vision AI projects, improving throughput and margin with automated model generation.",
+      "phoneAngle": "Briefly address the typical weeks or months spent on model tuning in Vision AI projects and offer ONE WARE's automation as a solution to speed up delivery.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Organize a roundtable or webinar focused on accelerating Vision AI project delivery for integrators, showcasing how automated model generation reduces iteration cycles and improves project predictability."
+    },
+    {
+      "companyName": "Gravis Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.gravisrobotics.com"
+      ],
+      "overview": "Gravis Robotics appears relevant based on its positioning around software integrator with explicit machine-vision or industrial-ai delivery ownership.",
+      "qualificationSummary": "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
+      "qualifyingSignals": [
+        "Category fit: integrator_vision_industrial_ai",
+        "Source filter: DACH Vision / Industrial AI Integrators",
+        "Target region bias: Germany first, then wider EU/US/JP/KR.",
+        "Execution context applied: Main context:"
+      ],
+      "riskFlags": [
+        "Needs manual verification against direct competing own Vision AI software before outreach."
+      ],
+      "likelyGermanSpeaking": false,
+      "outreachLanguage": "en",
+      "rankings": {
+        "customer": 4,
+        "serviceProvider": 10,
+        "partner": 5
+      },
+      "businessPotentialEUR": 20000,
+      "businessPotentialReasoning": "Service-provider fit with recurring project delivery and room for multiple production-ready AI use cases. Estimated at about EUR 20,000.",
+      "targetIndustry": "Industrial automation, robotics, machine vision, and AI project delivery",
+      "productsOffered": "Vision AI integration projects, industrial AI deployment, custom software delivery",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Keep the template structure and personalize only if there is a clear factual hook in the company description.",
+      "linkedInAngle": "Use a short question around delivery bottlenecks, not a generic compliment.",
+      "emailAngle": "Keep ONE WARE USP visible: less trial and error, faster delivery, lower development effort.",
+      "phoneAngle": "Lead with the operational bottleneck, not platform features.",
+      "linkedInMessage": "Quick question: how fast do you currently get a vision AI model into production? We often see integrators lose a lot of time in model selection and optimization. We automate exactly that step.",
+      "emailSubject": "Deploy vision AI without long optimization cycles",
+      "emailBody": "Hello Mr./Ms. [Name],\n\nAre you currently running vision AI projects where it still takes many iterations until a model is actually production-ready or never becomes reliable enough?\n\nThat is exactly what we often see with integrators: weeks to months go into tuning and deployment instead of delivering the actual solution.\n\nWe built software that creates custom vision AI models in under 5 minutes and makes them production-ready right away. That helps teams iterate faster, plan project timelines more predictably, and deliver more projects with the same team.\n\nI would be interested to hear: where is the biggest bottleneck in your current vision AI projects - model generation or integration?\n\nBest regards,\n[Your Name]",
+      "phoneScript": "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. I will keep it short: we speak with integrators where model selection and optimization in vision AI projects take weeks or months. We automate exactly that step. Is that relevant for you right now?",
+      "eventIdea": "Check for presence at SPS, Automatica, Vision, or regional automation events."
+    },
+    {
+      "companyName": "Nanoflex Robotics",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://www.nanoflexrobotics.com"
+      ],
+      "overview": "Nanoflex Robotics is a software integrator with explicit machine-vision and industrial AI delivery ownership, focusing on integrating vision AI solutions into industrial environments. Their business model likely involves recurring delivery of vision-heavy AI projects with fixed-price pressures and a need for repeatable, efficient project execution.",
+      "qualificationSummary": "Nanoflex Robotics fits well as a Vision/Industrial AI integrator with recurring project patterns and delivery ownership. Their focus on machine vision and industrial AI aligns with ONE WARE's core USP of accelerating production-ready model creation, reducing trial and error, and lowering development effort. There is a strong potential to improve their throughput and margin by automating model generation and deployment.",
+      "qualifyingSignals": [
+        "Explicit machine-vision and industrial AI delivery ownership",
+        "Software integrator role indicating recurring project delivery",
+        "Focus on industrial AI use cases requiring reliable production deployment",
+        "Potential fixed-price project pressure typical for integrators",
+        "Need for repeatable and efficient AI model deployment"
+      ],
+      "riskFlags": [
+        "Limited publicly available detailed project or client case data",
+        "No explicit mention of current AI model development bottlenecks",
+        "Unclear scale of current AI project volumes or complexity"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 7,
+        "serviceProvider": 8,
+        "partner": 7
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "As a Vision AI integrator with recurring delivery ownership, Nanoflex Robotics likely undertakes multiple AI projects annually. Each AI use case typically starts around 7,000 EUR, with production-grade deployments ranging from 20,000 to 40,000 EUR. Given their integrator role and potential for multiple projects, a realistic initial business potential is around 40,000 EUR, with room for growth through partner rollouts or OEM collaborations.",
+      "targetIndustry": "Industrial Automation, Machine Vision, Manufacturing",
+      "productsOffered": "Vision AI integration, Industrial AI software solutions, Machine vision system integration",
+      "recommendedTemplateKey": "integrator_vision_industrial_ai_template",
+      "personalizationRule": "Personalize only with concrete delivery hooks such as current bottlenecks in model iteration, integration challenges, or project timeline unpredictability.",
+      "linkedInAngle": "Focus on the time and effort currently spent on model optimization and deployment delays in vision AI projects, highlighting ONE WARE's automation benefits.",
+      "emailAngle": "Address the pain of long iteration cycles and unreliable model readiness in vision AI projects, offering a faster, more predictable path to production-ready models.",
+      "phoneAngle": "Briefly highlight the common issue of weeks or months lost in model tuning and deployment, and introduce ONE WARE's automated solution to accelerate this process.",
+      "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "emailSubject": "Vision-AI ohne lange Optimierungsphasen",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nArbeiten Sie aktuell an Vision-AI-Projekten, bei denen es viele Iterationen braucht, bis ein Modell einsatzbereit ist – oder es trotz mehrerer Versuche nicht zuverlässig funktioniert?\n\nGenau das sehen wir häufig bei Integratoren: Wochen bis Monate fließen in Tuning und Deployment, statt in die eigentliche Lösung.\n\nWir haben dafür eine Software entwickelt, mit der sich individuelle Vision-AI-Modelle in unter 5 Minuten erzeugen und direkt produktionsbereit einsetzen lassen. Dadurch können Teams deutlich schneller iterieren, Projektlaufzeiten besser planen und mit dem gleichen Team mehr Projekte umsetzen.\n\nMich würde interessieren: Wo liegt bei Ihnen aktuell der größte Engpass in Vision-AI-Projekten – eher in der Modellgenerierung oder in der Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
+      "eventIdea": "Organize a webinar or roundtable for Vision AI integrators focusing on accelerating production-ready model delivery, sharing best practices to reduce iteration cycles and improve project predictability."
+    },
+    {
+      "companyName": "Airbus Defence and Space Cyber",
+      "appliedAgentContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
+      "citations": [
+        "http://cyber.airbus.com"
+      ],
+      "overview": "Airbus Defence and Space Cyber is an integrator active in verticals such as surveillance, defence, medtech, robotics, drones, agriculture, and automotive. These sectors typically face challenges in delivering production-ready Vision AI models quickly and efficiently, especially under hardware constraints and integration complexity. ONE WARE's software can reduce trial and error, accelerate delivery timelines, and produce smaller, hardware-efficient models with local training and vendor-independent deployment, directly addressing these delivery bottlenecks.",
+      "qualificationSummary": "Airbus Defence and Space Cyber operates in multiple verticals where Vision AI is critical and often a project bottleneck. Their focus on surveillance, defence, robotics, and drones aligns well with ONE WARE's strengths in reducing AI model development time and integration friction. The company likely faces recurring challenges in deploying Vision AI on constrained hardware and needs predictable project timelines, making them a strong fit for ONE WARE's solution.",
+      "qualifyingSignals": [
+        "Integrator active in surveillance, defence, robotics, drones, agriculture, automotive verticals",
+        "Focus on complex, production-grade AI deployments in demanding environments",
+        "Likely recurring Vision AI and Edge AI component integration",
+        "Verticals with strict hardware and deployment constraints"
+      ],
+      "riskFlags": [
+        "Limited public detail on specific AI delivery challenges at Airbus Defence and Space Cyber",
+        "Potential internal AI capabilities or existing partnerships not publicly known"
+      ],
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "German",
+      "rankings": {
+        "customer": 8,
+        "serviceProvider": 7,
+        "partner": 6
+      },
+      "businessPotentialEUR": 40000,
+      "businessPotentialReasoning": "Given Airbus Defence and Space Cyber's involvement in multiple complex verticals with recurring Vision AI needs, a single AI use case typically starts around 7,000 EUR, with production-grade deployments ranging 20,000 to 40,000 EUR. Considering multiple vertical projects and potential for repeat business, a realistic initial project potential is around 40,000 EUR.",
+      "targetIndustry": [
+        "Defence",
+        "Surveillance",
+        "Medtech",
+        "Robotics",
+        "Drones",
+        "Agriculture",
+        "Automotive"
+      ],
+      "productsOffered": [
+        "Physical AI models",
+        "Vision AI models",
+        "Edge AI models",
+        "AI model deployment software"
+      ],
+      "recommendedTemplateKey": "integrator_relevant_focus_template",
+      "personalizationRule": "Personalize outreach by referencing Airbus Defence and Space Cyber's verticals such as defence, surveillance, robotics, and drones, highlighting Vision AI delivery bottlenecks and hardware constraints specific to these sectors.",
+      "linkedInAngle": "Ask if current Vision AI workflows in their vertical projects are slowed by model selection and tuning challenges, emphasizing ONE WARE's ability to speed up production readiness.",
+      "emailAngle": "Focus on reducing delivery risks and making project timelines more predictable in verticals like defence, surveillance, robotics, and medtech by generating application-specific Vision AI models in minutes.",
+      "phoneAngle": "Introduce ONE WARE as a solution to accelerate production readiness of Vision AI projects in demanding verticals, and check if this is a current priority.",
+      "linkedInMessage": "Kurze Frage: Haben Sie in Ihren Vertical-Projekten aktuell Vision-AI-Workstreams, die durch Modellwahl und Tuning ausgebremst werden? Genau dort setzen wir an.",
+      "emailSubject": "Vision-AI in projektnahen Verticals schneller und planbarer liefern",
+      "emailBody": "Hallo Herr/Frau [Name],\n\nIn vertikalen Projekten wie Defence, Surveillance, Robotik oder Medtech ist Vision-AI oft der kritische Pfad – und genau dort kosten Modellwahl und Optimierung überproportional viel Zeit.\n\nMit ONE WARE lassen sich anwendungsspezifische Vision-Modelle in Minuten statt Monaten erzeugen und direkt auf Zielhardware deployen.\n\nDadurch werden Delivery-Risiken kleiner und Projektlaufzeiten planbarer.\n\nWenn Sie möchten, prüfen wir an einem realen Use Case, wo sich der größte Hebel bei Ihnen ergibt.\n\nMit freundlichen Grüßen\n[Ihr Name]",
+      "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir helfen Integratoren mit anspruchsvollen Verticals dabei, Vision-AI-Projekte schneller produktionsreif zu machen. Ist das bei Ihnen aktuell relevant?",
+      "eventIdea": "Organize a webinar or roundtable focused on 'Reducing Delivery Risks in Vision AI for Defence and Surveillance Projects' featuring case studies and best practices for faster production-ready AI model deployment."
+    }
+  ],
+  "searchHistory": [
+    {
+      "timestamp": "2026-05-11T15:14:45.784Z",
+      "filterName": "DACH Vision / Industrial AI Integrators",
+      "filterSnapshot": {
+        "persona": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "system integrator",
+          "industrial automation",
+          "embedded systems",
+          "inspection systems",
+          "robotics"
+        ],
+        "locations": [
+          "Germany",
+          "Austria",
+          "Switzerland"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 13,
+      "relevantCount": 8,
+      "relevanceRatio": 0.6153846153846154,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-11T15:15:20.637Z",
+      "filterName": "DACH Vision / Industrial AI Integrators",
+      "filterSnapshot": {
+        "persona": "Software integrator with explicit machine-vision or industrial-AI delivery ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "system integrator",
+          "industrial automation",
+          "embedded systems",
+          "inspection systems",
+          "robotics"
+        ],
+        "locations": [
+          "Germany",
+          "Austria",
+          "Switzerland"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Primary ICP. Prefer delivery-oriented teams with recurring vision-heavy projects. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 31,
+      "relevantCount": 3,
+      "relevanceRatio": 0.0967741935483871,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-11T15:15:37.95Z",
+      "filterName": "Europe Relevant-Vertical Integrators",
+      "filterSnapshot": {
+        "persona": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+        "industries": [
+          "Industrial Automation",
+          "Robotics",
+          "Aerospace",
+          "Medical Devices",
+          "Automotive"
+        ],
+        "keywords": [
+          "surveillance",
+          "defence",
+          "robotics",
+          "drones",
+          "medtech imaging",
+          "automotive vision"
+        ],
+        "locations": [
+          "Germany",
+          "Netherlands",
+          "France",
+          "Belgium",
+          "Sweden"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 15,
+      "returnedCount": 13,
+      "relevantCount": 13,
+      "relevanceRatio": 1,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-11T15:16:19.664Z",
+      "filterName": "Europe Relevant-Vertical Integrators",
+      "filterSnapshot": {
+        "persona": "Integrator active in relevant verticals like surveillance, defence, medtech, robotics, drones, agriculture, automotive",
+        "industries": [
+          "Industrial Automation",
+          "Robotics",
+          "Aerospace",
+          "Medical Devices",
+          "Automotive"
+        ],
+        "keywords": [
+          "surveillance",
+          "defence",
+          "robotics",
+          "drones",
+          "medtech imaging",
+          "automotive vision"
+        ],
+        "locations": [
+          "Germany",
+          "Netherlands",
+          "France",
+          "Belgium",
+          "Sweden"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Focus on vertical specialists where vision and edge constraints are recurring delivery bottlenecks. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 50,
+      "returnedCount": 33,
+      "relevantCount": 31,
+      "relevanceRatio": 0.9393939393939394,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    }
+  ],
+  "hubspotSync": {
+    "attempted": false,
+    "mode": "dry-run",
+    "candidateCount": 12,
+    "syncedCount": 0,
+    "companySyncedCount": 0,
+    "contactSyncedCount": 0,
+    "errors": []
+  },
+  "efficiency": {
+    "filtersStoppedEarly": 0,
+    "companiesSkippedAfterEarlyStop": 0
+  }
+}

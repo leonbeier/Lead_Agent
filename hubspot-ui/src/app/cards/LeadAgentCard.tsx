@@ -45,6 +45,7 @@ type BootstrapPayload = {
     targetLeadCount?: number;
     targetCategories?: string[];
     companySearchMode?: "internet_research" | "apollo_search";
+    syncToHubSpot?: boolean;
   };
   selectableCategories?: CategoryOption[];
   latestLeadRun?: {
@@ -53,6 +54,11 @@ type BootstrapPayload = {
       foundCandidates?: number;
     };
   };
+};
+
+type ConsoleEntry = {
+  id: string;
+  message: string;
 };
 
 type RunStatusPayload = {
@@ -104,8 +110,10 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
   const [latestFoundCandidates, setLatestFoundCandidates] = React.useState<number | null>(null);
   const [runStatus, setRunStatus] = React.useState<RunStatusPayload["runStatus"]>({ running: false });
+  const [consoleEntries, setConsoleEntries] = React.useState<ConsoleEntry[]>([]);
   const [errorMessage, setErrorMessage] = React.useState<string>("");
   const [successMessage, setSuccessMessage] = React.useState<string>("");
+  const [syncToHubSpot, setSyncToHubSpot] = React.useState(true);
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
   const consoleUrl = `${normalizedBaseUrl}/hubspot/ui?portalId=${encodeURIComponent(portalId)}&key=${encodeURIComponent(sharedKey)}`;
   const canOpenConsole = Boolean(normalizedBaseUrl && sharedKey && openIframe);
@@ -113,6 +121,25 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const canStart = canFetch && targetLeadCount > 0 && selectedCategories.length > 0 && !runStatus?.running;
   const progressMax = Math.max(1, runStatus?.progressMax ?? 100);
   const progressValue = Math.min(progressMax, Math.max(0, runStatus?.progressValue ?? 0));
+  const lastConsoleSignature = React.useRef<string>("");
+
+  const appendConsoleEntry = React.useCallback((message: string, signature?: string) => {
+    const normalizedMessage = message.trim();
+    if (!normalizedMessage) {
+      return;
+    }
+
+    const nextSignature = signature ?? normalizedMessage;
+    if (lastConsoleSignature.current === nextSignature) {
+      return;
+    }
+
+    lastConsoleSignature.current = nextSignature;
+    setConsoleEntries((current) => [{
+      id: `${Date.now()}-${current.length}`,
+      message: normalizedMessage
+    }, ...current].slice(0, 12));
+  }, []);
 
   const requestJson = React.useCallback(async <T,>(pathname: string, options?: { method?: "GET" | "POST" }) => {
     const response = await hubspot.fetch(`${normalizedBaseUrl}${pathname}?key=${encodeURIComponent(sharedKey)}`, {
@@ -198,6 +225,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         setSelectableCategories(bootstrapPayload.selectableCategories ?? []);
         setTargetLeadCount(bootstrapPayload.settings?.targetLeadCount ?? 50);
         setCompanySearchMode(bootstrapPayload.settings?.companySearchMode ?? "internet_research");
+        setSyncToHubSpot(bootstrapPayload.settings?.syncToHubSpot ?? true);
         setSelectedCategories(bootstrapPayload.settings?.targetCategories ?? []);
         setLatestFoundCandidates(bootstrapPayload.latestLeadRun?.summary?.foundCandidates ?? null);
         setRunStatus(runStatusPayload.runStatus ?? { running: false });
@@ -218,6 +246,25 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       isCancelled = true;
     };
   }, [canFetch, requestJson]);
+
+  React.useEffect(() => {
+    if (!runStatus) {
+      return;
+    }
+
+    const timestamp = formatTimestamp(runStatus.updatedAt ?? runStatus.finishedAt ?? runStatus.startedAt);
+    const statusLine = `[${timestamp}] ${runStatus.stageLabel || (runStatus.running ? "Laeuft" : "Bereit")} | ${progressValue}% | ${runStatus.progressDescription || "Noch kein aktiver Lead-Run."}${runStatus.detail ? ` | ${runStatus.detail}` : ""}`;
+    const signature = [
+      runStatus.updatedAt,
+      runStatus.stage,
+      runStatus.progressValue,
+      runStatus.progressDescription,
+      runStatus.detail,
+      runStatus.running
+    ].join("|");
+
+    appendConsoleEntry(statusLine, signature);
+  }, [appendConsoleEntry, progressValue, runStatus]);
 
   React.useEffect(() => {
     if (!runStatus?.running || !canFetch) {
@@ -263,7 +310,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           companySearchMode,
           creditLessMode: companySearchMode === "internet_research",
           dryRun: false,
-          syncToHubSpot: true
+          syncToHubSpot
         }
       });
 
@@ -274,6 +321,9 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
 
       setRunStatus(payload.runStatus ?? { running: true });
       setSuccessMessage("Lead-Run wurde gestartet.");
+      appendConsoleEntry(
+        `[${formatTimestamp(new Date().toISOString())}] Start angefordert | ${targetLeadCount} Leads | Suche ${companySearchMode === "internet_research" ? "Web" : "Apollo"} | HubSpot-Sync ${syncToHubSpot ? "an" : "aus"}`
+      );
       await refreshRuntimeData();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Lead-Run konnte nicht gestartet werden.");
@@ -324,7 +374,16 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
               : ""}
           </Text>
         )}
+        <Text>HubSpot-Sync fuer Starts aus dieser Karte: {syncToHubSpot ? "aktiv" : "deaktiviert"}. Suchmodus: {companySearchMode === "internet_research" ? "Web-Recherche" : "Apollo"}.</Text>
         {runStatus?.updatedAt && <Text>Zuletzt aktualisiert: {formatTimestamp(runStatus.updatedAt)}</Text>}
+        <Divider />
+        <Flex direction="column" gap="flush">
+          <Heading>Live-Konsole</Heading>
+          {consoleEntries.length === 0 && <Text>Noch keine Statuszeilen.</Text>}
+          {consoleEntries.map((entry) => (
+            <Text key={entry.id}>{entry.message}</Text>
+          ))}
+        </Flex>
         <ButtonRow disableDropdown={true}>
           <Button
             variant="secondary"

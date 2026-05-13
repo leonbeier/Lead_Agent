@@ -33,17 +33,20 @@ const SOURCE_DISCOVERY_MAX_CANDIDATE_DOMAINS = 12;
 const SOURCE_DISCOVERY_MAX_BUDGET_MS = 20000;
 const SEARCH_RESULT_MAX_QUERIES = 6;
 const SEARCH_RESULT_MAX_RESULTS_PER_QUERY = 10;
+const CRAWL_DISCOVERY_CONCURRENCY = 4;
+const INTERNAL_PAGE_CRAWL_CONCURRENCY = 3;
 
 export class OpenAIWebSearchClient {
   async discoverCompanies(
     filter: ApolloOrganizationFilter,
     limit: number,
-    page = 1
+    page = 1,
+    shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
     const companies: CompanySample[] = [];
     const seenKeys = new Set<string>();
 
-    const searchResultCompanies = await this.discoverCompaniesFromKeywordSearch(filter, limit, page);
+    const searchResultCompanies = await this.discoverCompaniesFromKeywordSearch(filter, limit, page, shouldSkipDomain);
     for (const company of searchResultCompanies) {
       const companyKey = `${company.name.toLowerCase()}::${company.domain?.toLowerCase() ?? ""}`;
       if (seenKeys.has(companyKey)) {
@@ -58,7 +61,7 @@ export class OpenAIWebSearchClient {
       }
     }
 
-    const scrapedCompanies = await this.discoverCompaniesFromSourcePages(filter, limit, page);
+    const scrapedCompanies = await this.discoverCompaniesFromSourcePages(filter, limit, page, shouldSkipDomain);
     for (const company of scrapedCompanies) {
       const companyKey = `${company.name.toLowerCase()}::${company.domain?.toLowerCase() ?? ""}`;
       if (seenKeys.has(companyKey)) {
@@ -79,34 +82,56 @@ export class OpenAIWebSearchClient {
   private async discoverCompaniesFromKeywordSearch(
     filter: ApolloOrganizationFilter,
     limit: number,
-    page: number
+    page: number,
+    shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
     const companies: CompanySample[] = [];
     const seenDomains = new Set<string>();
     const queries = this.buildKeywordQueries(filter, page).slice(0, SEARCH_RESULT_MAX_QUERIES);
 
     for (const query of queries) {
-      const candidateUrls = await this.searchDuckDuckGo(query);
+      const candidateUrls = await this.searchDuckDuckGo(query, shouldSkipDomain);
+      const crawlDomains: string[] = [];
 
       for (const candidateUrl of candidateUrls) {
         const normalizedDomain = this.normalizeUrl(candidateUrl);
-        if (!normalizedDomain || seenDomains.has(normalizedDomain) || this.shouldIgnoreDomain(normalizedDomain)) {
+        if (
+          !normalizedDomain ||
+          seenDomains.has(normalizedDomain) ||
+          this.shouldIgnoreDomain(normalizedDomain) ||
+          shouldSkipDomain?.(normalizedDomain)
+        ) {
           continue;
         }
 
         seenDomains.add(normalizedDomain);
-        const websiteProfile = await this.fetchWebsiteCrawlProfile(normalizedDomain);
-        if (!websiteProfile || !this.looksLikePotentialDeliveryFit(websiteProfile.summary)) {
+        crawlDomains.push(normalizedDomain);
+      }
+
+      const crawledCompanies = await this.mapWithConcurrency(
+        crawlDomains.map((domain) => async () => {
+          const websiteProfile = await this.fetchWebsiteCrawlProfile(domain);
+          if (!websiteProfile || !this.looksLikePotentialDeliveryFit(websiteProfile.summary)) {
+            return null;
+          }
+
+          return {
+            name: this.deriveCompanyName(domain, websiteProfile.summary),
+            domain,
+            country: this.inferCountryFromDomain(domain, websiteProfile.summary),
+            shortDescription: websiteProfile.summary,
+            sourceFilter: `${filter.name} (browser-search: ${this.compactQueryLabel(query)})`
+          } satisfies CompanySample;
+        }),
+        CRAWL_DISCOVERY_CONCURRENCY
+      );
+
+      for (const company of crawledCompanies) {
+        if (!company) {
           continue;
         }
 
-        companies.push({
-          name: this.deriveCompanyName(normalizedDomain, websiteProfile.summary),
-          domain: normalizedDomain,
-          country: this.inferCountryFromDomain(normalizedDomain, websiteProfile.summary),
-          shortDescription: websiteProfile.summary,
-          sourceFilter: `${filter.name} (browser-search)`
-        });
+        companies.push(company);
 
         if (companies.length >= limit) {
           return companies;
@@ -164,7 +189,7 @@ export class OpenAIWebSearchClient {
     return keywordVariants.map((keyword, index) => `${keyword} ${sourceSuffixes[(page + index) % sourceSuffixes.length]} ${location}`);
   }
 
-  private async searchDuckDuckGo(query: string): Promise<string[]> {
+  private async searchDuckDuckGo(query: string, shouldSkipDomain?: (domain: string) => boolean): Promise<string[]> {
     try {
       const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
         signal: AbortSignal.timeout(10000),
@@ -193,7 +218,12 @@ export class OpenAIWebSearchClient {
 
         const resolvedHref = this.resolveSearchResultHref(rawHref);
         const normalizedHref = this.normalizeUrl(resolvedHref);
-        if (!normalizedHref || this.shouldIgnoreDomain(normalizedHref) || urls.includes(normalizedHref)) {
+        if (
+          !normalizedHref ||
+          this.shouldIgnoreDomain(normalizedHref) ||
+          shouldSkipDomain?.(normalizedHref) ||
+          urls.includes(normalizedHref)
+        ) {
           continue;
         }
 
@@ -220,10 +250,16 @@ export class OpenAIWebSearchClient {
     }
   }
 
+  private compactQueryLabel(query: string): string {
+    const normalized = query.replace(/^search:/i, "").replace(/\s+/g, " ").trim();
+    return normalized.length <= 70 ? normalized : `${normalized.slice(0, 67)}...`;
+  }
+
   private async discoverCompaniesFromSourcePages(
     filter: ApolloOrganizationFilter,
     limit: number,
-    page: number
+    page: number,
+    shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
     const startedAt = Date.now();
     const sourcePages = await this.discoverSourcePages(filter, page);
@@ -240,6 +276,7 @@ export class OpenAIWebSearchClient {
       }
 
       const candidateDomains = await this.scrapeCandidateDomainsFromSourcePage(sourcePage.url as string);
+      const crawlDomains: string[] = [];
 
       for (const candidateDomain of candidateDomains) {
         if (Date.now() - startedAt >= SOURCE_DISCOVERY_MAX_BUDGET_MS) {
@@ -247,23 +284,43 @@ export class OpenAIWebSearchClient {
         }
 
         const normalizedDomain = this.normalizeUrl(candidateDomain);
-        if (!normalizedDomain || seenDomains.has(normalizedDomain) || this.shouldIgnoreDomain(normalizedDomain)) {
+        if (
+          !normalizedDomain ||
+          seenDomains.has(normalizedDomain) ||
+          this.shouldIgnoreDomain(normalizedDomain) ||
+          shouldSkipDomain?.(normalizedDomain)
+        ) {
           continue;
         }
 
         seenDomains.add(normalizedDomain);
-        const websiteProfile = await this.fetchWebsiteCrawlProfile(normalizedDomain);
-        if (!websiteProfile || !this.looksLikePotentialDeliveryFit(websiteProfile.summary)) {
+        crawlDomains.push(normalizedDomain);
+      }
+
+      const crawledCompanies = await this.mapWithConcurrency(
+        crawlDomains.map((domain) => async () => {
+          const websiteProfile = await this.fetchWebsiteCrawlProfile(domain);
+          if (!websiteProfile || !this.looksLikePotentialDeliveryFit(websiteProfile.summary)) {
+            return null;
+          }
+
+          return {
+            name: this.deriveCompanyName(domain, websiteProfile.summary),
+            domain,
+            country: this.inferCountryFromDomain(domain, websiteProfile.summary),
+            shortDescription: websiteProfile.summary,
+            sourceFilter: `${filter.name} (source-scrape: ${this.compactQueryLabel(sourcePage.reason ?? sourcePage.url ?? "source-page")})`
+          } satisfies CompanySample;
+        }),
+        CRAWL_DISCOVERY_CONCURRENCY
+      );
+
+      for (const company of crawledCompanies) {
+        if (!company) {
           continue;
         }
 
-        companies.push({
-          name: this.deriveCompanyName(normalizedDomain, websiteProfile.summary),
-          domain: normalizedDomain,
-          country: this.inferCountryFromDomain(normalizedDomain, websiteProfile.summary),
-          shortDescription: websiteProfile.summary,
-          sourceFilter: `${filter.name} (source-scrape)`
-        });
+        companies.push(company);
 
         if (companies.length >= limit) {
           return companies;
@@ -583,34 +640,48 @@ export class OpenAIWebSearchClient {
         const html = await response.text();
         const landingUrl = response.url || url;
         const summaries = [this.extractPageSummary(html, landingUrl, "home")].filter((value): value is string => Boolean(value));
-        const relevantUrls: string[] = [];
         const relevantLinks = this.selectRelevantInternalLinks(html, landingUrl);
+        const linkedPageResults = await this.mapWithConcurrency(
+          relevantLinks.map((link) => async () => {
+            try {
+              const pageResponse = await fetch(link.url, {
+                redirect: "follow",
+                signal: AbortSignal.timeout(10000),
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0)"
+                }
+              });
 
-        for (const link of relevantLinks) {
-          try {
-            const pageResponse = await fetch(link.url, {
-              redirect: "follow",
-              signal: AbortSignal.timeout(10000),
-              headers: {
-                "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0)"
+              if (!pageResponse.ok) {
+                return null;
               }
-            });
 
-            if (!pageResponse.ok) {
-              continue;
+              const pageHtml = await pageResponse.text();
+              const resolvedUrl = pageResponse.url || link.url;
+              const pageSummary = this.extractPageSummary(pageHtml, resolvedUrl, link.label);
+              if (!pageSummary) {
+                return null;
+              }
+
+              return {
+                url: resolvedUrl,
+                summary: pageSummary
+              };
+            } catch {
+              return null;
             }
+          }),
+          INTERNAL_PAGE_CRAWL_CONCURRENCY
+        );
 
-            const pageHtml = await pageResponse.text();
-            const pageSummary = this.extractPageSummary(pageHtml, pageResponse.url || link.url, link.label);
-            if (!pageSummary) {
-              continue;
-            }
-
-            relevantUrls.push(pageResponse.url || link.url);
-            summaries.push(pageSummary);
-          } catch {
+        const relevantUrls: string[] = [];
+        for (const linkedPage of linkedPageResults) {
+          if (!linkedPage) {
             continue;
           }
+
+          relevantUrls.push(linkedPage.url);
+          summaries.push(linkedPage.summary);
         }
 
         const summary = summaries.join(" || ").slice(0, 1600);
@@ -783,6 +854,17 @@ export class OpenAIWebSearchClient {
     }
 
     return undefined;
+  }
+
+  private async mapWithConcurrency<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
+    const results: T[] = [];
+
+    for (let start = 0; start < tasks.length; start += concurrency) {
+      const batch = tasks.slice(start, start + concurrency);
+      results.push(...(await Promise.all(batch.map((task) => task()))));
+    }
+
+    return results;
   }
 
   private extractMetaContent(html: string, name: string): string | undefined {

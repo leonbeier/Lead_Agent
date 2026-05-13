@@ -1,184 +1,1304 @@
 {
-  "createdAt": "2026-05-10T17:46:02.447Z",
+  "createdAt": "2026-05-13T09:53:25.927Z",
   "requested": {
-    "targetLeadCount": 8,
+    "targetLeadCount": 15,
     "market": "DE",
-    "customGoal": "Prioritize German and European software integrators, industrial automation firms, machine builders, and industrial customers with QC or process automation needs. Avoid direct AI platform competitors and generic SaaS.",
-    "agentContext": "Prefer Europe first, especially Germany. Relevant means correct ONE WARE category plus Europe fit. Keep personalization factual and template-led. Use partner angle only where product or OEM fit is clear.",
+    "targetCategories": [
+      "integrator_vision_industrial_ai",
+      "integrator_general_ai",
+      "integrator_relevant_focus"
+    ],
+    "companySearchMode": "internet_research",
+    "creditLessMode": true,
     "runDeepResearch": false,
     "dryRun": false,
     "syncToHubSpot": false,
+    "disableHubSpotDeduplication": true,
     "earlyStopEnabled": true,
-    "earlyStopReviewCount": 15,
-    "earlyStopThreshold": 0.5
+    "earlyStopReviewCount": 8,
+    "earlyStopThreshold": 0.15,
+    "prequalification": {
+      "mainContext": "For this run, qualify conservatively for German delivery-led software and automation service providers. Prefer implementation ownership, recurring customer projects, industrial relevance, and credible Vision AI / Industrial AI potential. Downgrade product-centric AI platform vendors, pure consultancies, and weak-fit generic AI branding.",
+      "categoryContexts": {}
+    },
+    "mainContext": "",
+    "searchStrategyContext": "Run a crawler-first Germany search for delivery-led software and automation service providers. Use DuckDuckGo result pages plus official company sites and crawled internal pages such as About, Services, Solutions, Products, Applications, and Industry pages. Only keep firms whose own website suggests system integration, software implementation, automation engineering, machine vision delivery, industrial software projects, AOI, inline inspection, OT/MES/SCADA/PLC integration, or similar recurring customer project ownership. Avoid directories, marketplaces, publishers, media, events, associations, universities, investors, recruiters, hardware-only vendors, OEM product brands, and generic consultancies."
   },
   "summary": {
-    "foundCandidates": 8,
-    "filtersTested": 2,
-    "filtersStoppedEarly": 1,
-    "companiesSkippedAfterEarlyStop": 36
+    "foundCandidates": 6,
+    "filtersTested": 8,
+    "filtersStoppedEarly": 0,
+    "companiesSkippedAfterEarlyStop": 0
   },
   "contacts": [
     {
-      "companyName": "AlpsenTek",
-      "domain": "http://www.alpsentek.com",
-      "country": "Switzerland",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v2",
-      "rationale": "Description signals AI or computer vision delivery capability.",
-      "publicContactEmails": [
-        "business@alpsentek.com",
-        "talent@alpsentek.com"
-      ],
-      "publicContactPhones": [
-        "001/56005/14001/45001",
-        "001/56005/14001/45001"
-      ],
-      "publicContactSources": [
-        "http://www.alpsentek.com/contact-us",
-        "http://www.alpsentek.com/contact-us"
-      ]
-    },
-    {
-      "companyName": "Silicon Austria Labs (SAL)",
-      "domain": "http://www.silicon-austria-labs.com",
-      "country": "Austria",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v2",
-      "rationale": "Description signals AI or computer vision delivery capability.",
-      "publicContactEmails": [],
-      "publicContactPhones": [],
-      "publicContactSources": []
-    },
-    {
-      "companyName": "STEMMER IMAGING",
-      "domain": "http://www.stemmer-imaging.com",
+      "companyName": "Inline3D",
+      "domain": "https://inline3d.de",
       "country": "Germany",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v3",
-      "rationale": "Description signals AI or computer vision delivery capability.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "sourceFilter": "Germany Industrial Computer Vision Engineering Services (browser-search)",
+      "rationale": "Inline3D develops custom optical measurement systems with inline inspection and machine vision capabilities, indicating strong delivery ownership and industrial Vision AI relevance.",
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 0,
+        "serviceProvider": 0,
+        "partner": 0
+      },
+      "businessPotentialEUR": 0,
+      "businessPotentialReasoning": "",
+      "targetIndustry": "",
+      "productsOffered": "",
+      "overview": "",
+      "qualificationSummary": "Inline3D develops custom optical measurement systems with inline inspection and machine vision capabilities, indicating strong delivery ownership and industrial Vision AI relevance.",
+      "linkedInMessage": "",
+      "emailSubject": "",
+      "emailBody": "",
+      "phoneScript": "",
+      "riskFlags": [],
       "publicContactEmails": [],
       "publicContactPhones": [],
       "publicContactSources": []
     },
     {
-      "companyName": "Arotec Inspection GmbH",
-      "domain": "http://www.arotec-inspection.de",
+      "companyName": "deeplify",
+      "domain": "https://www.deeplify.de",
       "country": "Germany",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v3",
-      "rationale": "Description signals AI or computer vision delivery capability.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "sourceFilter": "Germany Industrial Computer Vision Engineering Services (browser-search)",
+      "rationale": "deeplify delivers AI-powered inspection software for industrial non-destructive testing with clear implementation ownership and industrial inspection focus.",
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 0,
+        "serviceProvider": 0,
+        "partner": 0
+      },
+      "businessPotentialEUR": 0,
+      "businessPotentialReasoning": "",
+      "targetIndustry": "",
+      "productsOffered": "",
+      "overview": "",
+      "qualificationSummary": "deeplify delivers AI-powered inspection software for industrial non-destructive testing with clear implementation ownership and industrial inspection focus.",
+      "linkedInMessage": "",
+      "emailSubject": "",
+      "emailBody": "",
+      "phoneScript": "",
+      "riskFlags": [],
       "publicContactEmails": [],
       "publicContactPhones": [],
       "publicContactSources": []
     },
     {
-      "companyName": "ANYbotics",
-      "domain": "http://www.anybotics.com",
-      "country": "Switzerland",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v3",
-      "rationale": "Description signals AI or computer vision delivery capability.",
-      "publicContactEmails": [],
-      "publicContactPhones": [],
-      "publicContactSources": []
-    },
-    {
-      "companyName": "Delvitech SA",
-      "domain": "http://www.delvi.tech",
-      "country": "Switzerland",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v3",
-      "rationale": "Description signals AI or computer vision delivery capability.",
-      "publicContactEmails": [],
-      "publicContactPhones": [],
-      "publicContactSources": []
-    },
-    {
-      "companyName": "JobLeads",
-      "domain": "http://www.jobleads.com",
+      "companyName": "MSK Engineering Services",
+      "domain": "https://www.mskengineering.de",
       "country": "Germany",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v3",
-      "rationale": "Description signals AI or computer vision delivery capability.",
-      "publicContactEmails": [
-        "press@jobleads.com",
-        "payment@jobleads.com"
-      ],
-      "publicContactPhones": [
-        "00219727 3",
-        "00219727 3"
-      ],
-      "publicContactSources": [
-        "https://www.jobleads.com/ae/about-us",
-        "https://www.jobleads.com/ae/about-us"
-      ]
+      "category": "integrator_general_ai",
+      "relevanceScore": 80,
+      "sourceFilter": "Germany Smart Factory Software Engineering Partners (browser-search)",
+      "rationale": "Company description shows delivery-led software, data, or AI engineering services with customer implementation ownership.",
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 0,
+        "serviceProvider": 0,
+        "partner": 0
+      },
+      "businessPotentialEUR": 0,
+      "businessPotentialReasoning": "",
+      "targetIndustry": "",
+      "productsOffered": "",
+      "overview": "",
+      "qualificationSummary": "Company description shows delivery-led software, data, or AI engineering services with customer implementation ownership.",
+      "linkedInMessage": "",
+      "emailSubject": "",
+      "emailBody": "",
+      "phoneScript": "",
+      "riskFlags": [],
+      "publicContactEmails": [],
+      "publicContactPhones": [],
+      "publicContactSources": []
     },
     {
-      "companyName": "Flyability",
-      "domain": "http://www.flyability.com",
-      "country": "Switzerland",
-      "category": "ai_software_integrator",
-      "relevanceScore": 87,
-      "sourceFilter": "Germany & EU Industrial AI Delivery Integrators Strict v3",
-      "rationale": "Description signals AI or computer vision delivery capability.",
-      "publicContactEmails": [
-        "communication@flyability.com",
-        "media@flyability.com"
-      ],
-      "publicContactPhones": [
-        "+41 21 311 55 00",
-        "+41 21 311 55 00"
-      ],
-      "publicContactSources": [
-        "https://www.flyability.com/contact/",
-        "https://www.flyability.com/de/kontakt"
-      ]
+      "companyName": "Smart Industry Group – Your reliable automation partner",
+      "domain": "https://sig-automation.com",
+      "country": "Germany",
+      "category": "integrator_general_ai",
+      "relevanceScore": 60,
+      "sourceFilter": "Germany Smart Factory Software Engineering Partners (browser-search)",
+      "rationale": "The company develops software for PLC and SCADA systems with industrial automation focus and project experience, but no explicit Vision AI or machine vision delivery evidence.",
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 0,
+        "serviceProvider": 0,
+        "partner": 0
+      },
+      "businessPotentialEUR": 0,
+      "businessPotentialReasoning": "",
+      "targetIndustry": "",
+      "productsOffered": "",
+      "overview": "",
+      "qualificationSummary": "The company develops software for PLC and SCADA systems with industrial automation focus and project experience, but no explicit Vision AI or machine vision delivery evidence.",
+      "linkedInMessage": "",
+      "emailSubject": "",
+      "emailBody": "",
+      "phoneScript": "",
+      "riskFlags": [],
+      "publicContactEmails": [],
+      "publicContactPhones": [],
+      "publicContactSources": []
+    },
+    {
+      "companyName": "Startseite - cronos automation GmbH",
+      "domain": "https://automation.cronos.de",
+      "country": "Germany",
+      "category": "integrator_general_ai",
+      "relevanceScore": 50,
+      "sourceFilter": "Germany Automation Software Integrators (browser-search)",
+      "rationale": "cronos automation GmbH presents as a professional automation solutions provider with process automation services, indicating delivery ownership and industrial relevance, but lacks explicit Vision AI or machine vision focus.",
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 0,
+        "serviceProvider": 0,
+        "partner": 0
+      },
+      "businessPotentialEUR": 0,
+      "businessPotentialReasoning": "",
+      "targetIndustry": "",
+      "productsOffered": "",
+      "overview": "",
+      "qualificationSummary": "cronos automation GmbH presents as a professional automation solutions provider with process automation services, indicating delivery ownership and industrial relevance, but lacks explicit Vision AI or machine vision focus.",
+      "linkedInMessage": "",
+      "emailSubject": "",
+      "emailBody": "",
+      "phoneScript": "",
+      "riskFlags": [],
+      "publicContactEmails": [],
+      "publicContactPhones": [],
+      "publicContactSources": []
+    },
+    {
+      "companyName": "home",
+      "domain": "https://www.nokra.de",
+      "country": "Germany",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "sourceFilter": "Germany Industrial Computer Vision Engineering Services (browser-search)",
+      "rationale": "Description suggests implementation or integration services.",
+      "likelyGermanSpeaking": true,
+      "outreachLanguage": "de",
+      "rankings": {
+        "customer": 0,
+        "serviceProvider": 0,
+        "partner": 0
+      },
+      "businessPotentialEUR": 0,
+      "businessPotentialReasoning": "",
+      "targetIndustry": "",
+      "productsOffered": "",
+      "overview": "",
+      "qualificationSummary": "Description suggests implementation or integration services.",
+      "linkedInMessage": "",
+      "emailSubject": "",
+      "emailBody": "",
+      "phoneScript": "",
+      "riskFlags": [],
+      "publicContactEmails": [],
+      "publicContactPhones": [],
+      "publicContactSources": []
     }
   ],
   "searchHistory": [
     {
-      "timestamp": "2026-05-10T17:44:30.199Z",
-      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v2",
+      "timestamp": "2026-05-13T08:14:28.944Z",
+      "filterName": "Germany Machine Vision System Integrators",
+      "filterSnapshot": {
+        "persona": "German system integrator delivering machine vision inspection and industrial image processing projects for customers",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "machine vision integrator",
+          "industrielle bildverarbeitung",
+          "bildverarbeitungssysteme",
+          "industrial image processing",
+          "inspection systems",
+          "quality inspection",
+          "system integrator",
+          "machbarkeitsanalyse bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Primary ICP. Target delivery-oriented German machine-vision and inspection integrators with customer project ownership. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
       "batchType": "probe_15",
       "page": 1,
-      "requestedCount": 15,
-      "returnedCount": 14,
+      "requestedCount": 8,
+      "returnedCount": 8,
       "relevantCount": 2,
+      "relevanceRatio": 0.25,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:16:12.651Z",
+      "filterName": "Germany Machine Vision System Integrators",
+      "filterSnapshot": {
+        "persona": "German system integrator delivering machine vision inspection and industrial image processing projects for customers",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "machine vision integrator",
+          "industrielle bildverarbeitung",
+          "bildverarbeitungssysteme",
+          "industrial image processing",
+          "inspection systems",
+          "quality inspection",
+          "system integrator",
+          "machbarkeitsanalyse bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Primary ICP. Target delivery-oriented German machine-vision and inspection integrators with customer project ownership. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 10,
+      "returnedCount": 9,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:17:30.492Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 8,
+      "returnedCount": 8,
+      "relevantCount": 1,
+      "relevanceRatio": 0.125,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:19:37.382Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 10,
+      "returnedCount": 10,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:24:08.952Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "expand_50",
+      "page": 2,
+      "requestedCount": 10,
+      "returnedCount": 10,
+      "relevantCount": 3,
+      "relevanceRatio": 0.3,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:28:50.601Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "expand_50",
+      "page": 3,
+      "requestedCount": 10,
+      "returnedCount": 7,
+      "relevantCount": 2,
+      "relevanceRatio": 0.2857142857142857,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:30:15.471Z",
+      "filterName": "Germany Smart Factory Software Engineering Partners",
+      "filterSnapshot": {
+        "persona": "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers",
+        "industries": [
+          "Industrial Software",
+          "Industrial Automation",
+          "System Integration",
+          "Machinery"
+        ],
+        "keywords": [
+          "smart factory software",
+          "smart factory dienstleister",
+          "industrial software engineering",
+          "manufacturing software implementation",
+          "production data integration",
+          "ot integration",
+          "industrial digitalization",
+          "smart systems engineering",
+          "co engineering automation",
+          "produktionssoftware dienstleister"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Targets Lachmann & Rink or Germanedge-like project-driven software delivery partners for production and smart factory environments, not generic SaaS vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 8,
+      "returnedCount": 8,
+      "relevantCount": 4,
+      "relevanceRatio": 0.5,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:33:51.784Z",
+      "filterName": "Germany Smart Factory Software Engineering Partners",
+      "filterSnapshot": {
+        "persona": "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers",
+        "industries": [
+          "Industrial Software",
+          "Industrial Automation",
+          "System Integration",
+          "Machinery"
+        ],
+        "keywords": [
+          "smart factory software",
+          "smart factory dienstleister",
+          "industrial software engineering",
+          "manufacturing software implementation",
+          "production data integration",
+          "ot integration",
+          "industrial digitalization",
+          "smart systems engineering",
+          "co engineering automation",
+          "produktionssoftware dienstleister"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Targets Lachmann & Rink or Germanedge-like project-driven software delivery partners for production and smart factory environments, not generic SaaS vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 6,
+      "returnedCount": 5,
+      "relevantCount": 1,
+      "relevanceRatio": 0.2,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:34:43.743Z",
+      "filterName": "Germany Automation Software Integrators",
+      "filterSnapshot": {
+        "persona": "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects with customer implementation ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "industrial automation integrator",
+          "automatisierung software dienstleister",
+          "sondermaschinen software",
+          "mes system integrator",
+          "scada system integrator",
+          "plc software integration",
+          "industrial software services",
+          "manufacturing software implementation",
+          "ot integration",
+          "softwareentwicklung industrie"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "German industrial software and automation implementation partners with clear delivery ownership. Prefer project-led OT, PLC, SCADA, and MES services over generic SaaS or HR software vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 8,
+      "returnedCount": 8,
+      "relevantCount": 1,
+      "relevanceRatio": 0.125,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:36:15.158Z",
+      "filterName": "Germany Automation Software Integrators",
+      "filterSnapshot": {
+        "persona": "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects with customer implementation ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "industrial automation integrator",
+          "automatisierung software dienstleister",
+          "sondermaschinen software",
+          "mes system integrator",
+          "scada system integrator",
+          "plc software integration",
+          "industrial software services",
+          "manufacturing software implementation",
+          "ot integration",
+          "softwareentwicklung industrie"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "German industrial software and automation implementation partners with clear delivery ownership. Prefer project-led OT, PLC, SCADA, and MES services over generic SaaS or HR software vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 5,
+      "returnedCount": 5,
+      "relevantCount": 1,
+      "relevanceRatio": 0.2,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:37:11.801Z",
+      "filterName": "Germany Automation Software Integrators",
+      "filterSnapshot": {
+        "persona": "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects with customer implementation ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "industrial automation integrator",
+          "automatisierung software dienstleister",
+          "sondermaschinen software",
+          "mes system integrator",
+          "scada system integrator",
+          "plc software integration",
+          "industrial software services",
+          "manufacturing software implementation",
+          "ot integration",
+          "softwareentwicklung industrie"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "German industrial software and automation implementation partners with clear delivery ownership. Prefer project-led OT, PLC, SCADA, and MES services over generic SaaS or HR software vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "expand_50",
+      "page": 2,
+      "requestedCount": 5,
+      "returnedCount": 5,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:39:23.931Z",
+      "filterName": "Germany Automation Software Integrators",
+      "filterSnapshot": {
+        "persona": "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects with customer implementation ownership",
+        "industries": [
+          "Industrial Automation",
+          "System Integration",
+          "Industrial Software",
+          "Machinery"
+        ],
+        "keywords": [
+          "industrial automation integrator",
+          "automatisierung software dienstleister",
+          "sondermaschinen software",
+          "mes system integrator",
+          "scada system integrator",
+          "plc software integration",
+          "industrial software services",
+          "manufacturing software implementation",
+          "ot integration",
+          "softwareentwicklung industrie"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "German industrial software and automation implementation partners with clear delivery ownership. Prefer project-led OT, PLC, SCADA, and MES services over generic SaaS or HR software vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "expand_50",
+      "page": 3,
+      "requestedCount": 5,
+      "returnedCount": 4,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:40:37.058Z",
+      "filterName": "Germany Embedded Vision Engineering Firms",
+      "filterSnapshot": {
+        "persona": "German embedded software and computer vision engineering services company serving industrial customers",
+        "industries": [
+          "Embedded Software",
+          "Industrial Automation",
+          "Electronics",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "embedded software services",
+          "embedded vision engineering",
+          "embedded software dienstleister",
+          "computer vision engineering services",
+          "bildverarbeitung dienstleistungen",
+          "industrial imaging integration",
+          "edge ai integration",
+          "industrial software engineering",
+          "softwareentwicklung support"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "German engineering service providers with embedded, edge, or computer-vision delivery capability for industrial customers. Prefer service-led development and integration teams over product-only robotics or model-platform vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 8,
+      "returnedCount": 8,
+      "relevantCount": 1,
+      "relevanceRatio": 0.125,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:42:23.477Z",
+      "filterName": "Germany Embedded Vision Engineering Firms",
+      "filterSnapshot": {
+        "persona": "German embedded software and computer vision engineering services company serving industrial customers",
+        "industries": [
+          "Embedded Software",
+          "Industrial Automation",
+          "Electronics",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "embedded software services",
+          "embedded vision engineering",
+          "embedded software dienstleister",
+          "computer vision engineering services",
+          "bildverarbeitung dienstleistungen",
+          "industrial imaging integration",
+          "edge ai integration",
+          "industrial software engineering",
+          "softwareentwicklung support"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "German engineering service providers with embedded, edge, or computer-vision delivery capability for industrial customers. Prefer service-led development and integration teams over product-only robotics or model-platform vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 5,
+      "returnedCount": 5,
+      "relevantCount": 1,
+      "relevanceRatio": 0.2,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:43:43.433Z",
+      "filterName": "Germany Embedded Vision Engineering Firms",
+      "filterSnapshot": {
+        "persona": "German embedded software and computer vision engineering services company serving industrial customers",
+        "industries": [
+          "Embedded Software",
+          "Industrial Automation",
+          "Electronics",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "embedded software services",
+          "embedded vision engineering",
+          "embedded software dienstleister",
+          "computer vision engineering services",
+          "bildverarbeitung dienstleistungen",
+          "industrial imaging integration",
+          "edge ai integration",
+          "industrial software engineering",
+          "softwareentwicklung support"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "German engineering service providers with embedded, edge, or computer-vision delivery capability for industrial customers. Prefer service-led development and integration teams over product-only robotics or model-platform vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_general_ai",
+      "batchType": "expand_50",
+      "page": 2,
+      "requestedCount": 5,
+      "returnedCount": 4,
+      "relevantCount": 1,
+      "relevanceRatio": 0.25,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:45:21.019Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 8,
+      "returnedCount": 8,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:46:55.324Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 10,
+      "returnedCount": 10,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T08:51:20.260Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "expand_50",
+      "page": 2,
+      "requestedCount": 10,
+      "returnedCount": 10,
+      "relevantCount": 2,
+      "relevanceRatio": 0.2,
+      "passedThreshold": true,
+      "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T08:55:59.203Z",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets firms closer to OCTUM or VEO-style customer project delivery in AOI, inline inspection, and industrial computer vision rather than broad AI vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "expand_50",
+      "page": 3,
+      "requestedCount": 10,
+      "returnedCount": 7,
+      "relevantCount": 1,
       "relevanceRatio": 0.14285714285714285,
       "passedThreshold": false,
       "recommendation": "Revise the search before spending more credits."
     },
     {
-      "timestamp": "2026-05-10T17:44:55.916Z",
-      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v3",
+      "timestamp": "2026-05-13T08:56:57.539Z",
+      "filterName": "Germany Smart Factory Software Engineering Partners",
+      "filterSnapshot": {
+        "persona": "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers",
+        "industries": [
+          "Industrial Software",
+          "Industrial Automation",
+          "System Integration",
+          "Machinery"
+        ],
+        "keywords": [
+          "smart factory software",
+          "smart factory dienstleister",
+          "industrial software engineering",
+          "manufacturing software implementation",
+          "production data integration",
+          "ot integration",
+          "industrial digitalization",
+          "smart systems engineering",
+          "co engineering automation",
+          "produktionssoftware dienstleister"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Targets Lachmann & Rink or Germanedge-like project-driven software delivery partners for production and smart factory environments, not generic SaaS vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
       "batchType": "probe_15",
       "page": 1,
-      "requestedCount": 15,
-      "returnedCount": 14,
-      "relevantCount": 9,
-      "relevanceRatio": 0.6428571428571429,
+      "requestedCount": 8,
+      "returnedCount": 8,
+      "relevantCount": 1,
+      "relevanceRatio": 0.125,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T09:00:16.224Z",
+      "filterName": "Germany Smart Factory Software Engineering Partners",
+      "filterSnapshot": {
+        "persona": "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers",
+        "industries": [
+          "Industrial Software",
+          "Industrial Automation",
+          "System Integration",
+          "Machinery"
+        ],
+        "keywords": [
+          "smart factory software",
+          "smart factory dienstleister",
+          "industrial software engineering",
+          "manufacturing software implementation",
+          "production data integration",
+          "ot integration",
+          "industrial digitalization",
+          "smart systems engineering",
+          "co engineering automation",
+          "produktionssoftware dienstleister"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Targets Lachmann & Rink or Germanedge-like project-driven software delivery partners for production and smart factory environments, not generic SaaS vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 10,
+      "returnedCount": 10,
+      "relevantCount": 3,
+      "relevanceRatio": 0.3,
       "passedThreshold": true,
       "recommendation": "Continue expanding this search."
     },
     {
-      "timestamp": "2026-05-10T17:45:36.990Z",
-      "filterName": "Germany & EU Industrial AI Delivery Integrators Strict v3",
+      "timestamp": "2026-05-13T09:04:18.349Z",
+      "filterName": "Germany Smart Factory Software Engineering Partners",
+      "filterSnapshot": {
+        "persona": "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers",
+        "industries": [
+          "Industrial Software",
+          "Industrial Automation",
+          "System Integration",
+          "Machinery"
+        ],
+        "keywords": [
+          "smart factory software",
+          "smart factory dienstleister",
+          "industrial software engineering",
+          "manufacturing software implementation",
+          "production data integration",
+          "ot integration",
+          "industrial digitalization",
+          "smart systems engineering",
+          "co engineering automation",
+          "produktionssoftware dienstleister"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Targets Lachmann & Rink or Germanedge-like project-driven software delivery partners for production and smart factory environments, not generic SaaS vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
       "batchType": "expand_50",
+      "page": 2,
+      "requestedCount": 10,
+      "returnedCount": 10,
+      "relevantCount": 1,
+      "relevanceRatio": 0.1,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T09:08:53.145Z",
+      "filterName": "Germany Smart Factory Software Engineering Partners",
+      "filterSnapshot": {
+        "persona": "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers",
+        "industries": [
+          "Industrial Software",
+          "Industrial Automation",
+          "System Integration",
+          "Machinery"
+        ],
+        "keywords": [
+          "smart factory software",
+          "smart factory dienstleister",
+          "industrial software engineering",
+          "manufacturing software implementation",
+          "production data integration",
+          "ot integration",
+          "industrial digitalization",
+          "smart systems engineering",
+          "co engineering automation",
+          "produktionssoftware dienstleister"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500",
+          "501,1000"
+        ],
+        "notes": "Targets Lachmann & Rink or Germanedge-like project-driven software delivery partners for production and smart factory environments, not generic SaaS vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "expand_50",
+      "page": 3,
+      "requestedCount": 10,
+      "returnedCount": 5,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
+    },
+    {
+      "timestamp": "2026-05-13T09:09:56.100Z",
+      "filterName": "Germany Embedded Vision Engineering Firms",
+      "filterSnapshot": {
+        "persona": "German embedded software and computer vision engineering services company serving industrial customers",
+        "industries": [
+          "Embedded Software",
+          "Industrial Automation",
+          "Electronics",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "embedded software services",
+          "embedded vision engineering",
+          "embedded software dienstleister",
+          "computer vision engineering services",
+          "bildverarbeitung dienstleistungen",
+          "industrial imaging integration",
+          "edge ai integration",
+          "industrial software engineering",
+          "softwareentwicklung support"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "German engineering service providers with embedded, edge, or computer-vision delivery capability for industrial customers. Prefer service-led development and integration teams over product-only robotics or model-platform vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "probe_15",
       "page": 1,
-      "requestedCount": 50,
-      "returnedCount": 35,
-      "relevantCount": 26,
-      "relevanceRatio": 0.7428571428571429,
+      "requestedCount": 8,
+      "returnedCount": 8,
+      "relevantCount": 2,
+      "relevanceRatio": 0.25,
       "passedThreshold": true,
       "recommendation": "Continue expanding this search."
+    },
+    {
+      "timestamp": "2026-05-13T09:11:24.562Z",
+      "filterName": "Germany Embedded Vision Engineering Firms",
+      "filterSnapshot": {
+        "persona": "German embedded software and computer vision engineering services company serving industrial customers",
+        "industries": [
+          "Embedded Software",
+          "Industrial Automation",
+          "Electronics",
+          "Industrial Software"
+        ],
+        "keywords": [
+          "embedded software services",
+          "embedded vision engineering",
+          "embedded software dienstleister",
+          "computer vision engineering services",
+          "bildverarbeitung dienstleistungen",
+          "industrial imaging integration",
+          "edge ai integration",
+          "industrial software engineering",
+          "softwareentwicklung support"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "German engineering service providers with embedded, edge, or computer-vision delivery capability for industrial customers. Prefer service-led development and integration teams over product-only robotics or model-platform vendors. Market focus: DE."
+      },
+      "targetCategory": "integrator_relevant_focus",
+      "batchType": "expand_50",
+      "page": 1,
+      "requestedCount": 10,
+      "returnedCount": 1,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits."
     }
-  ]
+  ],
+  "costs": {
+    "azure": {
+      "requests": 209,
+      "promptTokens": 537567,
+      "completionTokens": 13090,
+      "totalTokens": 550657,
+      "estimatedCostUsd": 0
+    }
+  }
 }

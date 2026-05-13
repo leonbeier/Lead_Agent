@@ -13,6 +13,8 @@ import {
 } from "./prompting/one-ware-playbook";
 import {
   ApolloOrganizationFilter,
+  CompanyScreeningDatabase,
+  CompanyScreeningRecord,
   CompanyFeedbackEntry,
   EditableExecutionContext,
   EditablePrequalificationCategoryContext,
@@ -41,6 +43,7 @@ const learningPath = path.join(dataDirectory, "lead-agent-learning.json");
 const latestLeadRunPath = path.join(dataDirectory, "latest-lead-run.json");
 const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-review.json");
 const apolloSearchCursorPath = path.join(dataDirectory, "apollo-search-cursors.json");
+const companyScreeningDatabasePath = path.join(dataDirectory, "company-screening-database.json");
 
 const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
@@ -137,9 +140,11 @@ const settingsSchema = z.object({
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
   runDeepResearch: z.boolean(),
   dryRun: z.boolean(),
+  syncToHubSpot: z.boolean().optional(),
   earlyStopEnabled: z.boolean(),
-  earlyStopReviewCount: z.number().int().min(5).max(15),
-  earlyStopThreshold: z.number().min(0).max(1)
+  earlyStopReviewCount: z.number().int().min(5).max(30),
+  earlyStopThreshold: z.number().min(0).max(1),
+  earlyStopMinRelevantCount: z.number().int().min(0).max(30).optional()
 });
 
 const settingsUpdateSchema = settingsSchema.partial();
@@ -236,6 +241,35 @@ const apolloSearchCursorSchema = z.record(z.object({
   updatedAt: z.string().min(1)
 }));
 
+const companyScreeningRecordSchema = z.object({
+  companyName: z.string().min(1),
+  normalizedName: z.string().min(1),
+  domain: z.string().optional(),
+  normalizedDomain: z.string().optional(),
+  category: z.enum([
+    "integrator_vision_industrial_ai",
+    "integrator_general_ai",
+    "integrator_relevant_focus",
+    "industrial_end_customer_scaled",
+    "camera_manufacturer_partner",
+    "machine_builder_ai_enablement",
+    "software_platform_embedding",
+    "irrelevant",
+    "other"
+  ]).optional(),
+  relevanceScore: z.number().min(0).max(100).optional(),
+  rationale: z.string().optional(),
+  sourceFilter: z.string().optional(),
+  shortDescription: z.string().optional(),
+  checkedAt: z.string().optional(),
+  existsInHubSpot: z.boolean().optional(),
+  hubspotCheckedAt: z.string().optional()
+});
+
+const companyScreeningDatabaseSchema = z.object({
+  records: z.array(companyScreeningRecordSchema)
+});
+
 const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 50,
   market: "DE",
@@ -266,10 +300,12 @@ const defaultSettings: LeadAgentSettings = {
     "software_platform_embedding"
   ],
   runDeepResearch: true,
-  dryRun: true,
+  dryRun: false,
+  syncToHubSpot: true,
   earlyStopEnabled: true,
-  earlyStopReviewCount: 15,
-  earlyStopThreshold: 0.15
+  earlyStopReviewCount: 30,
+  earlyStopThreshold: 0.15,
+  earlyStopMinRelevantCount: 2
 };
 
 const defaultLearning: LeadLearningData = {
@@ -293,6 +329,10 @@ const defaultLatestLeadRun: LatestLeadRunRecord = {
   searchHistory: []
 };
 
+const defaultCompanyScreeningDatabase: CompanyScreeningDatabase = {
+  records: []
+};
+
 const suggestedControls = [
   "targetLeadCount",
   "market",
@@ -305,9 +345,11 @@ const suggestedControls = [
   "targetCategories",
   "runDeepResearch",
   "dryRun",
+  "syncToHubSpot",
   "earlyStopEnabled",
   "earlyStopReviewCount",
   "earlyStopThreshold",
+  "earlyStopMinRelevantCount",
   "active ICP segment per campaign",
   "negative keyword rules",
   "personalization strictness"
@@ -339,6 +381,7 @@ export class ControlPlaneStore {
     await ensureFile(latestLeadRunPath, defaultLatestLeadRun);
     await ensureFile(latestOutreachReviewPath, defaultLatestLeadRun);
     await ensureFile(apolloSearchCursorPath, {});
+    await ensureFile(companyScreeningDatabasePath, defaultCompanyScreeningDatabase);
   }
 
   private getApolloSearchCursorKey(filter: ApolloOrganizationFilter): string {
@@ -439,6 +482,22 @@ export class ControlPlaneStore {
     return latestLeadRunSchema.parse(latestLeadRun) as LatestLeadRunRecord;
   }
 
+  async getCompanyScreeningDatabase(): Promise<CompanyScreeningDatabase> {
+    await this.ensureSeedData();
+    const database = await readJsonFile<Partial<CompanyScreeningDatabase>>(companyScreeningDatabasePath);
+    return companyScreeningDatabaseSchema.parse({
+      ...defaultCompanyScreeningDatabase,
+      ...database
+    });
+  }
+
+  async writeCompanyScreeningDatabase(database: CompanyScreeningDatabase): Promise<void> {
+    await this.ensureSeedData();
+    await writeJsonFile(companyScreeningDatabasePath, {
+      records: this.normalizeCompanyScreeningRecords(database.records)
+    });
+  }
+
   async getApolloSearchCursor(filter: ApolloOrganizationFilter): Promise<number> {
     await this.ensureSeedData();
     const cursorMap = apolloSearchCursorSchema.parse(
@@ -529,6 +588,30 @@ export class ControlPlaneStore {
     await this.ensureSeedData();
     await writeJsonFile(latestLeadRunPath, record);
     await writeJsonFile(latestOutreachReviewPath, record);
+  }
+
+  private normalizeCompanyScreeningRecords(records: CompanyScreeningRecord[]): CompanyScreeningRecord[] {
+    const deduped = new Map<string, CompanyScreeningRecord>();
+
+    for (const record of records) {
+      const normalizedName = record.normalizedName?.trim().toLowerCase() || record.companyName.trim().toLowerCase();
+      const normalizedDomain = record.normalizedDomain?.trim().toLowerCase() || record.domain?.trim().toLowerCase();
+      const key = normalizedDomain || `name:${normalizedName}`;
+
+      deduped.set(key, {
+        ...record,
+        normalizedName,
+        normalizedDomain
+      });
+    }
+
+    return Array.from(deduped.values())
+      .sort((left, right) => {
+        const leftTimestamp = Date.parse(left.checkedAt ?? left.hubspotCheckedAt ?? "") || 0;
+        const rightTimestamp = Date.parse(right.checkedAt ?? right.hubspotCheckedAt ?? "") || 0;
+        return rightTimestamp - leftTimestamp;
+      })
+      .slice(0, 5000);
   }
 
   async updateTemplate(key: string, input: Partial<Omit<OutreachTemplate, "key">>): Promise<OutreachTemplate> {

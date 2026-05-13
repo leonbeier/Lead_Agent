@@ -28,6 +28,7 @@ const envSchema = z.object({
   AZURE_OPENAI_API_KEY: z.string().optional(),
   AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
   AZURE_OPENAI_DEPLOYMENT: z.string().default("gpt-5.4-mini"),
+  AZURE_OPENAI_CLASSIFIER_DEPLOYMENT: z.string().optional(),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
   AZURE_OPENAI_INPUT_COST_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
   AZURE_OPENAI_OUTPUT_COST_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
