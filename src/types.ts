@@ -11,6 +11,8 @@ export type LeadCategory =
 
 export type SelectableLeadCategory = Exclude<LeadCategory, "irrelevant" | "other">;
 
+export type CompanySearchMode = "internet_research" | "apollo_search";
+
 export interface EditablePrequalificationCategoryContext {
   classificationRules?: string[];
   disqualifiers?: string[];
@@ -46,6 +48,12 @@ export interface CompanySample {
   country?: string;
   shortDescription: string;
   sourceFilter: string;
+}
+
+export interface CrawledWebsiteProfile {
+  summary: string;
+  landingUrl: string;
+  relevantUrls: string[];
 }
 
 export interface PreCategorizedCompany extends CompanySample {
@@ -129,6 +137,7 @@ export interface LeadAgentSettings {
   mainContext?: string;
   searchStrategyContext?: string;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
+  companySearchMode: CompanySearchMode;
   creditLessMode: boolean;
   prequalification?: PrequalificationConfig;
   prequalificationContext?: string;
@@ -251,6 +260,7 @@ export interface LeadJobRequest {
   mainContext?: string;
   searchStrategyContext?: string;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
+  companySearchMode?: CompanySearchMode;
   creditLessMode?: boolean;
   prequalification?: PrequalificationConfig;
   prequalificationContext?: string;
@@ -260,6 +270,7 @@ export interface LeadJobRequest {
   runDeepResearch?: boolean;
   dryRun?: boolean;
   syncToHubSpot?: boolean;
+  disableHubSpotDeduplication?: boolean;
   earlyStopEnabled?: boolean;
   earlyStopReviewCount?: number;
   earlyStopThreshold?: number;

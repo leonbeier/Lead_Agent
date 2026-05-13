@@ -17,13 +17,7 @@ export class ApolloClient {
     }
 
     if (creditLessMode) {
-      const webSearchCompanies = readiness.openAIWebSearchConfigured
-        ? await this.searchOrganizationsWithoutCredits(filter, limit, page)
-        : [];
-
-      if (webSearchCompanies.length > 0 || !readiness.apolloConfigured) {
-        return webSearchCompanies;
-      }
+      return this.searchOrganizationsWithoutCredits(filter, limit, page);
     }
 
     if (!readiness.apolloConfigured) {
@@ -324,14 +318,14 @@ export class ApolloClient {
     const enrichedCompanies = [...companies];
     const sparseIndexes = enrichedCompanies
       .map((company, index) => ({ company, index }))
-      .filter(({ company }) => company.shortDescription.includes("No verified public company description was returned by Apollo."))
-      .slice(0, 4);
+      .filter(({ company }) => this.isSparseCompanyDescription(company.shortDescription))
+      .slice(0, Math.min(8, enrichedCompanies.length));
 
     const enrichments = await Promise.all(
       sparseIndexes.map(async ({ company, index }) => ({
         index,
         company,
-        enrichment: await this.webSearchAgent.summarizeCompany(company)
+        enrichment: await this.enrichCompanyDescription(company)
       }))
     );
 
@@ -348,5 +342,20 @@ export class ApolloClient {
     }
 
     return enrichedCompanies;
+  }
+
+  private isSparseCompanyDescription(description: string | undefined): boolean {
+    const normalizedDescription = description?.trim().toLowerCase() ?? "";
+
+    return (
+      normalizedDescription.length < 80 ||
+      normalizedDescription.includes("no verified public company description was returned by apollo") ||
+      normalizedDescription.includes("no verified public company description") ||
+      normalizedDescription.includes("signal is mixed and needs deeper manual review")
+    );
+  }
+
+  private async enrichCompanyDescription(company: CompanySample): Promise<Partial<CompanySample> | null> {
+    return this.webSearchAgent.summarizeCompany(company);
   }
 }

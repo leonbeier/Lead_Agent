@@ -47,6 +47,7 @@ const settingsSchema = z.object({
   market: z.string().min(1),
   mainContext: z.string().max(12000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
+  companySearchMode: z.enum(["internet_research", "apollo_search"]),
   creditLessMode: z.boolean(),
   prequalification: z.object({
     mainContext: z.string().max(6000).optional(),
@@ -240,7 +241,8 @@ const defaultSettings: LeadAgentSettings = {
   market: "DE",
   mainContext: DEFAULT_MAIN_CONTEXT,
   searchStrategyContext: DEFAULT_SEARCH_STRATEGY_CONTEXT,
-  creditLessMode: false,
+  companySearchMode: "internet_research",
+  creditLessMode: true,
   prequalification: {
     mainContext: DEFAULT_PREQUALIFICATION_MAIN_CONTEXT,
     categoryContexts: DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS
@@ -267,7 +269,7 @@ const defaultSettings: LeadAgentSettings = {
   dryRun: true,
   earlyStopEnabled: true,
   earlyStopReviewCount: 15,
-  earlyStopThreshold: 0.5
+  earlyStopThreshold: 0.15
 };
 
 const defaultLearning: LeadLearningData = {
@@ -296,7 +298,7 @@ const suggestedControls = [
   "market",
   "mainContext",
   "searchStrategyContext",
-  "creditLessMode",
+  "companySearchMode",
   "prequalification.mainContext",
   "prequalification.categoryContexts",
   "executionContexts",
@@ -353,7 +355,8 @@ export class ControlPlaneStore {
 
   async getSettings(): Promise<LeadAgentSettings> {
     await this.ensureSeedData();
-    const settings = await readJsonFile<LeadAgentSettings & { prequalificationContext?: string }>(settingsPath);
+    const settings = await readJsonFile<Partial<LeadAgentSettings> & { prequalificationContext?: string }>(settingsPath);
+    const normalizedCompanySearchMode = settings.companySearchMode ?? defaultSettings.companySearchMode;
 
     const normalizedPrequalification = {
       ...defaultSettings.prequalification,
@@ -369,15 +372,25 @@ export class ControlPlaneStore {
     return settingsSchema.parse({
       ...defaultSettings,
       ...settings,
+      companySearchMode: normalizedCompanySearchMode,
+      creditLessMode: normalizedCompanySearchMode === "internet_research",
       prequalification: normalizedPrequalification
     });
   }
 
   async updateSettings(input: Partial<LeadAgentSettings>): Promise<LeadAgentSettings> {
     const currentSettings = await this.getSettings();
+    const parsedInput = settingsUpdateSchema.parse(input);
+    const normalizedCompanySearchMode = parsedInput.companySearchMode ?? (
+      typeof parsedInput.creditLessMode === "boolean"
+        ? (parsedInput.creditLessMode ? "internet_research" : "apollo_search")
+        : currentSettings.companySearchMode
+    );
     const nextSettings = settingsSchema.parse({
       ...currentSettings,
-      ...settingsUpdateSchema.parse(input)
+      ...parsedInput,
+      companySearchMode: normalizedCompanySearchMode,
+      creditLessMode: normalizedCompanySearchMode === "internet_research"
     });
 
     await writeJsonFile(settingsPath, nextSettings);

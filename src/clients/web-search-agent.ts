@@ -1,4 +1,4 @@
-import { ApolloOrganizationFilter, CompanySample, PreCategorizedCompany } from "../types";
+import { ApolloOrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 import { OpenAIWebSearchClient } from "./openai-web-search";
 
 interface SearchEvidence {
@@ -23,5 +23,9 @@ export class WebSearchAgent {
 
   async summarizeCompany(company: CompanySample): Promise<Partial<CompanySample> | null> {
     return this.openAIWebSearchClient.summarizeCompany(company);
+  }
+
+  async crawlCompanyWebsite(domain: string | undefined): Promise<CrawledWebsiteProfile | null> {
+    return this.openAIWebSearchClient.crawlCompanyWebsite(domain);
   }
 }

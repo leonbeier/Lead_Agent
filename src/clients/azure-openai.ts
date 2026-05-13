@@ -44,13 +44,66 @@ const QUICK_QUALIFICATION_CONTEXT = [
   "First identify the firm archetype: implementation-led integrator, industrial end customer, camera/imaging manufacturer, machine builder/OEM, software platform, or clearly irrelevant profile.",
   "Then decide whether the company is genuinely relevant, clearly irrelevant, or too ambiguous.",
   "Do not infer delivery ownership or category fit from the Apollo filter name, source filter, or a vague company name alone.",
+  "Positive archetypes look similar to OCTUM, VEO Automation, Gestalt Automation, kubion, Strategion, visiontechnik.de, or Lachmann & Rink: customer project delivery, implementation ownership, industrial inspection or production relevance, and concrete engineering work rather than generic AI branding.",
+  "Negative reference profiles include SemsoTec Group for display/HMI product engineering and exantas for clearly non-target publication or association-style profiles.",
+  "High-signal fit phrases include AOI, automated optical inspection, inline inspection, optical quality control, industrial image processing, machine vision integration, embedded computer vision, feasibility study, camera calibration, lighting optimization, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering.",
   "If the company description is missing, generic, placeholder-like, or weak, return other or irrelevant unless there is strong explicit evidence for a positive category.",
   "Reject media companies, magazines, publishers, news portals, event businesses, associations, universities, research institutes, VCs, private equity, banks, insurers, recruiting/HR tech, generic consultancies without delivery ownership, resellers, and direct competing AI software vendors.",
   "Do not classify robot manufacturers, OEMs, hardware vendors, or product-led robotics brands as integrators unless they clearly sell implementation or integration services.",
+  "Downgrade companies that mainly sell their own software platform, robot product, hardware portfolio, or generic consulting without visible recurring implementation responsibility.",
   "Return JSON only with category, relevanceScore 0-100, rationale.",
   "Keep rationale to one short sentence."
 ].join(" ");
 const MAX_FILTER_STRATEGY_HISTORY = 8;
+const REFERENCE_COMPANY_CLASSIFICATIONS: Array<{
+  match: RegExp;
+  category: LeadCategory;
+  relevanceScore: number;
+  rationale: string;
+}> = [
+  {
+    match: /gestalt automation/i,
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 94,
+    rationale: "Operator reference company for industrial inspection and implementation-led AI delivery."
+  },
+  {
+    match: /veo automation/i,
+    category: "integrator_general_ai",
+    relevanceScore: 90,
+    rationale: "Operator reference company for implementation-led automation and AI delivery."
+  },
+  {
+    match: /kubion/i,
+    category: "integrator_general_ai",
+    relevanceScore: 88,
+    rationale: "Operator reference company for delivery-led industrial software and automation services."
+  },
+  {
+    match: /strategion/i,
+    category: "integrator_general_ai",
+    relevanceScore: 84,
+    rationale: "Operator reference company for AI enablement with implementation and infrastructure ownership."
+  },
+  {
+    match: /visiontechnik/i,
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 91,
+    rationale: "Operator reference company for machine-vision integration, deep learning, and project delivery."
+  },
+  {
+    match: /semsotec/i,
+    category: "other",
+    relevanceScore: 18,
+    rationale: "Display, HMI, and optical product engineering profile rather than a target software integrator."
+  },
+  {
+    match: /exantas automotive|\bexantas\b/i,
+    category: "irrelevant",
+    relevanceScore: 8,
+    rationale: "Reference profile is not a target industrial AI delivery integrator for ONE WARE."
+  }
+];
 
 export class AzureOpenAIClient {
   private readonly foundryAgentsClient = new FoundryAgentsClient();
@@ -127,6 +180,67 @@ export class AzureOpenAIClient {
     }
   }
 
+  async categorizeWebsiteCrawl(
+    name: string,
+    domain: string | undefined,
+    crawledWebsiteSummary: string,
+    dryRun: boolean,
+    mainContext?: string,
+    prequalification?: PrequalificationConfig,
+    learning?: LeadLearningData
+  ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">> {
+    const deterministicCategory = this.categorizeDeterministic(name, crawledWebsiteSummary, learning);
+    if (deterministicCategory) {
+      return deterministicCategory;
+    }
+
+    if (dryRun || !readiness.azureConfigured) {
+      return this.categorizeDryRun(crawledWebsiteSummary);
+    }
+
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: [
+            QUICK_QUALIFICATION_CONTEXT,
+            buildPrequalificationContextBlock(prequalification, undefined, mainContext),
+            "You are classifying a company from its own crawled website pages only.",
+            "Treat this as a cheap website-first precheck before any expensive web-search research.",
+            "The crawled text may combine homepage, about, services, solutions, products, references, applications, and industry pages.",
+            "Prefer implementation-led software integrators, automation integrators, embedded/industrial engineering services, and project-delivery firms.",
+            "Downgrade product-heavy camera vendors, hardware sellers, marketplaces, and generic consultancies unless recurring customer implementation ownership is explicit."
+          ].join("\n\n")
+        },
+        {
+          role: "user",
+          content: [
+            `Company=${name}`,
+            domain ? `Website=${domain}` : undefined,
+            `Crawled website evidence=${crawledWebsiteSummary}`,
+            prequalification?.mainContext ? `Prequalification main context=${prequalification.mainContext}` : undefined,
+            learning ? this.buildLearningContext(learning) : undefined
+          ]
+            .filter(Boolean)
+            .join("\n")
+        }
+      ], { maxTokens: 180 });
+
+      const parsed = this.parseJsonObject<{
+        category: LeadCategory;
+        relevanceScore: number;
+        rationale: string;
+      }>(content);
+
+      return {
+        ...parsed,
+        category: this.normalizeCategory(parsed.category)
+      };
+    } catch {
+      return this.categorizeDryRun(crawledWebsiteSummary);
+    }
+  }
+
   async buildResearchBrief(
     company: PreCategorizedCompany,
     dryRun: boolean,
@@ -148,6 +262,18 @@ export class AzureOpenAIClient {
     if (dryRun || !readiness.azureConfigured) {
       return this.buildFallbackResearchBrief(company, template, executionContext, mainContext);
     }
+
+    const crawledWebsiteEvidence = company.domain
+      ? {
+          context: [
+            "Crawled website evidence:",
+            `Company: ${company.name}`,
+            `Website: ${company.domain}`,
+            `Website summary: ${company.shortDescription}`
+          ].join("\n\n"),
+          citations: [company.domain]
+        }
+      : undefined;
 
     const webResearchEvidence = includeWebResearch
       ? await this.webSearchAgent.buildResearchContext(company)
@@ -175,6 +301,7 @@ export class AzureOpenAIClient {
             `Base template email body:\n${template.emailBody}`,
             `Base template LinkedIn message:\n${template.linkedInMessage}`,
             `Base template phone script:\n${template.phoneScript}`,
+            crawledWebsiteEvidence?.context,
             webResearchEvidence?.context,
             learning ? this.buildLearningContext(learning) : undefined
           ].join("\n\n")
@@ -185,15 +312,23 @@ export class AzureOpenAIClient {
       return {
         companyName: company.name,
         appliedAgentContext: mainContext,
-        citations: webResearchEvidence?.citations?.length
-          ? webResearchEvidence.citations
-          : company.domain
-            ? [company.domain]
-            : [],
+        citations: Array.from(new Set([
+          ...(crawledWebsiteEvidence?.citations ?? []),
+          ...(webResearchEvidence?.citations ?? [])
+        ])),
         ...parsed
       };
     } catch {
-      return this.buildFallbackResearchBrief(company, template, executionContext, mainContext, webResearchEvidence?.citations);
+      return this.buildFallbackResearchBrief(
+        company,
+        template,
+        executionContext,
+        mainContext,
+        Array.from(new Set([
+          ...(crawledWebsiteEvidence?.citations ?? []),
+          ...(webResearchEvidence?.citations ?? [])
+        ]))
+      );
     }
   }
 
@@ -281,10 +416,17 @@ export class AzureOpenAIClient {
               "Optimize for at least 50% relevant firms in the first 15-company sample.",
               "Relevant means Europe-first and a plausible ONE WARE target category.",
               "Prioritize Germany first, then strong European industrial regions.",
+              "Model the positive archetype on the strongest known Apollo cluster: Gestalt Automation, VEO Automation, kubion, Lachmann & Rink, plus nearby implementation-led firms like OCTUM.",
+              "Keep wording concrete and close to the winning examples because Apollo is highly sensitive to small phrasing changes.",
+              "Treat exclusions as equally important as inclusion terms.",
               "Avoid magazines, publishers, media portals, event businesses, associations, universities, research institutes, VCs, generic consultancies, recruiting, banks, insurers, China, Saudi Arabia, and direct AI platform competitors.",
+              "Explicitly avoid hardware vendors, OEMs, publishers, media brands, and pure consultancies unless the operator context says otherwise.",
               "Prefer implementation-oriented software and automation service providers over product vendors or editorial/media brands.",
               "Do not use broad keywords like robotics or AI alone when they are likely to pull robot makers, OEMs, hardware vendors, investors, or magazines.",
-              "Prefer service-intent keywords such as system integrator, implementation, software services, engineering services, custom software, automation projects, machine vision integration, industrial inspection, embedded development, or solution provider.",
+              "Do not broaden with terms like AI solutions, manufacturing alone, or looser employee ranges when those changes risk generic AI or generic software-company results.",
+              "Prefer concrete service-intent keywords such as project-based software integrator, system integrator, implementation, software services, engineering services, custom software, automation projects, machine vision, industrial inspection, image processing, embedded development, or solution provider.",
+              "High-signal keyword families include AOI, automated optical inspection, inline inspection, optical quality control, industrial image processing, embedded computer vision, feasibility study, camera calibration, lighting optimization, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering.",
+              "When a search theme is broad, split it into neighboring variants with one clear angle each instead of one generic umbrella filter.",
               "Keep industries, keywords, employee ranges, and locations realistic for Apollo."
             ].join(" ")
           },
@@ -340,7 +482,11 @@ export class AzureOpenAIClient {
               "Return strict JSON with {\"filter\":{...}}.",
               "The revised filter must aim for at least 50% relevant firms in the next 15-company probe.",
               "Tighten geography and commercial fit before broadening.",
-              "Prefer service-led integrators and industrial accounts in Europe over broad AI vendors or generic consultancies."
+              "Prefer service-led integrators and industrial accounts in Europe over broad AI vendors or generic consultancies.",
+              "Move the failed filter toward the strongest known Apollo examples: Gestalt Automation, VEO Automation, kubion, Lachmann & Rink, and nearby firms like OCTUM when relevant.",
+              "If the prior filter was too broad, narrow one dimension only: either keywords, industries, or geography, but do not rewrite the whole idea into another generic bucket.",
+              "Do not rescue a weak filter by adding broadeners like AI solutions, manufacturing alone, or wider employee ranges.",
+              "Prefer keyword families such as AOI, inline inspection, machine vision integration, industrial image processing, embedded computer vision, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering."
             ].join(" ")
           },
           {
@@ -381,6 +527,32 @@ export class AzureOpenAIClient {
 
   private categorizeDryRun(description: string): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> {
     const lowered = description.toLowerCase();
+    const serviceDeliverySignals = [
+      "custom software",
+      "software development",
+      "softwareentwicklung",
+      "software engineering",
+      "engineering services",
+      "it services",
+      "it-services",
+      "it-dienstleistung",
+      "integration",
+      "implementation",
+      "project delivery",
+      "digital transformation",
+      "digitale transformation",
+      "platform engineering",
+      "data & ai",
+      "machine learning",
+      "computer vision",
+      "dedicated teams",
+      "beratung",
+      "dienstleistung",
+      "umsetzung",
+      "prozessautomatisierung",
+      "branchenloesungen",
+      "branchenlösungen"
+    ];
     const obviouslyIrrelevantSignals = [
       "magazine",
       "magazin",
@@ -413,7 +585,11 @@ export class AzureOpenAIClient {
       "e-commerce",
       "marketing platform",
       "cloud platform",
-      "business software"
+      "business software",
+      "marketplace",
+      "distributor",
+      "trader",
+      "spare parts"
     ];
     const industrialSignals = [
       "industrial",
@@ -430,8 +606,9 @@ export class AzureOpenAIClient {
 
     const nonIndustrialHits = nonIndustrialPlatformSignals.filter((signal) => lowered.includes(signal)).length;
     const industrialHits = industrialSignals.filter((signal) => lowered.includes(signal)).length;
+    const serviceDeliveryHits = serviceDeliverySignals.filter((signal) => lowered.includes(signal)).length;
 
-    if (obviouslyIrrelevantSignals.some((signal) => lowered.includes(signal))) {
+    if (obviouslyIrrelevantSignals.some((signal) => lowered.includes(signal)) && serviceDeliveryHits === 0) {
       return {
         category: "irrelevant",
         relevanceScore: 3,
@@ -439,7 +616,7 @@ export class AzureOpenAIClient {
       };
     }
 
-    if (nonIndustrialHits >= 1 && industrialHits === 0) {
+    if (nonIndustrialHits >= 1 && industrialHits === 0 && serviceDeliveryHits === 0) {
       return {
         category: "irrelevant",
         relevanceScore: 6,
@@ -477,7 +654,7 @@ export class AzureOpenAIClient {
       };
     }
 
-    if (lowered.includes("platform") || lowered.includes("api") || lowered.includes("workflow")) {
+    if ((lowered.includes("platform") || lowered.includes("api") || lowered.includes("workflow")) && serviceDeliveryHits === 0) {
       return {
         category: "software_platform_embedding",
         relevanceScore: 78,
@@ -485,7 +662,26 @@ export class AzureOpenAIClient {
       };
     }
 
-    if (lowered.includes("machine") || lowered.includes("oem") || lowered.includes("inspection")) {
+    if (serviceDeliveryHits >= 2 && (lowered.includes("software") || lowered.includes("ai") || lowered.includes("data") || lowered.includes("engineering"))) {
+      return {
+        category: "integrator_general_ai",
+        relevanceScore: 81,
+        rationale: "Description suggests a delivery-led software and AI engineering partner with customer implementation ownership."
+      };
+    }
+
+    if (
+      (lowered.includes("software") || lowered.includes("integration") || lowered.includes("engineering") || lowered.includes("implementation")) &&
+      (lowered.includes("factory") || lowered.includes("production") || lowered.includes("industrial") || lowered.includes("automation"))
+    ) {
+      return {
+        category: "integrator_general_ai",
+        relevanceScore: 79,
+        rationale: "Description suggests service-led industrial software or automation implementation ownership."
+      };
+    }
+
+    if (lowered.includes("oem") || lowered.includes("maschinenbau") || lowered.includes("special machinery") || lowered.includes("sondermaschinen")) {
       return {
         category: "machine_builder_ai_enablement",
         relevanceScore: 76,
@@ -522,6 +718,14 @@ export class AzureOpenAIClient {
     learning?: LeadLearningData
   ): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> | null {
     const lowered = `${name} ${description}`.toLowerCase();
+    const matchedReference = REFERENCE_COMPANY_CLASSIFICATIONS.find((entry) => entry.match.test(`${name} ${description}`));
+    if (matchedReference) {
+      return {
+        category: matchedReference.category,
+        relevanceScore: matchedReference.relevanceScore,
+        rationale: matchedReference.rationale
+      };
+    }
     const normalizedDescription = description.trim().toLowerCase();
     const hasPlaceholderDescription =
       normalizedDescription.length === 0 ||
@@ -587,6 +791,16 @@ export class AzureOpenAIClient {
       "embedded vision",
       "image sensor"
     ];
+    const displayVendorSignals = [
+      "display solution",
+      "display solutions",
+      "display customization",
+      "cockpit solutions",
+      "optical bonding",
+      "hmi",
+      "autostereoscopic",
+      "3d displays"
+    ];
     const serviceSignals = [
       "system integrator",
       "systems integrator",
@@ -641,6 +855,11 @@ export class AzureOpenAIClient {
       "embedded software",
       "embedded systems",
       "industrial software",
+      "smart factory",
+      "mom",
+      "iiot",
+      "co-engineering",
+      "co engineering",
       "commissioning",
       "software engineering"
     ];
@@ -683,9 +902,50 @@ export class AzureOpenAIClient {
       "multiposting",
       "ats"
     ];
+    const nonTargetInspectionSignals = [
+      "pipeline inspection",
+      "ili consulting",
+      "corrosion",
+      "geometric inspection",
+      "pre-inspection",
+      "post-inspection support",
+      "inspection data",
+      "supply chain solutions",
+      "creative visual studio"
+    ];
+    const serviceDeliverySignals = [
+      "custom software",
+      "software development",
+      "softwareentwicklung",
+      "software engineering",
+      "engineering services",
+      "it services",
+      "it-services",
+      "it-dienstleistung",
+      "integration",
+      "implementation",
+      "project delivery",
+      "digital transformation",
+      "digitale transformation",
+      "platform engineering",
+      "data & ai",
+      "machine learning",
+      "computer vision",
+      "dedicated teams",
+      "beratung",
+      "dienstleistung",
+      "umsetzung",
+      "prozessautomatisierung",
+      "branchenloesungen",
+      "branchenlösungen",
+      "softwareprojekte",
+      "it-projekthaus"
+    ];
 
     const recruitingHits = recruitingSignals.filter((signal) => lowered.includes(signal)).length;
-    if (obviouslyIrrelevantSignals.some((signal) => lowered.includes(signal))) {
+    const serviceDeliveryHits = serviceDeliverySignals.filter((signal) => lowered.includes(signal)).length;
+    const serviceHits = serviceSignals.filter((signal) => lowered.includes(signal)).length;
+    if (obviouslyIrrelevantSignals.some((signal) => lowered.includes(signal)) && serviceDeliveryHits === 0 && serviceHits === 0) {
       return {
         category: "irrelevant",
         relevanceScore: 2,
@@ -703,11 +963,19 @@ export class AzureOpenAIClient {
 
     const nonIndustrialHits = nonIndustrialPlatformSignals.filter((signal) => lowered.includes(signal)).length;
     const industrialHits = industrialSignals.filter((signal) => lowered.includes(signal)).length;
-    if (nonIndustrialHits >= 1 && industrialHits === 0) {
+    if (nonIndustrialHits >= 1 && industrialHits === 0 && serviceDeliveryHits === 0) {
       return {
         category: "irrelevant",
         relevanceScore: 5,
         rationale: "Company description looks like a generic enterprise platform or logistics business rather than an industrial delivery fit."
+      };
+    }
+
+    if (nonTargetInspectionSignals.some((signal) => lowered.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 9,
+        rationale: "Company description points to pipeline inspection, generic consulting, or another non-target inspection niche instead of industrial vision integration."
       };
     }
 
@@ -719,7 +987,15 @@ export class AzureOpenAIClient {
       lowered.includes("oem") ||
       lowered.includes("manufacturer") ||
       lowered.includes("optics");
-    const serviceHits = serviceSignals.filter((signal) => lowered.includes(signal)).length;
+    const distributorLikeSignals = [
+      "distributor",
+      "one-stop",
+      "multi brand",
+      "multibrand",
+      "parts from distributors",
+      "buy, sell and manage",
+      "platform for industrial automation traders"
+    ];
     const negatesServiceLedModel =
       lowered.includes("not a pure implementation-led services firm") ||
       lowered.includes("not a pure implementation led services firm") ||
@@ -743,6 +1019,23 @@ export class AzureOpenAIClient {
       };
     }
 
+    if (distributorLikeSignals.some((signal) => lowered.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 10,
+        rationale: "Company description looks like a distributor, trader platform, or parts marketplace rather than an implementation-led delivery partner."
+      };
+    }
+
+    const displayVendorHits = displayVendorSignals.filter((signal) => lowered.includes(signal)).length;
+    if (displayVendorHits >= 1 && serviceHits === 0) {
+      return {
+        category: "other",
+        relevanceScore: 20,
+        rationale: "Company description looks like a display, HMI, or optical product engineering vendor rather than a target software integrator."
+      };
+    }
+
     if ((hardwareHits >= 2 || (mentionsImagingOrCamera && mentionsVendorOrHardware)) && serviceHits === 0) {
       return {
         category: "camera_manufacturer_partner",
@@ -760,21 +1053,29 @@ export class AzureOpenAIClient {
       };
     }
 
+    const automationDeliveryHits = automationDeliverySignals.filter((signal) => lowered.includes(signal)).length;
+    if (serviceHits >= 1 && automationDeliveryHits >= 1) {
+      return {
+        category: "integrator_general_ai",
+        relevanceScore: 84,
+        rationale: "Company description shows service-led industrial software or automation implementation ownership."
+      };
+    }
+
+    if (serviceDeliveryHits >= 2 && (lowered.includes("software") || lowered.includes("ai") || lowered.includes("data") || lowered.includes("engineering"))) {
+      return {
+        category: "integrator_general_ai",
+        relevanceScore: 80,
+        rationale: "Company description shows delivery-led software, data, or AI engineering services with customer implementation ownership."
+      };
+    }
+
     const softwarePlatformHits = softwarePlatformSignals.filter((signal) => lowered.includes(signal)).length;
-    if (softwarePlatformHits >= 2 && (serviceHits === 0 || negatesServiceLedModel) && nonIndustrialHits === 0) {
+    if (softwarePlatformHits >= 2 && (serviceHits === 0 && serviceDeliveryHits === 0 || negatesServiceLedModel) && nonIndustrialHits === 0) {
       return {
         category: "software_platform_embedding",
         relevanceScore: 82,
         rationale: "Company description looks like an industrial software platform or developer-tool business with partner or embedding potential."
-      };
-    }
-
-    const automationDeliveryHits = automationDeliverySignals.filter((signal) => lowered.includes(signal)).length;
-    if (serviceHits >= 1 && automationDeliveryHits >= 2) {
-      return {
-        category: "integrator_general_ai",
-        relevanceScore: 78,
-        rationale: "Company description shows service-led industrial automation or industrial software implementation ownership."
       };
     }
 
@@ -799,11 +1100,20 @@ export class AzureOpenAIClient {
       .slice(0, 10)
       .map((entry) => `${entry.companyName}: ${entry.reason}`);
 
+    const positiveArchetypes = [
+      "Positive archetypes: OCTUM, VEO Automation, Gestalt Automation, Lachmann & Rink.",
+      "Typical positive evidence: customer project delivery, industrial inspection or production software relevance, feasibility studies, integration, commissioning, image processing, AOI, smart factory, or embedded computer vision implementation."
+    ];
+
     if (rejectedCompanies.length === 0) {
-      return undefined;
+      return positiveArchetypes.join("\n");
     }
 
-    return ["Learned rejects:", ...rejectedCompanies.map((item) => `- ${item}`)].join("\n");
+    return [
+      ...positiveArchetypes,
+      "Learned rejects:",
+      ...rejectedCompanies.map((item) => `- ${item}`)
+    ].join("\n");
   }
 
   private async runChat(messages: ChatMessage[], options: RunChatOptions = {}): Promise<string> {

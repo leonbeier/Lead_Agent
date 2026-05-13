@@ -43,11 +43,12 @@ const FULL_SAMPLE_SIZE = 50;
 const DEFAULT_EARLY_STOP_REVIEW_COUNT = 15;
 const MIN_EARLY_STOP_REVIEW_COUNT = 5;
 const MAX_EARLY_STOP_REVIEW_COUNT = 15;
-const DEFAULT_EARLY_STOP_THRESHOLD = 0.5;
+const DEFAULT_EARLY_STOP_THRESHOLD = 0.15;
 const AZURE_WORKER_CONCURRENCY = 4;
 const EXPANSION_BATCH_SIZE = 50;
 const CREDITLESS_EXPANSION_BATCH_SIZE = 12;
 const MAX_FILTER_REVISIONS = 1;
+const MIN_COMPANIES_REVIEWED_BEFORE_FILTER_GIVE_UP = 40;
 const CONTACT_DISCOVERY_CONCURRENCY = 2;
 
 type LeadPipelineRunOptions = {
@@ -133,7 +134,9 @@ export class LeadPipelineAgent {
 
     const dryRun = request.dryRun ?? true;
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
-    const creditLessMode = request.creditLessMode ?? false;
+    const disableHubSpotDeduplication = request.disableHubSpotDeduplication ?? false;
+    const companySearchMode = request.companySearchMode ?? (request.creditLessMode ? "internet_research" : "apollo_search");
+    const useWebSearchCompanyDiscovery = companySearchMode === "internet_research";
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
     const mainContext = request.mainContext ?? request.agentContext;
     const learning = await this.controlPlaneStore.getLearning();
@@ -210,8 +213,8 @@ export class LeadPipelineAgent {
         while (candidateFilters.length > 0) {
           const activeFilter = candidateFilters.shift() as ApolloOrganizationFilter;
           const reviewedCompanies: PreCategorizedCompany[] = [];
-          let useWebSearchForExpansion = creditLessMode;
-          let apolloExpansionPage = creditLessMode || dryRun
+          let useWebSearchForExpansion = useWebSearchCompanyDiscovery;
+          let apolloExpansionPage = useWebSearchCompanyDiscovery || dryRun
             ? 1
             : await this.controlPlaneStore.getApolloSearchCursor(activeFilter);
           const probeFetch = await this.fetchAvailableSearchSample(
@@ -219,7 +222,8 @@ export class LeadPipelineAgent {
             earlyStopReviewCount,
             dryRun,
             apolloExpansionPage,
-            creditLessMode,
+            useWebSearchCompanyDiscovery,
+            disableHubSpotDeduplication,
             learning,
             reviewedCompanies
           );
@@ -235,7 +239,7 @@ export class LeadPipelineAgent {
             false
           );
 
-          if (!creditLessMode) {
+          if (!useWebSearchCompanyDiscovery) {
             const initialRelevantFromApollo = this.getRelevantCompanies(categorizedInitialSample, activeFilter, targetCategories, request.market);
             if (initialRelevantFromApollo.length === 0 || initialEvaluation.relevanceRatio < earlyStopThreshold) {
               const webFallbackProbe = await this.fetchAvailableSearchSample(
@@ -244,6 +248,7 @@ export class LeadPipelineAgent {
                 dryRun,
                 1,
                 true,
+                disableHubSpotDeduplication,
                 learning,
                 reviewedCompanies
               );
@@ -284,7 +289,7 @@ export class LeadPipelineAgent {
               activeFilter.name,
               activeCategory,
               "probe_15",
-              creditLessMode ? 1 : apolloExpansionPage - 1,
+              useWebSearchCompanyDiscovery ? 1 : apolloExpansionPage - 1,
               earlyStopReviewCount,
               categorizedInitialSample,
               activeFilter,
@@ -297,7 +302,11 @@ export class LeadPipelineAgent {
           const addedFromProbe = this.addUniqueCompanies(shortlistedCompanies, initialRelevant, shortlistedKeys);
           categoryCounts.set(activeCategory, (categoryCounts.get(activeCategory) ?? 0) + addedFromProbe);
 
-          if (earlyStopEnabled && initialEvaluation.relevanceRatio < earlyStopThreshold) {
+          if (
+            earlyStopEnabled &&
+            categorizedInitialSample.length >= MIN_COMPANIES_REVIEWED_BEFORE_FILTER_GIVE_UP &&
+            initialEvaluation.relevanceRatio < earlyStopThreshold
+          ) {
             const skippedCount = Math.max(0, FULL_SAMPLE_SIZE - categorizedInitialSample.length);
             const stoppedEvaluation: FilterEvaluation = {
               ...initialEvaluation,
@@ -347,6 +356,7 @@ export class LeadPipelineAgent {
               dryRun,
               requestedPage,
               useWebSearchForExpansion,
+              disableHubSpotDeduplication,
               learning,
               reviewedCompanies
             );
@@ -389,6 +399,14 @@ export class LeadPipelineAgent {
               earlyStopReviewCount,
               false
             );
+            const cumulativeEvaluation = this.evaluateFilter(
+              activeFilter.name,
+              reviewedCompanies,
+              activeFilter,
+              targetCategories,
+              reviewedCompanies.length,
+              false
+            );
 
             searchHistory.push(
               this.buildSearchHistoryEntry(
@@ -404,7 +422,10 @@ export class LeadPipelineAgent {
               )
             );
 
-            if (batchEvaluation.relevanceRatio < earlyStopThreshold) {
+            if (
+              reviewedCompanies.length >= MIN_COMPANIES_REVIEWED_BEFORE_FILTER_GIVE_UP &&
+              cumulativeEvaluation.relevanceRatio < earlyStopThreshold
+            ) {
               break;
             }
 
@@ -459,8 +480,11 @@ export class LeadPipelineAgent {
           targetCategories,
           learning
         );
-
-    const filteredShortlist = await this.excludeExistingHubSpotDomains(toppedUpShortlist, dryRun);
+    const filteredShortlist = await this.excludeExistingHubSpotDomains(
+      toppedUpShortlist,
+      dryRun,
+      disableHubSpotDeduplication
+    );
     const replenishedShortlist = filteredShortlist.length >= request.targetLeadCount
       ? filteredShortlist
       : await this.topUpWithWebDiscovery(
@@ -473,7 +497,11 @@ export class LeadPipelineAgent {
           targetCategories,
           learning
         );
-    const finalShortlist = await this.excludeExistingHubSpotDomains(replenishedShortlist, dryRun);
+    const finalShortlist = await this.excludeExistingHubSpotDomains(
+      replenishedShortlist,
+      dryRun,
+      disableHubSpotDeduplication
+    );
     const uniqueShortlist = finalShortlist.slice(0, request.targetLeadCount);
 
     emitProgress({
@@ -502,7 +530,21 @@ export class LeadPipelineAgent {
           AZURE_WORKER_CONCURRENCY
         );
 
-    const contactCandidatesByCompany = await this.collectApolloContacts(uniqueShortlist, researchBriefs, dryRun, mainContext);
+    const publicContactCandidatesByCompany = await this.collectPublicContacts(uniqueShortlist, dryRun);
+    const companiesNeedingApolloContacts = uniqueShortlist.filter((company) => {
+      const existingContacts = publicContactCandidatesByCompany.get(this.getCompanyKey(company)) ?? [];
+      return !this.hasReachableContact(existingContacts);
+    });
+    const apolloContactCandidatesByCompany = await this.collectApolloContacts(
+      companiesNeedingApolloContacts,
+      researchBriefs,
+      dryRun,
+      mainContext
+    );
+    const contactCandidatesByCompany = this.mergeContactCandidates(
+      publicContactCandidatesByCompany,
+      apolloContactCandidatesByCompany
+    );
 
     emitProgress({
       stage: "syncing_hubspot",
@@ -651,15 +693,25 @@ export class LeadPipelineAgent {
           };
         }
 
-        const categorization = await this.azureClient.categorizeCompany(
-          company.name,
-          company.shortDescription,
-          dryRun,
-          mainContext,
-          prequalification,
-          targetCategories,
-          learning
-        );
+        const categorization = /(browser-search|source-scrape)/.test(company.sourceFilter)
+          ? await this.azureClient.categorizeWebsiteCrawl(
+              company.name,
+              company.domain,
+              company.shortDescription,
+              dryRun,
+              mainContext,
+              prequalification,
+              learning
+            )
+          : await this.azureClient.categorizeCompany(
+              company.name,
+              company.shortDescription,
+              dryRun,
+              mainContext,
+              prequalification,
+              targetCategories,
+              learning
+            );
 
         return {
           ...company,
@@ -732,11 +784,16 @@ export class LeadPipelineAgent {
       "integration services",
       "software services",
       "software development",
+      "software engineering",
       "custom software",
       "project delivery",
       "engineering services",
       "solution provider",
-      "implementation"
+      "implementation",
+      "digital transformation",
+      "data & ai",
+      "machine learning",
+      "computer vision"
     ];
     const productBrandSignals = [
       "robotics",
@@ -789,7 +846,7 @@ export class LeadPipelineAgent {
       };
     }
 
-    if (obviouslyIrrelevantSignals.some((signal) => text.includes(signal))) {
+    if (obviouslyIrrelevantSignals.some((signal) => text.includes(signal)) && !serviceSignals.some((signal) => text.includes(signal))) {
       return {
         category: "irrelevant",
         relevanceScore: 3,
@@ -829,7 +886,11 @@ export class LeadPipelineAgent {
       };
     }
 
-    if (industrialHits === 0 && nonIndustrialPlatformSignals.some((signal) => text.includes(signal))) {
+    if (
+      industrialHits === 0 &&
+      nonIndustrialPlatformSignals.some((signal) => text.includes(signal)) &&
+      !serviceSignals.some((signal) => text.includes(signal))
+    ) {
       return {
         category: "irrelevant",
         relevanceScore: 6,
@@ -905,6 +966,12 @@ export class LeadPipelineAgent {
     const productVendorSignals = [
       "manufacturer",
       "oem",
+      "industrial cameras",
+      "machine vision cameras",
+      "camera technology",
+      "lenses",
+      "lighting",
+      "vision sensor",
       "robot platform",
       "robotics platform",
       "industrial robots",
@@ -938,6 +1005,20 @@ export class LeadPipelineAgent {
         category: "machine_builder_ai_enablement",
         relevanceScore: Math.min(categorization.relevanceScore, 48),
         rationale: "Company looks more like a product-led robotics or OEM vendor than a service-led software integrator."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_vision_industrial_ai" ||
+        categorization.category === "integrator_general_ai" ||
+        categorization.category === "integrator_relevant_focus") &&
+      /(industrial cameras|machine vision cameras|camera technology|lenses|lighting|vision sensor)/.test(text) &&
+      !serviceSignals.some((signal) => text.includes(signal))
+    ) {
+      return {
+        category: "camera_manufacturer_partner",
+        relevanceScore: Math.min(categorization.relevanceScore, 45),
+        rationale: "Company looks more like a camera or imaging product vendor than a software integrator."
       };
     }
 
@@ -1004,6 +1085,7 @@ export class LeadPipelineAgent {
           Boolean(request.dryRun),
           page,
           true,
+          request.disableHubSpotDeduplication ?? false,
           learning,
           toppedUp
         );
@@ -1076,7 +1158,7 @@ export class LeadPipelineAgent {
       }
 
       const earlyStopRate = stats.earlyStopCount / stats.runs;
-      return stats.averageRelevanceRatio >= 0.55 && earlyStopRate <= 0.4;
+      return stats.averageRelevanceRatio >= 0.15 && earlyStopRate <= 0.6;
     });
 
     return strongBaselineFilters.length >= 2;
@@ -1101,6 +1183,22 @@ export class LeadPipelineAgent {
 
     if (normalizedName.includes("vision") && normalizedName.includes("integrators")) {
       bias += 0.45;
+    }
+
+    if (normalizedName.includes("automation software integrators")) {
+      bias += 0.35;
+    }
+
+    if (normalizedName.includes("smart factory software engineering partners")) {
+      bias += 0.35;
+    }
+
+    if (normalizedName.includes("industrial computer vision engineering services")) {
+      bias += 0.4;
+    }
+
+    if (normalizedName.includes("machine vision system integrators")) {
+      bias += 0.4;
     }
 
     if (normalizedName.includes("general ai integrators")) {
@@ -1252,9 +1350,10 @@ export class LeadPipelineAgent {
 
   private async excludeExistingHubSpotDomains(
     companies: PreCategorizedCompany[],
-    dryRun: boolean
+    dryRun: boolean,
+    disableHubSpotDeduplication: boolean
   ): Promise<PreCategorizedCompany[]> {
-    if (dryRun || companies.length === 0) {
+    if (dryRun || disableHubSpotDeduplication || companies.length === 0) {
       return companies;
     }
 
@@ -1278,9 +1377,10 @@ export class LeadPipelineAgent {
 
   private async excludeExistingCompanySamples(
     companies: CompanySample[],
-    dryRun: boolean
+    dryRun: boolean,
+    disableHubSpotDeduplication: boolean
   ): Promise<CompanySample[]> {
-    if (dryRun || companies.length === 0) {
+    if (dryRun || disableHubSpotDeduplication || companies.length === 0) {
       return companies;
     }
 
@@ -1308,6 +1408,7 @@ export class LeadPipelineAgent {
     dryRun: boolean,
     page: number,
     useWebSearch: boolean,
+    disableHubSpotDeduplication: boolean,
     learning: LeadLearningData,
     reviewedCompanies: Array<Pick<CompanySample, "name" | "domain">>
   ): Promise<{ companies: CompanySample[]; nextPage: number }> {
@@ -1315,24 +1416,31 @@ export class LeadPipelineAgent {
     const seenKeys = new Set(reviewedCompanies.map((company) => this.getCompanyKey(company)));
     const maxPages = useWebSearch ? 3 : 6;
     const pageSize = Math.max(MIN_EARLY_STOP_REVIEW_COUNT, requestedCount);
+    const plannedPages = this.buildSearchPagePlan(page, maxPages, useWebSearch, requestedCount);
     let nextPage = page;
 
-    for (let attempt = 0; attempt < maxPages && collected.length < requestedCount; attempt += 1) {
+    for (const plannedPage of plannedPages) {
+      if (collected.length >= requestedCount) {
+        break;
+      }
+
       const sample = this.excludeRejectedCompanies(
-        await this.apolloClient.fetchOrganizationSample(filter, pageSize, dryRun, nextPage, useWebSearch),
+        await this.apolloClient.fetchOrganizationSample(filter, pageSize, dryRun, plannedPage, useWebSearch),
         learning
       );
 
-      if (!useWebSearch && !dryRun) {
-        await this.controlPlaneStore.updateApolloSearchCursor(filter, nextPage + 1);
-      }
+      nextPage = plannedPage + 1;
 
       if (sample.length === 0) {
         break;
       }
 
       const unseenSample = sample.filter((company) => !seenKeys.has(this.getCompanyKey(company)));
-      const availableSample = await this.excludeExistingCompanySamples(unseenSample, dryRun);
+      const availableSample = await this.excludeExistingCompanySamples(
+        unseenSample,
+        dryRun,
+        disableHubSpotDeduplication
+      );
 
       for (const company of availableSample) {
         const companyKey = this.getCompanyKey(company);
@@ -1347,12 +1455,13 @@ export class LeadPipelineAgent {
           break;
         }
       }
-
-      nextPage += 1;
-
       if (sample.length < pageSize) {
         break;
       }
+    }
+
+    if (!useWebSearch && !dryRun) {
+      await this.controlPlaneStore.updateApolloSearchCursor(filter, nextPage);
     }
 
     return {
@@ -1361,6 +1470,19 @@ export class LeadPipelineAgent {
     };
   }
 
+  private buildSearchPagePlan(
+    startPage: number,
+    maxPages: number,
+    useWebSearch: boolean,
+    requestedCount: number
+  ): number[] {
+    if (useWebSearch || requestedCount > MAX_EARLY_STOP_REVIEW_COUNT) {
+      return Array.from({ length: maxPages }, (_, index) => startPage + index);
+    }
+
+    const pageOffsets = [0, 1, 3, 6, 12, 24];
+    return pageOffsets.slice(0, maxPages).map((offset) => startPage + offset);
+  }
   private getUniqueCompanyCount(companies: PreCategorizedCompany[]): number {
     return companies.filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index).length;
   }
@@ -1471,6 +1593,48 @@ export class LeadPipelineAgent {
     );
 
     return new Map(entries);
+  }
+
+  private hasReachableContact(contacts: PublicContactCandidate[]): boolean {
+    return contacts.some((contact) => Boolean(contact.email || contact.phone));
+  }
+
+  private mergeContactCandidates(
+    primaryContacts: Map<string, PublicContactCandidate[]>,
+    fallbackContacts: Map<string, PublicContactCandidate[]>
+  ): Map<string, PublicContactCandidate[]> {
+    const merged = new Map(primaryContacts);
+
+    for (const [companyKey, contacts] of fallbackContacts.entries()) {
+      const existingContacts = merged.get(companyKey) ?? [];
+      const dedupedContacts = [...existingContacts];
+      const seenContactKeys = new Set(existingContacts.map((contact) => this.getContactKey(contact)));
+
+      for (const contact of contacts) {
+        const contactKey = this.getContactKey(contact);
+        if (seenContactKeys.has(contactKey)) {
+          continue;
+        }
+
+        seenContactKeys.add(contactKey);
+        dedupedContacts.push(contact);
+      }
+
+      merged.set(companyKey, dedupedContacts);
+    }
+
+    return merged;
+  }
+
+  private getContactKey(contact: PublicContactCandidate): string {
+    return [
+      contact.email?.trim().toLowerCase(),
+      contact.phone?.trim(),
+      contact.linkedinUrl?.trim().toLowerCase(),
+      `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim().toLowerCase(),
+      contact.label.trim().toLowerCase(),
+      contact.sourceUrl.trim().toLowerCase()
+    ].filter(Boolean).join("::");
   }
 
   private getCompanyKey(company: Pick<CompanySample, "name" | "domain">): string {

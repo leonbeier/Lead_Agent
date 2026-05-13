@@ -7,10 +7,11 @@ import { ControlPlaneStore } from "./control-plane";
 import { defaultApolloFilters } from "./filters";
 import { LeadPipelineAgent } from "./agents/lead-pipeline";
 import { CATEGORY_EXECUTION_CONTEXT } from "./prompting/one-ware-playbook";
+import { LeadRunProgress } from "./types";
 
 const app = express();
 
-type LeadRunStatus = {
+type LeadRunStatus = LeadRunProgress & {
   running: boolean;
   startedAt?: string;
   finishedAt?: string;
@@ -18,7 +19,13 @@ type LeadRunStatus = {
 };
 
 const leadRunStatus: LeadRunStatus = {
-  running: false
+  running: false,
+  stage: "idle",
+  stageLabel: "Bereit",
+  progressValue: 0,
+  progressMax: 100,
+  progressDescription: "Noch kein aktiver Lead-Run.",
+  updatedAt: new Date(0).toISOString()
 };
 const leadPipelineAgent = new LeadPipelineAgent();
 const controlPlaneStore = new ControlPlaneStore();
@@ -75,6 +82,7 @@ const leadJobSchema = z.object({
   market: z.string().optional(),
   mainContext: z.string().max(12000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
+  companySearchMode: z.enum(["internet_research", "apollo_search"]).optional(),
   creditLessMode: z.boolean().optional(),
   prequalification: prequalificationConfigSchema.optional(),
   prequalificationContext: z.string().max(4000).optional(),
@@ -83,6 +91,7 @@ const leadJobSchema = z.object({
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   syncToHubSpot: z.boolean().optional(),
+  disableHubSpotDeduplication: z.boolean().optional(),
   earlyStopEnabled: z.boolean().optional(),
   earlyStopReviewCount: z.coerce.number().int().min(5).max(15).optional(),
   earlyStopThreshold: z.coerce.number().min(0).max(1).optional()
@@ -93,6 +102,7 @@ const settingsUpdateSchema = z.object({
   market: z.string().min(1).optional(),
   mainContext: z.string().max(12000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
+  companySearchMode: z.enum(["internet_research", "apollo_search"]).optional(),
   creditLessMode: z.boolean().optional(),
   prequalification: prequalificationConfigSchema.optional(),
   prequalificationContext: z.string().max(4000).optional(),
@@ -158,6 +168,11 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
   const legacyPrequalificationContext = typeof body.prequalificationContext === "string"
     ? body.prequalificationContext
     : settings.prequalificationContext;
+  const companySearchMode = body.companySearchMode === "internet_research" || body.companySearchMode === "apollo_search"
+    ? body.companySearchMode
+    : typeof body.creditLessMode === "boolean"
+      ? (body.creditLessMode ? "internet_research" : "apollo_search")
+      : settings.companySearchMode;
   const prequalification = (body.prequalification ?? settings.prequalification) ??
     (legacyPrequalificationContext ? { mainContext: legacyPrequalificationContext } : undefined);
 
@@ -166,7 +181,8 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     market: body.market ?? settings.market ?? env.DEFAULT_MARKET,
     mainContext: body.mainContext ?? settings.mainContext,
     searchStrategyContext: body.searchStrategyContext ?? settings.searchStrategyContext,
-    creditLessMode: body.creditLessMode ?? settings.creditLessMode,
+    companySearchMode,
+    creditLessMode: companySearchMode === "internet_research",
     prequalification,
     prequalificationContext: legacyPrequalificationContext,
     executionContexts: body.executionContexts ?? settings.executionContexts,
@@ -174,10 +190,53 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     runDeepResearch: body.runDeepResearch ?? settings.runDeepResearch,
     dryRun: body.dryRun ?? settings.dryRun,
     syncToHubSpot: body.syncToHubSpot,
+    disableHubSpotDeduplication: body.disableHubSpotDeduplication,
     earlyStopEnabled: body.earlyStopEnabled ?? settings.earlyStopEnabled,
     earlyStopReviewCount: body.earlyStopReviewCount ?? settings.earlyStopReviewCount,
     earlyStopThreshold: body.earlyStopThreshold ?? settings.earlyStopThreshold
   });
+}
+
+async function exchangeHubSpotOAuthCode(code: string, redirectUri: string) {
+  if (!env.HUBSPOT_CLIENT_ID || !env.HUBSPOT_CLIENT_SECRET) {
+    throw new Error("HubSpot OAuth is not configured. Set HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET.");
+  }
+
+  const response = await fetch(`${env.HUBSPOT_BASE_URL}/oauth/v1/token`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: env.HUBSPOT_CLIENT_ID,
+      client_secret: env.HUBSPOT_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      code
+    })
+  });
+
+  const payload = await response.json() as {
+    hub_id?: number;
+    access_token?: string;
+    refresh_token?: string;
+    message?: string;
+    status?: string;
+    error?: string;
+    error_description?: string;
+  };
+
+  if (!response.ok || !payload.access_token || !payload.refresh_token) {
+    throw new Error(
+      payload.error_description ||
+      payload.message ||
+      payload.error ||
+      payload.status ||
+      "HubSpot OAuth token exchange failed."
+    );
+  }
+
+  return payload;
 }
 
 app.get("/health", (_request, response) => {
@@ -210,8 +269,28 @@ app.get("/hubspot/ui", (request, response) => {
   );
 });
 
-app.get("/oauth-callback", (_request, response) => {
-  response.status(200).send("ONE WARE Lead Agent UI was connected successfully. You can close this window and return to HubSpot.");
+app.get("/oauth-callback", async (request, response) => {
+  const code = typeof request.query.code === "string" ? request.query.code : "";
+
+  if (!code) {
+    response.status(400).send("Missing HubSpot OAuth code.");
+    return;
+  }
+
+  try {
+    const publicBaseUrl = env.LEAD_AGENT_PUBLIC_BASE_URL ?? `${request.protocol}://${request.get("host")}`;
+    const redirectUri = new URL("/oauth-callback", publicBaseUrl).toString();
+    const oauthPayload = await exchangeHubSpotOAuthCode(code, redirectUri);
+
+    console.log("HubSpot UI app connected", {
+      hubId: oauthPayload.hub_id ?? "unknown"
+    });
+
+    response.status(200).send("ONE WARE Lead Agent UI was connected successfully. You can close this window and return to HubSpot.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "HubSpot OAuth callback failed.";
+    response.status(500).send(message);
+  }
 });
 
 app.get("/api/control-plane/bootstrap", async (_request, response, next) => {
@@ -349,14 +428,57 @@ app.post("/api/hubspot/workflow-trigger", async (request, response, next) => {
     leadRunStatus.startedAt = new Date().toISOString();
     leadRunStatus.finishedAt = undefined;
     leadRunStatus.lastError = undefined;
+    leadRunStatus.stage = "starting";
+    leadRunStatus.stageLabel = "Lead-Run startet";
+    leadRunStatus.progressValue = 2;
+    leadRunStatus.progressMax = 100;
+    leadRunStatus.progressDescription = "Der Lead Agent initialisiert die Suche.";
+    leadRunStatus.detail = "Die Zielparameter wurden uebernommen und der Lauf wird vorbereitet.";
+    leadRunStatus.processedFilters = 0;
+    leadRunStatus.totalFilters = undefined;
+    leadRunStatus.foundCandidates = 0;
+    leadRunStatus.targetLeadCount = payload.targetLeadCount;
+    leadRunStatus.updatedAt = new Date().toISOString();
 
-    void leadPipelineAgent.run(payload)
-      .then(() => {
+    void leadPipelineAgent.run(payload, {
+      onProgress: (progress) => {
+        leadRunStatus.stage = progress.stage;
+        leadRunStatus.stageLabel = progress.stageLabel;
+        leadRunStatus.progressValue = progress.progressValue;
+        leadRunStatus.progressMax = progress.progressMax;
+        leadRunStatus.progressDescription = progress.progressDescription;
+        leadRunStatus.detail = progress.detail;
+        leadRunStatus.processedFilters = progress.processedFilters;
+        leadRunStatus.totalFilters = progress.totalFilters;
+        leadRunStatus.foundCandidates = progress.foundCandidates;
+        leadRunStatus.targetLeadCount = progress.targetLeadCount;
+        leadRunStatus.updatedAt = progress.updatedAt;
+      }
+    })
+      .then((result) => {
         leadRunStatus.running = false;
+        leadRunStatus.stage = "completed";
+        leadRunStatus.stageLabel = "Abgeschlossen";
+        leadRunStatus.progressValue = 100;
+        leadRunStatus.progressMax = 100;
+        leadRunStatus.progressDescription = `${result.shortlistedCompanies.length} qualifizierte Firmen abgeschlossen`;
+        leadRunStatus.detail = result.hubspotSync.mode === "live"
+          ? `${result.hubspotSync.companySyncedCount} Firmen nach HubSpot synchronisiert.`
+          : "Dry-Run abgeschlossen. Es wurde nichts nach HubSpot geschrieben.";
+        leadRunStatus.processedFilters = result.evaluations.length;
+        leadRunStatus.totalFilters = result.suggestedFilters.length;
+        leadRunStatus.foundCandidates = result.shortlistedCompanies.length;
+        leadRunStatus.targetLeadCount = payload.targetLeadCount;
+        leadRunStatus.updatedAt = new Date().toISOString();
         leadRunStatus.finishedAt = new Date().toISOString();
       })
       .catch((error) => {
         leadRunStatus.running = false;
+        leadRunStatus.stage = "failed";
+        leadRunStatus.stageLabel = "Fehlgeschlagen";
+        leadRunStatus.progressDescription = "Der Lead-Run ist mit einem Fehler abgebrochen.";
+        leadRunStatus.detail = error instanceof Error ? error.message : "Unknown error";
+        leadRunStatus.updatedAt = new Date().toISOString();
         leadRunStatus.finishedAt = new Date().toISOString();
         leadRunStatus.lastError = error instanceof Error ? error.message : "Unknown error";
         console.error("Lead run failed", error);

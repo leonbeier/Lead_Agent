@@ -390,6 +390,13 @@
               Markt
               <input id="market" name="market" type="text" required />
             </label>
+            <label>
+              Firmensuche
+              <select id="companySearchMode" name="companySearchMode">
+                <option value="internet_research">Internet-Recherche</option>
+                <option value="apollo_search">Apollo-Unternehmenssuche</option>
+              </select>
+            </label>
             <label style="grid-column: 1 / -1;">
               Main-Kontext fuer alle Agenten
               <textarea id="mainContext" name="mainContext" style="min-height: 220px;"></textarea>
@@ -557,6 +564,7 @@
       function fillSettingsForm(settings) {
         document.getElementById("targetLeadCount").value = settings.targetLeadCount;
         document.getElementById("market").value = settings.market;
+        document.getElementById("companySearchMode").value = settings.companySearchMode || (settings.creditLessMode ? "internet_research" : "apollo_search");
         document.getElementById("mainContext").value = settings.mainContext || "";
         document.getElementById("prequalification-mainContext").value = settings.prequalification?.mainContext || settings.prequalificationContext || "";
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
@@ -575,6 +583,7 @@
       }
 
       function collectSettings() {
+        const companySearchMode = document.getElementById("companySearchMode").value;
         const categoryContexts = Object.fromEntries(
           Array.from(document.querySelectorAll("textarea[data-prequalification-category]")).map((field) => [
             field.dataset.prequalificationCategory,
@@ -588,6 +597,8 @@
           targetLeadCount: Number(document.getElementById("targetLeadCount").value),
           market: document.getElementById("market").value.trim(),
           mainContext: document.getElementById("mainContext").value.trim(),
+          companySearchMode,
+          creditLessMode: companySearchMode === "internet_research",
           prequalification: {
             mainContext: document.getElementById("prequalification-mainContext").value.trim(),
             categoryContexts

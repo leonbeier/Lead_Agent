@@ -4,7 +4,7 @@
   "config": {
     "name": "ONE WARE Lead Agent",
     "description": "Open the lead generation console from company or contact records.",
-    "location": "crm.record.tab",
+    "location": "crm.record.sidebar",
     "entrypoint": "/app/cards/LeadAgentCard.tsx",
     "objectTypes": [
       "companies",
