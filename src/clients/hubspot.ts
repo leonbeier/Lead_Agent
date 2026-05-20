@@ -922,6 +922,7 @@ export class HubSpotClient {
     const managerRoleQuery = '"CEO" OR "CTO" OR "COO" OR "Founder" OR "Managing Director" OR "Head of Engineering" OR "Head of Operations" OR "Technology Manager" OR "Operations Manager"';
     const developerRoleQuery = '"Engineer" OR "Developer" OR "Software Engineer" OR "Pipeline Engineer" OR "Technical Director"';
     const aliasQueries = aliases.flatMap((alias) => [
+      `${alias} site:linkedin.com/in`,
       `site:linkedin.com/in "${alias}"`,
       `${alias} ${managerRoleQuery}`,
       `site:linkedin.com/company "${alias}" people`,
@@ -934,8 +935,10 @@ export class HubSpotClient {
     return Array.from(
       new Set(
         [
+          `${companyName} site:linkedin.com/in`,
           `site:linkedin.com/in "${companyName}"`,
           `${companyName} ${managerRoleQuery}`,
+          simplifiedCompanyName && simplifiedCompanyName !== companyName ? `${simplifiedCompanyName} site:linkedin.com/in` : undefined,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}"` : undefined,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `${simplifiedCompanyName} ${managerRoleQuery}` : undefined,
           `site:linkedin.com/company "${companyName}" people`,
@@ -1621,11 +1624,27 @@ export class HubSpotClient {
     return Boolean((contact.firstName || contact.lastName) && !this.isGenericMailbox(contact.email ?? ""));
   }
 
+  private dedupeNamedEmployeeContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
+    const bestByKey = new Map<string, PublicContactCandidate>();
+
+    for (const contact of contacts) {
+      const nameKey = `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim().toLowerCase();
+      const key = nameKey || this.getPublicContactIdentity(contact);
+      const existing = bestByKey.get(key);
+
+      if (!existing || this.getPublicContactScore(contact) > this.getPublicContactScore(existing)) {
+        bestByKey.set(key, contact);
+      }
+    }
+
+    return [...bestByKey.values()];
+  }
+
   private async selectRelevantEmployeeContacts(
     company: PreCategorizedCompany,
     contacts: PublicContactCandidate[]
   ): Promise<PublicContactCandidate[]> {
-    const employeeCandidates = contacts
+    const employeeCandidates = this.dedupeNamedEmployeeContacts(contacts)
       .filter((contact) => this.isNamedEmployeeContact(contact))
       .filter((contact) => !this.isExcludedContact(contact))
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left));
@@ -1669,7 +1688,22 @@ export class HubSpotClient {
       ? heuristicSelection.concat(employeeCandidates.filter((contact) => !heuristicSelection.includes(contact)))
       : employeeCandidates;
 
-    return this.azureOpenAIClient.choosePublicContacts(company, rankedForAzure.slice(0, 12), false);
+    const azureSelected = await this.azureOpenAIClient.choosePublicContacts(company, rankedForAzure.slice(0, 12), false);
+    const completedSelection = [...azureSelected];
+
+    for (const contact of rankedForAzure) {
+      if (completedSelection.length >= Math.min(4, rankedForAzure.length)) {
+        break;
+      }
+
+      if (completedSelection.some((existing) => this.getPublicContactIdentity(existing) === this.getPublicContactIdentity(contact))) {
+        continue;
+      }
+
+      completedSelection.push(contact);
+    }
+
+    return completedSelection;
   }
 
   private escapeRegex(value: string): string {
