@@ -1,27 +1,76 @@
 import { env, readiness } from "../config";
-import { ApolloContactCandidate, ApolloOrganizationFilter, CompanySample, PreCategorizedCompany, PublicContactCandidate } from "../types";
+import { ApolloContactCandidate, ApolloOrganizationFilter, CompanySample, CompanySearchMode, PreCategorizedCompany, PublicContactCandidate } from "../types";
+import { DiffbotSearchClient } from "./diffbot-search";
+import { DiffbotTestDataClient } from "./diffbot-test-data";
 import { WebSearchAgent } from "./web-search-agent";
+
+interface ApolloResolvedOrganization {
+  id?: string;
+  name?: string;
+  websiteUrl?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zip?: string;
+}
 
 export class ApolloClient {
   private readonly webSearchAgent = new WebSearchAgent();
+  private readonly diffbotSearchClient = new DiffbotSearchClient();
+  private readonly diffbotTestDataClient = new DiffbotTestDataClient();
+  private apolloCreditsUnavailableUntil = 0;
+
+  setExaApiKey(apiKey: string | undefined): void {
+    this.webSearchAgent.setExaApiKey(apiKey);
+  }
+
+  setDiffbotToken(token: string | undefined): void {
+    this.webSearchAgent.setDiffbotToken(token);
+    this.diffbotSearchClient.setToken(token);
+  }
+
+  resetDiscoveryMetrics(companySearchMode: CompanySearchMode): void {
+    this.webSearchAgent.resetDiscoveryMetrics(companySearchMode);
+  }
+
+  private hasApolloCreditCapacity(): boolean {
+    return Date.now() >= this.apolloCreditsUnavailableUntil;
+  }
+
+  private markApolloCreditsUnavailable(): void {
+    this.apolloCreditsUnavailableUntil = Date.now() + 5 * 60 * 1000;
+  }
+
+  getDiscoveryMetrics(companySearchMode: CompanySearchMode) {
+    return this.webSearchAgent.getDiscoveryMetrics(companySearchMode);
+  }
 
   async fetchOrganizationSample(
     filter: ApolloOrganizationFilter,
     limit: number,
     dryRun: boolean,
     page = 1,
-    creditLessMode = false,
+    companySearchMode: CompanySearchMode = "apollo_search",
     shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
+    if (companySearchMode === "diffbot_test_data") {
+      return this.diffbotTestDataClient.fetchOrganizationSample(filter, limit, page, shouldSkipDomain);
+    }
+
+    if (companySearchMode === "diffbot_search") {
+      return this.diffbotSearchClient.discoverCompanies(filter, limit, page, shouldSkipDomain);
+    }
+
     if (dryRun) {
       return this.buildDryRunSample(filter, limit);
     }
 
-    if (creditLessMode) {
-      return this.searchOrganizationsWithoutCredits(filter, limit, page, shouldSkipDomain);
+    if (companySearchMode === "internet_research" || companySearchMode === "open_crawler_search" || companySearchMode === "exa_search") {
+      return this.searchOrganizationsWithoutCredits(filter, limit, page, shouldSkipDomain, companySearchMode);
     }
 
-    if (!readiness.apolloConfigured) {
+    if (!readiness.apolloConfigured || !this.hasApolloCreditCapacity()) {
       return [];
     }
 
@@ -39,7 +88,8 @@ export class ApolloClient {
       response = await this.searchOrganizations(body);
     } catch (error) {
       if (this.isApolloCreditError(error)) {
-        return this.searchOrganizationsWithoutCredits(filter, limit, page);
+        this.markApolloCreditsUnavailable();
+        return this.searchOrganizationsWithoutCredits(filter, limit, page, shouldSkipDomain, companySearchMode);
       }
 
       throw error;
@@ -98,84 +148,55 @@ export class ApolloClient {
     });
   }
 
-  async searchContactsForCompany(company: PreCategorizedCompany, limit = 10): Promise<ApolloContactCandidate[]> {
+  async searchContactsForCompany(company: PreCategorizedCompany, limit = 15): Promise<ApolloContactCandidate[]> {
     const normalizedDomain = this.normalizeDomain(company.domain);
-    if (!readiness.apolloConfigured || !normalizedDomain) {
+    if (!readiness.apolloConfigured || !normalizedDomain || !this.hasApolloCreditCapacity()) {
       return [];
     }
 
-    const response = await fetch(`${env.APOLLO_BASE_URL}/mixed_people/api_search`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": env.APOLLO_API_KEY as string
-      },
-      body: JSON.stringify({
-        page: 1,
-        per_page: limit,
-        q_organization_domains_list: [normalizedDomain],
-        person_seniorities: ["owner", "founder", "c_suite", "vp", "head", "director", "manager"],
-        person_titles: [
-          "CEO",
-          "CTO",
-          "COO",
-          "Managing Director",
-          "Head of Automation",
-          "Head of Innovation",
-          "Head of Engineering",
-          "Head of Operations",
-          "Head of Production",
-          "Digitalization"
-        ],
-        include_similar_titles: true,
-        contact_email_status: ["verified", "likely to engage", "unverified"]
-      })
-    });
+    let resolvedOrganization: ApolloResolvedOrganization | null = null;
+    try {
+      resolvedOrganization = await this.resolveOrganizationForCompany(company);
+    } catch (error) {
+      if (this.isApolloCreditError(error)) {
+        this.markApolloCreditsUnavailable();
+        return [];
+      }
 
-    if (!response.ok) {
-      throw new Error(`Apollo contact search failed: ${response.status} ${await response.text()}`);
+      throw error;
     }
 
-    const payload = (await response.json()) as {
-      people?: Array<{
-        id?: string;
-        first_name?: string;
-        last_name?: string;
-        last_name_obfuscated?: string;
-        name?: string;
-        title?: string | null;
-        seniority?: string | null;
-        departments?: string[];
-        functions?: string[];
-        linkedin_url?: string | null;
-        has_email?: boolean;
-        organization_id?: string;
-        organization?: { name?: string };
-      }>;
-    };
+    const candidateDomains = Array.from(
+      new Set([
+        normalizedDomain,
+        this.normalizeDomain(resolvedOrganization?.websiteUrl)
+      ].filter((domain): domain is string => Boolean(domain)))
+    );
 
-    const candidates = (payload.people ?? []).map<ApolloContactCandidate | null>((person) => {
-        if (!person.id) {
-          return null;
+    const candidatesByPersonId = new Map<string, ApolloContactCandidate>();
+    for (const domain of candidateDomains) {
+      let candidates: ApolloContactCandidate[] = [];
+      try {
+        candidates = await this.searchContactsByApolloDomain(domain, limit);
+      } catch (error) {
+        if (this.isApolloCreditError(error)) {
+          this.markApolloCreditsUnavailable();
+          return [];
         }
 
-        return {
-          personId: person.id,
-          firstName: person.first_name?.trim(),
-          lastName: person.last_name?.trim() || person.last_name_obfuscated?.trim(),
-          name: person.name?.trim() || [person.first_name, person.last_name_obfuscated].filter(Boolean).join(" "),
-          title: person.title?.trim() || undefined,
-          seniority: person.seniority?.trim() || undefined,
-          departments: person.departments ?? [],
-          functions: person.functions ?? [],
-          organizationId: person.organization_id,
-          organizationName: person.organization?.name?.trim(),
-          linkedinUrl: person.linkedin_url?.trim() || undefined,
-          hasEmail: Boolean(person.has_email)
-        } satisfies ApolloContactCandidate;
-      });
+        throw error;
+      }
 
-    return candidates.filter((person): person is ApolloContactCandidate => person !== null);
+      for (const candidate of candidates) {
+        if (!candidatesByPersonId.has(candidate.personId)) {
+          candidatesByPersonId.set(candidate.personId, candidate);
+        }
+      }
+    }
+
+    return [...candidatesByPersonId.values()]
+      .sort((left, right) => this.getApolloOrganizationMatchScore(right, company, resolvedOrganization) - this.getApolloOrganizationMatchScore(left, company, resolvedOrganization))
+      .slice(0, limit);
   }
 
   async enrichContactEmail(
@@ -183,7 +204,7 @@ export class ApolloClient {
     company: Pick<PreCategorizedCompany, "domain" | "name">
   ): Promise<PublicContactCandidate | null> {
     const normalizedDomain = this.normalizeDomain(company.domain);
-    if (!readiness.apolloConfigured || !normalizedDomain) {
+    if (!readiness.apolloConfigured || !normalizedDomain || !this.hasApolloCreditCapacity()) {
       return null;
     }
 
@@ -204,7 +225,14 @@ export class ApolloClient {
     );
 
     if (!response.ok) {
-      throw new Error(`Apollo contact enrichment failed: ${response.status} ${await response.text()}`);
+      const errorText = await response.text();
+      const error = new Error(`Apollo contact enrichment failed: ${response.status} ${errorText}`);
+      if (this.isApolloCreditError(error)) {
+        this.markApolloCreditsUnavailable();
+        return null;
+      }
+
+      throw error;
     }
 
     const payload = (await response.json()) as {
@@ -235,13 +263,52 @@ export class ApolloClient {
     };
   }
 
+  async getOrganizationAddress(company: Pick<PreCategorizedCompany, "domain" | "name">): Promise<{
+    address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    zip?: string;
+  } | null> {
+    if (!this.hasApolloCreditCapacity()) {
+      return null;
+    }
+
+    let organization: ApolloResolvedOrganization | null = null;
+    try {
+      organization = await this.resolveOrganizationForCompany(company);
+    } catch (error) {
+      if (this.isApolloCreditError(error)) {
+        this.markApolloCreditsUnavailable();
+        return null;
+      }
+
+      throw error;
+    }
+
+    if (!organization) {
+      return null;
+    }
+
+    return organization.address || organization.city || organization.state || organization.country || organization.zip
+      ? {
+          address: organization.address,
+          city: organization.city,
+          state: organization.state,
+          country: organization.country,
+          zip: organization.zip
+        }
+      : null;
+  }
+
   private async searchOrganizationsWithoutCredits(
     filter: ApolloOrganizationFilter,
     limit: number,
     page: number,
-    shouldSkipDomain?: (domain: string) => boolean
+    shouldSkipDomain?: (domain: string) => boolean,
+    companySearchMode: CompanySearchMode = "internet_research"
   ): Promise<CompanySample[]> {
-    const companies = await this.webSearchAgent.discoverCompaniesForFilter(filter, limit, page, shouldSkipDomain);
+    const companies = await this.webSearchAgent.discoverCompaniesForFilter(filter, limit, page, shouldSkipDomain, companySearchMode);
     return companies;
   }
 
@@ -264,6 +331,245 @@ export class ApolloClient {
       .replace(/^https?:\/\//, "")
       .replace(/^www\./, "")
       .replace(/\/$/, "");
+  }
+
+  private async resolveOrganizationForCompany(company: Pick<PreCategorizedCompany, "domain" | "name">): Promise<ApolloResolvedOrganization | null> {
+    const normalizedDomain = this.normalizeDomain(company.domain);
+    if (!normalizedDomain || !readiness.apolloConfigured) {
+      return null;
+    }
+
+    const response = await this.postSearchRequest("organizations/search", JSON.stringify({
+      page: 1,
+      per_page: 5,
+      q_organization_domains_list: [normalizedDomain]
+    }));
+
+    if (!response.ok) {
+      throw new Error(`Apollo request failed: ${response.status} ${await response.text()}`);
+    }
+
+    const payload = (await response.json()) as {
+      organizations?: Array<{
+        id?: string;
+        organization_id?: string;
+        name?: string;
+        website_url?: string;
+        raw_address?: string;
+        street_address?: string;
+        city?: string;
+        state?: string;
+        country?: string;
+        postal_code?: string;
+      }>;
+    };
+
+    const normalizedCompanyName = this.normalizeCompanyName(company.name);
+    const organizations = (payload.organizations ?? []).map((organization) => ({
+      id: organization.id ?? organization.organization_id,
+      name: organization.name?.trim(),
+      websiteUrl: organization.website_url?.trim(),
+      address: organization.street_address?.trim() || organization.raw_address?.trim(),
+      city: organization.city?.trim(),
+      state: organization.state?.trim(),
+      country: organization.country?.trim(),
+      zip: organization.postal_code?.trim()
+    }));
+
+    return organizations
+      .sort((left, right) => this.getOrganizationResolutionScore(right, normalizedDomain, normalizedCompanyName) - this.getOrganizationResolutionScore(left, normalizedDomain, normalizedCompanyName))[0] ?? null;
+  }
+
+  private async searchContactsByApolloDomain(domain: string, limit: number): Promise<ApolloContactCandidate[]> {
+    const searchBodies = [
+      {
+        page: 1,
+        per_page: limit,
+        q_organization_domains_list: [domain],
+        person_seniorities: ["owner", "founder", "c_suite", "vp", "head", "director", "manager"],
+        person_titles: [
+          "CEO",
+          "CTO",
+          "COO",
+          "Founder",
+          "Owner",
+          "Managing Director",
+          "Managing Partner",
+          "General Manager",
+          "Operations Manager",
+          "Plant Manager",
+          "Head of Automation",
+          "Head of Innovation",
+          "Head of Engineering",
+          "Head of Operations",
+          "Head of Production",
+          "Head of Manufacturing",
+          "Head of Digitalization",
+          "Innovation Manager",
+          "Innovation Lead",
+          "Innovation Director",
+          "Head of AI",
+          "Head of Computer Vision",
+          "Technical Director",
+          "Technology Manager",
+          "Technical Manager",
+          "Partner Manager",
+          "Account Manager",
+          "Business Development Manager",
+          "Business Developer",
+          "Solution Manager",
+          "Project Manager",
+          "Digitalization"
+        ],
+        include_similar_titles: true,
+        contact_email_status: ["verified", "likely to engage", "unverified"]
+      },
+      {
+        page: 1,
+        per_page: limit,
+        q_organization_domains_list: [domain],
+        person_titles: [
+          "Technology Manager",
+          "Technical Manager",
+          "Partner Manager",
+          "Account Manager",
+          "Business Development Manager",
+          "Business Developer",
+          "Business Development",
+          "Solution Manager",
+          "Project Manager",
+          "Innovation Manager",
+          "Operations Manager",
+          "Engineering Manager"
+        ],
+        include_similar_titles: true
+      }
+    ];
+
+    const candidatesByPersonId = new Map<string, ApolloContactCandidate>();
+    for (const body of searchBodies) {
+      const candidates = await this.searchApolloPeople(body);
+      for (const candidate of candidates) {
+        if (!candidatesByPersonId.has(candidate.personId)) {
+          candidatesByPersonId.set(candidate.personId, candidate);
+        }
+      }
+    }
+
+    return [...candidatesByPersonId.values()].slice(0, limit);
+  }
+
+  private async searchApolloPeople(body: Record<string, unknown>): Promise<ApolloContactCandidate[]> {
+    const response = await fetch(`${env.APOLLO_BASE_URL}/mixed_people/api_search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": env.APOLLO_API_KEY as string
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Apollo contact search failed: ${response.status} ${await response.text()}`);
+    }
+
+    const payload = (await response.json()) as {
+      people?: Array<{
+        id?: string;
+        first_name?: string;
+        last_name?: string;
+        last_name_obfuscated?: string;
+        name?: string;
+        title?: string | null;
+        seniority?: string | null;
+        departments?: string[];
+        functions?: string[];
+        linkedin_url?: string | null;
+        has_email?: boolean;
+        organization_id?: string;
+        organization?: { name?: string };
+      }>;
+    };
+
+    return (payload.people ?? [])
+      .map<ApolloContactCandidate | null>((person) => {
+        if (!person.id) {
+          return null;
+        }
+
+        return {
+          personId: person.id,
+          firstName: person.first_name?.trim(),
+          lastName: person.last_name?.trim() || person.last_name_obfuscated?.trim(),
+          name: person.name?.trim() || [person.first_name, person.last_name_obfuscated].filter(Boolean).join(" "),
+          title: person.title?.trim() || undefined,
+          seniority: person.seniority?.trim() || undefined,
+          departments: person.departments ?? [],
+          functions: person.functions ?? [],
+          organizationId: person.organization_id,
+          organizationName: person.organization?.name?.trim(),
+          linkedinUrl: person.linkedin_url?.trim() || undefined,
+          hasEmail: Boolean(person.has_email)
+        } satisfies ApolloContactCandidate;
+      })
+      .filter((person): person is ApolloContactCandidate => person !== null);
+  }
+
+  private getOrganizationResolutionScore(
+    organization: ApolloResolvedOrganization,
+    normalizedDomain: string,
+    normalizedCompanyName: string
+  ): number {
+    let score = 0;
+    const organizationDomain = this.normalizeDomain(organization.websiteUrl);
+    if (organizationDomain === normalizedDomain) {
+      score += 3;
+    }
+
+    if (this.normalizeCompanyName(organization.name) === normalizedCompanyName) {
+      score += 2;
+    }
+
+    return score;
+  }
+
+  private getApolloOrganizationMatchScore(
+    candidate: ApolloContactCandidate,
+    company: Pick<PreCategorizedCompany, "name">,
+    resolvedOrganization: ApolloResolvedOrganization | null
+  ): number {
+    let score = 0;
+    const normalizedCompanyName = this.normalizeCompanyName(company.name);
+    const normalizedCandidateOrgName = this.normalizeCompanyName(candidate.organizationName);
+    const normalizedResolvedOrgName = this.normalizeCompanyName(resolvedOrganization?.name);
+
+    if (candidate.hasEmail) {
+      score += 2;
+    }
+
+    if (resolvedOrganization?.id && candidate.organizationId === resolvedOrganization.id) {
+      score += 4;
+    }
+
+    if (normalizedCandidateOrgName && normalizedCandidateOrgName === normalizedCompanyName) {
+      score += 3;
+    }
+
+    if (normalizedCandidateOrgName && normalizedResolvedOrgName && normalizedCandidateOrgName === normalizedResolvedOrgName) {
+      score += 2;
+    }
+
+    return score;
+  }
+
+  private normalizeCompanyName(name: string | undefined): string {
+    return (name ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\b(gmbh|ag|bv|b v|sarl|s l|sl|sas|spa|s p a|sa|nv|oy|ab|kg|co|inc|ltd|llc)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   private isLowValueBusinessEmail(email: string): boolean {

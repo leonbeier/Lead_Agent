@@ -387,15 +387,28 @@
               <input id="targetLeadCount" name="targetLeadCount" type="number" min="1" max="1000" required />
             </label>
             <label>
-              Markt
+              Markt / Suchbereich
+              <span class="mini-meta">Freitext. Dieser Wert geht in die KI- und Suchstrategie-Prompts ein. Default: Europe.</span>
               <input id="market" name="market" type="text" required />
             </label>
             <label>
               Firmensuche
               <select id="companySearchMode" name="companySearchMode">
-                <option value="internet_research">Internet-Recherche</option>
-                <option value="apollo_search">Apollo-Unternehmenssuche</option>
+                <option value="diffbot_search">Diffbot Search</option>
+                <option value="exa_search">Exa Search</option>
               </select>
+            </label>
+            <label>
+              Zeitlimit in Minuten
+              <input id="maxRuntimeMinutes" name="maxRuntimeMinutes" type="number" min="1" max="180" step="1" required />
+            </label>
+            <label id="exaApiKeyField" style="grid-column: 1 / -1; display: none;">
+              Exa API Key
+              <input id="exaApiKey" name="exaApiKey" type="password" autocomplete="off" placeholder="Optional fuer Exa Search. Lauf endet bei Lead-Ziel, Zeitlimit oder fehlenden Credits." />
+            </label>
+            <label id="diffbotTokenField" style="grid-column: 1 / -1; display: none;">
+              Diffbot Token
+              <input id="diffbotToken" name="diffbotToken" type="password" autocomplete="off" placeholder="Optional fuer Diffbot Search." />
             </label>
             <label style="grid-column: 1 / -1;">
               Main-Kontext fuer alle Agenten
@@ -562,9 +575,15 @@
       }
 
       function fillSettingsForm(settings) {
+        const normalizedSearchMode = settings.companySearchMode === "diffbot_search"
+          ? "diffbot_search"
+          : "exa_search";
         document.getElementById("targetLeadCount").value = settings.targetLeadCount;
         document.getElementById("market").value = settings.market;
-        document.getElementById("companySearchMode").value = settings.companySearchMode || (settings.creditLessMode ? "internet_research" : "apollo_search");
+        document.getElementById("companySearchMode").value = normalizedSearchMode;
+        document.getElementById("maxRuntimeMinutes").value = String(Math.max(1, Math.round((settings.maxRuntimeMs || 10800000) / 60000)));
+        document.getElementById("exaApiKey").value = settings.exaApiKey || "";
+        document.getElementById("diffbotToken").value = settings.diffbotToken || "";
         document.getElementById("mainContext").value = settings.mainContext || "";
         document.getElementById("prequalification-mainContext").value = settings.prequalification?.mainContext || settings.prequalificationContext || "";
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
@@ -575,15 +594,25 @@
         });
         document.getElementById("runDeepResearch").checked = Boolean(settings.runDeepResearch);
         document.getElementById("dryRun").checked = Boolean(settings.dryRun);
-        document.getElementById("syncToHubSpot").checked = false;
+        document.getElementById("syncToHubSpot").checked = settings.syncToHubSpot !== false;
         document.getElementById("earlyStopEnabled").checked = Boolean(settings.earlyStopEnabled);
         document.getElementById("earlyStopReviewCount").value = settings.earlyStopReviewCount;
         document.getElementById("earlyStopThreshold").value = settings.earlyStopThreshold;
+        syncSearchModeState();
         syncPrequalificationCardState();
+      }
+
+      function syncSearchModeState() {
+        const companySearchMode = document.getElementById("companySearchMode").value;
+        const exaApiKeyField = document.getElementById("exaApiKeyField");
+        const diffbotTokenField = document.getElementById("diffbotTokenField");
+        exaApiKeyField.style.display = companySearchMode === "exa_search" ? "grid" : "none";
+        diffbotTokenField.style.display = companySearchMode === "diffbot_search" ? "grid" : "none";
       }
 
       function collectSettings() {
         const companySearchMode = document.getElementById("companySearchMode").value;
+        const maxRuntimeMinutes = Number(document.getElementById("maxRuntimeMinutes").value);
         const categoryContexts = Object.fromEntries(
           Array.from(document.querySelectorAll("textarea[data-prequalification-category]")).map((field) => [
             field.dataset.prequalificationCategory,
@@ -598,7 +627,10 @@
           market: document.getElementById("market").value.trim(),
           mainContext: document.getElementById("mainContext").value.trim(),
           companySearchMode,
-          creditLessMode: companySearchMode === "internet_research",
+          creditLessMode: true,
+          exaApiKey: document.getElementById("exaApiKey").value.trim() || undefined,
+          diffbotToken: document.getElementById("diffbotToken").value.trim() || undefined,
+          maxRuntimeMs: Math.max(60000, Math.round(Math.max(1, maxRuntimeMinutes || 180) * 60 * 1000)),
           prequalification: {
             mainContext: document.getElementById("prequalification-mainContext").value.trim(),
             categoryContexts
@@ -618,8 +650,10 @@
           .filter((value) => getPrequalificationAddOnValue(value).trim())
           .length;
         const cards = [
-          { label: "Default Markt", value: settings.market },
+          { label: "Default Markt", value: settings.market || "Europe" },
           { label: "Lead-Ziel", value: String(settings.targetLeadCount) },
+          { label: "Backend", value: settings.companySearchMode === "diffbot_search" ? "Diffbot Search" : "Exa Search" },
+          { label: "Zeitlimit", value: `${Math.max(1, Math.round((settings.maxRuntimeMs || 10800000) / 60000))} min` },
           { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
           { label: "Templates", value: String(Object.keys(templates).length) },
           { label: "Main-Kontext", value: settings.mainContext ? "gesetzt" : "leer" },
@@ -701,7 +735,7 @@
       }
 
       function renderLatestRun(latestLeadRun) {
-        if (!latestLeadRun || !latestLeadRun.createdAt || latestLeadRun.summary.foundCandidates === 0) {
+        if (!latestLeadRun || !latestLeadRun.createdAt) {
           latestRunList.innerHTML = '<div class="history-item"><strong>Noch kein verwertbarer Lauf</strong><span class="mini-meta">Sobald ein echter Lauf durch ist, erscheinen hier Trefferzahl, getestete Filter und Exportstatus.</span></div>';
           return;
         }
@@ -722,6 +756,28 @@
             </div>
           `)
         ].join("");
+      }
+
+      function getActiveSearchMode(data = bootstrapData) {
+        return data?.latestLeadRun?.requested?.companySearchMode
+          || data?.settings?.companySearchMode
+          || "exa_search";
+      }
+
+      function getSearchHistoryForMode(data = bootstrapData) {
+        const latestRunHistory = data?.latestLeadRun?.searchHistory || [];
+        if (latestRunHistory.length > 0) {
+          return latestRunHistory;
+        }
+
+        const activeMode = getActiveSearchMode(data);
+        return data?.learning?.searchHistoryByMode?.[activeMode]?.searchHistory
+          || (data?.learning?.searchHistory || []).filter((entry) => entry.companySearchMode === activeMode);
+      }
+
+      function getFilterPerformanceForMode(data = bootstrapData) {
+        const activeMode = getActiveSearchMode(data);
+        return data?.learning?.searchHistoryByMode?.[activeMode]?.filterPerformance || {};
       }
 
       function formatFilterSnapshot(snapshot) {
@@ -771,8 +827,9 @@
         searchHistoryList.innerHTML = pageEntries.map((entry) => `
           <div class="history-item">
             <strong>${entry.filterName}</strong>
-            <span class="mini-meta">${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page} · Zielkategorie: ${entry.targetCategory || "n/a"}</span>
+            <span class="mini-meta">${entry.companySearchMode === "diffbot_search" ? "Diffbot" : entry.companySearchMode === "exa_search" ? "Exa" : entry.companySearchMode} · ${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page} · Zielkategorie: ${entry.targetCategory || "n/a"}</span>
             <span class="mini-meta">Relevant: ${entry.relevantCount}/${entry.returnedCount} (${Math.round(entry.relevanceRatio * 100)}%)</span>
+            <span class="mini-meta">Kategorien: ${Object.entries(entry.categoryBreakdown || {}).filter(([, count]) => count > 0).map(([category, count]) => `${category}=${count}`).join(", ") || "keine"}</span>
             <span class="mini-meta">${entry.recommendation}</span>
             ${formatFilterSnapshot(entry.filterSnapshot)}
           </div>
@@ -835,6 +892,10 @@
                   <textarea data-field="emailBody">${template.emailBody}</textarea>
                 </label>
                 <label>
+                  LinkedIn Kontaktanfrage
+                  <textarea data-field="linkedInConnectionRequest">${template.linkedInConnectionRequest ?? ""}</textarea>
+                </label>
+                <label>
                   LinkedIn
                   <textarea data-field="linkedInMessage">${template.linkedInMessage}</textarea>
                 </label>
@@ -894,8 +955,8 @@
           renderTemplates(data.templates);
           renderContexts(data.categoryContexts);
           renderLatestRun(data.latestLeadRun);
-          renderSearchHistory(data.learning?.searchHistory || []);
-          renderFilterPerformance(data.learning?.filterPerformance || {}, data.learning?.searchHistory || []);
+          renderSearchHistory(getSearchHistoryForMode(data));
+          renderFilterPerformance(getFilterPerformanceForMode(data), getSearchHistoryForMode(data));
           setStatus(settingsStatus, "Settings geladen");
           setStatus(templatesStatus, "Templates geladen");
         } catch (error) {
@@ -937,30 +998,8 @@
         bootstrapData.learning = learningPayload.learning;
         renderSummary(collectSettings(), bootstrapData.templates, latestLeadRun);
         renderLatestRun(latestLeadRun);
-        renderSearchHistory(latestLeadRun?.searchHistory || []);
-        renderFilterPerformance(learningPayload.learning?.filterPerformance || {}, learningPayload.learning?.searchHistory || []);
-      }
-
-      async function waitForBackgroundRunCompletion() {
-        const start = Date.now();
-
-        while (Date.now() - start < 60 * 60 * 1000) {
-          const statusPayload = await requestJson("/api/control/run-status");
-          const runStatus = statusPayload.runStatus || {};
-
-          if (!runStatus.running) {
-            if (runStatus.lastError) {
-              throw new Error(runStatus.lastError);
-            }
-
-            return runStatus;
-          }
-
-          resultOutput.textContent = `Live-Run laeuft seit ${runStatus.startedAt || "unbekannt"}...`;
-          await new Promise((resolve) => setTimeout(resolve, 4000));
-        }
-
-        throw new Error("Live-Run hat das Polling-Zeitlimit ueberschritten.");
+        renderSearchHistory(getSearchHistoryForMode(bootstrapData));
+        renderFilterPerformance(getFilterPerformanceForMode(bootstrapData), getSearchHistoryForMode(bootstrapData));
       }
 
       async function triggerRun(endpoint) {
@@ -971,12 +1010,14 @@
             body: JSON.stringify(collectSettings())
           });
 
-          if (endpoint === "/api/hubspot/workflow-trigger" && result.accepted) {
-            await waitForBackgroundRunCompletion();
-          }
-
           await refreshRunSurfaces();
-          resultOutput.textContent = JSON.stringify(result, null, 2);
+          resultOutput.textContent = endpoint === "/api/hubspot/workflow-trigger" && result.accepted
+            ? JSON.stringify({
+                accepted: true,
+                message: "Lead-Run gestartet. Die Konsole und der Run-Status aktualisieren sich separat.",
+                runStatus: result.runStatus
+              }, null, 2)
+            : JSON.stringify(result, null, 2);
         } catch (error) {
           resultOutput.textContent = String(error);
         }
@@ -1007,6 +1048,7 @@
       document.getElementById("save-settings").addEventListener("click", saveSettings);
       document.getElementById("run-preview").addEventListener("click", () => triggerRun("/api/lead-jobs/preview"));
       document.getElementById("run-live").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger"));
+      document.getElementById("companySearchMode").addEventListener("change", syncSearchModeState);
 
       templateList.addEventListener("click", (event) => {
         const button = event.target.closest("button[data-action='save-template']");
@@ -1038,7 +1080,7 @@
 
           renderFilterPerformance(
             Object.fromEntries(paginationData.filterPerformance),
-            bootstrapData?.learning?.searchHistory || []
+            getSearchHistoryForMode(bootstrapData)
           );
         });
       });

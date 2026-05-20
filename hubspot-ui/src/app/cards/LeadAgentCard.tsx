@@ -12,6 +12,7 @@ import {
   ProgressBar,
   StatusTag,
   Text,
+  TextArea,
   hubspot
 } from "@hubspot/ui-extensions";
 
@@ -40,13 +41,34 @@ type CategoryOption = {
   label: string;
 };
 
-type BootstrapPayload = {
+type SidebarSearchMode = "exa_search" | "diffbot_search";
+
+const SIDEBAR_CATEGORY_OPTIONS: CategoryOption[] = [
+  { value: "integrator_vision_industrial_ai", label: "Software Integratoren mit Vision/Industrial AI Fokus" },
+  { value: "integrator_vision_ai_consulting", label: "Vision AI/Industrial AI Consulting" },
+  { value: "integrator_vision_ai_freelancer", label: "Vision AI/Industrial AI Freelancer" },
+  { value: "integrator_general_ai", label: "Software Integratoren mit allgemeinem AI Fokus" },
+  { value: "integrator_relevant_focus", label: "Integratoren in relevanten Industriezweigen" },
+  { value: "industrial_end_customer_scaled", label: "Industrie-Endkunden mit ausreichender Projektgroesse" },
+  { value: "camera_manufacturer_partner", label: "Kamera-/Imaging-Hersteller als Partner" },
+  { value: "machine_builder_ai_enablement", label: "Maschinenbauer mit AI-Option Potenzial" },
+  { value: "software_platform_embedding", label: "Softwareplattformen fuer Embedding-Partnerschaften" }
+];
+
+type SettingsPayload = {
   settings?: {
     targetLeadCount?: number;
+    market?: string;
     targetCategories?: string[];
-    companySearchMode?: "internet_research" | "apollo_search";
+    companySearchMode?: "internet_research" | "open_crawler_search" | "apollo_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
     syncToHubSpot?: boolean;
+    exaApiKey?: string;
+    diffbotToken?: string;
+    maxRuntimeMs?: number;
   };
+};
+
+type LatestLeadRunPayload = {
   selectableCategories?: CategoryOption[];
   latestLeadRun?: {
     createdAt?: string;
@@ -100,20 +122,59 @@ function formatTimestamp(value?: string) {
   });
 }
 
+function isMeaningfulRunStatus(runStatus?: RunStatusPayload["runStatus"]) {
+  if (!runStatus) {
+    return false;
+  }
+
+  if (runStatus.running || runStatus.lastError || runStatus.finishedAt) {
+    return true;
+  }
+
+  if (!runStatus.updatedAt) {
+    return false;
+  }
+
+  const updatedAt = new Date(runStatus.updatedAt);
+  return !Number.isNaN(updatedAt.getTime()) && updatedAt.getTime() > 0;
+}
+
+function getSearchModeLabel(mode: SidebarSearchMode) {
+  if (mode === "exa_search") {
+    return "Exa Search";
+  }
+
+  return "Diffbot Search";
+}
+
+function normalizeSidebarSearchMode(
+  mode: SettingsPayload["settings"] extends { companySearchMode?: infer T } ? T : never
+): SidebarSearchMode {
+  if (mode === "diffbot_search") {
+    return "diffbot_search";
+  }
+
+  return "exa_search";
+}
+
 function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCardProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isStarting, setIsStarting] = React.useState(false);
+  const [isStoppingRun, setIsStoppingRun] = React.useState(false);
+  const [isResettingRun, setIsResettingRun] = React.useState(false);
   const [isRefreshingStatus, setIsRefreshingStatus] = React.useState(false);
   const [targetLeadCount, setTargetLeadCount] = React.useState<number>(50);
-  const [companySearchMode, setCompanySearchMode] = React.useState<"internet_research" | "apollo_search">("internet_research");
-  const [selectableCategories, setSelectableCategories] = React.useState<CategoryOption[]>([]);
+  const [market, setMarket] = React.useState<string>("Europe");
+  const [companySearchMode, setCompanySearchMode] = React.useState<SidebarSearchMode>("exa_search");
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
   const [latestFoundCandidates, setLatestFoundCandidates] = React.useState<number | null>(null);
   const [runStatus, setRunStatus] = React.useState<RunStatusPayload["runStatus"]>({ running: false });
-  const [consoleEntries, setConsoleEntries] = React.useState<ConsoleEntry[]>([]);
   const [errorMessage, setErrorMessage] = React.useState<string>("");
   const [successMessage, setSuccessMessage] = React.useState<string>("");
   const [syncToHubSpot, setSyncToHubSpot] = React.useState(true);
+  const [exaApiKey, setExaApiKey] = React.useState("");
+  const [diffbotToken, setDiffbotToken] = React.useState("");
+  const [maxRuntimeMinutes, setMaxRuntimeMinutes] = React.useState<number>(20);
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
   const consoleUrl = `${normalizedBaseUrl}/hubspot/ui?portalId=${encodeURIComponent(portalId)}&key=${encodeURIComponent(sharedKey)}`;
   const canOpenConsole = Boolean(normalizedBaseUrl && sharedKey && openIframe);
@@ -121,30 +182,14 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const canStart = canFetch && targetLeadCount > 0 && selectedCategories.length > 0 && !runStatus?.running;
   const progressMax = Math.max(1, runStatus?.progressMax ?? 100);
   const progressValue = Math.min(progressMax, Math.max(0, runStatus?.progressValue ?? 0));
-  const lastConsoleSignature = React.useRef<string>("");
 
-  const appendConsoleEntry = React.useCallback((message: string, signature?: string) => {
-    const normalizedMessage = message.trim();
-    if (!normalizedMessage) {
-      return;
-    }
-
-    const nextSignature = signature ?? normalizedMessage;
-    if (lastConsoleSignature.current === nextSignature) {
-      return;
-    }
-
-    lastConsoleSignature.current = nextSignature;
-    setConsoleEntries((current) => [{
-      id: `${Date.now()}-${current.length}`,
-      message: normalizedMessage
-    }, ...current].slice(0, 12));
-  }, []);
-
-  const requestJson = React.useCallback(async <T,>(pathname: string, options?: { method?: "GET" | "POST" }) => {
+  const requestJson = React.useCallback(async <T,>(
+    pathname: string,
+    options?: { method?: "GET" | "POST"; timeout?: number }
+  ) => {
     const response = await hubspot.fetch(`${normalizedBaseUrl}${pathname}?key=${encodeURIComponent(sharedKey)}`, {
       method: options?.method ?? "GET",
-      timeout: 120000
+      timeout: options?.timeout ?? 120000
     });
 
     let payload: unknown = undefined;
@@ -169,7 +214,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       return;
     }
 
-    const payload = await requestJson<RunStatusPayload>("/api/control/run-status");
+    const payload = await requestJson<RunStatusPayload>("/api/control/run-status", { timeout: 15000 });
     setRunStatus(payload.runStatus ?? { running: false });
   }, [canFetch, requestJson]);
 
@@ -178,13 +223,23 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       return;
     }
 
-    const payload = await requestJson<BootstrapPayload>("/api/control/latest-lead-run");
+    const payload = await requestJson<LatestLeadRunPayload>("/api/control/latest-lead-run", { timeout: 20000 });
     setLatestFoundCandidates(payload.latestLeadRun?.summary?.foundCandidates ?? null);
   }, [canFetch, requestJson]);
 
   const refreshRuntimeData = React.useCallback(async () => {
     await Promise.all([refreshRunStatus(), refreshLatestRun()]);
   }, [refreshLatestRun, refreshRunStatus]);
+
+  const toggleCategory = (category: string, checked: boolean) => {
+    setSelectedCategories((current) => {
+      if (checked) {
+        return current.includes(category) ? current : [...current, category];
+      }
+
+      return current.filter((entry) => entry !== category);
+    });
+  };
 
   const handleManualRefresh = async () => {
     if (!canFetch) {
@@ -213,22 +268,20 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
     const load = async () => {
       try {
         setErrorMessage("");
-        const [bootstrapPayload, runStatusPayload] = await Promise.all([
-          requestJson<BootstrapPayload>("/api/control-plane/bootstrap"),
-          requestJson<RunStatusPayload>("/api/control/run-status")
-        ]);
+        const settingsPayload = await requestJson<SettingsPayload>("/api/control/settings", { timeout: 12000 });
 
         if (isCancelled) {
           return;
         }
 
-        setSelectableCategories(bootstrapPayload.selectableCategories ?? []);
-        setTargetLeadCount(bootstrapPayload.settings?.targetLeadCount ?? 50);
-        setCompanySearchMode(bootstrapPayload.settings?.companySearchMode ?? "internet_research");
-        setSyncToHubSpot(bootstrapPayload.settings?.syncToHubSpot ?? true);
-        setSelectedCategories(bootstrapPayload.settings?.targetCategories ?? []);
-        setLatestFoundCandidates(bootstrapPayload.latestLeadRun?.summary?.foundCandidates ?? null);
-        setRunStatus(runStatusPayload.runStatus ?? { running: false });
+        setTargetLeadCount(settingsPayload.settings?.targetLeadCount ?? 50);
+        setMarket(settingsPayload.settings?.market ?? "Europe");
+        setCompanySearchMode(normalizeSidebarSearchMode(settingsPayload.settings?.companySearchMode));
+        setSyncToHubSpot(settingsPayload.settings?.syncToHubSpot ?? true);
+        setExaApiKey(settingsPayload.settings?.exaApiKey ?? "");
+        setDiffbotToken(settingsPayload.settings?.diffbotToken ?? "");
+        setMaxRuntimeMinutes(Math.max(1, Math.round((settingsPayload.settings?.maxRuntimeMs ?? 1_200_000) / 60_000)));
+        setSelectedCategories(settingsPayload.settings?.targetCategories ?? []);
       } catch (error) {
         if (!isCancelled) {
           setErrorMessage(error instanceof Error ? error.message : "Lead-Agent-Daten konnten nicht geladen werden.");
@@ -238,6 +291,13 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           setIsLoading(false);
         }
       }
+
+      refreshRuntimeData().catch((error) => {
+        if (!isCancelled) {
+          const message = error instanceof Error ? error.message : "Run-Status konnte nicht aktualisiert werden.";
+          setErrorMessage((current) => current || message);
+        }
+      });
     };
 
     load().catch(() => undefined);
@@ -245,29 +305,10 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
     return () => {
       isCancelled = true;
     };
-  }, [canFetch, requestJson]);
+  }, [canFetch, refreshRuntimeData, requestJson]);
 
   React.useEffect(() => {
-    if (!runStatus) {
-      return;
-    }
-
-    const timestamp = formatTimestamp(runStatus.updatedAt ?? runStatus.finishedAt ?? runStatus.startedAt);
-    const statusLine = `[${timestamp}] ${runStatus.stageLabel || (runStatus.running ? "Laeuft" : "Bereit")} | ${progressValue}% | ${runStatus.progressDescription || "Noch kein aktiver Lead-Run."}${runStatus.detail ? ` | ${runStatus.detail}` : ""}`;
-    const signature = [
-      runStatus.updatedAt,
-      runStatus.stage,
-      runStatus.progressValue,
-      runStatus.progressDescription,
-      runStatus.detail,
-      runStatus.running
-    ].join("|");
-
-    appendConsoleEntry(statusLine, signature);
-  }, [appendConsoleEntry, progressValue, runStatus]);
-
-  React.useEffect(() => {
-    if (!runStatus?.running || !canFetch) {
+    if (!canFetch) {
       return;
     }
 
@@ -279,16 +320,64 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
     }, 5000);
 
     return () => clearInterval(handle);
-  }, [canFetch, refreshRuntimeData, runStatus?.running]);
+  }, [canFetch, refreshRuntimeData]);
 
-  const toggleCategory = (category: string, checked: boolean) => {
-    setSelectedCategories((current) => {
-      if (checked) {
-        return current.includes(category) ? current : [...current, category];
+  const resetLeadRun = async () => {
+    if (!canFetch || isResettingRun) {
+      return;
+    }
+
+    try {
+      setIsResettingRun(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const payload = await requestJson<{ accepted?: boolean; error?: string; runStatus?: RunStatusPayload["runStatus"] }>(
+        "/api/control/run-status/reset",
+        { method: "POST" }
+      );
+
+      if (!payload.accepted) {
+        throw new Error(payload.error || "Lead-Run konnte nicht zurueckgesetzt werden.");
       }
 
-      return current.filter((entry) => entry !== category);
-    });
+      setRunStatus(payload.runStatus ?? { running: false });
+      setSuccessMessage("Blockierter Lead-Run wurde freigegeben.");
+      await refreshRuntimeData();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Lead-Run konnte nicht zurueckgesetzt werden.");
+    } finally {
+      setIsResettingRun(false);
+    }
+  };
+
+  const stopLeadRun = async () => {
+    if (!canFetch || isStoppingRun || !runStatus?.running) {
+      return;
+    }
+
+    try {
+      setIsStoppingRun(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const payload = await requestJson<{ accepted?: boolean; error?: string; runStatus?: RunStatusPayload["runStatus"] }>(
+        "/api/control/run-status/stop",
+        { method: "POST" }
+      );
+
+      if (!payload.accepted) {
+        throw new Error(payload.error || "Lead-Run konnte nicht gestoppt werden.");
+      }
+
+      setRunStatus(payload.runStatus ?? { running: true });
+      setSuccessMessage("Lead-Run wird gestoppt.");
+      await refreshRuntimeData();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Lead-Run konnte nicht gestoppt werden.");
+    } finally {
+      setIsStoppingRun(false);
+    }
   };
 
   const startLeadRun = async () => {
@@ -306,24 +395,30 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         timeout: 120000,
         body: {
           targetLeadCount,
+          market,
           targetCategories: selectedCategories,
           companySearchMode,
-          creditLessMode: companySearchMode === "internet_research",
+          creditLessMode: true,
           dryRun: false,
-          syncToHubSpot
+          syncToHubSpot,
+          exaApiKey: exaApiKey.trim() || undefined,
+          diffbotToken: diffbotToken.trim() || undefined,
+          maxRuntimeMs: Math.max(60_000, Math.round(Math.max(1, maxRuntimeMinutes || 20) * 60_000))
         }
       });
 
       const payload = await response.json() as { accepted?: boolean; error?: string; runStatus?: RunStatusPayload["runStatus"] };
       if (!response.ok || !payload.accepted) {
+        if (response.status === 409) {
+          setRunStatus(payload.runStatus ?? { running: true });
+          throw new Error("Lead-Run ist blockiert. Status aktualisieren oder blockierten Run freigeben.");
+        }
+
         throw new Error(payload.error || "Lead-Run konnte nicht gestartet werden.");
       }
 
       setRunStatus(payload.runStatus ?? { running: true });
       setSuccessMessage("Lead-Run wurde gestartet.");
-      appendConsoleEntry(
-        `[${formatTimestamp(new Date().toISOString())}] Start angefordert | ${targetLeadCount} Leads | Suche ${companySearchMode === "internet_research" ? "Web" : "Apollo"} | HubSpot-Sync ${syncToHubSpot ? "an" : "aus"}`
-      );
       await refreshRuntimeData();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Lead-Run konnte nicht gestartet werden.");
@@ -340,6 +435,15 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       {errorMessage && <Alert title="Fehler" variant="error">{errorMessage}</Alert>}
       {successMessage && <Alert title="Status" variant="success">{successMessage}</Alert>}
       {runStatus?.running && <Alert title="Lead-Run aktiv">Laufend seit {formatTimestamp(runStatus.startedAt)}.</Alert>}
+      {runStatus?.running && (
+        <Button
+          variant="destructive"
+          disabled={!canFetch || isLoading || isStoppingRun}
+          onClick={stopLeadRun}
+        >
+          {isStoppingRun ? "Stoppe aktive Suche..." : "Aktive Suche sofort stoppen"}
+        </Button>
+      )}
       {!runStatus?.running && runStatus?.finishedAt && !runStatus?.lastError && runStatus?.stage === "completed" && (
         <Alert title="Letzter Lauf abgeschlossen" variant="success">
           Fertig seit {formatTimestamp(runStatus.finishedAt)}.
@@ -369,21 +473,66 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
             {typeof runStatus?.processedFilters === "number" && typeof runStatus?.totalFilters === "number"
               ? `Filter: ${runStatus.processedFilters}/${runStatus.totalFilters}. `
               : ""}
+            {typeof runStatus?.funnel?.syncedToHubSpot === "number" && syncToHubSpot
+              ? `Nach HubSpot synchronisiert: ${runStatus.funnel.syncedToHubSpot}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}. `
+              : ""}
             {typeof runStatus?.foundCandidates === "number"
               ? `Qualifizierte Firmen: ${runStatus.foundCandidates}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}.`
               : ""}
           </Text>
         )}
-        <Text>HubSpot-Sync fuer Starts aus dieser Karte: {syncToHubSpot ? "aktiv" : "deaktiviert"}. Suchmodus: {companySearchMode === "internet_research" ? "Web-Recherche" : "Apollo"}.</Text>
+        <Text>HubSpot-Sync fuer Starts aus dieser Karte: {syncToHubSpot ? "aktiv" : "deaktiviert"}. Suchmodus: {getSearchModeLabel(companySearchMode)}. Markt: {market}.</Text>
+        <Text>Aktive Kundentypen: {selectedCategories.length || 0}.</Text>
+        <Checkbox
+          name="diffbotSearchMode"
+          checked={companySearchMode === "diffbot_search"}
+          onChange={(checked) => setCompanySearchMode(checked ? "diffbot_search" : "exa_search")}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        >
+          Diffbot Search statt Exa Search verwenden
+        </Checkbox>
+        <TextArea
+          name="market"
+          label="Markt / Suchbereich"
+          description="Freitext. Dieser Wert geht in die KI- und Suchstrategie-Prompts ein. Default: Europe."
+          value={market}
+          rows={2}
+          resize="vertical"
+          onChange={setMarket}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <NumberInput
+          label="Zeitlimit in Minuten"
+          name="maxRuntimeMinutes"
+          min={1}
+          max={180}
+          step={1}
+          value={maxRuntimeMinutes}
+          onChange={(value) => setMaxRuntimeMinutes(Number(value) || 1)}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <TextArea
+          name="exaApiKey"
+          label="Exa API Key"
+          description="Optionaler manueller Override fuer Exa Search. Leer nutzt deinen hinterlegten Server-Default-Key. Wenn hier etwas steht, wird dieser Key fuer Exa Search verwendet."
+          value={exaApiKey}
+          rows={2}
+          resize="vertical"
+          onChange={setExaApiKey}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <TextArea
+          name="diffbotToken"
+          label="Diffbot Token"
+          description="Optionaler manueller Override fuer Diffbot Search. Leer nutzt deinen hinterlegten Standard-Token. Wenn hier etwas steht, wird dieser Token fuer Diffbot Search verwendet."
+          value={diffbotToken}
+          rows={3}
+          resize="vertical"
+          onChange={setDiffbotToken}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
         {runStatus?.updatedAt && <Text>Zuletzt aktualisiert: {formatTimestamp(runStatus.updatedAt)}</Text>}
         <Divider />
-        <Flex direction="column" gap="flush">
-          <Heading>Live-Konsole</Heading>
-          {consoleEntries.length === 0 && <Text>Noch keine Statuszeilen.</Text>}
-          {consoleEntries.map((entry) => (
-            <Text key={entry.id}>{entry.message}</Text>
-          ))}
-        </Flex>
         <ButtonRow disableDropdown={true}>
           <Button
             variant="secondary"
@@ -394,24 +543,38 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           </Button>
           <Button
             variant="secondary"
-            disabled={!canOpenConsole}
-            onClick={() => {
-              if (!openIframe) {
-                return;
-              }
-
-              openIframe({
-                uri: consoleUrl,
-                height: 900,
-                width: 1400,
-                title: "ONE WARE Lead Console",
-                flush: true
-              });
-            }}
+            disabled={!canFetch || isLoading || !runStatus?.running || isStoppingRun}
+            onClick={stopLeadRun}
           >
-            Lead-Konsole oeffnen
+            {isStoppingRun ? "Stoppe..." : "Aktuelle Suche stoppen"}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={!canFetch || isLoading || isResettingRun || Boolean(runStatus?.running)}
+            onClick={resetLeadRun}
+          >
+            {isResettingRun ? "Gebe frei..." : "Blockierten Run freigeben"}
           </Button>
         </ButtonRow>
+        <Button
+          variant="secondary"
+          disabled={!canOpenConsole}
+          onClick={() => {
+            if (!openIframe) {
+              return;
+            }
+
+            openIframe({
+              uri: consoleUrl,
+              height: 900,
+              width: 1400,
+              title: "ONE WARE Lead Console",
+              flush: true
+            });
+          }}
+        >
+          Zur Lead Console Website
+        </Button>
       </Flex>
       <Divider />
       <NumberInput
@@ -425,7 +588,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       />
       <Flex direction="column" gap="flush">
         <Text>Gewuenschte Kundentypen</Text>
-        {selectableCategories.map((category) => (
+        {SIDEBAR_CATEGORY_OPTIONS.map((category) => (
           <Checkbox
             key={category.value}
             name="targetCategories"

@@ -10,7 +10,7 @@ const booleanFlag = () =>
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
-  DEFAULT_MARKET: z.string().default("DE"),
+  DEFAULT_MARKET: z.string().default("Europe"),
   DEFAULT_TARGET_LEADS: z.coerce.number().int().positive().default(50),
   LEAD_AGENT_SHARED_KEY: z.string().min(24),
   LEAD_AGENT_PUBLIC_BASE_URL: z.string().url().optional(),
@@ -21,6 +21,9 @@ const envSchema = z.object({
   HUBSPOT_CLIENT_SECRET: z.string().optional(),
   HUBSPOT_BASE_URL: z.string().url().default("https://api.hubapi.com"),
   OPENAI_API_KEY: z.string().optional(),
+  EXA_API_KEY: z.string().optional(),
+  EXA_MAX_BUDGET_USD: z.coerce.number().nonnegative().default(20),
+  DIFFBOT_TOKEN: z.string().optional(),
   OPENAI_WEB_SEARCH_MODEL: z.string().default("gpt-5.4-mini"),
   OPENAI_PRE_RESEARCH_MODEL: z.string().optional(),
   OPENAI_DEEP_RESEARCH_MODEL: z.string().optional(),
@@ -29,9 +32,18 @@ const envSchema = z.object({
   AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
   AZURE_OPENAI_DEPLOYMENT: z.string().default("gpt-5.4-mini"),
   AZURE_OPENAI_CLASSIFIER_DEPLOYMENT: z.string().optional(),
+  AZURE_AI_CLASSIFICATION_CONCURRENCY: z.coerce.number().int().positive().default(10),
+  CONTACT_DISCOVERY_CONCURRENCY: z.coerce.number().int().positive().default(6),
+  HUBSPOT_SYNC_CONCURRENCY: z.coerce.number().int().positive().default(3),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
   AZURE_OPENAI_INPUT_COST_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
   AZURE_OPENAI_OUTPUT_COST_PER_1K_TOKENS: z.coerce.number().nonnegative().default(0),
+  AZURE_OPENAI_MAX_COST_USD: z.coerce.number().nonnegative().default(5),
+  AI_COST_INPUT_EUR_PER_MILLION: z.coerce.number().nonnegative().optional(),
+  AI_COST_INPUT_EUR_PER_MILLION_TOKENS: z.coerce.number().nonnegative().optional(),
+  AI_COST_OUTPUT_EUR_PER_MILLION: z.coerce.number().nonnegative().optional(),
+  AI_COST_OUTPUT_EUR_PER_MILLION_TOKENS: z.coerce.number().nonnegative().optional(),
+  AI_DAILY_BUDGET_EUR: z.coerce.number().nonnegative().optional(),
   FOUNDRY_PROJECT_ENDPOINT: z.string().url().optional(),
   FOUNDRY_MODEL_DEPLOYMENT: z.string().optional(),
   FOUNDRY_BING_CONNECTION_NAME: z.string().optional(),
@@ -52,9 +64,26 @@ export const openAIWebSearchModels = {
   deepResearch: env.OPENAI_DEEP_RESEARCH_MODEL ?? env.OPENAI_WEB_SEARCH_MODEL
 };
 
+const inputCostPer1kTokens =
+  env.AI_COST_INPUT_EUR_PER_MILLION_TOKENS !== undefined
+    ? env.AI_COST_INPUT_EUR_PER_MILLION_TOKENS / 1000
+    : env.AI_COST_INPUT_EUR_PER_MILLION !== undefined
+      ? env.AI_COST_INPUT_EUR_PER_MILLION / 1000
+      : env.AZURE_OPENAI_INPUT_COST_PER_1K_TOKENS;
+
+const outputCostPer1kTokens =
+  env.AI_COST_OUTPUT_EUR_PER_MILLION_TOKENS !== undefined
+    ? env.AI_COST_OUTPUT_EUR_PER_MILLION_TOKENS / 1000
+    : env.AI_COST_OUTPUT_EUR_PER_MILLION !== undefined
+      ? env.AI_COST_OUTPUT_EUR_PER_MILLION / 1000
+      : env.AZURE_OPENAI_OUTPUT_COST_PER_1K_TOKENS;
+
+const maxCostBudget = env.AI_DAILY_BUDGET_EUR ?? env.AZURE_OPENAI_MAX_COST_USD;
+
 export const azureOpenAICostConfig = {
-  inputCostPer1kTokens: env.AZURE_OPENAI_INPUT_COST_PER_1K_TOKENS,
-  outputCostPer1kTokens: env.AZURE_OPENAI_OUTPUT_COST_PER_1K_TOKENS
+  inputCostPer1kTokens,
+  outputCostPer1kTokens,
+  maxCostUsd: maxCostBudget
 };
 
 export const readiness = {
@@ -67,5 +96,7 @@ export const readiness = {
   researchConfigured: Boolean(env.AZURE_RESEARCH_ENABLED && env.AZURE_RESEARCH_ENDPOINT),
   foundryConfigured: Boolean(env.FOUNDRY_PROJECT_ENDPOINT),
   foundryBingConfigured: Boolean(env.FOUNDRY_PROJECT_ENDPOINT && env.FOUNDRY_BING_CONNECTION_NAME),
-  webSearchConfigured: Boolean(env.OPENAI_WEB_SEARCH_ENABLED && env.OPENAI_API_KEY)
+  webSearchConfigured: Boolean(env.OPENAI_WEB_SEARCH_ENABLED && env.OPENAI_API_KEY),
+  exaConfigured: Boolean(env.EXA_API_KEY),
+  diffbotConfigured: Boolean(env.DIFFBOT_TOKEN)
 };

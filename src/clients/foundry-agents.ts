@@ -1,7 +1,7 @@
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, LeadCategory, LeadLearningData, PreCategorizedCompany, PrequalificationConfig, ResearchBrief, StoredFilterSnapshot } from "../types";
+import { ApolloOrganizationFilter, LeadCategory, LeadLearningData, PreCategorizedCompany, PrequalificationConfig, PublicContactCandidate, ResearchBrief, StoredFilterSnapshot } from "../types";
 import {
   ONE_WARE_PROMPT_CONTEXT,
   TARGET_REGIONS,
@@ -11,7 +11,7 @@ import {
   getTemplateForCategory
 } from "../prompting/one-ware-playbook";
 
-type AgentKind = "filters" | "qualification" | "research";
+type AgentKind = "filters" | "qualification" | "research" | "contacts" | "contact_queries";
 
 interface CachedAgentReference {
   name: string;
@@ -207,6 +207,7 @@ export class FoundryAgentsClient {
           `Template key: ${template.key}`,
           `Template subject: ${template.subject}`,
           `Template email body:\n${template.emailBody}`,
+          `Template LinkedIn connection request:\n${template.linkedInConnectionRequest}`,
           `Template LinkedIn message:\n${template.linkedInMessage}`,
           `Template phone script:\n${template.phoneScript}`
         ].join("\n\n")
@@ -222,6 +223,103 @@ export class FoundryAgentsClient {
       };
     } catch {
       return null;
+    }
+  }
+
+  async discoverPublicContacts(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
+    evidence: string,
+    dryRun: boolean
+  ): Promise<PublicContactCandidate[]> {
+    if (dryRun || !readiness.foundryConfigured) {
+      return [];
+    }
+
+    try {
+      const content = await this.runAgent(
+        "contacts",
+        [
+          `Company: ${company.name}`,
+          company.domain ? `Website: ${company.domain}` : "Website: unknown",
+          company.country ? `Country: ${company.country}` : "Country: unknown",
+          "Target contact roles: CEO, CTO, COO, Innovation Manager, Partner Manager, Technology Manager, Operations Manager, Managing Director.",
+          evidence
+        ].join("\n\n")
+      );
+
+      const parsed = JSON.parse(content) as {
+        contacts?: Array<{
+          firstName?: string;
+          lastName?: string;
+          fullName?: string;
+          jobTitle?: string;
+          email?: string;
+          phone?: string;
+          linkedinUrl?: string;
+          sourceUrl?: string;
+          label?: string;
+        }>;
+      };
+
+      return (parsed.contacts ?? [])
+        .map<PublicContactCandidate | null>((contact) => {
+          const fullName = contact.fullName?.trim();
+          const fallbackNameParts = fullName?.split(/\s+/).filter(Boolean) ?? [];
+          const firstName = contact.firstName?.trim() || fallbackNameParts[0];
+          const lastName = contact.lastName?.trim() || (fallbackNameParts.length > 1 ? fallbackNameParts.slice(1).join(" ") : undefined);
+          const linkedinUrl = contact.linkedinUrl?.trim();
+          const sourceUrl = contact.sourceUrl?.trim() || linkedinUrl;
+
+          if (!sourceUrl) {
+            return null;
+          }
+
+          if (!firstName && !lastName && !contact.email?.trim() && !linkedinUrl) {
+            return null;
+          }
+
+          return {
+            firstName,
+            lastName,
+            email: contact.email?.trim().toLowerCase() || undefined,
+            phone: contact.phone?.trim() || undefined,
+            jobTitle: contact.jobTitle?.trim() || undefined,
+            linkedinUrl,
+            sourceUrl,
+            label: contact.label?.trim() || "foundry_web_contact"
+          } satisfies PublicContactCandidate;
+        })
+        .filter((contact): contact is PublicContactCandidate => contact !== null);
+    } catch {
+      return [];
+    }
+  }
+
+  async suggestPublicContactQueries(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
+    evidence: string,
+    dryRun: boolean
+  ): Promise<string[]> {
+    if (dryRun || !readiness.foundryConfigured) {
+      return [];
+    }
+
+    try {
+      const content = await this.runAgent(
+        "contact_queries",
+        [
+          `Company: ${company.name}`,
+          company.domain ? `Website: ${company.domain}` : "Website: unknown",
+          company.country ? `Country: ${company.country}` : "Country: unknown",
+          "Target roles: CEO, CTO, COO, Innovation Manager, Partner Manager, Technology Manager, Operations Manager, Managing Director.",
+          evidence
+        ].join("\n\n")
+      );
+
+      const parsed = JSON.parse(content) as { queries?: string[] };
+      return (parsed.queries ?? []).map((query) => query.trim()).filter(Boolean).slice(0, 10);
+    } catch {
+      return [];
     }
   }
 
@@ -296,20 +394,38 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Apollo Filter Strategy Agent. Follow any supplied main context strictly. Generate 4 to 6 Apollo company search filters focused on Germany first. Start unbiased by identifying which firm archetypes are most likely to contain service-led delivery companies for the requested categories. Focus strongest on software integrators, automation engineering firms, embedded/industrial software service providers, industrial customers with own engineering, and machine builders with plausible need. Anchor the search on the strongest known Apollo example cluster: Gestalt Automation, VEO Automation, kubion, Lachmann & Rink, plus nearby implementation-led firms like OCTUM. Keep wording concrete and close to these examples because Apollo is highly sensitive to small wording changes. Treat exclusions as equally important as inclusion terms. Avoid magazines, publishers, media brands, event businesses, associations, universities, research institutes, VCs, banks, insurers, broad consultancies, China, Saudi Arabia, and competing AI platform vendors. Explicitly avoid hardware vendors, OEMs, publishers, media brands, and pure consultancies unless operator context says otherwise. Avoid broad keywords like robotics or AI alone when they are likely to pull robot makers, product startups, hardware vendors, or editorial brands. Do not broaden with AI solutions, manufacturing alone, generic software labels, or looser employee ranges when those changes risk generic AI or software-company results. Prefer service-intent keywords such as project-based software integrator, system integrator, implementation, engineering services, software services, machine vision, industrial inspection, image processing, embedded development, automation projects, and solution provider. High-signal keyword families include AOI, automated optical inspection, inline inspection, optical quality control, industrial image processing, embedded computer vision, feasibility study, camera calibration, lighting optimization, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering. Split broad themes into neighboring variants instead of one generic umbrella filter. Return strict JSON: {"filters":[{"name":"...","persona":"...","industries":[...],"keywords":[...],"locations":[...],"employeeRanges":[...],"notes":"..."}]}. Keep industries and keywords practical for Apollo.`
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Apollo Filter Strategy Agent. Follow any supplied main context strictly. Generate 4 to 6 Apollo company search filters focused on Germany first. Start unbiased by identifying which firm archetypes are most likely to contain service-led delivery companies for the requested categories. Focus strongest on software integrators, automation engineering firms, embedded/industrial software service providers, industrial customers with own engineering, and machine builders with plausible need. Keep wording concrete and close to the strongest service-led archetypes because Apollo is highly sensitive to small wording changes. Treat exclusions as equally important as inclusion terms. Avoid magazines, publishers, media brands, event businesses, associations, universities, research institutes, VCs, banks, insurers, broad consultancies, China, Saudi Arabia, and competing AI platform vendors. Explicitly avoid hardware vendors, OEMs, publishers, media brands, and pure consultancies unless operator context says otherwise. Avoid broad keywords like robotics or AI alone when they are likely to pull robot makers, product startups, hardware vendors, or editorial brands. Do not broaden with AI solutions, manufacturing alone, generic software labels, or looser employee ranges when those changes risk generic AI or software-company results. Prefer service-intent keywords such as project-based software integrator, system integrator, implementation, engineering services, software services, machine vision, industrial inspection, image processing, embedded development, automation projects, and solution provider. High-signal keyword families include AOI, automated optical inspection, inline inspection, optical quality control, industrial image processing, embedded computer vision, feasibility study, camera calibration, lighting optimization, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering. Split broad themes into neighboring variants instead of one generic umbrella filter. Return strict JSON: {"filters":[{"name":"...","persona":"...","industries":[...],"keywords":[...],"locations":[...],"employeeRanges":[...],"notes":"..."}]}. Keep industries and keywords practical for Apollo.`
         };
       case "qualification":
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Follow any supplied main context and prequalification context strictly. Analyze completely unbiased before choosing any positive category. First determine the firm archetype: implementation-led integrator, industrial end customer, camera/imaging manufacturer, machine builder/OEM, software platform, or clearly irrelevant profile. Classify companies into exactly one category: integrator_vision_industrial_ai, integrator_general_ai, integrator_relevant_focus, industrial_end_customer_scaled, camera_manufacturer_partner, machine_builder_ai_enablement, software_platform_embedding, irrelevant, other. Do not infer delivery ownership or fit from the Apollo filter name, source filter, or a vague company name alone. Positive archetypes look like OCTUM, VEO Automation, Gestalt Automation, and Lachmann & Rink: project-led, implementation-heavy, industrially grounded, and close to customer operations. High-signal phrases include AOI, automated optical inspection, inline inspection, optical quality control, industrial image processing, machine vision integration, embedded computer vision, feasibility study, camera calibration, lighting optimization, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering. If the supplied company description is missing, generic, or placeholder-like, return other or irrelevant unless there is strong explicit evidence for a positive category. Treat magazines, publishers, media portals, editorial brands, event businesses, associations, universities, research institutes, VCs, banks, insurers, recruiters, generic consultancies without implementation ownership, and direct AI-platform competitors as irrelevant. Do not classify robot manufacturers, product-led robotics brands, OEMs, or hardware vendors as integrators unless clear implementation services are visible. Downgrade companies that mainly sell their own software platform, robot product, or hardware portfolio without visible recurring implementation ownership. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or internal delivery rather than a competing AI software stack. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Pre-Qualification Agent. Follow any supplied main context and prequalification context strictly. Analyze completely unbiased before choosing any positive category. First determine the firm archetype: implementation-led integrator, industrial end customer, camera/imaging manufacturer, machine builder/OEM, software platform, consulting firm, freelancer, or clearly irrelevant profile. Classify companies into exactly one category: integrator_vision_industrial_ai, integrator_vision_ai_consulting, integrator_vision_ai_freelancer, integrator_general_ai, integrator_relevant_focus, industrial_end_customer_scaled, camera_manufacturer_partner, machine_builder_ai_enablement, software_platform_embedding, irrelevant, other. Do not infer delivery ownership or fit from the Apollo filter name, source filter, or a vague company name alone. Read supplied website evidence as aggregate business-model context that may come from homepage, about, products, services, documentation, integrations, use cases, references, or application pages. Positive archetypes are project-led, implementation-heavy, industrially grounded, close to customer operations, or expose a real embeddable workflow product surface. Consulting firms are only positive when hands-on machine vision, AOI, embedded vision, or industrial AI implementation for clients is explicit. Freelancer profiles are only positive when the website clearly describes an individual or solo specialist offering the same hands-on implementation work. High-signal phrases include AOI, automated optical inspection, inline inspection, optical quality control, industrial image processing, machine vision integration, embedded computer vision, feasibility study, camera calibration, lighting optimization, MES integration, SCADA integration, PLC software integration, OT integration, smart factory software, and industrial software engineering. Companies that build their own quality-control systems, inspection machines, AOI systems, inspection stations, or special-purpose industrial inspection equipment should usually be machine_builder_ai_enablement rather than an integrator unless customer-specific implementation services clearly dominate. If the company mainly develops, manufactures, or sells its own scanners, scan bars, cameras, devices, machines, or branded industrial systems, prefer machine_builder_ai_enablement or camera_manufacturer_partner over any integrator category. Productized Vision-AI software vendors can also fit machine_builder_ai_enablement when they ship their own computer-vision or clinical-imaging application into customer workflows and could benefit from better model quality or deployment results. Require a real own product and explicit vision, image-analysis, diagnostic, inspection, or embedded-workflow relevance, not generic software. If the main fit is that ONE WARE would be embedded into the company's own shipped software product or diagnostic application, prefer machine_builder_ai_enablement over any integrator category. Do not mark medical-imaging, radiology, or clinical workflow AI products as irrelevant just because they are in healthcare; if they ship a concrete diagnostic application or plugin integrated into existing systems, they are valid positives. Do not mistake investor-relations, awards, news, or magazine navigation on a product site for the core business model; prioritize product, workflow, integration, and customer-value statements. If the company mainly sells a route-planning, telematics, logistics, or municipal operations platform, do not force it into integrator_general_ai just because AI or integration is mentioned. Municipal operations software for waste collection, winter service, street cleaning, telematics, or route planning should usually stay other unless customers build their own AI/apps/models on top of it or there is a clear open embedding surface. Use integrator_general_ai only when repeated customer delivery ownership for AI, automation, data, or software projects is explicit; if project delivery exists but the company is mostly defined by a vertical focus rather than broad AI delivery, prefer integrator_relevant_focus. Do not upgrade a generic engineering or product-development company into an integrator category unless software, automation, instrumentation, data, AI, or industrial system implementation ownership is explicit. Large IT service providers, digital engineering firms, and enterprise consultancies can still be integrator_general_ai when implementation ownership, systems integration, software delivery, or managed transformation execution is explicit rather than purely advisory. Internal or captive IT organizations can still fit integrator_general_ai when they repeatedly build, integrate, and operate MES, EDI, BI, process, or enterprise software systems for a larger industrial group. Do not classify an internal software and integration organization as industrial_end_customer_scaled when its primary role is building and integrating software systems for the group rather than operating the physical production itself. If the company mainly sells integration software, orchestration software, measurement automation software, test-and-measurement software, lab or factory connectivity software, or an API-first/plugin-first/driver-based platform that other teams embed into workflows, prefer software_platform_embedding over industrial_end_customer_scaled. If product documentation, app management, app stores, module catalogs, driver libraries, installation guides, or get-started surfaces dominate the evidence, prefer software_platform_embedding over integrator_general_ai even when some services or rollout help are mentioned. A platform vendor does not become an integrator merely because its product helps customers deploy, connect, or roll out systems. If customers can build, configure, distribute, train, or run their own apps, AI workflows, models, or extensions on top of the company's platform, prefer software_platform_embedding. AI operating systems, orchestration layers, vendor-neutral AI marketplaces, driver ecosystems, instrument-module environments, and multi-solution integration platforms usually fit software_platform_embedding when third-party solutions are accessed through one installation, API, plugin, driver, extension, or integration layer. AI consultancies or data-science firms belong in integrator_general_ai when they clearly deliver client implementations, production systems, or applied ML projects rather than only training or strategy. If a company acts as a system integrator in a concrete industrial or regulated vertical, prefer integrator_relevant_focus when the vertical delivery ownership is explicit. Specialist embedded-computing, industrial-electronics, ASIC, FPGA, SoC, or instrumentation consultancies can fit integrator_relevant_focus when they build customer-specific technical solutions or integrated systems, but not when they merely sell catalog hardware or generic engineering capacity. Embedded-computing or rugged-platform suppliers with explicit custom solutions, system-integration services, and customer-specific integrated-system delivery can fit integrator_relevant_focus when solution engineering is more central than catalog product resale. If the supplied company description or website crawl is noisy, ignore cookie banners, legal pages, newsletter prompts, career pages, and navigation fragments; focus on business-model evidence. If the supplied company description is missing, generic, or placeholder-like, return other or irrelevant unless there is strong explicit evidence for a positive category. Treat magazines, publishers, media portals, editorial brands, event businesses, associations, universities, research institutes, VCs, banks, insurers, recruiters, generic consultancies without implementation ownership, and direct end-to-end model-development platforms with no partner path as irrelevant. Publishers, trade-media brands, magazines, and editorial businesses stay other or irrelevant even when their content is about automation, production, or industrial technology. Do not classify robot manufacturers, product-led robotics brands, OEMs, or hardware vendors as integrators unless clear implementation services are visible. Downgrade companies that mainly sell their own software platform, robot product, or hardware portfolio without visible recurring implementation ownership, except where the platform or shipped product itself is the relevant partner or product-AI target. Focus on delivery ownership, geography fit, repeated project patterns, and whether the company sells services or a credible embeddable or shipped product. Return strict JSON with category, relevanceScore from 0 to 100, and rationale.`
         };
       case "research": {
         const tools = await this.buildResearchTools();
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Deep Research Agent. Use web grounding to verify the company, identify its business model, target customers, recent signals, likely Vision-AI or process-automation relevance, and clear outreach hooks. Always adapt your reasoning to the supplied main context and category-specific execution context. Estimate whether likely target contacts are German-speaking. If yes, produce outreach in German, otherwise in English. Estimate rankings on a 0-10 scale for customer, serviceProvider, and partner. Estimate businessPotentialEUR as a euro value. Return targetIndustry and productsOffered. Use the provided segment template as the base. Personalize only if there is a clear factual hook. Do not rewrite the outreach from scratch. Make the output steerable by preserving the template direction while sharpening the most relevant business pain. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.` ,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Deep Research Agent. Use web grounding to verify the company, identify its business model, target customers, recent signals, likely Vision-AI or process-automation relevance, and clear outreach hooks. Always adapt your reasoning to the supplied main context and category-specific execution context. Estimate whether likely target contacts are German-speaking. If yes, produce outreach in German, otherwise in English. For LinkedIn, always produce two separate texts: linkedInConnectionRequest as a short connection request with a hard maximum of 200 characters, and linkedInMessage as the longer follow-up message after connecting. For German outreach, always start emailBody naturally with "Hallo [Name]," and never with "Hello". Keep German phrasing natural and direct, avoid long list-like opener sentences, avoid vague department enumerations that sound AI-written, and do not use dash punctuation such as "–" or "—" in outreach copy. Prefer commas or full sentences instead. Estimate rankings on a 0-10 scale for customer, serviceProvider, and partner. Estimate businessPotentialEUR as a euro value. Return targetIndustry and productsOffered. Use the provided segment template as the base. Personalize only if there is a clear factual hook. Do not rewrite the outreach from scratch. Make the output steerable by preserving the template direction while sharpening the most relevant business pain. Keep linkedInConnectionRequest shorter, simpler, and curiosity-driven than linkedInMessage. For service-provider or partner-leaning companies, keep phoneScript collaboration-first: first ask whether they already implement Vision AI or have relevant experience, then position ONE WARE as a software layer for faster production-ready models, and finally test whether a delivery partnership or joint customer work could make sense. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInConnectionRequest, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.` ,
+          tools
+        };
+      }
+      case "contacts": {
+        const tools = await this.buildResearchTools();
+        return {
+          kind: "prompt",
+          model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Discovery Agent. Find real people for outreach at the supplied company. Prioritize these roles: CEO, CTO, COO, Innovation Manager, Partner Manager, Technology Manager, Operations Manager, Managing Director. Search in this order: official company website first, then LinkedIn company/people evidence, then normal web search evidence for named people and LinkedIn profile URLs. Prefer contacts with clear delivery, technical, operations, innovation, or partner responsibility. Use only evidence-backed people. Never invent names, job titles, email addresses, phone numbers, or LinkedIn URLs. Always include linkedinUrl when a credible LinkedIn profile URL is available. If you have no direct LinkedIn URL for a person, exclude that person unless the company website clearly names them and no better option exists. Return strict JSON: {"contacts":[{"firstName":"...","lastName":"...","fullName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","sourceUrl":"...","label":"website_named_contact|linkedin_profile|web_search_contact"}]}. Keep up to 8 contacts, ranked best first.`,
+          tools
+        };
+      }
+      case "contact_queries": {
+        const tools = await this.buildResearchTools();
+        return {
+          kind: "prompt",
+          model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Search Planner. Build the most effective web-search queries to find outreach-relevant people for the supplied company. Think LLM-first: infer adjacent role wording, likely legal entity names, German and English title variants, company aliases from the evidence, and likely LinkedIn company slug hints. Prioritize these role families: CEO, CTO, COO, managing director, founder, innovation, operations, partner, technology, engineering, product, and business development leadership. Search in this order: named contacts from the official website, LinkedIn company page / people view, direct LinkedIn profile searches, then broader web searches for names plus company and role. Do not invent any person names. Return only high-yield queries for normal search engines and Bing grounding. Return strict JSON: {"queries":["...","..."]}. Keep 6 to 10 queries, ranked best first.`,
           tools
         };
       }

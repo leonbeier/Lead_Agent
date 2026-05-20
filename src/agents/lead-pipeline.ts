@@ -1,4 +1,8 @@
-import { buildSuggestedFilters } from "../filters";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+import { env } from "../config";
+import { buildSuggestedFilters, extractExplicitMarketLocality, isGermanyFocusedMarket } from "../filters";
 import { ApolloClient } from "../clients/apollo";
 import { AzureOpenAIClient } from "../clients/azure-openai";
 import { HubSpotClient } from "../clients/hubspot";
@@ -14,15 +18,19 @@ import {
   LeadLearningData,
   LeadJobRequest,
   LeadJobResult,
+  LeadRunFunnel,
   LeadRunProgress,
   PreCategorizedCompany,
   PrequalificationConfig,
   PublicContactCandidate,
+  ResearchBrief,
   SearchHistoryEntry
 } from "../types";
 
 const RELEVANT_CATEGORIES: LeadCategory[] = [
   "integrator_vision_industrial_ai",
+  "integrator_vision_ai_consulting",
+  "integrator_vision_ai_freelancer",
   "integrator_general_ai",
   "integrator_relevant_focus",
   "industrial_end_customer_scaled",
@@ -33,6 +41,8 @@ const RELEVANT_CATEGORIES: LeadCategory[] = [
 
 const FILTER_CATEGORY_FALLBACKS: Array<{ match: RegExp; categories: LeadCategory[] }> = [
   { match: /vision\s*\/\s*industrial ai integrators/i, categories: ["integrator_vision_industrial_ai"] },
+  { match: /vision ai consulting specialists|vision ai consulting/i, categories: ["integrator_vision_ai_consulting"] },
+  { match: /freelance specialists|freelancer/i, categories: ["integrator_vision_ai_freelancer"] },
   { match: /general ai integrators/i, categories: ["integrator_general_ai"] },
   { match: /relevant-vertical integrators/i, categories: ["integrator_relevant_focus"] },
   { match: /scaled industrial end customers/i, categories: ["industrial_end_customer_scaled"] },
@@ -46,23 +56,38 @@ const DEFAULT_EARLY_STOP_REVIEW_COUNT = 30;
 const MIN_EARLY_STOP_REVIEW_COUNT = 5;
 const MAX_EARLY_STOP_REVIEW_COUNT = 30;
 const DEFAULT_EARLY_STOP_THRESHOLD = 0.15;
-const AZURE_WORKER_CONCURRENCY = 6;
+const AZURE_WORKER_CONCURRENCY = env.AZURE_AI_CLASSIFICATION_CONCURRENCY;
 const EXPANSION_BATCH_SIZE = 50;
-const CREDITLESS_EXPANSION_BATCH_SIZE = 12;
+const CREDITLESS_EXPANSION_BATCH_SIZE = 20;
 const MAX_FILTER_REVISIONS = 1;
 const MIN_COMPANIES_REVIEWED_BEFORE_FILTER_GIVE_UP = 40;
-const CONTACT_DISCOVERY_CONCURRENCY = 2;
-const PARALLEL_FILTER_PROBE_COUNT = 3;
-const FILTERS_TO_EXPAND_AFTER_PROBE = 2;
+const CONTACT_DISCOVERY_CONCURRENCY = env.CONTACT_DISCOVERY_CONCURRENCY;
+const PUBLIC_CONTACT_DISCOVERY_TIMEOUT_MS = 15_000;
+const PARALLEL_FILTER_PROBE_COUNT = 5;
+const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
+const MAX_FILTER_REPLENISH_ROUNDS = 12;
+const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
+const FALLBACK_REPLENISHMENT_LOCATIONS = ["Berlin", "Munich", "Hamburg", "Cologne", "Stuttgart", "DACH", "Austria", "Switzerland"];
+const FALLBACK_REPLENISHMENT_KEYWORDS = ["computer vision", "machine vision", "bildverarbeitung", "industrial ai", "inspection automation", "vision systems"];
+const WEB_SEARCH_SAMPLE_MULTIPLIER = 10;
+const WEB_SEARCH_MIN_SAMPLE_SIZE = 20;
+const WEB_SEARCH_MAX_PAGES = 5;
+const WEB_SEARCH_MAX_RAW_PROBE_COUNT = 20;
+const WEB_SEARCH_TOP_UP_SAMPLE_MULTIPLIER = 8;
+const WEB_SEARCH_TOP_UP_MIN_SAMPLE_SIZE = 12;
+const WEB_SEARCH_TOP_UP_MAX_PAGES = 3;
 
 type ProbedFilterCandidate = {
   filter: ApolloOrganizationFilter;
   activeCategory: LeadCategory;
   reviewedCompanies: PreCategorizedCompany[];
   categorizedInitialSample: PreCategorizedCompany[];
+  rawSampleCount: number;
+  eligibleSampleCount: number;
   initialEvaluation: FilterEvaluation;
   initialRelevant: PreCategorizedCompany[];
   useWebSearchForExpansion: boolean;
+  expansionSearchMode: import("../types").CompanySearchMode;
   apolloExpansionPage: number;
 };
 
@@ -75,6 +100,7 @@ type ExpandedFilterOutcome = {
 
 type LeadPipelineRunOptions = {
   onProgress?: (progress: LeadRunProgress) => void;
+  shouldStop?: () => boolean;
 };
 
 const EUROPEAN_COUNTRIES = new Set([
@@ -137,6 +163,20 @@ const EUROPEAN_TLDS = [
   ".eu"
 ];
 
+const COMMON_COMPOUND_TLDS = new Set([
+  "co.uk",
+  "com.au",
+  "com.br",
+  "com.mx",
+  "co.jp",
+  "co.kr",
+  "co.nz",
+  "com.sg",
+  "com.cn",
+  "com.tw",
+  "com.hk"
+]);
+
 export class LeadPipelineAgent {
   private readonly apolloClient = new ApolloClient();
 
@@ -147,6 +187,8 @@ export class LeadPipelineAgent {
   private readonly controlPlaneStore = new ControlPlaneStore();
 
   private companyScreeningDatabase: CompanyScreeningDatabase = { records: [] };
+
+  private discoveryCheckpointContext?: { runId: string; nextSequence: number };
 
   async run(request: LeadJobRequest, options?: LeadPipelineRunOptions): Promise<LeadJobResult> {
     const emitProgress = (progress: Omit<LeadRunProgress, "updatedAt">) => {
@@ -160,7 +202,14 @@ export class LeadPipelineAgent {
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
     const disableHubSpotDeduplication = request.disableHubSpotDeduplication ?? false;
     const companySearchMode = request.companySearchMode ?? (request.creditLessMode ? "internet_research" : "apollo_search");
-    const useWebSearchCompanyDiscovery = companySearchMode === "internet_research";
+    this.apolloClient.setExaApiKey(request.exaApiKey);
+    this.apolloClient.setDiffbotToken(request.diffbotToken);
+    const deadlineAt = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS);
+    const wasStopped = () => Boolean(options?.shouldStop?.());
+    const hasTimedOut = () => Date.now() >= deadlineAt;
+    const shouldFinishEarly = () => wasStopped() || hasTimedOut();
+    this.discoveryCheckpointContext = { runId: this.createDiscoveryCheckpointRunId(), nextSequence: 0 };
+    const useWebSearchCompanyDiscovery = companySearchMode !== "apollo_search";
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
     const mainContext = request.mainContext ?? request.agentContext;
     const learning = await this.controlPlaneStore.getLearning();
@@ -172,10 +221,29 @@ export class LeadPipelineAgent {
     const earlyStopThreshold = request.earlyStopThreshold ?? DEFAULT_EARLY_STOP_THRESHOLD;
     const earlyStopMinRelevantCount = Math.max(0, request.earlyStopMinRelevantCount ?? (earlyStopReviewCount >= 20 ? 2 : 1));
     const minimumCompaniesBeforeFilterGiveUp = Math.min(FULL_SAMPLE_SIZE, Math.max(earlyStopReviewCount, 20));
+    const openCrawlerTuning = request.openCrawlerTuning;
+    const webRawProbeCount = companySearchMode === "exa_search"
+      ? openCrawlerTuning?.probeCount ?? 20
+      : companySearchMode === "open_crawler_search" || companySearchMode === "diffbot_search"
+        ? openCrawlerTuning?.probeCount ?? 20
+        : Math.min(
+          WEB_SEARCH_MAX_RAW_PROBE_COUNT,
+          Math.max(WEB_SEARCH_MIN_SAMPLE_SIZE, request.targetLeadCount * WEB_SEARCH_SAMPLE_MULTIPLIER)
+        );
     const prequalification = request.prequalification ?? (request.prequalificationContext ? { mainContext: request.prequalificationContext } : undefined);
     this.companyScreeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
-    const suggestedFilters = this.orderFiltersByLearning(
-      await this.getSuggestedFilters(request.market, request.customGoal, mainContext, request.searchStrategyContext, targetCategories, dryRun, learning),
+    await this.preloadKnownHubSpotDomains(disableHubSpotDeduplication);
+    let suggestedFilters = this.orderFiltersByLearning(
+      await this.getSuggestedFilters(
+        request.market,
+        request.customGoal,
+        mainContext,
+        request.searchStrategyContext,
+        targetCategories,
+        dryRun,
+        learning,
+        companySearchMode
+      ),
       learning,
       request.market,
       request.customGoal
@@ -192,14 +260,189 @@ export class LeadPipelineAgent {
       foundCandidates: 0,
       targetLeadCount: request.targetLeadCount
     });
+    const incrementalHubspotSync = {
+      attempted: false,
+      mode: (syncToHubSpot ? "live" : "dry-run") as "live" | "dry-run",
+      candidateCount: 0,
+      syncedCount: 0,
+      companySyncedCount: 0,
+      contactSyncedCount: 0,
+      errors: [] as string[]
+    };
+    const targetSynchronizedCompanies = syncToHubSpot && !dryRun;
+    const qualificationPoolTarget = targetSynchronizedCompanies
+      ? Math.min(1000, Math.max(request.targetLeadCount * 4, request.targetLeadCount + targetCategories.length * 3))
+      : request.targetLeadCount;
     const evaluations: FilterEvaluation[] = [];
     const shortlistedCompanies: PreCategorizedCompany[] = [];
     const shortlistedKeys = new Set<string>();
     const searchHistory: SearchHistoryEntry[] = [];
-    const categoryQuotas = this.buildCategoryQuotas(request.targetLeadCount, targetCategories);
+    const categoryQuotas = this.buildCategoryQuotas(qualificationPoolTarget, targetCategories);
     const categoryCounts = new Map<LeadCategory, number>(targetCategories.map((category) => [category, 0]));
     let filtersStoppedEarly = 0;
     let companiesSkippedAfterEarlyStop = 0;
+    let completionReason: string | undefined;
+    const hubSpotDedupQualifiedKeys = new Set<string>();
+    const researchBriefsByCompany = new Map<string, ResearchBrief>();
+    const contactCandidatesByCompany = new Map<string, PublicContactCandidate[]>();
+    const flushedQualifiedCompanyKeys = new Set<string>();
+    const getCompletionCount = () => targetSynchronizedCompanies ? incrementalHubspotSync.companySyncedCount : shortlistedCompanies.length;
+    const hasReachedRequestedTarget = () => getCompletionCount() >= request.targetLeadCount;
+
+    const finalizeInterruptedRun = async (shortlisted: PreCategorizedCompany[], errorMessage: string) => {
+      await flushQualifiedCompanies(shortlisted, shortlisted.length);
+
+      return this.finalizeLeadRun(
+        request,
+        suggestedFilters,
+        evaluations,
+        shortlisted,
+        collectPreparedResearchBriefs(shortlisted),
+        searchHistory,
+        {
+          ...incrementalHubspotSync,
+          errors: [...incrementalHubspotSync.errors, errorMessage]
+        },
+        filtersStoppedEarly,
+        companiesSkippedAfterEarlyStop,
+        this.buildFunnel(
+          companySearchMode,
+          Math.max(hubSpotDedupQualifiedKeys.size, shortlisted.length),
+          shortlisted.length,
+          incrementalHubspotSync.companySyncedCount
+        ),
+        hasTimedOut(),
+        wasStopped(),
+        errorMessage,
+        contactCandidatesByCompany
+      );
+    };
+
+    this.apolloClient.resetDiscoveryMetrics(companySearchMode);
+
+    const collectPreparedResearchBriefs = (companies: PreCategorizedCompany[]): ResearchBrief[] =>
+      companies
+        .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
+        .filter((brief): brief is ResearchBrief => Boolean(brief));
+
+    const flushQualifiedCompanies = async (companies: PreCategorizedCompany[], shortlistCount: number) => {
+      const pendingCompanies = companies.filter((company) => !flushedQualifiedCompanyKeys.has(this.getCompanyKey(company)));
+      if (pendingCompanies.length === 0) {
+        return;
+      }
+
+      const emitSyncPreparationProgress = (progressValue: number, detail: string) => {
+        const completionCount = getCompletionCount();
+        emitProgress({
+          stage: "syncing_hubspot",
+          stageLabel: "HubSpot wird fortlaufend aktualisiert",
+          progressValue,
+          progressMax: 100,
+          progressDescription: targetSynchronizedCompanies
+            ? `${completionCount}/${request.targetLeadCount} Firmen nach HubSpot synchronisiert, ${shortlistCount} qualifiziert`
+            : `${shortlistCount} qualifizierte Firmen bisher gesammelt`,
+          detail,
+          processedFilters: evaluations.length,
+          totalFilters: suggestedFilters.length,
+          foundCandidates: shortlistCount,
+          targetLeadCount: request.targetLeadCount,
+          funnel: this.buildFunnel(companySearchMode, hubSpotDedupQualifiedKeys.size, shortlistCount, incrementalHubspotSync.companySyncedCount)
+        });
+      };
+
+      emitSyncPreparationProgress(
+        Math.min(92, Math.max(35, Math.round((getCompletionCount() / Math.max(request.targetLeadCount, 1)) * 100))),
+        targetSynchronizedCompanies
+          ? `${pendingCompanies.length} weitere qualifizierte Firmen werden jetzt fuer den HubSpot-Sync vorbereitet.`
+          : `${pendingCompanies.length} neue Firmen werden direkt recherchiert, mit Kontakten angereichert und nach HubSpot geschrieben.`
+      );
+
+      emitSyncPreparationProgress(40, `Research-Briefs werden fuer ${pendingCompanies.length} Firmen erstellt.`);
+
+      const preparedResearchEntries = dryRun
+        ? []
+        : await this.mapWithConcurrency(
+            pendingCompanies.map((company) => async () => ({
+              companyKey: this.getCompanyKey(company),
+              brief: await this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
+                includeWebResearch: request.runDeepResearch !== false
+              })
+            })),
+            AZURE_WORKER_CONCURRENCY
+          );
+
+      for (const entry of preparedResearchEntries) {
+        researchBriefsByCompany.set(entry.companyKey, entry.brief);
+      }
+
+      const syncEligibleCompanies = pendingCompanies;
+
+      emitSyncPreparationProgress(48, `Oeffentliche Kontakte werden fuer ${syncEligibleCompanies.length} Firmen recherchiert.`);
+
+      const publicContacts = await this.collectPublicContacts(syncEligibleCompanies, dryRun);
+
+      const pendingResearchBriefs = syncEligibleCompanies
+        .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
+        .filter((brief): brief is ResearchBrief => Boolean(brief));
+      const companiesNeedingApolloContacts = syncEligibleCompanies.filter((company) => {
+        const existingContacts = publicContacts.get(this.getCompanyKey(company)) ?? [];
+        return !this.hasNonGenericReachableContact(existingContacts);
+      });
+
+      emitSyncPreparationProgress(56, `Zusatzrecherche fuer ${companiesNeedingApolloContacts.length} Firmen ohne brauchbare Direktkontakte wird vorbereitet.`);
+
+      const apolloContacts = await this.collectApolloContacts(
+        companiesNeedingApolloContacts,
+        pendingResearchBriefs,
+        dryRun,
+        mainContext
+      );
+
+      if (shouldFinishEarly()) {
+        return;
+      }
+
+      const mergedContacts = this.mergeContactCandidates(apolloContacts, publicContacts);
+
+      for (const company of syncEligibleCompanies) {
+        const companyKey = this.getCompanyKey(company);
+        contactCandidatesByCompany.set(companyKey, mergedContacts.get(companyKey) ?? []);
+      }
+
+      const syncResult = await this.hubspotClient.syncQualifiedCompanies(
+        syncEligibleCompanies,
+        syncEligibleCompanies
+          .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
+          .filter((brief): brief is ResearchBrief => Boolean(brief)),
+        mergedContacts,
+        !syncToHubSpot,
+        ({ completedCompanies, totalCompanies, companyName }) => {
+          const completionCount = incrementalHubspotSync.companySyncedCount + completedCompanies;
+          emitSyncPreparationProgress(
+            Math.min(92, 60 + Math.round((completedCompanies / Math.max(totalCompanies, 1)) * 32)),
+            `${companyName} wird nach HubSpot geschrieben. ${completedCompanies}/${totalCompanies} Firmen in diesem Sync-Block verarbeitet.`
+          );
+          if (!targetSynchronizedCompanies) {
+            return;
+          }
+          emitSyncPreparationProgress(
+            Math.min(92, 60 + Math.round((completedCompanies / Math.max(totalCompanies, 1)) * 32)),
+            `${companyName} wird nach HubSpot geschrieben. Gesamtstand ${completionCount}/${request.targetLeadCount} Firmen synchronisiert.`
+          );
+        }
+      );
+
+      incrementalHubspotSync.attempted = incrementalHubspotSync.attempted || syncResult.attempted;
+      incrementalHubspotSync.candidateCount += syncResult.candidateCount;
+      incrementalHubspotSync.syncedCount += syncResult.syncedCount;
+      incrementalHubspotSync.companySyncedCount += syncResult.companySyncedCount;
+      incrementalHubspotSync.contactSyncedCount += syncResult.contactSyncedCount;
+      incrementalHubspotSync.errors.push(...syncResult.errors);
+
+      for (const companyKey of syncResult.successfulCompanyKeys) {
+        flushedQualifiedCompanyKeys.add(companyKey);
+      }
+    };
 
     const emitFilterProgress = (detail: string) => {
       const processedFilters = evaluations.length;
@@ -214,63 +457,164 @@ export class LeadPipelineAgent {
         processedFilters,
         totalFilters,
         foundCandidates: shortlistedCompanies.length,
-        targetLeadCount: request.targetLeadCount
+        targetLeadCount: request.targetLeadCount,
+        funnel: this.buildFunnel(
+          companySearchMode,
+          hubSpotDedupQualifiedKeys.size,
+          shortlistedCompanies.length,
+          incrementalHubspotSync.companySyncedCount
+        )
       });
     };
 
-    for (const activeCategory of targetCategories) {
-      const categoryTarget = categoryQuotas[activeCategory] ?? 0;
-      if (categoryTarget <= 0) {
-        continue;
-      }
+    const categoryStates = targetCategories.map((category) => ({
+      category,
+      categoryTarget: categoryQuotas[category] ?? 0,
+      filters: suggestedFilters.filter((filter) => this.getPrimaryTargetCategoryForFilter(filter, targetCategories) === category),
+      nextFilterIndex: 0
+    }));
+    let filterReplenishmentRounds = 0;
 
-      const categoryFilters = suggestedFilters.filter((filter) => this.filterSupportsTargetCategories(filter, [activeCategory]));
-      for (let filterIndex = 0; filterIndex < categoryFilters.length; filterIndex += PARALLEL_FILTER_PROBE_COUNT) {
-        if ((categoryCounts.get(activeCategory) ?? 0) >= categoryTarget || shortlistedCompanies.length >= request.targetLeadCount) {
+    while (!hasReachedRequestedTarget() && !shouldFinishEarly()) {
+      const remainingTargetCount = Math.max(1, request.targetLeadCount - getCompletionCount());
+      const parallelFilterProbeCount = this.getParallelFilterProbeCount(companySearchMode, remainingTargetCount);
+      const filtersToExpandAfterProbe = this.getFiltersToExpandAfterProbe(companySearchMode, remainingTargetCount);
+      const nextCategoryState = categoryStates
+        .filter((state) => state.categoryTarget > 0)
+        .filter((state) => (categoryCounts.get(state.category) ?? 0) < state.categoryTarget)
+        .filter((state) => state.nextFilterIndex < state.filters.length)
+        .sort((left, right) => {
+          const leftRemaining = left.categoryTarget - (categoryCounts.get(left.category) ?? 0);
+          const rightRemaining = right.categoryTarget - (categoryCounts.get(right.category) ?? 0);
+          if (rightRemaining !== leftRemaining) {
+            return rightRemaining - leftRemaining;
+          }
+
+          return left.nextFilterIndex - right.nextFilterIndex;
+        })[0];
+
+      if (!nextCategoryState) {
+        if (filterReplenishmentRounds >= MAX_FILTER_REPLENISH_ROUNDS) {
+          completionReason = `Die Suche endete, weil nach ${suggestedFilters.length} getesteten Filtern das Limit fuer die Filter-Nachgenerierung erreicht wurde.`;
           break;
         }
 
-        const probeBatch = categoryFilters.slice(filterIndex, filterIndex + PARALLEL_FILTER_PROBE_COUNT);
-        const batchFilterNames = probeBatch.map((filter) => `"${filter.name}"`).join(", ");
-        emitFilterProgress(
-          `Starte Parallel-Probe fuer ${probeBatch.length} Filter in ${this.describeLeadCategory(activeCategory)}: ${batchFilterNames}.`
+        const additionalFilters = await this.replenishExhaustedFilters(
+          suggestedFilters,
+          evaluations,
+          request.market,
+          request.customGoal,
+          mainContext,
+          request.searchStrategyContext,
+          targetCategories,
+          dryRun,
+          learning
         );
 
-        const probedCandidates = await this.mapWithConcurrency<ProbedFilterCandidate>(
-          probeBatch.map((filter) => () => this.probeFilterCandidate(
+        const replenishedFilters = additionalFilters.length > 0
+          ? additionalFilters
+          : this.buildFallbackReplenishmentFilters(suggestedFilters, evaluations, targetCategories);
+
+        if (replenishedFilters.length === 0) {
+          completionReason = `Die Suche endete, weil alle ${suggestedFilters.length} Filter getestet wurden und keine neuen Filter nachgeneriert werden konnten.`;
+          break;
+        }
+
+        filterReplenishmentRounds += 1;
+        suggestedFilters = [...suggestedFilters, ...replenishedFilters];
+        for (const state of categoryStates) {
+          state.filters.push(
+            ...replenishedFilters.filter((filter) => this.getPrimaryTargetCategoryForFilter(filter, targetCategories) === state.category)
+          );
+        }
+
+        emitFilterProgress(
+          `${replenishedFilters.length} neue Filter wurden nachgeneriert, weil die bisherige Liste ausgeschoepft war.`
+        );
+        continue;
+      }
+
+      const scheduledBatch = {
+        activeCategory: nextCategoryState.category,
+        categoryTarget: nextCategoryState.categoryTarget,
+        probeBatch: nextCategoryState.filters.slice(nextCategoryState.nextFilterIndex, nextCategoryState.nextFilterIndex + parallelFilterProbeCount)
+      };
+      nextCategoryState.nextFilterIndex += scheduledBatch.probeBatch.length;
+
+      const batchFilterNames = scheduledBatch.probeBatch.map((filter) => `"${filter.name}"`).join(", ");
+      emitFilterProgress(
+        `Starte Parallel-Probe fuer ${scheduledBatch.probeBatch.length} Filter in ${this.describeLeadCategory(scheduledBatch.activeCategory)}: ${batchFilterNames}.`
+      );
+
+      const probedResults = await this.mapWithConcurrency(
+        scheduledBatch.probeBatch.map((filter) => async () => ({
+          activeCategory: scheduledBatch.activeCategory,
+          candidate: await this.probeFilterCandidate(
             filter,
-            activeCategory,
+            scheduledBatch.activeCategory,
             dryRun,
+            syncToHubSpot,
             mainContext,
             prequalification,
             targetCategories,
             learning,
             request.market,
+            webRawProbeCount,
             earlyStopReviewCount,
             earlyStopThreshold,
+            companySearchMode,
             useWebSearchCompanyDiscovery,
             disableHubSpotDeduplication,
+            openCrawlerTuning,
             emitFilterProgress
-          )),
-          PARALLEL_FILTER_PROBE_COUNT
-        );
+          )
+        })),
+        parallelFilterProbeCount
+      );
 
-        const rankedCandidates: ProbedFilterCandidate[] = [...probedCandidates].sort((left: ProbedFilterCandidate, right: ProbedFilterCandidate) => {
-          if (right.initialEvaluation.relevanceRatio !== left.initialEvaluation.relevanceRatio) {
-            return right.initialEvaluation.relevanceRatio - left.initialEvaluation.relevanceRatio;
-          }
+      for (const activeCategory of targetCategories) {
+        if (shouldFinishEarly() && !hasReachedRequestedTarget()) {
+          return finalizeInterruptedRun(
+            shortlistedCompanies,
+            wasStopped()
+              ? "Run was stopped manually before qualification completed."
+              : "Run timed out before qualification completed."
+          );
+        }
 
-          return right.initialRelevant.length - left.initialRelevant.length;
-        });
+        const categoryTarget = categoryQuotas[activeCategory] ?? 0;
+        if (categoryTarget <= 0 || hasReachedRequestedTarget()) {
+          continue;
+        }
 
-        const filtersToExpand = rankedCandidates.slice(0, Math.min(FILTERS_TO_EXPAND_AFTER_PROBE, rankedCandidates.length));
+        const rankedCandidates: ProbedFilterCandidate[] = probedResults
+          .filter((result) => result.activeCategory === activeCategory)
+          .map((result) => result.candidate)
+          .sort((left, right) => {
+            if (right.initialEvaluation.relevanceRatio !== left.initialEvaluation.relevanceRatio) {
+              return right.initialEvaluation.relevanceRatio - left.initialEvaluation.relevanceRatio;
+            }
+
+            return right.initialRelevant.length - left.initialRelevant.length;
+          });
+
+        if (rankedCandidates.length === 0) {
+          continue;
+        }
+
+        const filtersToExpand = rankedCandidates.slice(0, Math.min(filtersToExpandAfterProbe, rankedCandidates.length));
         const discardedFilters = rankedCandidates.slice(filtersToExpand.length);
 
+        const newlyQualifiedFromProbe: PreCategorizedCompany[] = [];
+
         for (const candidate of rankedCandidates) {
+          const shortlistLengthBeforeProbe = shortlistedCompanies.length;
           const addedFromProbe = this.addUniqueCompanies(shortlistedCompanies, candidate.initialRelevant, shortlistedKeys);
           categoryCounts.set(activeCategory, (categoryCounts.get(activeCategory) ?? 0) + addedFromProbe);
+          newlyQualifiedFromProbe.push(...shortlistedCompanies.slice(shortlistLengthBeforeProbe));
           searchHistory.push(
             this.buildSearchHistoryEntry(
+              request.companySearchMode ?? "internet_research",
               candidate.filter.name,
               activeCategory,
               "probe_15",
@@ -279,14 +623,17 @@ export class LeadPipelineAgent {
               candidate.categorizedInitialSample,
               candidate.filter,
               targetCategories,
+              request.market,
               earlyStopThreshold
             )
           );
 
           emitFilterProgress(
-            `Probe fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}, Weiterlauf ab ${earlyStopMinRelevantCount} relevanten Treffern.`
+            `Probe fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.rawSampleCount}, nach Cache/Vorfilter ${candidate.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}, Weiterlauf ab ${earlyStopMinRelevantCount} relevanten Treffern.`
           );
         }
+
+        await flushQualifiedCompanies(newlyQualifiedFromProbe, shortlistedCompanies.length);
 
         for (const discardedCandidate of discardedFilters) {
           const discardedEvaluation: FilterEvaluation = {
@@ -305,10 +652,11 @@ export class LeadPipelineAgent {
         }
 
         for (const selectedCandidate of filtersToExpand) {
-          if ((categoryCounts.get(activeCategory) ?? 0) >= categoryTarget || shortlistedCompanies.length >= request.targetLeadCount) {
+          if ((categoryCounts.get(activeCategory) ?? 0) >= categoryTarget || hasReachedRequestedTarget()) {
             break;
           }
 
+          const shortlistLengthBeforeExpansion = shortlistedCompanies.length;
           const expansionOutcome = await this.expandProbedFilter(
             selectedCandidate,
             request,
@@ -327,7 +675,10 @@ export class LeadPipelineAgent {
             earlyStopThreshold,
             earlyStopMinRelevantCount,
             minimumCompaniesBeforeFilterGiveUp,
-            emitFilterProgress
+            openCrawlerTuning,
+            emitFilterProgress,
+            getCompletionCount,
+            hasReachedRequestedTarget
           );
 
           evaluations.push(expansionOutcome.evaluation);
@@ -335,174 +686,200 @@ export class LeadPipelineAgent {
             filtersStoppedEarly += 1;
             companiesSkippedAfterEarlyStop += expansionOutcome.skippedAfterEarlyStop;
           }
+
+          await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeExpansion), shortlistedCompanies.length);
         }
       }
 
-      if (shortlistedCompanies.length >= request.targetLeadCount) {
-        break;
+      if (this.shouldAbortLowYieldExaRun(companySearchMode, evaluations.length, shortlistedCompanies.length)) {
+        return finalizeInterruptedRun(
+          shortlistedCompanies,
+          "Run was stopped early because Exa discovery kept crawling results without producing qualified companies."
+        );
       }
     }
+
+    if (shouldFinishEarly() && !hasReachedRequestedTarget()) {
+      return finalizeInterruptedRun(
+        shortlistedCompanies,
+        wasStopped()
+          ? "Run was stopped manually before top-up started."
+          : "Run timed out before top-up started."
+      );
+    }
+
+    const topUpFilters = this.prioritizeFiltersForTopUp(
+      suggestedFilters,
+      evaluations,
+      learning,
+      request.market,
+      request.customGoal
+    );
+    const emitTopUpProgress = (detail: string, foundCandidates: number) => {
+      emitProgress({
+        stage: "topping_up_candidates",
+        stageLabel: "Zusatzkandidaten werden gesucht",
+        progressValue: 74,
+        progressMax: 100,
+        progressDescription: targetSynchronizedCompanies
+          ? `${incrementalHubspotSync.companySyncedCount}/${request.targetLeadCount} Firmen synchronisiert, ${foundCandidates} qualifiziert`
+          : `${foundCandidates}/${request.targetLeadCount} Firmen nach Top-up erreicht`,
+        detail,
+        processedFilters: evaluations.length,
+        totalFilters: suggestedFilters.length,
+        foundCandidates,
+        targetLeadCount: request.targetLeadCount,
+        funnel: this.buildFunnel(
+          companySearchMode,
+          hubSpotDedupQualifiedKeys.size,
+          foundCandidates,
+          incrementalHubspotSync.companySyncedCount
+        )
+      });
+    };
 
     const sortedShortlist = shortlistedCompanies
       .sort((left, right) => right.relevanceScore - left.relevanceScore)
       .filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index);
 
-    const toppedUpShortlist = sortedShortlist.length >= request.targetLeadCount
+    const toppedUpShortlist = hasReachedRequestedTarget()
       ? sortedShortlist
       : await this.topUpWithWebDiscovery(
           sortedShortlist,
           shortlistedKeys,
-          suggestedFilters,
+          topUpFilters,
+          evaluations,
           request,
           mainContext,
           prequalification,
           targetCategories,
-          learning
+          learning,
+          openCrawlerTuning,
+          emitTopUpProgress,
+          getCompletionCount,
+          hasReachedRequestedTarget,
+          shouldFinishEarly
         );
+    await flushQualifiedCompanies(toppedUpShortlist.slice(sortedShortlist.length), toppedUpShortlist.length);
+
+    if (!hasReachedRequestedTarget() && !shouldFinishEarly() && !completionReason) {
+      completionReason = `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} getesteten Filtern und ausgeschopfter Top-up-Suche mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`;
+    }
     const filteredShortlist = await this.excludeExistingHubSpotDomains(
       toppedUpShortlist,
       dryRun,
-      disableHubSpotDeduplication
+      disableHubSpotDeduplication,
+      syncToHubSpot
     );
-    const replenishedShortlist = filteredShortlist.length >= request.targetLeadCount
+    filteredShortlist.forEach((company) => hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company)));
+    const replenishedShortlist = hasReachedRequestedTarget()
       ? filteredShortlist
       : await this.topUpWithWebDiscovery(
           filteredShortlist,
           shortlistedKeys,
-          suggestedFilters,
+          topUpFilters,
+          evaluations,
           request,
           mainContext,
           prequalification,
           targetCategories,
-          learning
+          learning,
+          openCrawlerTuning,
+          emitTopUpProgress,
+          getCompletionCount,
+          hasReachedRequestedTarget,
+          shouldFinishEarly
         );
+    await flushQualifiedCompanies(replenishedShortlist.slice(filteredShortlist.length), replenishedShortlist.length);
     const finalShortlist = await this.excludeExistingHubSpotDomains(
       replenishedShortlist,
       dryRun,
-      disableHubSpotDeduplication
+      disableHubSpotDeduplication,
+      syncToHubSpot
     );
-    const uniqueShortlist = finalShortlist.slice(0, request.targetLeadCount);
+    finalShortlist.forEach((company) => hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company)));
+    const uniqueShortlist = targetSynchronizedCompanies ? finalShortlist : finalShortlist.slice(0, request.targetLeadCount);
+    const funnelBeforeSync = this.buildFunnel(
+      companySearchMode,
+      hubSpotDedupQualifiedKeys.size,
+      uniqueShortlist.length,
+      0
+    );
+
+    if (shouldFinishEarly() && !hasReachedRequestedTarget()) {
+      return finalizeInterruptedRun(
+        uniqueShortlist,
+        wasStopped()
+          ? "Run was stopped manually before outreach preparation and HubSpot sync."
+          : "Run timed out before outreach preparation and HubSpot sync."
+      );
+    }
 
     emitProgress({
       stage: "building_research",
       stageLabel: "Leads werden aufbereitet",
       progressValue: 78,
       progressMax: 100,
-      progressDescription: `${uniqueShortlist.length} qualifizierte Firmen werden vorbereitet`,
+      progressDescription: targetSynchronizedCompanies
+        ? `${incrementalHubspotSync.companySyncedCount}/${request.targetLeadCount} Firmen synchronisiert, ${uniqueShortlist.length} qualifiziert`
+        : `${uniqueShortlist.length} qualifizierte Firmen werden vorbereitet`,
       detail: dryRun
         ? "Dry-Run aktiv: Research-Briefs werden uebersprungen."
         : "Research-Briefs und Zusatzdaten werden fuer die qualifizierten Firmen erstellt.",
       processedFilters: evaluations.length,
       totalFilters: suggestedFilters.length,
       foundCandidates: uniqueShortlist.length,
-      targetLeadCount: request.targetLeadCount
+      targetLeadCount: request.targetLeadCount,
+      funnel: funnelBeforeSync
     });
 
-    const researchBriefs = dryRun
-      ? []
-      : await this.mapWithConcurrency(
-          uniqueShortlist.map((company) =>
-            () => this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
-              includeWebResearch: request.runDeepResearch !== false
-            })
-          ),
-          AZURE_WORKER_CONCURRENCY
-        );
-
-    const publicContactCandidatesByCompany = await this.collectPublicContacts(uniqueShortlist, dryRun);
-    const companiesNeedingApolloContacts = uniqueShortlist.filter((company) => {
-      const existingContacts = publicContactCandidatesByCompany.get(this.getCompanyKey(company)) ?? [];
-      return !this.hasReachableContact(existingContacts);
-    });
-    const apolloContactCandidatesByCompany = await this.collectApolloContacts(
-      companiesNeedingApolloContacts,
-      researchBriefs,
-      dryRun,
-      mainContext
-    );
-    const contactCandidatesByCompany = this.mergeContactCandidates(
-      publicContactCandidatesByCompany,
-      apolloContactCandidatesByCompany
-    );
+    await flushQualifiedCompanies(uniqueShortlist, uniqueShortlist.length);
+    const researchBriefs = collectPreparedResearchBriefs(uniqueShortlist);
+    const localityScopedResults = this.applyExplicitLocalityFilter(uniqueShortlist, researchBriefs, request.market);
+    const localityScopedShortlist = localityScopedResults.companies;
+    const localityScopedBriefs = localityScopedResults.researchBriefs;
 
     emitProgress({
       stage: "syncing_hubspot",
       stageLabel: "HubSpot wird aktualisiert",
       progressValue: 90,
       progressMax: 100,
-      progressDescription: `${uniqueShortlist.length} qualifizierte Firmen werden synchronisiert`,
+      progressDescription: targetSynchronizedCompanies
+        ? `${incrementalHubspotSync.companySyncedCount}/${request.targetLeadCount} Firmen nach HubSpot synchronisiert, ${localityScopedShortlist.length} qualifiziert`
+        : `${localityScopedShortlist.length} qualifizierte Firmen werden synchronisiert`,
       detail: syncToHubSpot
         ? "Die qualifizierten Firmen und Kontakte werden jetzt nach HubSpot geschrieben."
         : "Synchronisierung deaktiviert. Die Ergebnisse werden nur lokal gespeichert.",
       processedFilters: evaluations.length,
       totalFilters: suggestedFilters.length,
-      foundCandidates: uniqueShortlist.length,
-      targetLeadCount: request.targetLeadCount
+      foundCandidates: localityScopedShortlist.length,
+      targetLeadCount: request.targetLeadCount,
+      funnel: funnelBeforeSync
     });
 
-    const hubspotSync = await this.hubspotClient.syncQualifiedCompanies(uniqueShortlist, researchBriefs, contactCandidatesByCompany, !syncToHubSpot);
-    const azureCosts = this.azureClient.getUsageTotals();
-  await this.controlPlaneStore.writeCompanyScreeningDatabase(this.companyScreeningDatabase);
-    await this.controlPlaneStore.recordFilterEvaluations(evaluations);
-    await this.controlPlaneStore.recordSearchHistory(searchHistory);
-    emitProgress({
-      stage: "saving_results",
-      stageLabel: "Ergebnisse werden gespeichert",
-      progressValue: 97,
-      progressMax: 100,
-      progressDescription: `${uniqueShortlist.length} qualifizierte Firmen wurden verarbeitet`,
-      detail: "Der letzte Lauf wird gespeichert und fuer die HubSpot-Oberflaeche aktualisiert.",
-      processedFilters: evaluations.length,
-      totalFilters: suggestedFilters.length,
-      foundCandidates: uniqueShortlist.length,
-      targetLeadCount: request.targetLeadCount
-    });
-    await this.controlPlaneStore.writeLatestLeadRun({
-      createdAt: new Date().toISOString(),
-      requested: request,
-      summary: {
-        foundCandidates: uniqueShortlist.length,
-        filtersTested: evaluations.length,
-        filtersStoppedEarly,
-        companiesSkippedAfterEarlyStop
-      },
-      contacts: uniqueShortlist.map((company) =>
-        this.buildGeneratedLeadRecord(
-          company,
-          researchBriefs,
-          contactCandidatesByCompany.get(this.getCompanyKey(company)) ?? []
-        )
-      ),
-      searchHistory,
-      costs: {
-        azure: azureCosts
-      }
-    });
+    const finalFunnel = this.buildFunnel(
+      companySearchMode,
+      hubSpotDedupQualifiedKeys.size,
+      localityScopedShortlist.length,
+      incrementalHubspotSync.companySyncedCount
+    );
 
-    return {
-      requested: request,
+    return this.finalizeLeadRun(
+      request,
       suggestedFilters,
-      evaluations: evaluations.sort((left, right) => right.relevanceRatio - left.relevanceRatio),
-      shortlistedCompanies: uniqueShortlist,
-      researchBriefs,
+      evaluations,
+      localityScopedShortlist,
+      localityScopedBriefs,
       searchHistory,
-      hubspotSync: {
-        attempted: hubspotSync.attempted,
-        mode: hubspotSync.mode,
-        candidateCount: hubspotSync.candidateCount,
-        syncedCount: hubspotSync.syncedCount,
-        companySyncedCount: hubspotSync.companySyncedCount,
-        contactSyncedCount: hubspotSync.contactSyncedCount,
-        errors: hubspotSync.errors
-      },
-      efficiency: {
-        filtersStoppedEarly,
-        companiesSkippedAfterEarlyStop
-      },
-      costs: {
-        azure: azureCosts
-      }
-    };
+      incrementalHubspotSync,
+      filtersStoppedEarly,
+      companiesSkippedAfterEarlyStop,
+      finalFunnel,
+      false,
+      false,
+      completionReason,
+      contactCandidatesByCompany
+    );
   }
 
   async preview(request: LeadJobRequest): Promise<Pick<LeadJobResult, "requested" | "suggestedFilters">> {
@@ -520,7 +897,9 @@ export class LeadPipelineAgent {
         mainContext,
         request.searchStrategyContext,
         targetCategories,
-        request.dryRun ?? true
+        request.dryRun ?? true,
+        undefined,
+        request.companySearchMode
       )
     };
   }
@@ -529,23 +908,29 @@ export class LeadPipelineAgent {
     filter: ApolloOrganizationFilter,
     activeCategory: LeadCategory,
     dryRun: boolean,
+    syncToHubSpot: boolean,
     mainContext: string | undefined,
     prequalification: PrequalificationConfig | undefined,
     targetCategories: LeadCategory[],
     learning: LeadLearningData,
     market: string | undefined,
+    webRawProbeCount: number,
     earlyStopReviewCount: number,
     earlyStopThreshold: number,
+    companySearchMode: import("../types").CompanySearchMode,
     useWebSearchCompanyDiscovery: boolean,
     disableHubSpotDeduplication: boolean,
+    openCrawlerTuning: LeadJobRequest["openCrawlerTuning"] | undefined,
     emitFilterProgress: (detail: string) => void
   ): Promise<ProbedFilterCandidate> {
     const reviewedCompanies: PreCategorizedCompany[] = [];
+    const probeSourceLabel = this.getDiscoverySourceLabel(useWebSearchCompanyDiscovery ? companySearchMode : "apollo_search");
     emitFilterProgress(
-      `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${useWebSearchCompanyDiscovery ? "Web" : "Apollo"}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit ${earlyStopReviewCount} Firmen startet.`
+      `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} startet.`
     );
 
     let useWebSearchForExpansion = useWebSearchCompanyDiscovery;
+    let expansionSearchMode = companySearchMode;
     let apolloExpansionPage = useWebSearchCompanyDiscovery || dryRun
       ? 1
       : await this.controlPlaneStore.getApolloSearchCursor(filter);
@@ -554,11 +939,25 @@ export class LeadPipelineAgent {
       earlyStopReviewCount,
       dryRun,
       apolloExpansionPage,
+      companySearchMode,
       useWebSearchCompanyDiscovery,
       disableHubSpotDeduplication,
+      syncToHubSpot,
       targetCategories,
       learning,
-      reviewedCompanies
+      reviewedCompanies,
+      useWebSearchCompanyDiscovery ? webRawProbeCount : undefined,
+      companySearchMode === "open_crawler_search"
+        ? {
+            webSearchMaxPages: openCrawlerTuning?.maxPages,
+            webSearchSampleMultiplier: openCrawlerTuning?.sampleMultiplier,
+            webSearchMinSampleSize: openCrawlerTuning?.minSampleSize,
+            webSearchRawCollectionMultiplier: openCrawlerTuning?.rawCollectionMultiplier
+          }
+        : undefined,
+      () => emitFilterProgress(
+        `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} startet.`
+      )
     );
     const probeSample = probeFetch.companies;
     apolloExpansionPage = probeFetch.nextPage;
@@ -575,6 +974,7 @@ export class LeadPipelineAgent {
       categorizedInitialSample,
       filter,
       targetCategories,
+      market,
       categorizedInitialSample.length,
       false
     );
@@ -582,16 +982,31 @@ export class LeadPipelineAgent {
     if (!useWebSearchCompanyDiscovery) {
       const initialRelevantFromApollo = this.getRelevantCompanies(categorizedInitialSample, filter, targetCategories, market);
       if (initialRelevantFromApollo.length === 0 || initialEvaluation.relevanceRatio < earlyStopThreshold) {
+        const webFallbackSourceLabel = this.getDiscoverySourceLabel("internet_research");
         const webFallbackProbe = await this.fetchAvailableSearchSample(
           filter,
           earlyStopReviewCount,
           dryRun,
           1,
+          "internet_research",
           true,
           disableHubSpotDeduplication,
+          syncToHubSpot,
           targetCategories,
           learning,
-          reviewedCompanies
+          reviewedCompanies,
+          webRawProbeCount,
+          companySearchMode === "open_crawler_search"
+            ? {
+                webSearchMaxPages: openCrawlerTuning?.maxPages,
+                webSearchSampleMultiplier: openCrawlerTuning?.sampleMultiplier,
+                webSearchMinSampleSize: openCrawlerTuning?.minSampleSize,
+                webSearchRawCollectionMultiplier: openCrawlerTuning?.rawCollectionMultiplier
+              }
+            : undefined,
+          () => emitFilterProgress(
+            `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${webFallbackSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${webRawProbeCount} Web-Sites startet.`
+          )
         );
         const categorizedWebFallbackProbe = await this.categorizeCompanies(
           webFallbackProbe.companies,
@@ -607,6 +1022,7 @@ export class LeadPipelineAgent {
           categorizedWebFallbackProbe,
           filter,
           targetCategories,
+          market,
           categorizedWebFallbackProbe.length,
           false
         );
@@ -618,6 +1034,7 @@ export class LeadPipelineAgent {
           categorizedInitialSample = categorizedWebFallbackProbe;
           initialEvaluation = webFallbackEvaluation;
           useWebSearchForExpansion = true;
+          expansionSearchMode = "internet_research";
         }
       }
     }
@@ -629,9 +1046,12 @@ export class LeadPipelineAgent {
       activeCategory,
       reviewedCompanies,
       categorizedInitialSample,
+      rawSampleCount: probeFetch.rawSampleCount,
+      eligibleSampleCount: probeFetch.eligibleSampleCount,
       initialEvaluation,
       initialRelevant: this.getRelevantCompanies(categorizedInitialSample, filter, targetCategories, market),
       useWebSearchForExpansion,
+      expansionSearchMode,
       apolloExpansionPage
     };
   }
@@ -654,10 +1074,35 @@ export class LeadPipelineAgent {
     earlyStopThreshold: number,
     earlyStopMinRelevantCount: number,
     minimumCompaniesBeforeFilterGiveUp: number,
-    emitFilterProgress: (detail: string) => void
+    openCrawlerTuning: LeadJobRequest["openCrawlerTuning"] | undefined,
+    emitFilterProgress: (detail: string) => void,
+    getCompletionCount: () => number,
+    hasReachedRequestedTarget: () => boolean
   ): Promise<ExpandedFilterOutcome> {
     const reviewedCompanies = [...candidate.reviewedCompanies];
     let apolloExpansionPage = candidate.apolloExpansionPage;
+
+    if (
+      candidate.useWebSearchForExpansion &&
+      candidate.initialRelevant.length === 0
+    ) {
+      const evaluation: FilterEvaluation = {
+        ...candidate.initialEvaluation,
+        stoppedEarly: true,
+        skippedAfterEarlyStop: Math.max(0, FULL_SAMPLE_SIZE - candidate.categorizedInitialSample.length),
+        recommendation: `${candidate.initialEvaluation.recommendation} Web expansion stopped because the initial probe found no relevant companies.`
+      };
+      emitFilterProgress(
+        `Filter "${candidate.filter.name}" frueh gestoppt nach Web-Probe: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant, Rohmenge ${candidate.rawSampleCount}, nach Cache/Vorfilter ${candidate.eligibleSampleCount}.`
+      );
+
+      return {
+        evaluation,
+        categoryAdded: 0,
+        stoppedEarly: true,
+        skippedAfterEarlyStop: evaluation.skippedAfterEarlyStop
+      };
+    }
 
     if (
       candidate.categorizedInitialSample.length >= minimumCompaniesBeforeFilterGiveUp &&
@@ -686,7 +1131,7 @@ export class LeadPipelineAgent {
     let categoryAdded = 0;
     for (let page = 1; page <= 10; page += 1) {
       const remainingCategorySlots = Math.max(0, categoryTarget - (categoryCounts.get(candidate.activeCategory) ?? 0));
-      const remainingGlobalSlots = Math.max(0, request.targetLeadCount - shortlistedCompanies.length);
+      const remainingGlobalSlots = Math.max(1, request.targetLeadCount - getCompletionCount());
       const expansionBatchSize = this.getExpansionBatchSize(
         Math.min(remainingCategorySlots || remainingGlobalSlots, remainingGlobalSlots),
         candidate.useWebSearchForExpansion
@@ -697,11 +1142,25 @@ export class LeadPipelineAgent {
         expansionBatchSize,
         dryRun,
         requestedPage,
+        candidate.expansionSearchMode,
         candidate.useWebSearchForExpansion,
         disableHubSpotDeduplication,
+        request.syncToHubSpot ?? !dryRun,
         targetCategories,
         learning,
-        reviewedCompanies
+        reviewedCompanies,
+        undefined,
+        candidate.expansionSearchMode === "open_crawler_search"
+          ? {
+              webSearchMaxPages: openCrawlerTuning?.maxPages,
+              webSearchSampleMultiplier: openCrawlerTuning?.sampleMultiplier,
+              webSearchMinSampleSize: openCrawlerTuning?.minSampleSize,
+              webSearchRawCollectionMultiplier: openCrawlerTuning?.rawCollectionMultiplier
+            }
+          : undefined,
+        () => emitFilterProgress(
+          `Filter "${candidate.filter.name}" wird weiter ausgebaut. Seite ${requestedPage}, Batch ${expansionBatchSize}, aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
+        )
       );
       const expandedSample = expandedFetch.companies;
       if (!candidate.useWebSearchForExpansion) {
@@ -740,12 +1199,14 @@ export class LeadPipelineAgent {
         reviewedCompanies,
         candidate.filter,
         targetCategories,
+        request.market,
         reviewedCompanies.length,
         false
       );
 
       searchHistory.push(
         this.buildSearchHistoryEntry(
+          request.companySearchMode ?? candidate.expansionSearchMode,
           candidate.filter.name,
           candidate.activeCategory,
           "expand_50",
@@ -754,6 +1215,7 @@ export class LeadPipelineAgent {
           categorizedExpandedSample,
           candidate.filter,
           targetCategories,
+          request.market,
           earlyStopThreshold
         )
       );
@@ -785,7 +1247,7 @@ export class LeadPipelineAgent {
         break;
       }
 
-      if ((categoryCounts.get(candidate.activeCategory) ?? 0) >= categoryTarget || shortlistedCompanies.length >= request.targetLeadCount) {
+      if ((categoryCounts.get(candidate.activeCategory) ?? 0) >= categoryTarget || hasReachedRequestedTarget()) {
         break;
       }
     }
@@ -795,11 +1257,12 @@ export class LeadPipelineAgent {
       reviewedCompanies,
       candidate.filter,
       targetCategories,
+      request.market,
       candidate.categorizedInitialSample.length,
       false
     );
     emitFilterProgress(
-      `Filter "${candidate.filter.name}" abgeschlossen: ${evaluation.relevantCount}/${evaluation.totalReviewed} relevant (${Math.round(evaluation.relevanceRatio * 100)}%). Aktuell ${shortlistedCompanies.length}/${request.targetLeadCount} Ziel-Firmen gefunden.`
+      `Filter "${candidate.filter.name}" abgeschlossen: ${evaluation.relevantCount}/${evaluation.totalReviewed} relevant (${Math.round(evaluation.relevanceRatio * 100)}%). Aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
     );
 
     return {
@@ -817,27 +1280,262 @@ export class LeadPipelineAgent {
     searchStrategyContext: string | undefined,
     targetCategories: LeadCategory[],
     dryRun: boolean,
-    learning?: LeadLearningData
+    learning?: LeadLearningData,
+    companySearchMode?: import("../types").CompanySearchMode
   ) {
     const baselineFilters = buildSuggestedFilters(market, customGoal)
       .filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
-    if (this.shouldReuseLearnedFilters(baselineFilters, learning, customGoal, mainContext, searchStrategyContext)) {
-      return baselineFilters;
+    const modeAdjustedBaselineFilters = companySearchMode === "open_crawler_search"
+      ? this.prioritizeFiltersForOpenCrawler(baselineFilters, targetCategories, learning, market, customGoal)
+      : baselineFilters;
+    if (this.shouldReuseLearnedFilters(modeAdjustedBaselineFilters, learning, customGoal, mainContext, searchStrategyContext)) {
+      return modeAdjustedBaselineFilters;
     }
+
+    if (companySearchMode === "open_crawler_search") {
+      return modeAdjustedBaselineFilters;
+    }
+
+    const adaptiveSearchStrategyContext = this.buildAdaptiveSearchStrategyContext(searchStrategyContext);
 
     const generatedFilters = await this.azureClient.generateSuggestedFilters(
       market,
       customGoal,
       mainContext,
-      searchStrategyContext,
+      adaptiveSearchStrategyContext,
       targetCategories,
       baselineFilters,
       dryRun,
       learning
     );
 
-    return [...baselineFilters, ...generatedFilters.filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories))]
+    return [...modeAdjustedBaselineFilters, ...generatedFilters.filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories))]
       .filter((filter, index, all) => all.findIndex((candidate) => candidate.name === filter.name) === index);
+  }
+
+  private prioritizeFiltersForOpenCrawler(
+    filters: ApolloOrganizationFilter[],
+    targetCategories: LeadCategory[],
+    learning: LeadLearningData | undefined,
+    market?: string,
+    customGoal?: string
+  ): ApolloOrganizationFilter[] {
+    const excludedNames = new Set([
+      "Germany Embedded Vision Engineering Firms",
+      "Benelux DACH Vision Integration Specialists",
+      "France Vision Industrielle Integrateurs",
+      "Italy Visione Industriale Integratori",
+      "Spain Vision Industrial Integradores",
+      "France Italy Spain Vision Inspection Integrators"
+    ]);
+    const softwareLedNames = new Set([
+      "Germany Smart Factory Software Engineering Partners",
+      "Germany Automation Software Integrators",
+      "DACH Industrial Software Integration Partners"
+    ]);
+    const consultingNames = new Set([
+      "Germany Vision AI Consulting Specialists"
+    ]);
+    const machineBuilderNames = new Set([
+      "DACH Machine Builders For AI Options"
+    ]);
+    const industrialEndCustomerNames = new Set([
+      "DACH Scaled Industrial End Customers"
+    ]);
+    const platformNames = new Set([
+      "Europe Software Platforms For Embedding"
+    ]);
+    const preferredSoftwareNames = new Set([
+      "Germany Automation Software Integrators",
+      "Germany Smart Factory Software Engineering Partners",
+      "DACH Industrial Software Integration Partners"
+    ]);
+    const preferredVisionNames = new Set([
+      "Germany Industrial Computer Vision Engineering Services",
+      "Germany Machine Vision System Integrators",
+      "Austria Switzerland Vision Inspection Integrators",
+      "Netherlands Sweden Vision Automation Integrators",
+      "Europe Vision System Integrators",
+      "Europe Industrial Inspection Engineering Firms"
+    ]);
+    const wantsGeneralAISignals = targetCategories.includes("integrator_general_ai");
+    const wantsVisionSignals = targetCategories.includes("integrator_vision_industrial_ai");
+    const wantsConsultingSignals = targetCategories.includes("integrator_vision_ai_consulting");
+    const wantsMachineBuilderSignals = targetCategories.includes("machine_builder_ai_enablement");
+    const wantsIndustrialEndCustomers = targetCategories.includes("industrial_end_customer_scaled");
+    const wantsPlatformSignals = targetCategories.includes("software_platform_embedding");
+    const wantsBroadCategoryMix =
+      wantsVisionSignals ||
+      wantsConsultingSignals ||
+      wantsMachineBuilderSignals ||
+      wantsIndustrialEndCustomers ||
+      wantsPlatformSignals;
+
+    const filtered = filters.filter((filter) => {
+      if (excludedNames.has(filter.name)) {
+        return false;
+      }
+
+      if (!wantsGeneralAISignals && softwareLedNames.has(filter.name)) {
+        return false;
+      }
+
+      if (wantsGeneralAISignals && !wantsBroadCategoryMix && !softwareLedNames.has(filter.name)) {
+        return false;
+      }
+
+      if (!wantsConsultingSignals && consultingNames.has(filter.name)) {
+        return false;
+      }
+
+      if (!wantsMachineBuilderSignals && machineBuilderNames.has(filter.name)) {
+        return false;
+      }
+
+      if (!wantsIndustrialEndCustomers && industrialEndCustomerNames.has(filter.name)) {
+        return false;
+      }
+
+      if (!wantsPlatformSignals && platformNames.has(filter.name)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const getModeBias = (filterName: string): number => {
+      if (wantsGeneralAISignals && !wantsBroadCategoryMix) {
+        if (preferredSoftwareNames.has(filterName)) {
+          return 1.2;
+        }
+
+        return -1;
+      }
+
+      let bias = 0;
+
+      if (wantsGeneralAISignals && preferredSoftwareNames.has(filterName)) {
+        bias += 0.9;
+      }
+
+      if (wantsVisionSignals && preferredVisionNames.has(filterName)) {
+        bias += 0.8;
+      }
+
+      if (wantsConsultingSignals && consultingNames.has(filterName)) {
+        bias += 0.75;
+      }
+
+      if (wantsMachineBuilderSignals && machineBuilderNames.has(filterName)) {
+        bias += 0.8;
+      }
+
+      if (wantsIndustrialEndCustomers && industrialEndCustomerNames.has(filterName)) {
+        bias += 0.65;
+      }
+
+      if (wantsPlatformSignals && platformNames.has(filterName)) {
+        bias += 0.55;
+      }
+
+      return bias;
+    };
+
+    const ranked = [...filtered].sort((left, right) => {
+      const leftRank = (learning ? this.getFilterRank(left.name, learning, market, customGoal) : 0) + getModeBias(left.name);
+      const rightRank = (learning ? this.getFilterRank(right.name, learning, market, customGoal) : 0) + getModeBias(right.name);
+      return rightRank - leftRank;
+    });
+
+    if (wantsBroadCategoryMix) {
+      const coverageBuckets: string[][] = [
+        wantsGeneralAISignals ? [...preferredSoftwareNames] : [],
+        wantsVisionSignals ? [...preferredVisionNames] : [],
+        wantsConsultingSignals ? [...consultingNames] : [],
+        wantsMachineBuilderSignals ? [...machineBuilderNames] : [],
+        wantsIndustrialEndCustomers ? [...industrialEndCustomerNames] : [],
+        wantsPlatformSignals ? [...platformNames] : []
+      ];
+      const coveredNames = new Set<string>();
+      const coveredFilters: ApolloOrganizationFilter[] = [];
+
+      for (const bucket of coverageBuckets) {
+        const firstMatch = ranked.find((filter) => bucket.includes(filter.name) && !coveredNames.has(filter.name));
+        if (!firstMatch) {
+          continue;
+        }
+
+        coveredNames.add(firstMatch.name);
+        coveredFilters.push(firstMatch);
+      }
+
+      for (const filter of ranked) {
+        if (coveredNames.has(filter.name)) {
+          continue;
+        }
+
+        coveredFilters.push(filter);
+        coveredNames.add(filter.name);
+      }
+
+      return coveredFilters;
+    }
+
+    return ranked;
+  }
+
+  private buildAdaptiveSearchStrategyContext(searchStrategyContext?: string): string | undefined {
+    const recentRecords = this.companyScreeningDatabase.records
+      .filter((record) => record.category)
+      .slice(0, 250);
+
+    if (recentRecords.length === 0) {
+      return searchStrategyContext;
+    }
+
+    const counts = recentRecords.reduce<Record<string, number>>((accumulator, record) => {
+      const key = record.category ?? "unknown";
+      accumulator[key] = (accumulator[key] ?? 0) + 1;
+      return accumulator;
+    }, {});
+
+    const hints: string[] = [];
+
+    if ((counts.integrator_vision_industrial_ai ?? 0) >= 3) {
+      hints.push(
+        "Keep proven positive angles from recent good firms: machine vision, visual inspection, optical inspection, AOI, quality inspection, system integration, commissioning, and customer-specific delivery ownership."
+      );
+    }
+
+    if ((counts.integrator_general_ai ?? 0) >= 3 || (counts.integrator_relevant_focus ?? 0) >= 3) {
+      hints.push(
+        "Keep adjacent industrial software and automation-integrator angles when implementation ownership, references, and customer projects are explicit."
+      );
+    }
+
+    if ((counts.camera_manufacturer_partner ?? 0) >= 3) {
+      hints.push(
+        "Minimal negative adjustment: filter out camera manufacturers, component vendors, sensor suppliers, lighting vendors, and product-heavy imaging firms unless services, integration, commissioning, support, or references are explicit."
+      );
+    }
+
+    if ((counts.irrelevant ?? 0) >= 3) {
+      hints.push(
+        "Minimal negative adjustment: exclude publishers, media, event operators, associations, investors, recruiting firms, and other non-operating entities earlier in the search loop."
+      );
+    }
+
+    if (hints.length === 0) {
+      return searchStrategyContext;
+    }
+
+    return [
+      searchStrategyContext?.trim(),
+      "Adaptive tuning from recent screening:",
+      ...hints.map((hint) => `- ${hint}`)
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   private async categorizeCompanies(
@@ -850,24 +1548,36 @@ export class LeadPipelineAgent {
   ): Promise<PreCategorizedCompany[]> {
     return this.mapWithConcurrency(
       companies.map((company) => async () => {
-        const cachedCategorization = this.getCachedCategorization(company);
+        const useWebsiteBackedClassification = Boolean(company.domain);
+        const cachedCategorization = dryRun ? this.getCachedCategorization(company) : null;
         if (cachedCategorization) {
-          return {
+          const resolvedCachedCategorization = this.normalizeCompanyIdentity({
             ...company,
-            ...cachedCategorization
-          };
+            ...this.enforceIndustrialFit(company, cachedCategorization)
+          });
+          this.upsertCompanyScreeningRecord(resolvedCachedCategorization, {
+            category: resolvedCachedCategorization.category,
+            relevanceScore: resolvedCachedCategorization.relevanceScore,
+            rationale: resolvedCachedCategorization.rationale
+          });
+          return resolvedCachedCategorization;
         }
 
         const localCategorization = this.prequalifyLocally(company);
-        if (localCategorization) {
-          this.upsertCompanyScreeningRecord(company, localCategorization);
-          return {
+        if (dryRun && localCategorization) {
+          const resolvedLocalCategorization = this.normalizeCompanyIdentity({
             ...company,
-            ...localCategorization
-          };
+            ...this.enforceIndustrialFit(company, localCategorization)
+          });
+          this.upsertCompanyScreeningRecord(resolvedLocalCategorization, {
+            category: resolvedLocalCategorization.category,
+            relevanceScore: resolvedLocalCategorization.relevanceScore,
+            rationale: resolvedLocalCategorization.rationale
+          });
+          return resolvedLocalCategorization;
         }
 
-        const categorization = /(browser-search|source-scrape)/.test(company.sourceFilter)
+        const categorization = useWebsiteBackedClassification
           ? await this.azureClient.categorizeWebsiteCrawl(
               company.name,
               company.domain,
@@ -887,18 +1597,24 @@ export class LeadPipelineAgent {
               learning
             );
 
-        const resolvedCategorization = {
-          ...company,
-          ...this.enforceIndustrialFit(company, categorization)
-        };
+        const resolvedCategorization = dryRun
+          ? {
+              ...company,
+              ...this.enforceIndustrialFit(company, categorization)
+            }
+          : {
+              ...company,
+              ...categorization
+            };
+        const normalizedCategorization = this.normalizeCompanyIdentity(resolvedCategorization);
 
-        this.upsertCompanyScreeningRecord(company, {
-          category: resolvedCategorization.category,
-          relevanceScore: resolvedCategorization.relevanceScore,
-          rationale: resolvedCategorization.rationale
+        this.upsertCompanyScreeningRecord(normalizedCategorization, {
+          category: normalizedCategorization.category,
+          relevanceScore: normalizedCategorization.relevanceScore,
+          rationale: normalizedCategorization.rationale
         });
 
-        return resolvedCategorization;
+        return normalizedCategorization;
       }),
       AZURE_WORKER_CONCURRENCY
     );
@@ -916,13 +1632,25 @@ export class LeadPipelineAgent {
     const industrialSignals = [
       "industrial",
       "automation",
+      "automatisierung",
+      "automatisierungstechnik",
       "inspection",
       "quality control",
       "machine vision",
+      "bildverarbeitung",
+      "industrielle bildverarbeitung",
       "camera",
       "robotics",
       "embedded",
       "factory",
+      "smart factory",
+      "mes",
+      "scada",
+      "plc",
+      "ot",
+      "operational technology",
+      "production data",
+      "process control",
       "oem",
       "sensor"
     ];
@@ -958,7 +1686,65 @@ export class LeadPipelineAgent {
       "investor",
       "bank",
       "financial services",
-      "insurance"
+      "insurance",
+      "betriebssicherheitsverordnung",
+      "arbeitsschutzgesetz",
+      "baurecht",
+      "sachverstand",
+      "sachverstaend",
+      "building inspection",
+      "facility inspection",
+      "hvac inspection",
+      "fire safety inspection",
+      "elevator inspection",
+      "construction inspection",
+      "ventilation inspection",
+      "casino",
+      "betting",
+      "sportsbook",
+      "slot",
+      "roulette",
+      "blackjack",
+      "baccarat",
+      "poker",
+      "bahis",
+      "live casino",
+      "online casino",
+      "curacao egaming",
+      "sorumlu kumar"
+    ];
+    const mediaProductionSignals = [
+      "videoproduktion",
+      "video production",
+      "content- und videoproduktion",
+      "filmproduktion",
+      "film production",
+      "filmmaker",
+      "videographer",
+      "cinematography",
+      "post-production",
+      "post production",
+      "production company",
+      "video agency",
+      "content creation",
+      "content creator",
+      "commercial production",
+      "vfx",
+      "storytelling"
+    ];
+    const clinicalSoftwareSignals = [
+      "clinical trial",
+      "clinical trials",
+      "ctms",
+      "etmf",
+      "trial master file",
+      "trial supply management",
+      "life sciences software",
+      "cro",
+      "pharma",
+      "biotech",
+      "clinical operations",
+      "study startup"
     ];
     const serviceSignals = [
       "system integrator",
@@ -972,10 +1758,41 @@ export class LeadPipelineAgent {
       "engineering services",
       "solution provider",
       "implementation",
+      "mes integration",
+      "mes system integrator",
+      "scada integration",
+      "scada system integrator",
+      "plc software integration",
+      "ot integration",
+      "industrial software",
+      "manufacturing software",
+      "smart factory",
+      "process control",
       "digital transformation",
       "data & ai",
       "machine learning",
       "computer vision"
+    ];
+    const facilityInspectionSignals = [
+      "betriebssicherheitsverordnung",
+      "arbeitsschutzgesetz",
+      "baurecht",
+      "verkaufsstätten",
+      "gaststätten",
+      "hochhäuser",
+      "hochhaeuser",
+      "garagen",
+      "heime",
+      "prüfen und beraten",
+      "pruefen und beraten",
+      "sachverstand",
+      "hvac inspection",
+      "building inspection",
+      "facility inspection",
+      "fire safety inspection",
+      "elevator inspection",
+      "construction inspection",
+      "ventilation inspection"
     ];
     const productBrandSignals = [
       "robotics",
@@ -1017,8 +1834,69 @@ export class LeadPipelineAgent {
       "robotics platform",
       "robot manufacturer"
     ];
+    const machineBuilderSignals = [
+      "maschinenbau",
+      "anlagenbau",
+      "sondermaschinenbau",
+      "special machinery",
+      "machine builder",
+      "oem",
+      "automation equipment",
+      "inspection systems",
+      "schaltschrankbau",
+      "intralogistik",
+      "lagertechnik",
+      "production machines"
+    ];
+    const openCrawlerStrongDeliverySignals = [
+      "system integrator",
+      "systems integrator",
+      "systemintegration",
+      "integration partner",
+      "implementation",
+      "commissioning",
+      "inbetriebnahme",
+      "engineering services",
+      "custom solution",
+      "customer-specific",
+      "project delivery",
+      "retrofit"
+    ];
+    const openCrawlerVisionSignals = [
+      "machine vision",
+      "bildverarbeitung",
+      "industrielle bildverarbeitung",
+      "optische inspektion",
+      "aoi",
+      "industrial image processing",
+      "quality inspection"
+    ];
+    const openCrawlerSoftwareSignals = [
+      "industrial software",
+      "manufacturing software",
+      "mes",
+      "scada",
+      "plc",
+      "ot integration",
+      "smart factory",
+      "industrie 4.0",
+      "iiot",
+      "industrial iot",
+      "prozessautomation",
+      "prozessleittechnik",
+      "leitsystem",
+      "systemhaus",
+      "steuerungstechnik"
+    ];
 
     const industrialHits = industrialSignals.filter((signal) => text.includes(signal)).length;
+    const openCrawlerScoreMatch = normalizedDescription.match(/open-crawler\s+(?:high-fit|review-fit)\s+score\s+(\d+)/i);
+    const openCrawlerScore = openCrawlerScoreMatch ? Number(openCrawlerScoreMatch[1]) : 0;
+    const openCrawlerDeliveryHits = openCrawlerStrongDeliverySignals.filter((signal) => text.includes(signal)).length;
+    const openCrawlerVisionHits = openCrawlerVisionSignals.filter((signal) => text.includes(signal)).length;
+    const openCrawlerSoftwareHits = openCrawlerSoftwareSignals.filter((signal) => text.includes(signal)).length;
+    const machineBuilderHits = machineBuilderSignals.filter((signal) => text.includes(signal)).length;
+    const clinicalSoftwareHits = clinicalSoftwareSignals.filter((signal) => text.includes(signal)).length;
 
     if (normalizedCountry && !EUROPEAN_COUNTRIES.has(normalizedCountry)) {
       return {
@@ -1033,6 +1911,30 @@ export class LeadPipelineAgent {
         category: "irrelevant",
         relevanceScore: 3,
         rationale: "Company appears to be a media, finance, event, academic, or otherwise clearly irrelevant profile."
+      };
+    }
+
+    if (mediaProductionSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 2,
+        rationale: "Company appears to be a film, video, or content-production business rather than a software integrator or industrial AI target."
+      };
+    }
+
+    if (clinicalSoftwareHits >= 2 && industrialHits <= 1) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 4,
+        rationale: "Company appears to be clinical-trial or life-sciences software rather than an industrial Vision-AI fit."
+      };
+    }
+
+    if (facilityInspectionSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 4,
+        rationale: "Company appears to be a building, safety, or facility inspection service rather than an AI integrator."
       };
     }
 
@@ -1068,6 +1970,14 @@ export class LeadPipelineAgent {
       };
     }
 
+    if (machineBuilderHits >= 2 && industrialHits >= 2) {
+      return {
+        category: "machine_builder_ai_enablement",
+        relevanceScore: Math.min(78, 42 + machineBuilderHits * 6 + industrialHits),
+        rationale: "Company profile indicates a machine builder or OEM with industrial automation, inspection, or AI-option potential."
+      };
+    }
+
     if (
       industrialHits === 0 &&
       nonIndustrialPlatformSignals.some((signal) => text.includes(signal)) &&
@@ -1080,6 +1990,43 @@ export class LeadPipelineAgent {
       };
     }
 
+    if (
+      normalizedDescription.includes("open-crawler") &&
+      openCrawlerScore >= 12 &&
+      openCrawlerDeliveryHits >= 1 &&
+      industrialHits >= 2
+    ) {
+      if (openCrawlerVisionHits >= 1) {
+        return {
+          category: "integrator_relevant_focus",
+          relevanceScore: Math.min(82, 62 + openCrawlerScore),
+          rationale: "Open-crawler signals show a delivery-led industrial vision or inspection integrator with explicit implementation evidence."
+        };
+      }
+
+      if (openCrawlerSoftwareHits >= 1) {
+        return {
+          category: "integrator_general_ai",
+          relevanceScore: Math.min(80, 60 + openCrawlerScore),
+          rationale: "Open-crawler signals show a delivery-led industrial software or OT integrator with explicit implementation evidence."
+        };
+      }
+    }
+
+    if (
+      normalizedDescription.includes("open-crawler") &&
+      openCrawlerScore >= 9 &&
+      openCrawlerDeliveryHits >= 2 &&
+      openCrawlerSoftwareHits >= 2 &&
+      industrialHits >= 2
+    ) {
+      return {
+        category: "software_platform_embedding",
+        relevanceScore: Math.min(74, 58 + openCrawlerScore),
+        rationale: "Open-crawler signals indicate an industrial software implementation partner with platform or embedded delivery relevance."
+      };
+    }
+
     return null;
   }
 
@@ -1088,16 +2035,30 @@ export class LeadPipelineAgent {
     categorization: Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">
   ): Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale"> {
     const text = `${company.name} ${company.shortDescription} ${company.domain ?? ""} ${company.sourceFilter}`.toLowerCase();
+    const normalizedName = company.name.trim().toLowerCase();
+    const normalizedDomain = company.domain?.trim().toLowerCase() ?? "";
     const industrialSignals = [
       "industrial",
       "automation",
+      "automatisierung",
+      "automatisierungstechnik",
       "inspection",
       "quality control",
       "machine vision",
+      "bildverarbeitung",
+      "industrielle bildverarbeitung",
       "camera",
       "robotics",
       "embedded",
       "factory",
+      "smart factory",
+      "mes",
+      "scada",
+      "plc",
+      "ot",
+      "operational technology",
+      "production data",
+      "process control",
       "oem",
       "sensor",
       "manufacturing",
@@ -1128,10 +2089,77 @@ export class LeadPipelineAgent {
       "job platform",
       "logistics",
       "parcel",
-      "hr",
+      "human resources",
+      "hr software",
+      "hr platform",
       "crypto",
       "marketing",
-      "payments"
+      "payments",
+      "betriebssicherheitsverordnung",
+      "arbeitsschutzgesetz",
+      "baurecht",
+      "sachverstand",
+      "sachverstaend",
+      "building inspection",
+      "facility inspection",
+      "hvac inspection",
+      "fire safety inspection",
+      "elevator inspection",
+      "construction inspection",
+      "ventilation inspection",
+      "casino",
+      "betting",
+      "sportsbook",
+      "slot",
+      "roulette",
+      "blackjack",
+      "baccarat",
+      "poker",
+      "bahis",
+      "live casino",
+      "online casino",
+      "curacao egaming",
+      "sorumlu kumar"
+    ];
+    const mediaProductionSignals = [
+      "videoproduktion",
+      "video production",
+      "content- und videoproduktion",
+      "filmproduktion",
+      "film production",
+      "filmmaker",
+      "videographer",
+      "cinematography",
+      "post-production",
+      "post production",
+      "production company",
+      "video agency",
+      "content creation",
+      "content creator",
+      "commercial production",
+      "vfx",
+      "storytelling"
+    ];
+    const clinicalSoftwareSignals = [
+      "clinical trial",
+      "clinical trials",
+      "ctms",
+      "etmf",
+      "trial master file",
+      "trial supply management",
+      "life sciences software",
+      "cro",
+      "pharma",
+      "biotech",
+      "clinical operations",
+      "study startup"
+    ];
+    const academicDomainSignals = [
+      "uni-",
+      ".edu",
+      "/university",
+      "hochschule",
+      "fh-"
     ];
     const serviceSignals = [
       "system integrator",
@@ -1139,13 +2167,30 @@ export class LeadPipelineAgent {
       "integration services",
       "software services",
       "software development",
+      "software engineering",
       "custom software",
       "project delivery",
       "engineering services",
       "solution provider",
-      "implementation"
+      "implementation",
+      "mes integration",
+      "mes system integrator",
+      "scada integration",
+      "scada system integrator",
+      "plc software integration",
+      "ot integration",
+      "industrial software",
+      "manufacturing software",
+      "smart factory",
+      "process control",
+      "commissioning",
+      "turnkey",
+      "customer-specific",
+      "kundenspezifisch",
+      "systemintegration"
     ];
     const productVendorSignals = [
+      "manufacturer",
       "manufacturer",
       "oem",
       "industrial cameras",
@@ -1167,6 +2212,28 @@ export class LeadPipelineAgent {
       "product portfolio",
       "autonomous robot"
     ];
+    const knownManufacturerSignals = [
+      "omron",
+      "keyence",
+      "cognex",
+      "basler",
+      "balluff",
+      "sick",
+      "teledyne",
+      "baumer",
+      "ifm",
+      "ids imaging"
+    ];
+    const genericPageTitleNames = new Set([
+      "solutions",
+      "inspection systems",
+      "industrial automation",
+      "index.php",
+      "home",
+      "homepage",
+      "products",
+      "services"
+    ]);
 
     if (clearlyBadSignals.some((signal) => text.includes(signal))) {
       return {
@@ -1176,11 +2243,55 @@ export class LeadPipelineAgent {
       };
     }
 
+    if (mediaProductionSignals.some((signal) => text.includes(signal))) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 4,
+        rationale: "Company profile signals a film, video, or content-production business rather than an industrial or AI software integrator."
+      };
+    }
+
+    if (clinicalSoftwareSignals.filter((signal) => text.includes(signal)).length >= 2) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 6,
+        rationale: "Company profile signals clinical-trial or life-sciences software rather than industrial Vision-AI delivery."
+      };
+    }
+
     if (
       (categorization.category === "integrator_vision_industrial_ai" ||
         categorization.category === "integrator_general_ai" ||
         categorization.category === "integrator_relevant_focus") &&
-      productVendorSignals.some((signal) => text.includes(signal)) &&
+      (genericPageTitleNames.has(normalizedName) || academicDomainSignals.some((signal) => normalizedDomain.includes(signal)))
+    ) {
+      return {
+        category: academicDomainSignals.some((signal) => normalizedDomain.includes(signal)) ? "irrelevant" : "other",
+        relevanceScore: Math.min(categorization.relevanceScore, 22),
+        rationale: academicDomainSignals.some((signal) => normalizedDomain.includes(signal))
+          ? "Domain and profile look academic rather than a delivery-led industrial integrator."
+          : "Result looks like a generic page title instead of a verified company identity."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_vision_industrial_ai" ||
+        categorization.category === "integrator_general_ai" ||
+        categorization.category === "integrator_relevant_focus") &&
+      knownManufacturerSignals.some((signal) => text.includes(signal))
+    ) {
+      return {
+        category: "camera_manufacturer_partner",
+        relevanceScore: Math.min(categorization.relevanceScore, 38),
+        rationale: "Company looks like a known manufacturer or OEM brand, not a delivery-led integrator target."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_vision_industrial_ai" ||
+        categorization.category === "integrator_general_ai" ||
+        categorization.category === "integrator_relevant_focus") &&
+      (productVendorSignals.some((signal) => text.includes(signal)) || knownManufacturerSignals.some((signal) => text.includes(signal))) &&
       !serviceSignals.some((signal) => text.includes(signal))
     ) {
       return {
@@ -1222,6 +2333,77 @@ export class LeadPipelineAgent {
     return categorization;
   }
 
+  private normalizeCompanyIdentity<T extends Pick<CompanySample, "name" | "domain">>(company: T): T {
+    const normalizedName = company.name.trim().toLowerCase();
+    const normalizedCompactName = normalizedName.replace(/[^a-z0-9]+/g, "");
+    const fallbackName = this.deriveCompanyNameFromDomain(company.domain);
+    const normalizedFallbackName = fallbackName?.replace(/[^a-z0-9]+/g, "").toLowerCase();
+    const genericPageTitleNames = new Set([
+      "inicio",
+      "welcome",
+      "solutions",
+      "inspection systems",
+      "industrial automation",
+      "index.php",
+      "home",
+      "homepage",
+      "what is visio?",
+      "nueva sala blanca",
+      "zero defect manufacturing",
+      "products",
+      "services"
+    ]);
+    const looksLikeMarketingSlogan = /(trusted by|powered by|built for|made for|future of|designed for|engineered for|your partner|tailored for|driven by)/i.test(normalizedName);
+    const mismatchesDomainBrand = Boolean(normalizedFallbackName && !normalizedCompactName.includes(normalizedFallbackName));
+    const brandsDifferClearly = Boolean(
+      normalizedFallbackName &&
+      normalizedCompactName !== normalizedFallbackName &&
+      !normalizedCompactName.includes(normalizedFallbackName) &&
+      !normalizedFallbackName.includes(normalizedCompactName)
+    );
+    const looksLikePageTitle =
+      genericPageTitleNames.has(normalizedName) ||
+      normalizedName.startsWith("what is ") ||
+      normalizedName.startsWith("inicio") ||
+      normalizedName.includes(" - ") ||
+      normalizedName.includes(" — ") ||
+      normalizedName.split(/\s+/).length >= 6 ||
+      (brandsDifferClearly && normalizedName.split(/\s+/).length <= 2) ||
+      (looksLikeMarketingSlogan && mismatchesDomainBrand);
+
+    if (!looksLikePageTitle) {
+      return company;
+    }
+
+    if (!fallbackName) {
+      return company;
+    }
+
+    return {
+      ...company,
+      name: fallbackName
+    };
+  }
+
+  private deriveCompanyNameFromDomain(domain: string | undefined): string | undefined {
+    const normalizedDomain = this.normalizeDomain(domain);
+    if (!normalizedDomain) {
+      return undefined;
+    }
+
+    const hostWithoutWww = normalizedDomain.replace(/^www\./, "");
+    const firstSegment = hostWithoutWww.split(".")[0]?.trim();
+    if (!firstSegment) {
+      return undefined;
+    }
+
+    return firstSegment
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
   private excludeRejectedCompanies(companies: CompanySample[], learning: LeadLearningData): CompanySample[] {
     const rejectedEntries = learning.companyFeedback.filter((entry) => entry.verdict === "reject");
     if (rejectedEntries.length === 0) {
@@ -1244,38 +2426,90 @@ export class LeadPipelineAgent {
     currentShortlist: PreCategorizedCompany[],
     shortlistedKeys: Set<string>,
     filters: import("../types").ApolloOrganizationFilter[],
+    evaluations: FilterEvaluation[],
     request: LeadJobRequest,
     mainContext: string | undefined,
     prequalification: PrequalificationConfig | undefined,
     targetCategories: LeadCategory[],
-    learning: LeadLearningData
+    learning: LeadLearningData,
+    openCrawlerTuning: LeadJobRequest["openCrawlerTuning"] | undefined,
+    emitTopUpProgress: (detail: string, foundCandidates: number) => void,
+    getCompletionCount: () => number,
+    hasReachedRequestedTarget: () => boolean,
+    shouldStop?: () => boolean
   ): Promise<PreCategorizedCompany[]> {
     const toppedUp = [...currentShortlist];
+    const evaluationByName = new Map(evaluations.map((evaluation) => [evaluation.filterName, evaluation]));
+    const nextPageByFilter = new Map(filters.map((filter) => [filter.name, 1]));
 
-    for (const filter of filters) {
-      const remainingSlots = request.targetLeadCount - toppedUp.length;
-      if (remainingSlots <= 0) {
-        break;
-      }
+    while (!shouldStop?.() && !hasReachedRequestedTarget()) {
+      let roundAddedCount = 0;
+      let exhaustedFilters = 0;
 
-      const maxPages = remainingSlots <= 3 ? 1 : remainingSlots <= 8 ? 2 : 3;
-      for (let page = 1; page <= maxPages; page += 1) {
-        const expansionBatchSize = this.getExpansionBatchSize(request.targetLeadCount - toppedUp.length, true);
-        const discoveredFetch = await this.fetchAvailableSearchSample(
-          filter,
-          expansionBatchSize,
-          Boolean(request.dryRun),
-          page,
-          true,
-          request.disableHubSpotDeduplication ?? false,
-          targetCategories,
-          learning,
-          toppedUp
+      for (const filter of filters) {
+        if (shouldStop?.()) {
+          return toppedUp;
+        }
+
+        const remainingSlots = Math.max(1, request.targetLeadCount - getCompletionCount());
+
+        const evaluation = evaluationByName.get(filter.name);
+        const hasStrongTopUpSignal = Boolean(
+          evaluation && (evaluation.relevantCount >= 2 || evaluation.relevanceRatio >= 0.25 || evaluation.totalReviewed >= 8)
+        );
+        const maxPages = hasStrongTopUpSignal
+          ? (remainingSlots <= 3 ? 2 : remainingSlots <= 8 ? 3 : Math.max(WEB_SEARCH_TOP_UP_MAX_PAGES, openCrawlerTuning?.maxPages ?? 0))
+          : toppedUp.length === 0
+            ? Math.max(WEB_SEARCH_TOP_UP_MAX_PAGES, openCrawlerTuning?.maxPages ?? 0)
+            : remainingSlots <= 3
+              ? 1
+              : Math.min(Math.max(WEB_SEARCH_TOP_UP_MAX_PAGES, openCrawlerTuning?.maxPages ?? 0), 2);
+        const page = nextPageByFilter.get(filter.name) ?? 1;
+        if (page > maxPages) {
+          exhaustedFilters += 1;
+          continue;
+        }
+
+        if (shouldStop?.()) {
+          return toppedUp;
+        }
+
+        const topUpDetail = `Top-up prueft Filter "${filter.name}" auf Seite ${page}/${maxPages}. Aktuell ${toppedUp.length}/${request.targetLeadCount} Ziel-Firmen gefunden.`;
+        emitTopUpProgress(topUpDetail, toppedUp.length);
+        const expansionBatchSize = this.getExpansionBatchSize(remainingSlots, true);
+        const discoveredFetch = await this.runWithProgressHeartbeat(
+          () => this.fetchAvailableSearchSample(
+            filter,
+            expansionBatchSize,
+            Boolean(request.dryRun),
+            page,
+            request.companySearchMode ?? (request.creditLessMode ? "internet_research" : "apollo_search"),
+            true,
+            request.disableHubSpotDeduplication ?? false,
+            request.syncToHubSpot ?? !(request.dryRun ?? true),
+            targetCategories,
+            learning,
+            toppedUp,
+            undefined,
+            {
+              webSearchMaxPages: Math.max(WEB_SEARCH_TOP_UP_MAX_PAGES, openCrawlerTuning?.maxPages ?? 0),
+              webSearchSampleMultiplier: Math.max(WEB_SEARCH_TOP_UP_SAMPLE_MULTIPLIER, openCrawlerTuning?.sampleMultiplier ?? 0),
+              webSearchMinSampleSize: Math.max(WEB_SEARCH_TOP_UP_MIN_SAMPLE_SIZE, openCrawlerTuning?.minSampleSize ?? 0),
+              webSearchRawCollectionMultiplier: Math.max(2, openCrawlerTuning?.rawCollectionMultiplier ?? 0)
+            }
+          ),
+          () => emitTopUpProgress(topUpDetail, toppedUp.length)
         );
         const discoveredCompanies = discoveredFetch.companies;
+        nextPageByFilter.set(filter.name, page + 1);
 
         if (discoveredCompanies.length === 0) {
-          break;
+          exhaustedFilters += 1;
+          continue;
+        }
+
+        if (shouldStop?.()) {
+          return toppedUp;
         }
 
         const unseenCompanies = this.excludeAlreadyReviewedCompanies(discoveredCompanies, toppedUp);
@@ -1293,15 +2527,43 @@ export class LeadPipelineAgent {
         );
 
         const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, filter, targetCategories, request.market);
+        const sizeBeforeAdd = toppedUp.length;
         this.addUniqueCompanies(toppedUp, relevantCompanies, shortlistedKeys);
+        roundAddedCount += toppedUp.length - sizeBeforeAdd;
 
-        if (toppedUp.length >= request.targetLeadCount || discoveredCompanies.length < expansionBatchSize) {
-          break;
+        if (hasReachedRequestedTarget() || discoveredCompanies.length < expansionBatchSize) {
+          if (discoveredCompanies.length < expansionBatchSize) {
+            exhaustedFilters += 1;
+          }
+
+          if (hasReachedRequestedTarget()) {
+            return toppedUp;
+          }
         }
+      }
+
+      if (roundAddedCount === 0 || exhaustedFilters >= filters.length) {
+        break;
       }
     }
 
     return toppedUp;
+  }
+
+  private async runWithProgressHeartbeat<T>(
+    operation: () => Promise<T>,
+    heartbeat: () => void,
+    intervalMs = 5_000
+  ): Promise<T> {
+    const timer = setInterval(() => {
+      heartbeat();
+    }, intervalMs);
+
+    try {
+      return await operation();
+    } finally {
+      clearInterval(timer);
+    }
   }
 
   private getExpansionBatchSize(remainingSlots: number, useWebSearch: boolean): number {
@@ -1321,6 +2583,79 @@ export class LeadPipelineAgent {
     return [...filters].sort(
       (left, right) => this.getFilterRank(right.name, learning, market, customGoal) - this.getFilterRank(left.name, learning, market, customGoal)
     );
+  }
+
+  private prioritizeFiltersForTopUp(
+    filters: import("../types").ApolloOrganizationFilter[],
+    evaluations: FilterEvaluation[],
+    learning: LeadLearningData,
+    market?: string,
+    customGoal?: string
+  ): import("../types").ApolloOrganizationFilter[] {
+    const evaluationByName = new Map(evaluations.map((evaluation) => [evaluation.filterName, evaluation]));
+
+    return [...filters].sort((left, right) => {
+      const leftEvaluation = evaluationByName.get(left.name);
+      const rightEvaluation = evaluationByName.get(right.name);
+      const leftScore = this.getTopUpFilterScore(left.name, leftEvaluation, learning, market, customGoal);
+      const rightScore = this.getTopUpFilterScore(right.name, rightEvaluation, learning, market, customGoal);
+
+      return rightScore - leftScore;
+    });
+  }
+
+  private getTopUpFilterScore(
+    filterName: string,
+    evaluation: FilterEvaluation | undefined,
+    learning: LeadLearningData,
+    market?: string,
+    customGoal?: string
+  ): number {
+    const rank = this.getFilterRank(filterName, learning, market, customGoal);
+    if (!evaluation) {
+      return rank;
+    }
+
+    let score = rank + Math.min(0.5, evaluation.relevanceRatio) + Math.min(2, evaluation.relevantCount) * 0.2;
+
+    if (evaluation.relevantCount === 1 && evaluation.totalReviewed <= 4) {
+      score -= 0.55;
+    }
+
+    if (evaluation.relevantCount === 0 && evaluation.totalReviewed <= 2) {
+      score -= 0.2;
+    }
+
+    return score;
+  }
+
+  private hasSyncReadyResearchBrief(brief: ResearchBrief | undefined): brief is ResearchBrief {
+    const hasText = (value: unknown): boolean => typeof value === "string" && value.trim().length > 0;
+
+    return Boolean(
+      brief &&
+      !brief.isFallback &&
+      hasText(brief.overview) &&
+      hasText(brief.qualificationSummary) &&
+      hasText(brief.emailBody) &&
+      hasText(brief.linkedInMessage) &&
+      hasText(brief.phoneScript)
+    );
+  }
+
+  private hasSyncReadyContacts(contacts: PublicContactCandidate[]): boolean {
+    return contacts.some((contact) => {
+      const email = contact.email?.trim().toLowerCase();
+      if (!email) {
+        return false;
+      }
+
+      if (/^(info|sales|office|kontakt|contact|hello|team|support|service|mail)@/i.test(email)) {
+        return false;
+      }
+
+      return Boolean(contact.firstName?.trim() || contact.lastName?.trim());
+    });
   }
 
   private shouldReuseLearnedFilters(
@@ -1355,8 +2690,10 @@ export class LeadPipelineAgent {
       return strategicBias;
     }
 
+    const sampleConfidence = Math.min(1, stats.runs / 5);
+    const confidenceWeightedRelevance = stats.averageRelevanceRatio * sampleConfidence;
     const earlyStopPenalty = stats.runs === 0 ? 0 : stats.earlyStopCount / stats.runs;
-    return stats.averageRelevanceRatio - earlyStopPenalty + strategicBias;
+    return confidenceWeightedRelevance - earlyStopPenalty + strategicBias;
   }
 
   private getStrategicFilterBias(filterName: string, market?: string, customGoal?: string): number {
@@ -1366,6 +2703,10 @@ export class LeadPipelineAgent {
 
     if (normalizedName.includes("vision") && normalizedName.includes("integrators")) {
       bias += 0.45;
+    }
+
+    if (normalizedName.includes("consulting") || normalizedName.includes("freelance")) {
+      bias += 0.38;
     }
 
     if (normalizedName.includes("automation software integrators")) {
@@ -1384,6 +2725,42 @@ export class LeadPipelineAgent {
       bias += 0.4;
     }
 
+    if (normalizedName.includes("europe vision system integrators")) {
+      bias += 0.48;
+    }
+
+    if (normalizedName.includes("europe industrial inspection engineering firms")) {
+      bias += 0.48;
+    }
+
+    if (normalizedName.includes("benelux dach vision integration specialists")) {
+      bias += 0.44;
+    }
+
+    if (normalizedName.includes("france italy spain vision inspection integrators")) {
+      bias += 0.44;
+    }
+
+    if (normalizedName.includes("france vision industrielle integrateurs")) {
+      bias += 0.5;
+    }
+
+    if (normalizedName.includes("italy visione industriale integratori")) {
+      bias += 0.48;
+    }
+
+    if (normalizedName.includes("spain vision industrial integradores")) {
+      bias += 0.48;
+    }
+
+    if (normalizedName.includes("netherlands sweden vision automation integrators")) {
+      bias += 0.45;
+    }
+
+    if (normalizedName.includes("austria switzerland vision inspection integrators")) {
+      bias += 0.46;
+    }
+
     if (normalizedName.includes("general ai integrators")) {
       bias += 0.05;
     }
@@ -1400,7 +2777,7 @@ export class LeadPipelineAgent {
       bias -= 0.15;
     }
 
-    if ((market ?? "").toLowerCase() === "de" && normalizedName.includes("europe")) {
+    if (isGermanyFocusedMarket(market) && normalizedName.includes("europe")) {
       bias -= 0.05;
     }
 
@@ -1430,7 +2807,7 @@ export class LeadPipelineAgent {
     const normalizedMarket = market?.trim().toLowerCase();
     const normalizedCountry = company.country?.trim().toLowerCase();
 
-    if (normalizedMarket === "de") {
+    if (isGermanyFocusedMarket(normalizedMarket)) {
       if (normalizedCountry) {
         return normalizedCountry === "germany";
       }
@@ -1456,10 +2833,78 @@ export class LeadPipelineAgent {
   }
 
   private isEuropeanLocation(location: string): boolean {
-    return EUROPEAN_COUNTRIES.has(location.trim().toLowerCase());
+    const normalizedLocation = location.trim().toLowerCase();
+    return EUROPEAN_COUNTRIES.has(normalizedLocation) || Array.from(EUROPEAN_COUNTRIES).some((country) => normalizedLocation.includes(country));
+  }
+
+  private getDiscoverySourceLabel(companySearchMode: import("../types").CompanySearchMode): string {
+    if (companySearchMode === "exa_search") {
+      return "Exa/Web";
+    }
+
+    if (companySearchMode === "diffbot_search") {
+      return "Diffbot";
+    }
+
+    if (companySearchMode === "diffbot_test_data") {
+      return "Diffbot-Testdaten";
+    }
+
+    if (companySearchMode === "open_crawler_search" || companySearchMode === "internet_research") {
+      return "Open Web";
+    }
+
+    return "Apollo";
+  }
+
+  private applyExplicitLocalityFilter(
+    companies: PreCategorizedCompany[],
+    researchBriefs: ResearchBrief[],
+    market?: string
+  ): { companies: PreCategorizedCompany[]; researchBriefs: ResearchBrief[] } {
+    const locality = extractExplicitMarketLocality(market)?.toLowerCase();
+    if (!locality) {
+      return { companies, researchBriefs };
+    }
+
+    const researchBriefByCompanyKey = new Map(
+      companies.map((company) => [this.getCompanyKey(company), researchBriefs.find((brief) => brief.companyName === company.name)])
+    );
+
+    const filteredCompanies = companies.filter((company) => {
+      const brief = researchBriefByCompanyKey.get(this.getCompanyKey(company));
+      const localityEvidence = [
+        company.name,
+        company.domain,
+        company.shortDescription,
+        brief?.overview,
+        brief?.qualificationSummary,
+        brief?.targetIndustry,
+        brief?.productsOffered
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return localityEvidence.includes(locality);
+    });
+
+    // Keep explicit-locality filtering as a preference, not a hard failure mode.
+    // Otherwise a market like "DE Berlin" can zero out a valid shortlist just
+    // because the generated summary omitted the city name even when the company is relevant.
+    if (filteredCompanies.length === 0) {
+      return { companies, researchBriefs };
+    }
+
+    const filteredCompanyNames = new Set(filteredCompanies.map((company) => company.name));
+    return {
+      companies: filteredCompanies,
+      researchBriefs: researchBriefs.filter((brief) => filteredCompanyNames.has(brief.companyName))
+    };
   }
 
   private buildSearchHistoryEntry(
+    companySearchMode: import("../types").CompanySearchMode,
     filterName: string,
     targetCategory: LeadCategory,
     batchType: "probe_15" | "expand_50",
@@ -1468,13 +2913,16 @@ export class LeadPipelineAgent {
     companies: PreCategorizedCompany[],
     filter: import("../types").ApolloOrganizationFilter,
     targetCategories: LeadCategory[],
+    market: string | undefined,
     threshold: number
   ): SearchHistoryEntry {
-    const relevantCount = this.getRelevantCompanies(companies, filter, targetCategories).length;
+    const relevantCount = this.getRelevantCompanies(companies, filter, targetCategories, market).length;
     const relevanceRatio = companies.length === 0 ? 0 : relevantCount / companies.length;
+    const categoryBreakdown = this.evaluateFilter(filterName, companies, filter, targetCategories, market, requestedCount, false).categoryBreakdown;
 
     return {
       timestamp: new Date().toISOString(),
+      companySearchMode,
       filterName,
       filterSnapshot: {
         persona: filter.persona,
@@ -1491,6 +2939,7 @@ export class LeadPipelineAgent {
       returnedCount: companies.length,
       relevantCount,
       relevanceRatio,
+      categoryBreakdown,
       passedThreshold: relevanceRatio >= threshold,
       recommendation: relevanceRatio >= threshold
         ? "Continue expanding this search."
@@ -1499,12 +2948,10 @@ export class LeadPipelineAgent {
   }
 
   private buildCategoryQuotas(targetLeadCount: number, categories: LeadCategory[]): Record<LeadCategory, number> {
-    const baseQuota = Math.floor(targetLeadCount / categories.length);
-    const remainder = targetLeadCount % categories.length;
     const quotas = {} as Record<LeadCategory, number>;
 
-    categories.forEach((category, index) => {
-      quotas[category] = baseQuota + (index < remainder ? 1 : 0);
+    categories.forEach((category) => {
+      quotas[category] = targetLeadCount;
     });
 
     return quotas;
@@ -1514,6 +2961,10 @@ export class LeadPipelineAgent {
     switch (category) {
       case "integrator_vision_industrial_ai":
         return "Vision-/Industrial-AI-Integratoren";
+      case "integrator_vision_ai_consulting":
+        return "Vision-/Industrial-AI-Consulting-Firmen";
+      case "integrator_vision_ai_freelancer":
+        return "Vision-/Industrial-AI-Freelancer";
       case "integrator_general_ai":
         return "allgemeinen AI-Integratoren";
       case "integrator_relevant_focus":
@@ -1547,9 +2998,10 @@ export class LeadPipelineAgent {
   private async excludeExistingHubSpotDomains(
     companies: PreCategorizedCompany[],
     dryRun: boolean,
-    disableHubSpotDeduplication: boolean
+    disableHubSpotDeduplication: boolean,
+    syncToHubSpot: boolean
   ): Promise<PreCategorizedCompany[]> {
-    if (dryRun || disableHubSpotDeduplication || companies.length === 0) {
+    if (dryRun || disableHubSpotDeduplication || syncToHubSpot || companies.length === 0) {
       return companies;
     }
 
@@ -1575,9 +3027,10 @@ export class LeadPipelineAgent {
     companies: CompanySample[],
     dryRun: boolean,
     disableHubSpotDeduplication: boolean,
-    targetCategories: LeadCategory[]
+    targetCategories: LeadCategory[],
+    syncToHubSpot: boolean
   ): Promise<CompanySample[]> {
-    if (dryRun || disableHubSpotDeduplication || companies.length === 0) {
+    if (dryRun || disableHubSpotDeduplication || syncToHubSpot || companies.length === 0) {
       return this.excludeCachedScreenedCompanies(companies, targetCategories);
     }
 
@@ -1609,33 +3062,87 @@ export class LeadPipelineAgent {
     requestedCount: number,
     dryRun: boolean,
     page: number,
+    companySearchMode: import("../types").CompanySearchMode,
     useWebSearch: boolean,
     disableHubSpotDeduplication: boolean,
+    syncToHubSpot: boolean,
     targetCategories: LeadCategory[],
     learning: LeadLearningData,
-    reviewedCompanies: Array<Pick<CompanySample, "name" | "domain">>
-  ): Promise<{ companies: CompanySample[]; nextPage: number }> {
+    reviewedCompanies: Array<Pick<CompanySample, "name" | "domain">>,
+    rawCollectionTarget?: number,
+    searchTuning?: {
+      webSearchMaxPages?: number;
+      webSearchSampleMultiplier?: number;
+      webSearchMinSampleSize?: number;
+      webSearchRawCollectionMultiplier?: number;
+    },
+    progressHeartbeat?: () => void
+  ): Promise<{ companies: CompanySample[]; nextPage: number; rawSampleCount: number; eligibleSampleCount: number }> {
     const collected: CompanySample[] = [];
     const seenKeys = new Set(reviewedCompanies.map((company) => this.getCompanyKey(company)));
-    const maxPages = useWebSearch ? 3 : 6;
-    const pageSize = Math.max(MIN_EARLY_STOP_REVIEW_COUNT, requestedCount);
+    const isOpenCrawlerSearch = companySearchMode === "open_crawler_search";
+    const webSearchSampleMultiplier = isOpenCrawlerSearch
+      ? Math.max(2, searchTuning?.webSearchSampleMultiplier ?? 3)
+      : (searchTuning?.webSearchSampleMultiplier ?? WEB_SEARCH_SAMPLE_MULTIPLIER);
+    const webSearchMinSampleSize = isOpenCrawlerSearch
+      ? Math.max(10, searchTuning?.webSearchMinSampleSize ?? 10)
+      : (searchTuning?.webSearchMinSampleSize ?? WEB_SEARCH_MIN_SAMPLE_SIZE);
+    const maxPages = useWebSearch
+      ? (searchTuning?.webSearchMaxPages ?? (isOpenCrawlerSearch ? 2 : WEB_SEARCH_MAX_PAGES))
+      : 6;
+    const pageSize = useWebSearch
+      ? Math.max(webSearchMinSampleSize, requestedCount * webSearchSampleMultiplier)
+      : Math.max(MIN_EARLY_STOP_REVIEW_COUNT, requestedCount);
+    const collectionTarget = useWebSearch
+      ? Math.max(
+          requestedCount,
+          rawCollectionTarget ?? (isOpenCrawlerSearch ? requestedCount * Math.max(2, searchTuning?.webSearchRawCollectionMultiplier ?? 2) : requestedCount)
+        )
+      : requestedCount;
     const plannedPages = this.buildSearchPagePlan(page, maxPages, useWebSearch, requestedCount);
     let nextPage = page;
+    let rawSampleCount = 0;
+    let eligibleSampleCount = 0;
     const shouldSkipDiscoveryDomain = (domain: string) => this.shouldSkipDiscoveryDomain(domain, targetCategories);
+    const discoveryCheckpointContext = this.discoveryCheckpointContext ??= {
+      runId: this.createDiscoveryCheckpointRunId(),
+      nextSequence: 0
+    };
 
     for (const plannedPage of plannedPages) {
-      if (collected.length >= requestedCount) {
+      if (collected.length >= collectionTarget) {
         break;
       }
 
-      const sample = this.excludeRejectedCompanies(
-        await this.apolloClient.fetchOrganizationSample(filter, pageSize, dryRun, plannedPage, useWebSearch, shouldSkipDiscoveryDomain),
-        learning
+      const rawSample = await this.runWithProgressHeartbeat(
+        () => this.apolloClient.fetchOrganizationSample(
+          filter,
+          pageSize,
+          dryRun,
+          plannedPage,
+          companySearchMode,
+          shouldSkipDiscoveryDomain
+        ),
+        progressHeartbeat ?? (() => undefined)
       );
+      await this.persistDiscoveryCheckpoint({
+        runId: discoveryCheckpointContext.runId,
+        sequence: ++discoveryCheckpointContext.nextSequence,
+        companySearchMode,
+        filter,
+        page: plannedPage,
+        companies: rawSample
+      });
+      const sample = this.excludeRejectedCompanies(rawSample, learning);
 
       nextPage = plannedPage + 1;
+      rawSampleCount += sample.length;
 
       if (sample.length === 0) {
+        if (useWebSearch) {
+          continue;
+        }
+
         break;
       }
 
@@ -1644,8 +3151,10 @@ export class LeadPipelineAgent {
         unseenSample,
         dryRun,
         disableHubSpotDeduplication,
-        targetCategories
+        targetCategories,
+        syncToHubSpot
       );
+      eligibleSampleCount += availableSample.length;
 
       for (const company of availableSample) {
         const companyKey = this.getCompanyKey(company);
@@ -1656,11 +3165,11 @@ export class LeadPipelineAgent {
         seenKeys.add(companyKey);
         collected.push(company);
 
-        if (collected.length >= requestedCount) {
+        if (collected.length >= collectionTarget) {
           break;
         }
       }
-      if (sample.length < pageSize) {
+      if (!useWebSearch && sample.length < pageSize) {
         break;
       }
     }
@@ -1671,7 +3180,9 @@ export class LeadPipelineAgent {
 
     return {
       companies: collected,
-      nextPage
+      nextPage,
+      rawSampleCount,
+      eligibleSampleCount
     };
   }
 
@@ -1839,21 +3350,94 @@ export class LeadPipelineAgent {
     return knownExistingDomains;
   }
 
+  private async preloadKnownHubSpotDomains(disableHubSpotDeduplication: boolean): Promise<void> {
+    if (disableHubSpotDeduplication) {
+      return;
+    }
+
+    const liveHubSpotDomains = await this.hubspotClient.getAllCompanyDomains();
+    for (const domain of liveHubSpotDomains) {
+      this.upsertCompanyScreeningRecord(
+        {
+          name: domain,
+          domain,
+          shortDescription: "",
+          sourceFilter: "hubspot-domain-cache"
+        },
+        undefined,
+        true
+      );
+    }
+  }
+
   private normalizeDomain(domain: string | undefined): string | undefined {
     if (!domain) {
       return undefined;
     }
 
-    return domain
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//, "")
-      .replace(/^www\./, "")
-      .replace(/\/$/, "");
+    try {
+      const hostname = new URL(domain.startsWith("http") ? domain : `https://${domain}`).hostname.toLowerCase().replace(/^www\./, "");
+      const labels = hostname.split(".").filter(Boolean);
+      if (labels.length <= 2) {
+        return hostname;
+      }
+
+      const compoundTld = labels.slice(-2).join(".");
+      return COMMON_COMPOUND_TLDS.has(compoundTld)
+        ? labels.slice(-3).join(".")
+        : labels.slice(-2).join(".");
+    } catch {
+      return domain
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .replace(/\/$/, "");
+    }
   }
 
   private getUniqueCompanyCount(companies: PreCategorizedCompany[]): number {
     return companies.filter((company, index, all) => this.findFirstMatchingCompanyIndex(all, company) === index).length;
+  }
+
+  private createDiscoveryCheckpointRunId(): string {
+    return new Date().toISOString().replace(/[:.]/g, "-");
+  }
+
+  private async persistDiscoveryCheckpoint(params: {
+    runId: string;
+    sequence: number;
+    companySearchMode: string;
+    filter: ApolloOrganizationFilter;
+    page: number;
+    companies: CompanySample[];
+  }): Promise<void> {
+    const outputDir = process.env.LEAD_AGENT_DISCOVERY_CHECKPOINT_DIR?.trim()
+      || path.join(process.cwd(), "data", "lead-run-discovery-checkpoints", params.runId);
+    await fs.mkdir(outputDir, { recursive: true });
+
+    const safeFilterName = params.filter.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "unnamed-filter";
+    const fileName = `${String(params.sequence).padStart(3, "0")}-${params.companySearchMode}-page-${params.page}-${safeFilterName}.json`;
+
+    await fs.writeFile(path.join(outputDir, fileName), JSON.stringify({
+      runId: params.runId,
+      savedAt: new Date().toISOString(),
+      companySearchMode: params.companySearchMode,
+      page: params.page,
+      filter: {
+        name: params.filter.name,
+        keywords: params.filter.keywords,
+        locations: params.filter.locations,
+        industries: params.filter.industries,
+        employeeRanges: params.filter.employeeRanges
+      },
+      count: params.companies.length,
+      companies: params.companies
+    }, null, 2), "utf8");
   }
 
   private excludeAlreadyReviewedCompanies(
@@ -1865,11 +3449,11 @@ export class LeadPipelineAgent {
   }
 
   private findFirstMatchingCompanyIndex(companies: PreCategorizedCompany[], company: PreCategorizedCompany): number {
-    const companyDomain = company.domain?.toLowerCase();
+    const companyDomain = this.normalizeDomain(company.domain);
     const companyName = company.name.toLowerCase();
 
     return companies.findIndex((entry) => {
-      const sameDomain = companyDomain && entry.domain?.toLowerCase() === companyDomain;
+      const sameDomain = companyDomain && this.normalizeDomain(entry.domain) === companyDomain;
       const sameName = entry.name.toLowerCase() === companyName;
       return Boolean(sameDomain || sameName);
     });
@@ -1899,6 +3483,7 @@ export class LeadPipelineAgent {
       productsOffered: researchBrief?.productsOffered,
       overview: researchBrief?.overview,
       qualificationSummary: researchBrief?.qualificationSummary,
+      linkedInConnectionRequest: researchBrief?.linkedInConnectionRequest,
       linkedInMessage: researchBrief?.linkedInMessage,
       emailSubject: researchBrief?.emailSubject,
       emailBody: researchBrief?.emailBody,
@@ -1919,7 +3504,14 @@ export class LeadPipelineAgent {
     }
 
     const entries = await this.mapWithConcurrency(
-      companies.map((company) => async () => [this.getCompanyKey(company), await this.hubspotClient.findPublicContactsForCompany(company)] as const),
+      companies.map((company) => async () => [
+        this.getCompanyKey(company),
+        await this.withTimeout(
+          this.hubspotClient.findPublicContactsForCompany(company),
+          PUBLIC_CONTACT_DISCOVERY_TIMEOUT_MS,
+          [] as PublicContactCandidate[]
+        )
+      ] as const),
       CONTACT_DISCOVERY_CONCURRENCY
     );
 
@@ -1939,7 +3531,7 @@ export class LeadPipelineAgent {
     const entries = await this.mapWithConcurrency(
       companies.map((company) => async () => {
         const brief = researchBriefs.find((entry) => entry.companyName === company.name);
-        const apolloCandidates = await this.apolloClient.searchContactsForCompany(company, 10);
+        const apolloCandidates = await this.apolloClient.searchContactsForCompany(company, 20);
         const selectedCandidates = await this.azureClient.chooseApolloContacts(company, apolloCandidates, dryRun, mainContext, brief);
         const enrichedContacts: PublicContactCandidate[] = [];
 
@@ -1964,8 +3556,8 @@ export class LeadPipelineAgent {
     return new Map(entries);
   }
 
-  private hasReachableContact(contacts: PublicContactCandidate[]): boolean {
-    return contacts.some((contact) => Boolean(contact.email || contact.phone));
+  private hasNonGenericReachableContact(contacts: PublicContactCandidate[]): boolean {
+    return contacts.some((contact) => Boolean(contact.email || contact.phone) && !this.isGenericFallbackContact(contact));
   }
 
   private mergeContactCandidates(
@@ -1980,6 +3572,10 @@ export class LeadPipelineAgent {
       const seenContactKeys = new Set(existingContacts.map((contact) => this.getContactKey(contact)));
 
       for (const contact of contacts) {
+        if (this.isGenericFallbackContact(contact) && existingContacts.some((existing) => !this.isGenericFallbackContact(existing))) {
+          continue;
+        }
+
         const contactKey = this.getContactKey(contact);
         if (seenContactKeys.has(contactKey)) {
           continue;
@@ -1995,6 +3591,12 @@ export class LeadPipelineAgent {
     return merged;
   }
 
+  private isGenericFallbackContact(contact: PublicContactCandidate): boolean {
+    const email = contact.email?.trim().toLowerCase() ?? "";
+    return /^((info|sales|office|kontakt|contact|hello|team|support|service|mail)@)/i.test(email)
+      || contact.label === "public_generic_mailbox";
+  }
+
   private getContactKey(contact: PublicContactCandidate): string {
     return [
       contact.email?.trim().toLowerCase(),
@@ -2007,7 +3609,24 @@ export class LeadPipelineAgent {
   }
 
   private getCompanyKey(company: Pick<CompanySample, "name" | "domain">): string {
-    return company.domain?.trim().toLowerCase() || company.name.trim().toLowerCase();
+    return this.normalizeDomain(company.domain) || company.name.trim().toLowerCase();
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
+    let timeoutHandle: NodeJS.Timeout | undefined;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((resolve) => {
+          timeoutHandle = setTimeout(() => resolve(fallbackValue), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 
   private async mapWithConcurrency<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
@@ -2021,11 +3640,280 @@ export class LeadPipelineAgent {
     return results;
   }
 
+  private buildFunnel(
+    companySearchMode: import("../types").CompanySearchMode,
+    afterHubSpotDedup: number,
+    afterAzureAICheck: number,
+    syncedToHubSpot: number
+  ): LeadRunFunnel {
+    const discoveryMetrics = this.apolloClient.getDiscoveryMetrics(companySearchMode);
+
+    return {
+      crawledPages: discoveryMetrics.crawledPages,
+      afterCrawlerPrefilter: discoveryMetrics.acceptedCompanyDomains,
+      afterHubSpotDedup,
+      afterAzureAICheck,
+      syncedToHubSpot
+    };
+  }
+
+  private shouldAbortLowYieldExaRun(
+    companySearchMode: import("../types").CompanySearchMode,
+    processedFilters: number,
+    shortlistedCount: number
+  ): boolean {
+    if (companySearchMode !== "exa_search" || shortlistedCount > 0 || processedFilters < 2) {
+      return false;
+    }
+
+    const discoveryMetrics = this.apolloClient.getDiscoveryMetrics(companySearchMode);
+    return discoveryMetrics.crawledPages >= 24 && discoveryMetrics.acceptedCompanyDomains >= 24;
+  }
+
+  private async replenishExhaustedFilters(
+    existingFilters: ApolloOrganizationFilter[],
+    evaluations: FilterEvaluation[],
+    market: string | undefined,
+    customGoal: string | undefined,
+    mainContext: string | undefined,
+    searchStrategyContext: string | undefined,
+    targetCategories: LeadCategory[],
+    dryRun: boolean,
+    learning?: LeadLearningData
+  ): Promise<ApolloOrganizationFilter[]> {
+    const existingNames = new Set(existingFilters.map((filter) => filter.name));
+    const recentOutcomes = evaluations
+      .slice(-12)
+      .map((evaluation) => `${evaluation.filterName}: relevant ${evaluation.relevantCount}/${evaluation.totalReviewed} (${Math.round(evaluation.relevanceRatio * 100)}%)`)
+      .join("\n");
+    const strongestOutcomes = [...evaluations]
+      .sort((left, right) => right.relevanceRatio - left.relevanceRatio)
+      .slice(0, 6)
+      .map((evaluation) => `${evaluation.filterName}: relevant ${evaluation.relevantCount}/${evaluation.totalReviewed} (${Math.round(evaluation.relevanceRatio * 100)}%)`)
+      .join("\n");
+    const adaptiveSearchStrategyContext = [
+      this.buildAdaptiveSearchStrategyContext(searchStrategyContext),
+      "The current filter set was exhausted before the lead target was reached.",
+      recentOutcomes ? `Most recent tested filters:\n${recentOutcomes}` : undefined,
+      strongestOutcomes ? `Best-performing filters so far:\n${strongestOutcomes}` : undefined,
+      "Return only net-new filters with distinct names and search angles that complement the exhausted set.",
+      "Prefer concrete geo and niche variants over near-duplicates, for example city-specific variants such as Berlin, Munich, Hamburg, Cologne, Stuttgart, or DACH sub-regions when they fit the market.",
+      "For Exa-style web discovery, propose search angles that are likely to surface additional official company sites instead of directories or generic listing pages."
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const generatedFilters = await this.azureClient.generateSuggestedFilters(
+      market,
+      customGoal,
+      mainContext,
+      adaptiveSearchStrategyContext,
+      targetCategories,
+      existingFilters,
+      dryRun,
+      learning
+    );
+
+    return generatedFilters
+      .filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories))
+      .filter((filter) => !existingNames.has(filter.name));
+  }
+
+  private buildFallbackReplenishmentFilters(
+    existingFilters: ApolloOrganizationFilter[],
+    evaluations: FilterEvaluation[],
+    targetCategories: LeadCategory[]
+  ): ApolloOrganizationFilter[] {
+    const existingNames = new Set(existingFilters.map((filter) => filter.name));
+    const rankedFilters = [...evaluations]
+      .filter((evaluation) => evaluation.relevantCount > 0)
+      .sort((left, right) => {
+        if (right.relevanceRatio !== left.relevanceRatio) {
+          return right.relevanceRatio - left.relevanceRatio;
+        }
+
+        return right.relevantCount - left.relevantCount;
+      })
+      .map((evaluation) => existingFilters.find((filter) => filter.name === evaluation.filterName))
+      .filter((filter): filter is ApolloOrganizationFilter => Boolean(filter));
+
+    const fallbackFilters: ApolloOrganizationFilter[] = [];
+
+    for (const filter of rankedFilters.slice(0, 4)) {
+      const nextLocation = FALLBACK_REPLENISHMENT_LOCATIONS.find((location) =>
+        !filter.locations.some((existingLocation) => existingLocation.toLowerCase() === location.toLowerCase())
+      );
+      if (nextLocation) {
+        const locationVariant: ApolloOrganizationFilter = {
+          ...filter,
+          name: `${filter.name} ${nextLocation} Variant`,
+          locations: [...filter.locations, nextLocation],
+          notes: `${filter.notes} Fallback location variant for continued discovery in ${nextLocation}.`
+        };
+        if (!existingNames.has(locationVariant.name) && this.filterSupportsTargetCategories(locationVariant, targetCategories)) {
+          existingNames.add(locationVariant.name);
+          fallbackFilters.push(locationVariant);
+        }
+      }
+
+      const nextKeyword = FALLBACK_REPLENISHMENT_KEYWORDS.find((keyword) =>
+        !filter.keywords.some((existingKeyword) => existingKeyword.toLowerCase() === keyword.toLowerCase())
+      );
+      if (nextKeyword) {
+        const keywordVariant: ApolloOrganizationFilter = {
+          ...filter,
+          name: `${filter.name} ${nextKeyword} Variant`,
+          keywords: [...filter.keywords, nextKeyword],
+          notes: `${filter.notes} Fallback keyword variant for continued discovery around ${nextKeyword}.`
+        };
+        if (!existingNames.has(keywordVariant.name) && this.filterSupportsTargetCategories(keywordVariant, targetCategories)) {
+          existingNames.add(keywordVariant.name);
+          fallbackFilters.push(keywordVariant);
+        }
+      }
+    }
+
+    return fallbackFilters.slice(0, 8);
+  }
+
+  private getParallelFilterProbeCount(
+    companySearchMode: import("../types").CompanySearchMode,
+    targetLeadCount: number
+  ): number {
+    if (companySearchMode !== "exa_search") {
+      return PARALLEL_FILTER_PROBE_COUNT;
+    }
+
+    if (targetLeadCount <= 10) {
+      return 1;
+    }
+
+    if (targetLeadCount <= 25) {
+      return 2;
+    }
+
+    return 3;
+  }
+
+  private getFiltersToExpandAfterProbe(
+    companySearchMode: import("../types").CompanySearchMode,
+    targetLeadCount: number
+  ): number {
+    if (companySearchMode !== "exa_search") {
+      return FILTERS_TO_EXPAND_AFTER_PROBE;
+    }
+
+    if (targetLeadCount <= 10) {
+      return 1;
+    }
+
+    if (targetLeadCount <= 25) {
+      return 2;
+    }
+
+    return 3;
+  }
+
+  private async finalizeLeadRun(
+    request: LeadJobRequest,
+    suggestedFilters: ApolloOrganizationFilter[],
+    evaluations: FilterEvaluation[],
+    shortlistedCompanies: PreCategorizedCompany[],
+    researchBriefs: ResearchBrief[],
+    searchHistory: SearchHistoryEntry[],
+    hubspotSync: {
+      attempted: boolean;
+      mode: "dry-run" | "live";
+      candidateCount: number;
+      syncedCount: number;
+      companySyncedCount: number;
+      contactSyncedCount: number;
+      errors?: string[];
+    },
+    filtersStoppedEarly: number,
+    companiesSkippedAfterEarlyStop: number,
+    funnel: LeadRunFunnel,
+    timedOut: boolean,
+    stopped = false,
+    completionReason?: string,
+    contactCandidatesByCompany: Map<string, PublicContactCandidate[]> = new Map()
+  ): Promise<LeadJobResult> {
+    const azureCosts = this.azureClient.getUsageTotals();
+
+    await this.controlPlaneStore.writeCompanyScreeningDatabase(this.companyScreeningDatabase);
+    await this.controlPlaneStore.recordFilterEvaluations(request.companySearchMode ?? "internet_research", evaluations);
+    await this.controlPlaneStore.recordSearchHistory(request.companySearchMode ?? "internet_research", searchHistory);
+    await this.controlPlaneStore.writeLatestLeadRun({
+      createdAt: new Date().toISOString(),
+      requested: request,
+      summary: {
+        foundCandidates: shortlistedCompanies.length,
+        filtersTested: evaluations.length,
+        filtersStoppedEarly,
+        companiesSkippedAfterEarlyStop,
+        funnel,
+        timedOut,
+        stopped,
+        completionReason
+      },
+      contacts: shortlistedCompanies.map((company) =>
+        this.buildGeneratedLeadRecord(
+          company,
+          researchBriefs,
+          contactCandidatesByCompany.get(this.getCompanyKey(company)) ?? []
+        )
+      ),
+      searchHistory,
+      hubspotSync: {
+        attempted: hubspotSync.attempted,
+        mode: hubspotSync.mode,
+        candidateCount: hubspotSync.candidateCount,
+        syncedCount: hubspotSync.syncedCount,
+        companySyncedCount: hubspotSync.companySyncedCount,
+        contactSyncedCount: hubspotSync.contactSyncedCount,
+        errors: hubspotSync.errors
+      },
+      costs: {
+        azure: azureCosts
+      }
+    });
+
+    return {
+      requested: request,
+      suggestedFilters,
+      evaluations: evaluations.sort((left, right) => right.relevanceRatio - left.relevanceRatio),
+      shortlistedCompanies,
+      researchBriefs,
+      searchHistory,
+      hubspotSync: {
+        attempted: hubspotSync.attempted,
+        mode: hubspotSync.mode,
+        candidateCount: hubspotSync.candidateCount,
+        syncedCount: hubspotSync.syncedCount,
+        companySyncedCount: hubspotSync.companySyncedCount,
+        contactSyncedCount: hubspotSync.contactSyncedCount,
+        errors: hubspotSync.errors
+      },
+      efficiency: {
+        filtersStoppedEarly,
+        companiesSkippedAfterEarlyStop
+      },
+      funnel,
+      timedOut,
+      stopped,
+      completionReason,
+      costs: {
+        azure: azureCosts
+      }
+    };
+  }
+
   private evaluateFilter(
     filterName: string,
     companies: PreCategorizedCompany[],
     filter: import("../types").ApolloOrganizationFilter,
     targetCategories: LeadCategory[],
+    market: string | undefined,
     initialReviewCount: number,
     stoppedEarly: boolean
   ): FilterEvaluation {
@@ -2038,7 +3926,7 @@ export class LeadPipelineAgent {
       Object.fromEntries(allCategories.map((category) => [category, 0])) as Record<LeadCategory, number>
     );
 
-    const relevantCount = this.getRelevantCompanies(companies, filter, targetCategories).length;
+    const relevantCount = this.getRelevantCompanies(companies, filter, targetCategories, market).length;
     const relevanceRatio = companies.length === 0 ? 0 : relevantCount / companies.length;
 
     return {
@@ -2067,6 +3955,18 @@ export class LeadPipelineAgent {
   private filterSupportsTargetCategories(filter: ApolloOrganizationFilter, targetCategories: LeadCategory[]): boolean {
     const filterCategories = filter.targetCategories?.length ? filter.targetCategories : this.inferTargetCategories(filter.name);
     return filterCategories.some((category) => targetCategories.includes(category));
+  }
+
+  private getPrimaryTargetCategoryForFilter(filter: ApolloOrganizationFilter, targetCategories: LeadCategory[]): LeadCategory | undefined {
+    const filterCategories = filter.targetCategories?.length ? filter.targetCategories : this.inferTargetCategories(filter.name);
+
+    for (const category of filterCategories) {
+      if (targetCategories.includes(category)) {
+        return category;
+      }
+    }
+
+    return targetCategories.find((category) => filterCategories.includes(category));
   }
 
   private inferTargetCategories(filterName: string): LeadCategory[] {

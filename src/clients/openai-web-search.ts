@@ -26,15 +26,40 @@ interface OpenAIResponsesOutput {
 
 type WebSearchMode = "preResearch" | "deepResearch";
 
-const SOURCE_DISCOVERY_MAX_SOURCE_PAGES = 2;
-const SOURCE_DISCOVERY_MAX_INTERNAL_PAGES = 3;
-const SOURCE_DISCOVERY_MAX_QUEUED_PAGES = 4;
-const SOURCE_DISCOVERY_MAX_CANDIDATE_DOMAINS = 12;
-const SOURCE_DISCOVERY_MAX_BUDGET_MS = 20000;
+const SOURCE_DISCOVERY_MAX_SOURCE_PAGES = 4;
+const SOURCE_DISCOVERY_MAX_INTERNAL_PAGES = 4;
+const SOURCE_DISCOVERY_MAX_QUEUED_PAGES = 6;
+const SOURCE_DISCOVERY_MAX_CANDIDATE_DOMAINS = 20;
+const SOURCE_DISCOVERY_MAX_BUDGET_MS = 18000;
 const SEARCH_RESULT_MAX_QUERIES = 6;
-const SEARCH_RESULT_MAX_RESULTS_PER_QUERY = 10;
-const CRAWL_DISCOVERY_CONCURRENCY = 4;
-const INTERNAL_PAGE_CRAWL_CONCURRENCY = 3;
+const SEARCH_RESULT_MAX_RESULTS_PER_QUERY = 25;
+const SEARCH_RESULT_QUERY_CONCURRENCY = 4;
+const SEARCH_RESULT_DDG_TIMEOUT_MS = 3500;
+const SEARCH_RESULT_BING_TIMEOUT_MS = 5000;
+const CRAWL_DISCOVERY_CONCURRENCY = 6;
+const INTERNAL_PAGE_CRAWL_CONCURRENCY = 4;
+const SOURCE_PAGE_FETCH_TIMEOUT_MS = 5000;
+const WEBSITE_CRAWL_TIMEOUT_MS = 12000;
+const INTERNAL_PAGE_CRAWL_TIMEOUT_MS = 8000;
+const OPENAI_PRE_RESEARCH_TIMEOUT_MS = 8000;
+const OPENAI_DEEP_RESEARCH_TIMEOUT_MS = 30000;
+const DEFAULT_BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+  "Accept-Language": "en-US,en;q=0.9,de;q=0.8"
+};
+const COMMON_COMPOUND_TLDS = new Set([
+  "co.uk",
+  "com.au",
+  "com.br",
+  "com.mx",
+  "co.jp",
+  "co.kr",
+  "co.nz",
+  "com.sg",
+  "com.cn",
+  "com.tw",
+  "com.hk"
+]);
 
 export class OpenAIWebSearchClient {
   async discoverCompanies(
@@ -85,15 +110,21 @@ export class OpenAIWebSearchClient {
     page: number,
     shouldSkipDomain?: (domain: string) => boolean
   ): Promise<CompanySample[]> {
+    const queries = this.buildKeywordQueries(filter, page).slice(0, SEARCH_RESULT_MAX_QUERIES);
+    const queryResults = await this.mapWithConcurrency(
+      queries.map((query) => async () => ({
+        query,
+        candidateUrls: await this.searchCandidateUrls(query, filter, shouldSkipDomain)
+      })),
+      SEARCH_RESULT_QUERY_CONCURRENCY
+    );
+
     const companies: CompanySample[] = [];
     const seenDomains = new Set<string>();
-    const queries = this.buildKeywordQueries(filter, page).slice(0, SEARCH_RESULT_MAX_QUERIES);
+    const domainsToCrawl: Array<{ domain: string; query: string }> = [];
 
-    for (const query of queries) {
-      const candidateUrls = await this.searchDuckDuckGo(query, shouldSkipDomain);
-      const crawlDomains: string[] = [];
-
-      for (const candidateUrl of candidateUrls) {
+    for (const queryResult of queryResults) {
+      for (const candidateUrl of queryResult.candidateUrls) {
         const normalizedDomain = this.normalizeUrl(candidateUrl);
         if (
           !normalizedDomain ||
@@ -105,41 +136,100 @@ export class OpenAIWebSearchClient {
         }
 
         seenDomains.add(normalizedDomain);
-        crawlDomains.push(normalizedDomain);
+        domainsToCrawl.push({ domain: normalizedDomain, query: queryResult.query });
+      }
+    }
+
+    const crawledCompanies = await this.mapWithConcurrency(
+      domainsToCrawl.map(({ domain, query }) => async () => {
+        const websiteProfile = await this.fetchWebsiteCrawlProfile(domain);
+        if (!websiteProfile || !this.looksLikePotentialDeliveryFit(websiteProfile.summary)) {
+          return null;
+        }
+
+        return {
+          name: this.deriveCompanyName(domain, websiteProfile.summary),
+          domain: this.toCanonicalCompanyDomain(domain),
+          country: this.inferCountryFromDomain(domain, websiteProfile.summary),
+          shortDescription: websiteProfile.summary,
+          sourceFilter: `${filter.name} (browser-search: ${this.compactQueryLabel(query)})`
+        } satisfies CompanySample;
+      }),
+      CRAWL_DISCOVERY_CONCURRENCY
+    );
+
+    for (const company of crawledCompanies) {
+      if (!company) {
+        continue;
       }
 
-      const crawledCompanies = await this.mapWithConcurrency(
-        crawlDomains.map((domain) => async () => {
-          const websiteProfile = await this.fetchWebsiteCrawlProfile(domain);
-          if (!websiteProfile || !this.looksLikePotentialDeliveryFit(websiteProfile.summary)) {
-            return null;
-          }
-
-          return {
-            name: this.deriveCompanyName(domain, websiteProfile.summary),
-            domain,
-            country: this.inferCountryFromDomain(domain, websiteProfile.summary),
-            shortDescription: websiteProfile.summary,
-            sourceFilter: `${filter.name} (browser-search: ${this.compactQueryLabel(query)})`
-          } satisfies CompanySample;
-        }),
-        CRAWL_DISCOVERY_CONCURRENCY
-      );
-
-      for (const company of crawledCompanies) {
-        if (!company) {
-          continue;
-        }
-
-        companies.push(company);
-
-        if (companies.length >= limit) {
-          return companies;
-        }
+      companies.push(company);
+      if (companies.length >= limit) {
+        return companies;
       }
     }
 
     return companies;
+  }
+
+  private async searchCandidateUrls(
+    query: string,
+    filter: ApolloOrganizationFilter,
+    shouldSkipDomain?: (domain: string) => boolean
+  ): Promise<string[]> {
+    const duckDuckGoUrls = await this.searchDuckDuckGo(query, shouldSkipDomain);
+    if (duckDuckGoUrls.length > 0) {
+      return duckDuckGoUrls;
+    }
+
+    const bingUrls = await this.searchBing(query, shouldSkipDomain);
+    if (bingUrls.length > 0 || !readiness.openAIWebSearchConfigured) {
+      return bingUrls;
+    }
+
+    return this.searchWithOpenAIWebFallback(query, filter, shouldSkipDomain);
+  }
+
+  private async searchBing(query: string, shouldSkipDomain?: (domain: string) => boolean): Promise<string[]> {
+    try {
+      const response = await fetch(`https://www.bing.com/search?q=${encodeURIComponent(query)}`, {
+        signal: AbortSignal.timeout(SEARCH_RESULT_BING_TIMEOUT_MS),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0)"
+        }
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const html = await response.text();
+      const matches = Array.from(html.matchAll(/<h2[^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["']/gi));
+      const urls: string[] = [];
+
+      for (const match of matches) {
+        if (urls.length >= SEARCH_RESULT_MAX_RESULTS_PER_QUERY) {
+          break;
+        }
+
+        const resolvedHref = this.resolveSearchResultHref(match[1]?.trim() ?? "");
+        const normalizedHref = this.normalizeUrl(resolvedHref);
+        if (
+          !normalizedHref ||
+          this.shouldIgnoreDomain(normalizedHref) ||
+          shouldSkipDomain?.(normalizedHref) ||
+          urls.includes(normalizedHref)
+        ) {
+          continue;
+        }
+
+        urls.push(normalizedHref);
+      }
+
+      return urls;
+    } catch {
+      return [];
+    }
   }
 
   private buildKeywordQueries(filter: ApolloOrganizationFilter, page: number): string[] {
@@ -161,13 +251,16 @@ export class OpenAIWebSearchClient {
       return `${keyword} ${suffix} ${location}`;
     });
 
+    const primaryKeywords = keywordVariants.slice(0, 3);
+    const secondaryKeywords = keywordVariants.slice(3, 6);
+
     const targetedQueries = [
-      `gestalt automation aehnliche firmen industrielle bildverarbeitung ${location}`,
-      `veo automation aehnliche firmen systemintegrator ${location}`,
-      `visiontechnik aehnliche firmen industrielle bildverarbeitung ${location}`,
-      `maschinen vision systemintegrator gmbh ${location}`,
-      `industrielle bildverarbeitung softwareentwicklung ${location}`,
-      `automation software engineering gmbh ${location}`
+      `${primaryKeywords.join(" ")} kundenprojekte ${location}`,
+      `${primaryKeywords.join(" ")} gmbh ${location}`,
+      `${primaryKeywords.join(" ")} ${secondaryKeywords.join(" ")} ${location}`,
+      `${filter.persona} ${location}`,
+      `${keywordVariants.slice(0, 2).join(" ")} engineering services ${location}`,
+      `${keywordVariants.slice(1, 4).join(" ")} systemintegrator ${location}`
     ];
 
     return [...baseQueries, ...targetedQueries];
@@ -192,7 +285,7 @@ export class OpenAIWebSearchClient {
   private async searchDuckDuckGo(query: string, shouldSkipDomain?: (domain: string) => boolean): Promise<string[]> {
     try {
       const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(SEARCH_RESULT_DDG_TIMEOUT_MS),
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0)"
         }
@@ -236,17 +329,84 @@ export class OpenAIWebSearchClient {
     }
   }
 
+  private async searchWithOpenAIWebFallback(
+    query: string,
+    filter: ApolloOrganizationFilter,
+    shouldSkipDomain?: (domain: string) => boolean
+  ): Promise<string[]> {
+    try {
+      const response = await this.runWebSearch(
+        [
+          "Find official company websites for this company discovery query.",
+          "Return only organization homepages or official company sites.",
+          "Exclude directories, media sites, LinkedIn, social profiles, marketplaces, events, and article pages.",
+          `Market intent: ${filter.persona}`,
+          `Target region: ${filter.locations.join(", ") || "Germany"}`,
+          `Search query: ${query}`,
+          `Keywords: ${filter.keywords.slice(0, 8).join(", ")}`,
+          "Return strict JSON with {\"websites\":[\"https://example.com\"]}. Limit to 12 websites."
+        ].join("\n\n"),
+        160,
+        "preResearch"
+      );
+
+      const parsed = this.parseJson<{ websites?: string[] }>(response.text);
+      const candidateUrls = [...(parsed.websites ?? []), ...response.citations];
+
+      return Array.from(
+        new Set(
+          candidateUrls
+            .map((url) => this.normalizeUrl(url))
+            .filter((url): url is string => Boolean(url))
+            .filter((url) => !this.shouldIgnoreDomain(url))
+            .filter((url) => !shouldSkipDomain?.(url))
+        )
+      ).slice(0, SEARCH_RESULT_MAX_RESULTS_PER_QUERY);
+    } catch {
+      return [];
+    }
+  }
+
   private resolveSearchResultHref(rawHref: string): string {
-    if (/^https?:\/\//i.test(rawHref)) {
-      return rawHref;
+    const decodedHref = this.decodeHtml(rawHref);
+
+    if (/^https?:\/\//i.test(decodedHref)) {
+      try {
+        const parsed = new URL(decodedHref);
+
+        if (/bing\.com$/i.test(parsed.hostname)) {
+          const directTarget = parsed.searchParams.get("target") ?? parsed.searchParams.get("url");
+          if (directTarget) {
+            return decodeURIComponent(directTarget);
+          }
+
+          const encodedTarget = parsed.searchParams.get("u");
+          if (encodedTarget) {
+            const normalizedTarget = encodedTarget.startsWith("a1") ? encodedTarget.slice(2) : encodedTarget;
+
+            try {
+              const decodedTarget = Buffer.from(normalizedTarget, "base64").toString("utf8");
+              if (/^https?:\/\//i.test(decodedTarget)) {
+                return decodedTarget;
+              }
+            } catch {
+              return decodedHref;
+            }
+          }
+        }
+
+        return decodedHref;
+      } catch {
+        return decodedHref;
+      }
     }
 
     try {
-      const parsed = new URL(rawHref, "https://html.duckduckgo.com");
+      const parsed = new URL(decodedHref, "https://html.duckduckgo.com");
       const target = parsed.searchParams.get("uddg");
       return target ? decodeURIComponent(target) : parsed.toString();
     } catch {
-      return rawHref;
+      return decodedHref;
     }
   }
 
@@ -306,7 +466,7 @@ export class OpenAIWebSearchClient {
 
           return {
             name: this.deriveCompanyName(domain, websiteProfile.summary),
-            domain,
+            domain: this.toCanonicalCompanyDomain(domain),
             country: this.inferCountryFromDomain(domain, websiteProfile.summary),
             shortDescription: websiteProfile.summary,
             sourceFilter: `${filter.name} (source-scrape: ${this.compactQueryLabel(sourcePage.reason ?? sourcePage.url ?? "source-page")})`
@@ -378,7 +538,7 @@ export class OpenAIWebSearchClient {
       try {
         const response = await fetch(nextPage, {
           redirect: "follow",
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(SOURCE_PAGE_FETCH_TIMEOUT_MS),
             headers: {
               "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0)"
             }
@@ -456,6 +616,7 @@ export class OpenAIWebSearchClient {
       "system integrator",
       "software development",
       "engineering services",
+      "implementation services",
       "implementation",
       "automation",
       "machine vision",
@@ -463,8 +624,27 @@ export class OpenAIWebSearchClient {
       "inspection",
       "embedded software",
       "industrial software",
+      "industrial ai",
+      "computer vision",
+      "aoi",
+      "automated optical inspection",
+      "quality inspection",
+      "feasibility study",
+      "solution provider",
       "deep learning",
       "project"
+    ];
+    const specialistConsultingSignals = [
+      "machine vision consultant",
+      "computer vision consultant",
+      "vision ai consulting",
+      "industrial ai consulting",
+      "embedded vision consultant",
+      "inspection ai consultant",
+      "freelancer",
+      "freiberuf",
+      "beratung",
+      "consulting services"
     ];
     const negativeSignals = [
       "magazine",
@@ -479,34 +659,128 @@ export class OpenAIWebSearchClient {
       "vendor directory",
       "company lists",
       "top 25",
+      "top 10",
+      "best of",
+      "ranked list",
       "oilfield",
       "distributor",
       "trader",
       "spare parts",
-      "consulting",
       "pipeline inspection",
       "corrosion",
       "investor",
       "bank",
-      "insurance"
+      "insurance",
+      "newsroom",
+      "press release",
+      "academy",
+      "training center",
+      "shop",
+      "e-commerce"
     ];
+
+    const hasSpecialistConsultingSignal = specialistConsultingSignals.some((signal) => lowered.includes(signal));
+    const hasPositiveSignal = positiveSignals.some((signal) => lowered.includes(signal));
+    const hasStrongDeliveryContext = /(customer|kunden|implementation|integration|engineering|projekt|delivery|services|dienstleistung)/.test(lowered);
 
     if (negativeSignals.some((signal) => lowered.includes(signal))) {
       return false;
     }
 
-    return positiveSignals.some((signal) => lowered.includes(signal));
+    if (lowered.includes("consulting") && !hasSpecialistConsultingSignal) {
+      return false;
+    }
+
+    if (hasSpecialistConsultingSignal) {
+      return hasPositiveSignal || hasStrongDeliveryContext;
+    }
+
+    return hasPositiveSignal;
   }
 
   private deriveCompanyName(domain: string, summary: string): string {
-    const titleCandidate = summary.split("|")[0]?.trim();
-    if (titleCandidate && titleCandidate.length >= 3 && titleCandidate.length <= 80) {
-      return titleCandidate;
+    const hostname = new URL(domain).hostname.replace(/^www\./i, "");
+    const registrableHostname = this.toRegistrableHostname(hostname);
+    const brand = registrableHostname.split(".")[0].replace(/[-_]+/g, " ").trim();
+    const normalizedBrand = brand.replace(/\s+/g, "").toLowerCase();
+    const candidates = summary
+      .split("|")
+      .map((part) => part.trim())
+      .filter((part) => part.length >= 3 && part.length <= 80)
+      .slice(0, 6);
+
+    const preferredCandidate = candidates.find((candidate) => this.looksLikeCompanyName(candidate, normalizedBrand));
+    if (preferredCandidate) {
+      return preferredCandidate;
     }
 
-    const hostname = new URL(domain).hostname.replace(/^www\./i, "");
-    const brand = hostname.split(".")[0].replace(/[-_]+/g, " ").trim();
-    return brand.length > 0 ? brand : hostname;
+    return brand.length > 0 ? this.toTitleCaseWords(brand) : registrableHostname;
+  }
+
+  private looksLikeCompanyName(candidate: string, normalizedBrand: string): boolean {
+    const lowered = candidate.toLowerCase();
+    const normalizedCandidate = lowered.replace(/[^a-z0-9]+/g, "");
+    const looksLikeSlogan = /(trusted by|powered by|built for|made for|future of|designed for|engineered for|your partner|tailored for|driven by)/i.test(candidate);
+    const genericNames = [
+      "home",
+      "startseite",
+      "homepage",
+      "welcome",
+      "press",
+      "news",
+      "blog",
+      "weltweite qualitaetskontrollen",
+      "worldwide quality controls",
+      "quality controls",
+      "quality control"
+    ];
+    if (genericNames.includes(lowered)) {
+      return false;
+    }
+
+    if (/(home|startseite|welcome|solutions|services|products|news|blog)\s*[-|:]/i.test(candidate)) {
+      return false;
+    }
+
+    if (looksLikeSlogan) {
+      return false;
+    }
+
+    if (normalizedBrand && normalizedCandidate.includes(normalizedBrand)) {
+      return true;
+    }
+
+    if (/(gmbh|mbh|ag|kg|ug|llc|inc|ltd|corp|bv|oy|ab|group|international)$/i.test(lowered)) {
+      return true;
+    }
+
+    return candidate.split(/\s+/).length <= 3 && !/(weltweite|worldwide|global|international quality|quality controls)/i.test(candidate);
+  }
+
+  private toTitleCaseWords(value: string): string {
+    return value
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+  }
+
+  private toCanonicalCompanyDomain(domain: string): string {
+    const parsed = new URL(domain);
+    return `${parsed.protocol}//${this.toRegistrableHostname(parsed.hostname)}`;
+  }
+
+  private toRegistrableHostname(hostname: string): string {
+    const normalizedHostname = hostname.toLowerCase().replace(/^www\./, "");
+    const labels = normalizedHostname.split(".").filter(Boolean);
+    if (labels.length <= 2) {
+      return normalizedHostname;
+    }
+
+    const compoundTld = labels.slice(-2).join(".");
+    return COMMON_COMPOUND_TLDS.has(compoundTld)
+      ? labels.slice(-3).join(".")
+      : labels.slice(-2).join(".");
   }
 
   async buildResearchContext(company: PreCategorizedCompany): Promise<SearchEvidence | null> {
@@ -558,6 +832,45 @@ export class OpenAIWebSearchClient {
     }
   }
 
+  async findCompanyAddress(company: Pick<PreCategorizedCompany, "name" | "domain" | "country">): Promise<{
+    address?: string;
+    city?: string;
+    zip?: string;
+    state?: string;
+    country?: string;
+  } | null> {
+    if (!readiness.openAIWebSearchConfigured) {
+      return null;
+    }
+
+    const prompt = [
+      "Find the official postal address of this company using public organization-level web sources.",
+      "Use only organization-level information from the company website, legal notice, contact page, map listing, or reputable company directory.",
+      "Do not include or search for personal data such as employee names, personal emails, direct phone numbers, or personal social profiles.",
+      "Return only the best verified headquarters or main office mailing address if available.",
+      `Company name: ${company.name}`,
+      company.domain ? `Known website: ${company.domain}` : undefined,
+      company.country ? `Known country: ${company.country}` : undefined,
+      "Return strict JSON with {\"address\":\"...\",\"city\":\"...\",\"zip\":\"...\",\"state\":\"...\",\"country\":\"...\"}. Use empty strings for unknown values."
+    ].filter(Boolean).join("\n\n");
+
+    try {
+      const response = await this.runWebSearch(prompt, 320, "preResearch");
+      const parsed = this.parseJson<{ address?: string; city?: string; zip?: string; state?: string; country?: string }>(response.text);
+      const result = {
+        address: parsed.address?.trim(),
+        city: parsed.city?.trim(),
+        zip: parsed.zip?.trim(),
+        state: parsed.state?.trim(),
+        country: parsed.country?.trim() || company.country
+      };
+
+      return result.address || result.city || result.zip || result.state || result.country ? result : null;
+    } catch {
+      return null;
+    }
+  }
+
   async summarizeCompany(company: CompanySample): Promise<Partial<CompanySample> | null> {
     if (!readiness.openAIWebSearchConfigured) {
       return this.summarizeFromOfficialWebsite(company);
@@ -598,6 +911,55 @@ export class OpenAIWebSearchClient {
     return this.fetchWebsiteCrawlProfile(domain);
   }
 
+  private async summarizeOfficialSiteViaWebSearch(domain: string): Promise<CrawledWebsiteProfile | null> {
+    if (!readiness.openAIWebSearchConfigured) {
+      return null;
+    }
+
+    const prompt = [
+      "Summarize this organization using only pages from its official website.",
+      "Use only organization-level information.",
+      "Do not include or search for personal data such as employee names, emails, direct phone numbers, or personal social profiles.",
+      "Review the official site broadly, including about, products, services, integrations, documentation, applications, references, and industry pages when available.",
+      "Ignore careers, legal, privacy, cookie, login, newsletter, and generic navigation pages.",
+      "Determine the company's actual business model, whether it primarily sells products or services, whether it exposes an embeddable product surface, and whether it appears to implement customer projects.",
+      `Official website: ${domain}`,
+      "Return strict JSON with {\"summary\":\"...\",\"urls\":[\"https://example.com/page\"]}. Keep summary factual and concise."
+    ].join("\n\n");
+
+    try {
+      const response = await this.runWebSearch(prompt, 420, "preResearch");
+      const parsed = this.parseJson<{ summary?: string; urls?: string[] }>(response.text);
+      const baseHostname = this.toRegistrableHostname(new URL(domain).hostname);
+      const relevantUrls = Array.from(
+        new Set(
+          [...(parsed.urls ?? []), ...response.citations]
+            .filter((url): url is string => Boolean(url))
+            .filter((url) => {
+              try {
+                return this.toRegistrableHostname(new URL(url).hostname) === baseHostname;
+              } catch {
+                return false;
+              }
+            })
+        )
+      ).slice(0, 6);
+
+      const summary = parsed.summary?.trim();
+      if (!summary) {
+        return null;
+      }
+
+      return {
+        summary,
+        landingUrl: domain,
+        relevantUrls
+      };
+    } catch {
+      return null;
+    }
+  }
+
   private async summarizeFromOfficialWebsite(company: CompanySample): Promise<Partial<CompanySample> | null> {
     const websiteProfile = await this.fetchWebsiteCrawlProfile(company.domain);
     if (!websiteProfile) {
@@ -625,13 +987,7 @@ export class OpenAIWebSearchClient {
 
     for (const url of candidateUrls) {
       try {
-        const response = await fetch(url, {
-          redirect: "follow",
-            signal: AbortSignal.timeout(10000),
-            headers: {
-              "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0)"
-            }
-        });
+        const response = await this.fetchWebsitePage(url, WEBSITE_CRAWL_TIMEOUT_MS);
 
         if (!response.ok) {
           continue;
@@ -644,13 +1000,7 @@ export class OpenAIWebSearchClient {
         const linkedPageResults = await this.mapWithConcurrency(
           relevantLinks.map((link) => async () => {
             try {
-              const pageResponse = await fetch(link.url, {
-                redirect: "follow",
-                signal: AbortSignal.timeout(10000),
-                headers: {
-                  "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0)"
-                }
-              });
+              const pageResponse = await this.fetchWebsitePage(link.url, INTERNAL_PAGE_CRAWL_TIMEOUT_MS);
 
               if (!pageResponse.ok) {
                 return null;
@@ -684,7 +1034,7 @@ export class OpenAIWebSearchClient {
           summaries.push(linkedPage.summary);
         }
 
-        const summary = summaries.join(" || ").slice(0, 1600);
+        const summary = summaries.join("\n").slice(0, 3600);
         if (summary) {
           return {
             summary,
@@ -697,7 +1047,7 @@ export class OpenAIWebSearchClient {
       }
     }
 
-    return null;
+    return this.summarizeOfficialSiteViaWebSearch(normalizedDomain);
   }
 
   private buildCandidateUrls(normalizedDomain: string): string[] {
@@ -706,9 +1056,12 @@ export class OpenAIWebSearchClient {
 
     return Array.from(new Set([
       `https://${hostname}`,
+      `https://${hostname}/en/`,
+      `https://${hostname}/de/`,
       `https://www.${hostname}`,
-      `http://${hostname}`,
-      `http://www.${hostname}`
+      `https://www.${hostname}/en/`,
+      `https://www.${hostname}/de/`,
+      `http://${hostname}`
     ]));
   }
 
@@ -722,13 +1075,17 @@ export class OpenAIWebSearchClient {
       this.extractMetaContent(html, "description") ||
       this.extractMetaPropertyContent(html, "og:description");
     const firstHeading = this.extractTagContent(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    const bodyText = this.extractVisibleText(html)
-      .split(/\s{2,}|\n+/)
+    const visibleText = this.extractVisibleText(html);
+    const bodyExcerpt = visibleText
+      .split(/\n+/)
       .map((part) => part.trim())
-      .filter((part) => part.length >= 40)
-      .slice(0, 3);
+      .filter((part) => part.length >= 30)
+      .filter((part) => !/(cookie|privacy|datenschutz|newsletter|career|karriere|jobs|bewerbung|additional links|powered by|impressum|legal terms)/i.test(part))
+      .slice(0, 18)
+      .join(" | ")
+      .slice(0, 1600);
 
-    const parts = [title, metaDescription, firstHeading, ...bodyText]
+    const parts = [title, metaDescription, firstHeading, bodyExcerpt]
       .map((part) => part?.trim())
       .filter((part): part is string => Boolean(part));
 
@@ -743,12 +1100,12 @@ export class OpenAIWebSearchClient {
     return [pathHint, `${prefix}${parts.join(" | ")}`]
       .filter(Boolean)
       .join(" | ")
-      .slice(0, 700);
+      .slice(0, 1800);
   }
 
   private selectRelevantInternalLinks(html: string, baseUrl: string): Array<{ url: string; label: string }> {
     const baseHostname = new URL(baseUrl).hostname.replace(/^www\./i, "");
-    const positivePattern = /(about|ueber|uber|unternehmen|company|services|service|leistungen|solutions|solution|loesungen|products|product|produkte|kompetenzen|portfolio|applications|anwendungen|industries|branchen|use cases|referenzen|references)/i;
+    const positivePattern = /(about|ueber|uber|unternehmen|company|services|service|leistungen|solutions|solution|loesungen|products|product|produkte|kompetenzen|portfolio|applications|anwendungen|industries|branchen|use cases|usecases|referenzen|references|docs|documentation|api|schnittstellen|integration|integrations|plugins|plugin|modules|module|drivers|devices|instrument|instrumente|platform|plattform|workflow|automation|diagnostic|pacs|viewer|scanner|scan|vision|inspection|quality)/i;
     const negativePattern = /(news|blog|jobs|karriere|career|kontakt|contact|impressum|datenschutz|privacy|legal|terms|shop|cart|login)/i;
     const seenUrls = new Set<string>();
     const selected: Array<{ url: string; label: string; score: number }> = [];
@@ -779,7 +1136,7 @@ export class OpenAIWebSearchClient {
 
     return selected
       .sort((left, right) => right.score - left.score)
-      .slice(0, 3)
+      .slice(0, 4)
       .map(({ url, label }) => ({ url, label }));
   }
 
@@ -788,15 +1145,23 @@ export class OpenAIWebSearchClient {
     let score = 0;
 
     if (/(about|ueber|uber|unternehmen|company)/.test(lowered)) {
-      score += 3;
+      score += 1;
     }
 
     if (/(services|service|leistungen|solutions|loesungen|kompetenzen)/.test(lowered)) {
-      score += 4;
+      score += 2;
     }
 
     if (/(products|product|produkte|applications|anwendungen|industries|branchen|references|referenzen)/.test(lowered)) {
-      score += 2;
+      score += /(industries|branchen)/.test(lowered) ? 1 : 3;
+    }
+
+    if (/(api|schnittstellen|integration|integrations|plugins|plugin|modules|module|drivers|devices|instrument|instrumente|platform|plattform|workflow|automation|docs|documentation)/.test(lowered)) {
+      score += 4;
+    }
+
+    if (/(custom|customer-specific|system integration|engineering|industrial automation|embedded computing|racks|chassis|inspection|machine vision|diagnostic|pacs|viewer|scanner|scan|vision|quality)/.test(lowered)) {
+      score += 4;
     }
 
     return score;
@@ -916,10 +1281,52 @@ export class OpenAIWebSearchClient {
         .replace(/<script[\s\S]*?<\/script>/gi, " ")
         .replace(/<style[\s\S]*?<\/style>/gi, " ")
         .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+        .replace(/<\s*br\s*\/?>/gi, "\n")
+        .replace(/<\/(p|div|section|article|li|ul|ol|h1|h2|h3|h4|h5|h6|table|tr)>/gi, "\n")
         .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n\s+/g, "\n")
+        .replace(/\n{2,}/g, "\n")
         .trim()
     );
+  }
+
+  private async fetchWebsitePage(url: string, timeoutMs: number): Promise<Response> {
+    try {
+      return await fetch(url, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: DEFAULT_BROWSER_HEADERS
+      });
+    } catch (error) {
+      if (!this.isTlsValidationError(error)) {
+        throw error;
+      }
+
+      const undici = await import("undici");
+      const dispatcher = new undici.Agent({
+        connect: { rejectUnauthorized: false }
+      } as any);
+
+      return fetch(url, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: DEFAULT_BROWSER_HEADERS,
+        dispatcher: dispatcher as any
+      } as any);
+    }
+  }
+
+  private isTlsValidationError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const causeCode = typeof (error as Error & { cause?: { code?: string } }).cause?.code === "string"
+      ? (error as Error & { cause?: { code?: string } }).cause?.code
+      : undefined;
+
+    return causeCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE" || /certificate/i.test(error.message);
   }
 
   private decodeHtml(value: string): string {
@@ -949,7 +1356,7 @@ export class OpenAIWebSearchClient {
         "Content-Type": "application/json",
         Authorization: `Bearer ${env.OPENAI_API_KEY}`
       },
-        signal: AbortSignal.timeout(mode === "preResearch" ? 30000 : 45000),
+        signal: AbortSignal.timeout(mode === "preResearch" ? OPENAI_PRE_RESEARCH_TIMEOUT_MS : OPENAI_DEEP_RESEARCH_TIMEOUT_MS),
         body: JSON.stringify({
         model: openAIWebSearchModels[mode],
         tools: [{ type: "web_search_preview" }],
@@ -1017,19 +1424,23 @@ export class OpenAIWebSearchClient {
     company: { name?: string; domain?: string; country?: string; shortDescription?: string; whyRelevant?: string },
     filter: ApolloOrganizationFilter
   ): CompanySample | null {
-    const name = company.name?.trim();
+    const rawName = company.name?.trim();
+    const domain = this.normalizeUrl(company.domain);
+    const name = rawName && domain ? this.looksLikeCompanyName(rawName, this.toRegistrableHostname(new URL(domain).hostname).split(".")[0])
+      ? rawName
+      : this.deriveCompanyName(domain, [rawName, company.shortDescription, company.whyRelevant].filter(Boolean).join(" | "))
+      : rawName;
     if (!name) {
       return null;
     }
 
-    const domain = this.normalizeUrl(company.domain);
     if (!domain || this.shouldIgnoreDomain(domain)) {
       return null;
     }
 
     return {
       name,
-      domain,
+      domain: this.toCanonicalCompanyDomain(domain),
       country: company.country?.trim() || filter.locations[0],
       shortDescription: company.shortDescription?.trim() || company.whyRelevant?.trim() || filter.persona,
       sourceFilter: `${filter.name} (openai-web-search)`

@@ -1,5 +1,7 @@
 export type LeadCategory =
   | "integrator_vision_industrial_ai"
+  | "integrator_vision_ai_consulting"
+  | "integrator_vision_ai_freelancer"
   | "integrator_general_ai"
   | "integrator_relevant_focus"
   | "industrial_end_customer_scaled"
@@ -11,7 +13,8 @@ export type LeadCategory =
 
 export type SelectableLeadCategory = Exclude<LeadCategory, "irrelevant" | "other">;
 
-export type CompanySearchMode = "internet_research" | "apollo_search";
+export type CompanySearchMode = "internet_research" | "open_crawler_search" | "apollo_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
+export type SearchStrategyPreset = "default" | "optimized_vision_integrators";
 
 export interface EditablePrequalificationCategoryContext {
   classificationRules?: string[];
@@ -67,6 +70,7 @@ export interface ResearchBrief {
   website?: string;
   citations?: string[];
   appliedAgentContext?: string;
+  isFallback?: boolean;
   stillQualified?: boolean;
   qualificationDecisionReason?: string;
   overview: string;
@@ -87,6 +91,7 @@ export interface ResearchBrief {
   recommendedTemplateKey: string;
   personalizationRule: string;
   linkedInAngle: string;
+  linkedInConnectionRequest?: string;
   emailAngle: string;
   phoneAngle: string;
   linkedInMessage: string;
@@ -136,6 +141,7 @@ export interface LeadAgentSettings {
   market: string;
   mainContext?: string;
   searchStrategyContext?: string;
+  searchStrategyPreset?: SearchStrategyPreset;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
   companySearchMode: CompanySearchMode;
   creditLessMode: boolean;
@@ -145,10 +151,20 @@ export interface LeadAgentSettings {
   runDeepResearch: boolean;
   dryRun: boolean;
   syncToHubSpot?: boolean;
+  exaApiKey?: string;
+  diffbotToken?: string;
+  maxRuntimeMs?: number;
   earlyStopEnabled: boolean;
   earlyStopReviewCount: number;
   earlyStopThreshold: number;
   earlyStopMinRelevantCount?: number;
+  openCrawlerTuning?: {
+    probeCount?: number;
+    maxPages?: number;
+    sampleMultiplier?: number;
+    minSampleSize?: number;
+    rawCollectionMultiplier?: number;
+  };
 }
 
 export interface FilterEvaluation {
@@ -177,6 +193,11 @@ export interface FilterLearningStat {
   earlyStopCount: number;
 }
 
+export interface SearchModeLearning {
+  filterPerformance: Record<string, FilterLearningStat>;
+  searchHistory: SearchHistoryEntry[];
+}
+
 export interface StoredFilterSnapshot {
   persona: string;
   industries: string[];
@@ -188,6 +209,7 @@ export interface StoredFilterSnapshot {
 
 export interface SearchHistoryEntry {
   timestamp: string;
+  companySearchMode: CompanySearchMode;
   filterName: string;
   filterSnapshot?: StoredFilterSnapshot;
   targetCategory?: LeadCategory;
@@ -197,6 +219,7 @@ export interface SearchHistoryEntry {
   returnedCount: number;
   relevantCount: number;
   relevanceRatio: number;
+  categoryBreakdown: Record<LeadCategory, number>;
   passedThreshold: boolean;
   recommendation: string;
 }
@@ -224,6 +247,7 @@ export interface GeneratedLeadRecord {
   stillQualified?: boolean;
   qualificationDecisionReason?: string;
   qualificationSummary?: string;
+  linkedInConnectionRequest?: string;
   linkedInMessage?: string;
   emailSubject?: string;
   emailBody?: string;
@@ -242,9 +266,22 @@ export interface LatestLeadRunRecord {
     filtersTested: number;
     filtersStoppedEarly: number;
     companiesSkippedAfterEarlyStop: number;
+    funnel?: LeadRunFunnel;
+    timedOut?: boolean;
+    stopped?: boolean;
+    completionReason?: string;
   };
   contacts: GeneratedLeadRecord[];
   searchHistory: SearchHistoryEntry[];
+  hubspotSync?: {
+    attempted: boolean;
+    mode: "dry-run" | "live";
+    candidateCount: number;
+    syncedCount: number;
+    companySyncedCount: number;
+    contactSyncedCount: number;
+    errors?: string[];
+  };
   costs?: {
     azure?: AzureUsageCost;
   };
@@ -254,6 +291,7 @@ export interface LeadLearningData {
   companyFeedback: CompanyFeedbackEntry[];
   filterPerformance: Record<string, FilterLearningStat>;
   searchHistory: SearchHistoryEntry[];
+  searchHistoryByMode?: Partial<Record<CompanySearchMode, SearchModeLearning>>;
 }
 
 export interface CompanyScreeningRecord {
@@ -275,11 +313,20 @@ export interface CompanyScreeningDatabase {
   records: CompanyScreeningRecord[];
 }
 
+export interface LeadRunFunnel {
+  crawledPages: number;
+  afterCrawlerPrefilter: number;
+  afterHubSpotDedup: number;
+  afterAzureAICheck: number;
+  syncedToHubSpot: number;
+}
+
 export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
   mainContext?: string;
   searchStrategyContext?: string;
+  searchStrategyPreset?: SearchStrategyPreset;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
   companySearchMode?: CompanySearchMode;
   creditLessMode?: boolean;
@@ -291,11 +338,21 @@ export interface LeadJobRequest {
   runDeepResearch?: boolean;
   dryRun?: boolean;
   syncToHubSpot?: boolean;
+  exaApiKey?: string;
+  diffbotToken?: string;
   disableHubSpotDeduplication?: boolean;
   earlyStopEnabled?: boolean;
   earlyStopReviewCount?: number;
   earlyStopThreshold?: number;
   earlyStopMinRelevantCount?: number;
+  maxRuntimeMs?: number;
+  openCrawlerTuning?: {
+    probeCount?: number;
+    maxPages?: number;
+    sampleMultiplier?: number;
+    minSampleSize?: number;
+    rawCollectionMultiplier?: number;
+  };
 }
 
 export interface LeadRunProgress {
@@ -309,6 +366,9 @@ export interface LeadRunProgress {
   totalFilters?: number;
   foundCandidates?: number;
   targetLeadCount?: number;
+  funnel?: LeadRunFunnel;
+  timedOut?: boolean;
+  stopped?: boolean;
   updatedAt: string;
 }
 
@@ -332,6 +392,10 @@ export interface LeadJobResult {
     filtersStoppedEarly: number;
     companiesSkippedAfterEarlyStop: number;
   };
+  funnel: LeadRunFunnel;
+  timedOut?: boolean;
+  stopped?: boolean;
+  completionReason?: string;
   costs?: {
     azure: AzureUsageCost;
   };

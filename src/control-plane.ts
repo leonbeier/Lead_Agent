@@ -28,6 +28,8 @@ import {
 
 const selectableCategorySchema = z.enum([
   "integrator_vision_industrial_ai",
+  "integrator_vision_ai_consulting",
+  "integrator_vision_ai_freelancer",
   "integrator_general_ai",
   "integrator_relevant_focus",
   "industrial_end_customer_scaled",
@@ -45,17 +47,36 @@ const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-revie
 const apolloSearchCursorPath = path.join(dataDirectory, "apollo-search-cursors.json");
 const companyScreeningDatabasePath = path.join(dataDirectory, "company-screening-database.json");
 
+const openCrawlerTuningSchema = z.object({
+  probeCount: z.number().int().min(1).max(200).optional(),
+  maxPages: z.number().int().min(1).max(20).optional(),
+  sampleMultiplier: z.number().int().min(1).max(20).optional(),
+  minSampleSize: z.number().int().min(1).max(200).optional(),
+  rawCollectionMultiplier: z.number().int().min(1).max(20).optional()
+});
+
 const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
   market: z.string().min(1),
   mainContext: z.string().max(12000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
-  companySearchMode: z.enum(["internet_research", "apollo_search"]),
+  searchStrategyPreset: z.enum(["default", "optimized_vision_integrators"]).optional(),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
   creditLessMode: z.boolean(),
   prequalification: z.object({
     mainContext: z.string().max(6000).optional(),
     categoryContexts: z.object({
       integrator_vision_industrial_ai: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      integrator_vision_ai_consulting: z.object({
+        classificationRules: z.array(z.string().min(1)).max(12).optional(),
+        disqualifiers: z.array(z.string().min(1)).max(12).optional(),
+        addOnContext: z.string().max(3000).optional()
+      }).optional(),
+      integrator_vision_ai_freelancer: z.object({
         classificationRules: z.array(z.string().min(1)).max(12).optional(),
         disqualifiers: z.array(z.string().min(1)).max(12).optional(),
         addOnContext: z.string().max(3000).optional()
@@ -95,6 +116,18 @@ const settingsSchema = z.object({
   prequalificationContext: z.string().max(4000).optional(),
   executionContexts: z.object({
     integrator_vision_industrial_ai: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    integrator_vision_ai_consulting: z.object({
+      researchPriorities: z.array(z.string().min(1)).max(12).optional(),
+      outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
+      personalizationRules: z.array(z.string().min(1)).max(12).optional(),
+      avoidSignals: z.array(z.string().min(1)).max(12).optional()
+    }).optional(),
+    integrator_vision_ai_freelancer: z.object({
       researchPriorities: z.array(z.string().min(1)).max(12).optional(),
       outreachPriorities: z.array(z.string().min(1)).max(12).optional(),
       personalizationRules: z.array(z.string().min(1)).max(12).optional(),
@@ -141,10 +174,14 @@ const settingsSchema = z.object({
   runDeepResearch: z.boolean(),
   dryRun: z.boolean(),
   syncToHubSpot: z.boolean().optional(),
+  exaApiKey: z.string().optional(),
+  diffbotToken: z.string().optional(),
+  maxRuntimeMs: z.number().int().min(60_000).max(10_800_000).optional(),
   earlyStopEnabled: z.boolean(),
   earlyStopReviewCount: z.number().int().min(5).max(30),
   earlyStopThreshold: z.number().min(0).max(1),
-  earlyStopMinRelevantCount: z.number().int().min(0).max(30).optional()
+  earlyStopMinRelevantCount: z.number().int().min(0).max(30).optional(),
+  openCrawlerTuning: openCrawlerTuningSchema.optional()
 });
 
 const settingsUpdateSchema = settingsSchema.partial();
@@ -155,6 +192,7 @@ const templateSchema = z.object({
   goal: z.string().min(1),
   subject: z.string().min(1),
   emailBody: z.string().min(1),
+  linkedInConnectionRequest: z.string().min(1),
   linkedInMessage: z.string().min(1),
   phoneScript: z.string().min(1)
 });
@@ -176,8 +214,23 @@ const filterLearningStatSchema = z.object({
   earlyStopCount: z.number().int().nonnegative()
 });
 
+const leadCategorySchema = z.enum([
+  "integrator_vision_industrial_ai",
+  "integrator_vision_ai_consulting",
+  "integrator_vision_ai_freelancer",
+  "integrator_general_ai",
+  "integrator_relevant_focus",
+  "industrial_end_customer_scaled",
+  "camera_manufacturer_partner",
+  "machine_builder_ai_enablement",
+  "software_platform_embedding",
+  "irrelevant",
+  "other"
+]);
+
 const searchHistoryEntrySchema = z.object({
   timestamp: z.string().min(1),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
   filterName: z.string().min(1),
   filterSnapshot: z.object({
     persona: z.string().min(1),
@@ -187,31 +240,35 @@ const searchHistoryEntrySchema = z.object({
     employeeRanges: z.array(z.string().min(1)),
     notes: z.string().min(1)
   }).optional(),
-  targetCategory: z.enum([
-    "integrator_vision_industrial_ai",
-    "integrator_general_ai",
-    "integrator_relevant_focus",
-    "industrial_end_customer_scaled",
-    "camera_manufacturer_partner",
-    "machine_builder_ai_enablement",
-    "software_platform_embedding",
-    "irrelevant",
-    "other"
-  ]).optional(),
+  targetCategory: leadCategorySchema.optional(),
   batchType: z.enum(["probe_15", "expand_50"]),
   page: z.number().int().positive(),
   requestedCount: z.number().int().positive(),
   returnedCount: z.number().int().nonnegative(),
   relevantCount: z.number().int().nonnegative(),
   relevanceRatio: z.number().min(0).max(1),
+  categoryBreakdown: z.record(leadCategorySchema, z.number().int().nonnegative()),
   passedThreshold: z.boolean(),
   recommendation: z.string().min(1)
+});
+
+const searchModeLearningSchema = z.object({
+  filterPerformance: z.record(filterLearningStatSchema),
+  searchHistory: z.array(searchHistoryEntrySchema)
 });
 
 const leadLearningSchema = z.object({
   companyFeedback: z.array(companyFeedbackSchema),
   filterPerformance: z.record(filterLearningStatSchema),
-  searchHistory: z.array(searchHistoryEntrySchema)
+  searchHistory: z.array(searchHistoryEntrySchema),
+  searchHistoryByMode: z.object({
+    internet_research: searchModeLearningSchema.optional(),
+    open_crawler_search: searchModeLearningSchema.optional(),
+    apollo_search: searchModeLearningSchema.optional(),
+    exa_search: searchModeLearningSchema.optional(),
+    diffbot_search: searchModeLearningSchema.optional(),
+    diffbot_test_data: searchModeLearningSchema.optional()
+  }).optional()
 });
 
 const latestLeadRunSchema = z.object({
@@ -221,10 +278,29 @@ const latestLeadRunSchema = z.object({
     foundCandidates: z.number().int().nonnegative(),
     filtersTested: z.number().int().nonnegative(),
     filtersStoppedEarly: z.number().int().nonnegative(),
-    companiesSkippedAfterEarlyStop: z.number().int().nonnegative()
+    companiesSkippedAfterEarlyStop: z.number().int().nonnegative(),
+    funnel: z.object({
+      crawledPages: z.number().int().nonnegative(),
+      afterCrawlerPrefilter: z.number().int().nonnegative(),
+      afterHubSpotDedup: z.number().int().nonnegative(),
+      afterAzureAICheck: z.number().int().nonnegative(),
+      syncedToHubSpot: z.number().int().nonnegative()
+    }).optional(),
+    timedOut: z.boolean().optional(),
+    stopped: z.boolean().optional(),
+    completionReason: z.string().min(1).optional()
   }),
   contacts: z.array(z.any()),
   searchHistory: z.array(searchHistoryEntrySchema),
+  hubspotSync: z.object({
+    attempted: z.boolean(),
+    mode: z.enum(["dry-run", "live"]),
+    candidateCount: z.number().int().nonnegative(),
+    syncedCount: z.number().int().nonnegative(),
+    companySyncedCount: z.number().int().nonnegative(),
+    contactSyncedCount: z.number().int().nonnegative(),
+    errors: z.array(z.string().min(1)).optional()
+  }).optional(),
   costs: z.object({
     azure: z.object({
       requests: z.number().int().nonnegative(),
@@ -248,6 +324,8 @@ const companyScreeningRecordSchema = z.object({
   normalizedDomain: z.string().optional(),
   category: z.enum([
     "integrator_vision_industrial_ai",
+    "integrator_vision_ai_consulting",
+    "integrator_vision_ai_freelancer",
     "integrator_general_ai",
     "integrator_relevant_focus",
     "industrial_end_customer_scaled",
@@ -271,11 +349,12 @@ const companyScreeningDatabaseSchema = z.object({
 });
 
 const defaultSettings: LeadAgentSettings = {
-  targetLeadCount: 50,
-  market: "DE",
+  targetLeadCount: 15,
+  market: "Europe",
   mainContext: DEFAULT_MAIN_CONTEXT,
   searchStrategyContext: DEFAULT_SEARCH_STRATEGY_CONTEXT,
-  companySearchMode: "internet_research",
+  searchStrategyPreset: "default",
+  companySearchMode: "exa_search",
   creditLessMode: true,
   prequalification: {
     mainContext: DEFAULT_PREQUALIFICATION_MAIN_CONTEXT,
@@ -283,6 +362,8 @@ const defaultSettings: LeadAgentSettings = {
   },
   executionContexts: {
     integrator_vision_industrial_ai: CATEGORY_EXECUTION_CONTEXT.integrator_vision_industrial_ai,
+    integrator_vision_ai_consulting: CATEGORY_EXECUTION_CONTEXT.integrator_vision_ai_consulting,
+    integrator_vision_ai_freelancer: CATEGORY_EXECUTION_CONTEXT.integrator_vision_ai_freelancer,
     integrator_general_ai: CATEGORY_EXECUTION_CONTEXT.integrator_general_ai,
     integrator_relevant_focus: CATEGORY_EXECUTION_CONTEXT.integrator_relevant_focus,
     industrial_end_customer_scaled: CATEGORY_EXECUTION_CONTEXT.industrial_end_customer_scaled,
@@ -293,15 +374,12 @@ const defaultSettings: LeadAgentSettings = {
   targetCategories: [
     "integrator_vision_industrial_ai",
     "integrator_general_ai",
-    "integrator_relevant_focus",
-    "industrial_end_customer_scaled",
-    "camera_manufacturer_partner",
-    "machine_builder_ai_enablement",
-    "software_platform_embedding"
+    "integrator_relevant_focus"
   ],
   runDeepResearch: true,
   dryRun: false,
   syncToHubSpot: true,
+  maxRuntimeMs: 10_800_000,
   earlyStopEnabled: true,
   earlyStopReviewCount: 30,
   earlyStopThreshold: 0.15,
@@ -311,7 +389,8 @@ const defaultSettings: LeadAgentSettings = {
 const defaultLearning: LeadLearningData = {
   companyFeedback: [],
   filterPerformance: {},
-  searchHistory: []
+  searchHistory: [],
+  searchHistoryByMode: {}
 };
 
 const defaultLatestLeadRun: LatestLeadRunRecord = {
@@ -323,7 +402,15 @@ const defaultLatestLeadRun: LatestLeadRunRecord = {
     foundCandidates: 0,
     filtersTested: 0,
     filtersStoppedEarly: 0,
-    companiesSkippedAfterEarlyStop: 0
+    companiesSkippedAfterEarlyStop: 0,
+    funnel: {
+      crawledPages: 0,
+      afterCrawlerPrefilter: 0,
+      afterHubSpotDedup: 0,
+      afterAzureAICheck: 0,
+      syncedToHubSpot: 0
+    },
+    timedOut: false
   },
   contacts: [],
   searchHistory: []
@@ -338,6 +425,7 @@ const suggestedControls = [
   "market",
   "mainContext",
   "searchStrategyContext",
+  "searchStrategyPreset",
   "companySearchMode",
   "prequalification.mainContext",
   "prequalification.categoryContexts",
@@ -346,6 +434,9 @@ const suggestedControls = [
   "runDeepResearch",
   "dryRun",
   "syncToHubSpot",
+  "exaApiKey",
+  "diffbotToken",
+  "maxRuntimeMs",
   "earlyStopEnabled",
   "earlyStopReviewCount",
   "earlyStopThreshold",
@@ -374,6 +465,53 @@ async function writeJsonFile<T>(filePath: string, value: T): Promise<void> {
 }
 
 export class ControlPlaneStore {
+  private normalizeLegacyCategory(category: string | undefined): string | undefined {
+    if (category === "integrator_vision_ai_consulting_freelancer") {
+      return "integrator_vision_ai_consulting";
+    }
+
+    return category;
+  }
+
+  private normalizeLegacyCategoryRecord<T extends Record<string, unknown> | undefined>(record: T): T {
+    if (!record || typeof record !== "object") {
+      return record;
+    }
+
+    const normalized = { ...record } as Record<string, unknown>;
+    const legacyValue = normalized.integrator_vision_ai_consulting_freelancer;
+
+    if (legacyValue !== undefined && normalized.integrator_vision_ai_consulting === undefined) {
+      normalized.integrator_vision_ai_consulting = legacyValue;
+    }
+
+    delete normalized.integrator_vision_ai_consulting_freelancer;
+    return normalized as T;
+  }
+
+  private normalizeSearchHistoryEntry(entry: SearchHistoryEntry): SearchHistoryEntry {
+    const emptyCategoryBreakdown = Object.fromEntries(
+      leadCategorySchema.options.map((category) => [category, 0])
+    ) as SearchHistoryEntry["categoryBreakdown"];
+
+    return {
+      ...entry,
+      companySearchMode: entry.companySearchMode ?? "open_crawler_search",
+      targetCategory: this.normalizeLegacyCategory(entry.targetCategory) as SearchHistoryEntry["targetCategory"],
+      categoryBreakdown: {
+        ...emptyCategoryBreakdown,
+        ...(entry.categoryBreakdown ?? {})
+      }
+    };
+  }
+
+  private normalizeCompanyScreeningRecord(record: CompanyScreeningRecord): CompanyScreeningRecord {
+    return {
+      ...record,
+      category: this.normalizeLegacyCategory(record.category) as CompanyScreeningRecord["category"]
+    };
+  }
+
   private async ensureSeedData(): Promise<void> {
     await ensureFile(settingsPath, defaultSettings);
     await ensureFile(templatesPath, OUTREACH_TEMPLATES);
@@ -408,16 +546,29 @@ export class ControlPlaneStore {
         settings.prequalification?.mainContext ?? settings.prequalificationContext ?? defaultSettings.prequalification?.mainContext,
       categoryContexts: {
         ...defaultSettings.prequalification?.categoryContexts,
-        ...(settings.prequalification?.categoryContexts ?? {})
+        ...this.normalizeLegacyCategoryRecord(settings.prequalification?.categoryContexts)
       }
     };
+
+    const normalizedExecutionContexts = {
+      ...defaultSettings.executionContexts,
+      ...this.normalizeLegacyCategoryRecord(settings.executionContexts)
+    };
+
+    const normalizedTargetCategories = (settings.targetCategories ?? defaultSettings.targetCategories)
+      ?.map((category) => this.normalizeLegacyCategory(category))
+      .filter((category): category is SelectableLeadCategory => Boolean(category));
 
     return settingsSchema.parse({
       ...defaultSettings,
       ...settings,
       companySearchMode: normalizedCompanySearchMode,
-      creditLessMode: normalizedCompanySearchMode === "internet_research",
-      prequalification: normalizedPrequalification
+      creditLessMode: normalizedCompanySearchMode !== "apollo_search",
+      prequalification: normalizedPrequalification,
+      executionContexts: normalizedExecutionContexts,
+      targetCategories: normalizedTargetCategories,
+      openCrawlerTuning: settings.openCrawlerTuning ?? defaultSettings.openCrawlerTuning,
+      maxRuntimeMs: settings.maxRuntimeMs ?? defaultSettings.maxRuntimeMs
     });
   }
 
@@ -433,7 +584,7 @@ export class ControlPlaneStore {
       ...currentSettings,
       ...parsedInput,
       companySearchMode: normalizedCompanySearchMode,
-      creditLessMode: normalizedCompanySearchMode === "internet_research"
+      creditLessMode: normalizedCompanySearchMode !== "apollo_search"
     });
 
     await writeJsonFile(settingsPath, nextSettings);
@@ -443,10 +594,15 @@ export class ControlPlaneStore {
   async getTemplates(): Promise<Record<string, OutreachTemplate>> {
     await this.ensureSeedData();
     const templates = await readJsonFile<Record<string, OutreachTemplate>>(templatesPath);
-    const mergedTemplates = {
-      ...OUTREACH_TEMPLATES,
-      ...templates
-    };
+    const mergedTemplates = Object.fromEntries(
+      Object.entries(OUTREACH_TEMPLATES).map(([key, template]) => [
+        key,
+        {
+          ...template,
+          ...(templates[key] ?? {})
+        }
+      ])
+    );
 
     const supportedTemplateKeys = new Set(Object.keys(OUTREACH_TEMPLATES));
     const sanitizedTemplates = templateRecordSchema.parse(
@@ -470,16 +626,45 @@ export class ControlPlaneStore {
   async getLearning(): Promise<LeadLearningData> {
     await this.ensureSeedData();
     const learning = await readJsonFile<Partial<LeadLearningData>>(learningPath);
+    const normalizedSearchHistoryByMode = Object.fromEntries(
+      Object.entries(learning.searchHistoryByMode ?? {}).map(([mode, modeLearning]) => [
+        mode,
+        {
+          filterPerformance: modeLearning?.filterPerformance ?? {},
+          searchHistory: (modeLearning?.searchHistory ?? []).map((entry) => this.normalizeSearchHistoryEntry(entry))
+        }
+      ])
+    ) as NonNullable<LeadLearningData["searchHistoryByMode"]>;
+    const flattenedSearchHistory = Object.values(normalizedSearchHistoryByMode)
+      .flatMap((modeLearning) => modeLearning.searchHistory)
+      .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp))
+      .slice(0, 300) as SearchHistoryEntry[];
+    const flattenedFilterPerformance = Object.fromEntries(
+      Object.entries(normalizedSearchHistoryByMode).flatMap(([mode, modeLearning]) =>
+        Object.entries(modeLearning.filterPerformance).map(([filterName, stats]) => [`${mode} :: ${filterName}`, stats])
+      )
+    );
+
     return leadLearningSchema.parse({
       ...defaultLearning,
-      ...learning
-    });
+      ...learning,
+      filterPerformance: flattenedFilterPerformance,
+      searchHistory: flattenedSearchHistory,
+      searchHistoryByMode: normalizedSearchHistoryByMode
+    }) as LeadLearningData;
   }
 
   async getLatestLeadRun(): Promise<LatestLeadRunRecord> {
     await this.ensureSeedData();
     const latestLeadRun = await readJsonFile<LatestLeadRunRecord>(latestLeadRunPath);
-    return latestLeadRunSchema.parse(latestLeadRun) as LatestLeadRunRecord;
+    return latestLeadRunSchema.parse({
+      ...latestLeadRun,
+      contacts: latestLeadRun.contacts.map((contact) => ({
+        ...contact,
+        category: this.normalizeLegacyCategory(contact.category) as typeof contact.category
+      })),
+      searchHistory: latestLeadRun.searchHistory.map((entry) => this.normalizeSearchHistoryEntry(entry))
+    }) as LatestLeadRunRecord;
   }
 
   async getCompanyScreeningDatabase(): Promise<CompanyScreeningDatabase> {
@@ -487,7 +672,8 @@ export class ControlPlaneStore {
     const database = await readJsonFile<Partial<CompanyScreeningDatabase>>(companyScreeningDatabasePath);
     return companyScreeningDatabaseSchema.parse({
       ...defaultCompanyScreeningDatabase,
-      ...database
+      ...database,
+      records: (database.records ?? []).map((record) => this.normalizeCompanyScreeningRecord(record))
     });
   }
 
@@ -547,9 +733,18 @@ export class ControlPlaneStore {
     return nextLearning;
   }
 
-  async recordFilterEvaluations(evaluations: FilterEvaluation[]): Promise<void> {
+  async recordFilterEvaluations(
+    companySearchMode: LeadAgentSettings["companySearchMode"],
+    evaluations: FilterEvaluation[]
+  ): Promise<void> {
     const learning = await this.getLearning();
-    const filterPerformance = { ...learning.filterPerformance };
+    const searchHistoryByMode = { ...(learning.searchHistoryByMode ?? {}) };
+    const normalizedMode = companySearchMode ?? "open_crawler_search";
+    const modeLearning = searchHistoryByMode[normalizedMode] ?? {
+      filterPerformance: {},
+      searchHistory: []
+    };
+    const filterPerformance = { ...modeLearning.filterPerformance };
 
     for (const evaluation of evaluations) {
       const current = filterPerformance[evaluation.filterName] ?? {
@@ -567,17 +762,43 @@ export class ControlPlaneStore {
       };
     }
 
+    searchHistoryByMode[normalizedMode] = {
+      ...modeLearning,
+      filterPerformance
+    };
+
     await writeJsonFile(learningPath, {
       ...learning,
-      filterPerformance
+      filterPerformance: {},
+      searchHistory: [],
+      searchHistoryByMode
     });
   }
 
-  async recordSearchHistory(entries: SearchHistoryEntry[]): Promise<LeadLearningData> {
+  async recordSearchHistory(
+    companySearchMode: LeadAgentSettings["companySearchMode"],
+    entries: SearchHistoryEntry[]
+  ): Promise<LeadLearningData> {
     const learning = await this.getLearning();
+    const searchHistoryByMode = { ...(learning.searchHistoryByMode ?? {}) };
+    const normalizedMode = companySearchMode ?? "open_crawler_search";
+    const modeLearning = searchHistoryByMode[normalizedMode] ?? {
+      filterPerformance: {},
+      searchHistory: []
+    };
     const nextLearning = {
       ...learning,
-      searchHistory: [...entries, ...learning.searchHistory].slice(0, 300)
+      filterPerformance: {},
+      searchHistory: [],
+      searchHistoryByMode: {
+        ...searchHistoryByMode,
+        [normalizedMode]: {
+          ...modeLearning,
+          searchHistory: [...entries, ...modeLearning.searchHistory]
+            .map((entry) => this.normalizeSearchHistoryEntry(entry))
+            .slice(0, 300)
+        }
+      }
     };
 
     await writeJsonFile(learningPath, nextLearning);
@@ -599,7 +820,7 @@ export class ControlPlaneStore {
       const key = normalizedDomain || `name:${normalizedName}`;
 
       deduped.set(key, {
-        ...record,
+        ...this.normalizeCompanyScreeningRecord(record),
         normalizedName,
         normalizedDomain
       });
@@ -654,6 +875,8 @@ export class ControlPlaneStore {
       prequalificationCategoryContexts: CATEGORY_PREQUALIFICATION_CONTEXT,
       selectableCategories: [
         { value: "integrator_vision_industrial_ai", label: "Software Integratoren mit Vision/Industrial AI Fokus" },
+        { value: "integrator_vision_ai_consulting", label: "Vision AI/Industrial AI Consulting" },
+        { value: "integrator_vision_ai_freelancer", label: "Vision AI/Industrial AI Freelancer" },
         { value: "integrator_general_ai", label: "Software Integratoren mit allgemeinem AI Fokus" },
         { value: "integrator_relevant_focus", label: "Integratoren in relevanten Industriezweigen" },
         { value: "industrial_end_customer_scaled", label: "Industrie-Endkunden mit ausreichender Projektgroesse" },
