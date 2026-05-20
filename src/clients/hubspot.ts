@@ -50,6 +50,7 @@ const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
 const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
+const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_ROLE_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -245,20 +246,25 @@ export class HubSpotClient {
           companyWriteSucceeded = true;
 
           const selectedContacts = contactsByCompany.get(this.getCompanyKey(company)) ?? [];
-          for (const publicContact of selectedContacts) {
-            try {
-              const syncedContact = await this.upsertContact(publicContact, contactProperties);
-              if (!syncedContact) {
-                continue;
-              }
+          const contactResults = await this.mapWithConcurrency(
+            selectedContacts.map((publicContact) => async () => {
+              try {
+                const syncedContact = await this.upsertContact(publicContact, contactProperties);
+                if (!syncedContact) {
+                  return 0;
+                }
 
-              await this.associateContactToCompany(syncedContact.id, syncedCompany.id);
-              await this.createOutreachNotes(syncedCompany.id, syncedContact.id, company, publicContact, brief);
-              contactSyncedCount += 1;
-            } catch (error) {
-              errors.push(`${company.name}: ${this.toErrorMessage(error)}`);
-            }
-          }
+                await this.associateContactToCompany(syncedContact.id, syncedCompany.id);
+                await this.createOutreachNotes(syncedCompany.id, syncedContact.id, company, publicContact, brief);
+                return 1;
+              } catch (error) {
+                errors.push(`${company.name}: ${this.toErrorMessage(error)}`);
+                return 0;
+              }
+            }),
+            CONTACT_SYNC_PER_COMPANY_CONCURRENCY
+          );
+          contactSyncedCount = contactResults.reduce<number>((sum, value) => sum + value, 0);
         } catch (error) {
           errors.push(`${company.name}: ${this.toErrorMessage(error)}`);
         } finally {
@@ -305,12 +311,27 @@ export class HubSpotClient {
   }
 
   private async mapWithConcurrency<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
-    const results: T[] = [];
-
-    for (let start = 0; start < tasks.length; start += concurrency) {
-      const batch = tasks.slice(start, start + concurrency);
-      results.push(...(await Promise.all(batch.map((task) => task()))));
+    if (tasks.length === 0) {
+      return [];
     }
+
+    const results = new Array<T>(tasks.length);
+    let nextIndex = 0;
+    const workerCount = Math.max(1, Math.min(concurrency, tasks.length));
+
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (true) {
+          const currentIndex = nextIndex;
+          nextIndex += 1;
+          if (currentIndex >= tasks.length) {
+            return;
+          }
+
+          results[currentIndex] = await tasks[currentIndex]!();
+        }
+      })
+    );
 
     return results;
   }
@@ -454,20 +475,9 @@ export class HubSpotClient {
       return;
     }
 
-    const emailNote = this.buildEmailOutreachNote(company, contact, brief);
-    const linkedInNote = this.buildLinkedInOutreachNote(company, contact, brief);
-    const phoneNote = this.buildPhoneOutreachNote(company, contact, brief);
-
-    if (emailNote) {
-      await this.createAssociatedNote(companyId, contactId, emailNote);
-    }
-
-    if (linkedInNote) {
-      await this.createAssociatedNote(companyId, contactId, linkedInNote);
-    }
-
-    if (phoneNote) {
-      await this.createAssociatedNote(companyId, contactId, phoneNote);
+    const combinedNote = this.buildCombinedOutreachNote(company, contact, brief);
+    if (combinedNote) {
+      await this.createAssociatedNote(companyId, contactId, combinedNote);
     }
   }
 
@@ -672,8 +682,10 @@ export class HubSpotClient {
 
       for (const email of emails) {
         const existing = candidates.get(email);
-        const inferredName = this.inferNameFromPageContext(page.html, email) ?? this.inferNameFromEmail(email);
         const isGenericMailbox = this.isGenericMailbox(email);
+        const inferredName = isGenericMailbox
+          ? {}
+          : (this.inferNameFromPageContext(page.html, email) ?? this.inferNameFromEmail(email));
         candidates.set(email, {
           email,
           phone: existing?.phone ?? primaryPhone,
@@ -682,7 +694,7 @@ export class HubSpotClient {
           firstName: existing?.firstName ?? inferredName.firstName,
           lastName: existing?.lastName ?? inferredName.lastName,
           jobTitle: existing?.jobTitle ?? (isGenericMailbox ? "General contact" : (this.inferJobTitleFromPageContext(page.html, email) ?? "Public contact")),
-          linkedinUrl: existing?.linkedinUrl ?? this.extractLinkedInProfileUrlFromPage(page.html)
+          linkedinUrl: existing?.linkedinUrl ?? (isGenericMailbox ? undefined : this.extractLinkedInProfileUrlFromPage(page.html))
         });
       }
 
@@ -700,10 +712,26 @@ export class HubSpotClient {
       1
     );
 
-    return enrichedContacts
+    return this.collapseDuplicateMailboxContacts(enrichedContacts)
       .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""))
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
       .slice(0, 5);
+  }
+
+  private collapseDuplicateMailboxContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
+    const bestByKey = new Map<string, PublicContactCandidate>();
+
+    for (const contact of contacts) {
+      const key = contact.email && this.isGenericMailbox(contact.email)
+        ? `generic:${contact.email.trim().toLowerCase()}`
+        : this.getPublicContactIdentity(contact);
+      const existing = bestByKey.get(key);
+      if (!existing || this.getPublicContactScore(contact) > this.getPublicContactScore(existing)) {
+        bestByKey.set(key, contact);
+      }
+    }
+
+    return [...bestByKey.values()];
   }
 
   private async discoverWebSearchContacts(
@@ -1192,7 +1220,7 @@ export class HubSpotClient {
     company: Pick<PreCategorizedCompany, "name" | "domain">,
     contact: PublicContactCandidate
   ): Promise<PublicContactCandidate> {
-    if (contact.linkedinUrl) {
+    if (contact.linkedinUrl && this.isPersonalLinkedInUrl(contact.linkedinUrl)) {
       return {
         ...contact,
         linkedinUrl: this.normalizeLinkedInUrl(contact.linkedinUrl)
@@ -1303,6 +1331,10 @@ export class HubSpotClient {
     return this.normalizeLinkedInUrl(linkedInUrl);
   }
 
+  private isPersonalLinkedInUrl(url: string | undefined): boolean {
+    return Boolean(url && /linkedin\.com\/in\//i.test(url));
+  }
+
   private normalizeLinkedInUrl(url: string | undefined): string | undefined {
     const trimmed = url?.trim();
     if (!trimmed) {
@@ -1351,6 +1383,7 @@ export class HubSpotClient {
     const contacts: PublicContactCandidate[] = [];
     const primaryEmail = pageEmails.find((email) => !this.isLowValueMailbox(email)) ?? pageEmails[0];
     const pageLinkedInUrl = this.extractLinkedInProfileUrlFromPage(html);
+    const pagePersonalLinkedInUrl = this.isPersonalLinkedInUrl(pageLinkedInUrl) ? pageLinkedInUrl : undefined;
 
     for (let index = 0; index < lines.length - 1; index += 1) {
       const currentLine = lines[index] ?? "";
@@ -1369,7 +1402,7 @@ export class HubSpotClient {
         phone: fallbackPhone,
         sourceUrl: url,
         label: "website_named_contact",
-        linkedinUrl: pageLinkedInUrl
+        linkedinUrl: pagePersonalLinkedInUrl
       });
     }
 
@@ -1392,7 +1425,7 @@ export class HubSpotClient {
         phone: fallbackPhone,
         sourceUrl: url,
         label: "website_named_contact",
-        linkedinUrl: pageLinkedInUrl
+        linkedinUrl: pagePersonalLinkedInUrl
       });
     }
 
@@ -1411,7 +1444,7 @@ export class HubSpotClient {
           phone: fallbackPhone,
           sourceUrl: url,
           label: "website_named_contact",
-          linkedinUrl: pageLinkedInUrl
+          linkedinUrl: pagePersonalLinkedInUrl
         });
       }
     }
@@ -1493,6 +1526,10 @@ export class HubSpotClient {
   }
 
   private extractNameFromLine(value: string): { firstName: string; lastName: string } | null {
+    if (this.isClearlyNonPersonLine(value)) {
+      return null;
+    }
+
     const nameParts = value
       .split(/\s+/)
       .map((part) => part.replace(/[^A-Za-zÄÖÜäöüß'’-]/g, ""))
@@ -1513,6 +1550,24 @@ export class HubSpotClient {
     }
 
     return { firstName, lastName };
+  }
+
+  private isClearlyNonPersonLine(value: string): boolean {
+    const normalized = value
+      .toLowerCase()
+      .replace(/[^a-zäöüß\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized) {
+      return true;
+    }
+
+    if (["wer wir sind", "in sensorik", "kontakt", "unternehmen", "about us", "contact person"].includes(normalized)) {
+      return true;
+    }
+
+    return normalized.split(" ").some((token) => ["wer", "wir", "sind", "sensorik"].includes(token));
   }
 
   private decodeHtmlEntities(value: string): string {
@@ -1739,7 +1794,7 @@ export class HubSpotClient {
       if (anchorNameMatch) {
         const firstName = this.normalizeNamePart(anchorNameMatch[1]);
         const lastName = this.normalizeNamePart(anchorNameMatch[2]);
-        if (firstName && lastName) {
+        if (firstName && lastName && !this.isClearlyNonPersonLine(`${firstName} ${lastName}`)) {
           return { firstName, lastName };
         }
       }
@@ -1767,7 +1822,7 @@ export class HubSpotClient {
 
     const firstName = this.normalizeNamePart(twoPartMatch[1]);
     const lastName = this.normalizeNamePart(twoPartMatch[2]);
-    if (!firstName || !lastName) {
+    if (!firstName || !lastName || this.isClearlyNonPersonLine(`${firstName} ${lastName}`)) {
       return null;
     }
 
@@ -2116,6 +2171,24 @@ export class HubSpotClient {
       "Call Outreach",
       this.personalizeOutreachMessage(brief.phoneScript, contact, brief.outreachLanguage)
     );
+  }
+
+  private buildCombinedOutreachNote(
+    company: PreCategorizedCompany,
+    contact: PublicContactCandidate,
+    brief: ResearchBrief
+  ): string | undefined {
+    const sections = [
+      this.buildEmailOutreachNote(company, contact, brief),
+      this.buildLinkedInOutreachNote(company, contact, brief),
+      this.buildPhoneOutreachNote(company, contact, brief)
+    ].filter((value): value is string => Boolean(value));
+
+    if (sections.length === 0) {
+      return undefined;
+    }
+
+    return sections.join("<br><br><hr><br><br>");
   }
 
   private buildOutreachNoteBody(channelLabel: string, message: string): string {

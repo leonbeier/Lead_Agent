@@ -154,6 +154,14 @@ export class AzureOpenAIClient {
     const websiteProfile = domain
       ? await this.webSearchAgent.crawlCompanyWebsite(domain)
       : null;
+    if (domain && !websiteProfile) {
+      return {
+        category: "irrelevant",
+        relevanceScore: 0,
+        rationale: "Official website could not be loaded reliably, so the company is rejected before qualification."
+      };
+    }
+
     const websiteEvidence = websiteProfile?.summary?.trim() || crawledWebsiteSummary;
 
     try {

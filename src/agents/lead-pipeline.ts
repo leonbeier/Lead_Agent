@@ -356,29 +356,28 @@ export class LeadPipelineAgent {
           : `${pendingCompanies.length} neue Firmen werden direkt recherchiert, mit Kontakten angereichert und nach HubSpot geschrieben.`
       );
 
-      emitSyncPreparationProgress(40, `Research-Briefs werden fuer ${pendingCompanies.length} Firmen erstellt.`);
+      emitSyncPreparationProgress(40, `Research-Briefs und Website-Kontakte werden parallel fuer ${pendingCompanies.length} Firmen vorbereitet.`);
 
-      const preparedResearchEntries = dryRun
-        ? []
-        : await this.mapWithConcurrency(
-            pendingCompanies.map((company) => async () => ({
-              companyKey: this.getCompanyKey(company),
-              brief: await this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
-                includeWebResearch: request.runDeepResearch !== false
-              })
-            })),
-            AZURE_WORKER_CONCURRENCY
-          );
+      const [preparedResearchEntries, publicContacts] = await Promise.all([
+        dryRun
+          ? Promise.resolve([])
+          : this.mapWithConcurrency(
+              pendingCompanies.map((company) => async () => ({
+                companyKey: this.getCompanyKey(company),
+                brief: await this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
+                  includeWebResearch: request.runDeepResearch !== false
+                })
+              })),
+              AZURE_WORKER_CONCURRENCY
+            ),
+        this.collectPublicContacts(pendingCompanies, dryRun)
+      ]);
 
       for (const entry of preparedResearchEntries) {
         researchBriefsByCompany.set(entry.companyKey, entry.brief);
       }
 
       const syncEligibleCompanies = pendingCompanies;
-
-      emitSyncPreparationProgress(48, `Oeffentliche Kontakte werden fuer ${syncEligibleCompanies.length} Firmen recherchiert.`);
-
-      const publicContacts = await this.collectPublicContacts(syncEligibleCompanies, dryRun);
 
       const pendingResearchBriefs = syncEligibleCompanies
         .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
@@ -3624,12 +3623,27 @@ export class LeadPipelineAgent {
   }
 
   private async mapWithConcurrency<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
-    const results: T[] = [];
-
-    for (let start = 0; start < tasks.length; start += concurrency) {
-      const batch = tasks.slice(start, start + concurrency);
-      results.push(...(await Promise.all(batch.map((task) => task()))));
+    if (tasks.length === 0) {
+      return [];
     }
+
+    const results = new Array<T>(tasks.length);
+    let nextIndex = 0;
+    const workerCount = Math.max(1, Math.min(concurrency, tasks.length));
+
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (true) {
+          const currentIndex = nextIndex;
+          nextIndex += 1;
+          if (currentIndex >= tasks.length) {
+            return;
+          }
+
+          results[currentIndex] = await tasks[currentIndex]!();
+        }
+      })
+    );
 
     return results;
   }
