@@ -65,7 +65,6 @@ const CONTACT_DISCOVERY_CONCURRENCY = env.CONTACT_DISCOVERY_CONCURRENCY;
 const PUBLIC_CONTACT_DISCOVERY_TIMEOUT_MS = 15_000;
 const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
-const MAX_FILTER_REPLENISH_ROUNDS = 12;
 const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
 const FALLBACK_REPLENISHMENT_LOCATIONS = ["Berlin", "Munich", "Hamburg", "Cologne", "Stuttgart", "DACH", "Austria", "Switzerland"];
 const FALLBACK_REPLENISHMENT_KEYWORDS = ["computer vision", "machine vision", "bildverarbeitung", "industrial ai", "inspection automation", "vision systems"];
@@ -494,11 +493,6 @@ export class LeadPipelineAgent {
         })[0];
 
       if (!nextCategoryState) {
-        if (filterReplenishmentRounds >= MAX_FILTER_REPLENISH_ROUNDS) {
-          completionReason = `Die Suche endete, weil nach ${suggestedFilters.length} getesteten Filtern das Limit fuer die Filter-Nachgenerierung erreicht wurde.`;
-          break;
-        }
-
         const additionalFilters = await this.replenishExhaustedFilters(
           suggestedFilters,
           evaluations,
@@ -513,7 +507,7 @@ export class LeadPipelineAgent {
 
         const replenishedFilters = additionalFilters.length > 0
           ? additionalFilters
-          : this.buildFallbackReplenishmentFilters(suggestedFilters, evaluations, targetCategories);
+          : this.buildFallbackReplenishmentFilters(suggestedFilters, evaluations, targetCategories, filterReplenishmentRounds + 1);
 
         if (replenishedFilters.length === 0) {
           completionReason = `Die Suche endete, weil alle ${suggestedFilters.length} Filter getestet wurden und keine neuen Filter nachgeneriert werden konnten.`;
@@ -3722,7 +3716,8 @@ export class LeadPipelineAgent {
   private buildFallbackReplenishmentFilters(
     existingFilters: ApolloOrganizationFilter[],
     evaluations: FilterEvaluation[],
-    targetCategories: LeadCategory[]
+    targetCategories: LeadCategory[],
+    round: number
   ): ApolloOrganizationFilter[] {
     const existingNames = new Set(existingFilters.map((filter) => filter.name));
     const rankedFilters = [...evaluations]
@@ -3736,19 +3731,18 @@ export class LeadPipelineAgent {
       })
       .map((evaluation) => existingFilters.find((filter) => filter.name === evaluation.filterName))
       .filter((filter): filter is ApolloOrganizationFilter => Boolean(filter));
+    const fallbackSourceFilters = rankedFilters.length > 0 ? rankedFilters : existingFilters;
 
     const fallbackFilters: ApolloOrganizationFilter[] = [];
 
-    for (const filter of rankedFilters.slice(0, 4)) {
-      const nextLocation = FALLBACK_REPLENISHMENT_LOCATIONS.find((location) =>
-        !filter.locations.some((existingLocation) => existingLocation.toLowerCase() === location.toLowerCase())
-      );
+    for (const [index, filter] of fallbackSourceFilters.slice(0, 4).entries()) {
+      const nextLocation = FALLBACK_REPLENISHMENT_LOCATIONS[(round + index - 1) % FALLBACK_REPLENISHMENT_LOCATIONS.length];
       if (nextLocation) {
         const locationVariant: ApolloOrganizationFilter = {
           ...filter,
-          name: `${filter.name} ${nextLocation} Variant`,
-          locations: [...filter.locations, nextLocation],
-          notes: `${filter.notes} Fallback location variant for continued discovery in ${nextLocation}.`
+          name: `${filter.name} ${nextLocation} Variant R${round}`,
+          locations: Array.from(new Set([...filter.locations, nextLocation])),
+          notes: `${filter.notes} Fallback location variant for continued discovery in ${nextLocation}, round ${round}.`
         };
         if (!existingNames.has(locationVariant.name) && this.filterSupportsTargetCategories(locationVariant, targetCategories)) {
           existingNames.add(locationVariant.name);
@@ -3756,15 +3750,13 @@ export class LeadPipelineAgent {
         }
       }
 
-      const nextKeyword = FALLBACK_REPLENISHMENT_KEYWORDS.find((keyword) =>
-        !filter.keywords.some((existingKeyword) => existingKeyword.toLowerCase() === keyword.toLowerCase())
-      );
+      const nextKeyword = FALLBACK_REPLENISHMENT_KEYWORDS[(round + index - 1) % FALLBACK_REPLENISHMENT_KEYWORDS.length];
       if (nextKeyword) {
         const keywordVariant: ApolloOrganizationFilter = {
           ...filter,
-          name: `${filter.name} ${nextKeyword} Variant`,
-          keywords: [...filter.keywords, nextKeyword],
-          notes: `${filter.notes} Fallback keyword variant for continued discovery around ${nextKeyword}.`
+          name: `${filter.name} ${nextKeyword} Variant R${round}`,
+          keywords: Array.from(new Set([...filter.keywords, nextKeyword])),
+          notes: `${filter.notes} Fallback keyword variant for continued discovery around ${nextKeyword}, round ${round}.`
         };
         if (!existingNames.has(keywordVariant.name) && this.filterSupportsTargetCategories(keywordVariant, targetCategories)) {
           existingNames.add(keywordVariant.name);
