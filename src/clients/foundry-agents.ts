@@ -114,6 +114,15 @@ export class FoundryAgentsClient {
       .slice(0, 8)
       .map((entry) => [
         `${entry.filterName} | ${entry.batchType} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}% | ${entry.recommendation}`,
+        entry.fetchedSampleCount !== undefined
+          ? `Prefilter: fetched ${entry.fetchedSampleCount}, eligible ${entry.eligibleSampleCount ?? entry.returnedCount}, rejected feedback ${entry.dropOffSummary?.filteredByPriorFeedback ?? 0}, cache ${entry.dropOffSummary?.filteredByCache ?? 0}, hubspot ${entry.dropOffSummary?.filteredByHubSpot ?? 0}`
+          : undefined,
+        entry.discoveryQueries && entry.discoveryQueries.length > 0
+          ? `Queries: ${entry.discoveryQueries.join(" || ")}`
+          : undefined,
+        entry.decisionSamples && entry.decisionSamples.length > 0
+          ? `Decisions: ${entry.decisionSamples.slice(0, 3).map((sample) => `${sample.companyName} => ${sample.category} (${sample.relevanceScore}) because ${sample.rationale}`).join(" || ")}`
+          : undefined,
         entry.filterSnapshot ? `Snapshot: ${this.formatFilterSnapshot(entry.filterSnapshot)}` : undefined
       ].filter(Boolean).join("\n"));
 
@@ -416,7 +425,7 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Discovery Agent. Find real people for outreach at the supplied company. Prioritize these roles: CEO, CTO, COO, Innovation Manager, Partner Manager, Technology Manager, Operations Manager, Managing Director. Search in this order: official company website first, then LinkedIn company/people evidence, then normal web search evidence for named people and LinkedIn profile URLs. Prefer contacts with clear delivery, technical, operations, innovation, or partner responsibility. Use only evidence-backed people. Never invent names, job titles, email addresses, phone numbers, or LinkedIn URLs. Always include linkedinUrl when a credible LinkedIn profile URL is available. If you have no direct LinkedIn URL for a person, exclude that person unless the company website clearly names them and no better option exists. Return strict JSON: {"contacts":[{"firstName":"...","lastName":"...","fullName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","sourceUrl":"...","label":"website_named_contact|linkedin_profile|web_search_contact"}]}. Keep up to 8 contacts, ranked best first.`,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Discovery Agent. You MUST use the web-search tool when the supplied evidence does not already contain enough named people. Start with the exact search pattern site:linkedin.com/in plus the company name or alias, then try manager-title variants, then developer-title variants if fewer than 4 relevant people are found. Find real people for outreach at the supplied company. Prioritize managers and decision-makers first: CEO, CTO, COO, founder, managing director, head of engineering, head of operations, technology manager, operations manager, partner manager, innovation manager. If fewer than 4 evidence-backed manager-type people exist, fill the remaining slots with developers or engineering contacts such as software engineer, developer, pipeline engineer, technical director, or similar technical implementation roles. Exclude unclear people unless title evidence is missing across the candidate set; in that case prefer the people with the strongest LinkedIn connection-count evidence. Search in this order: official company website first, then exact LinkedIn profile searches, then broader web search evidence for named people and LinkedIn profile URLs. A LinkedIn result is relevant when the company name appears in the result title or snippet. Use only evidence-backed people. Never invent names, job titles, email addresses, phone numbers, LinkedIn URLs, or connection counts. Always include linkedinUrl when a credible LinkedIn profile URL is available. Return strict JSON: {"contacts":[{"firstName":"...","lastName":"...","fullName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","sourceUrl":"...","label":"website_named_contact|linkedin_profile|web_search_contact"}]}. Keep up to 8 contacts, ranked best first.`,
           tools
         };
       }
@@ -425,7 +434,7 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Search Planner. Build the most effective web-search queries to find outreach-relevant people for the supplied company. Think LLM-first: infer adjacent role wording, likely legal entity names, German and English title variants, company aliases from the evidence, and likely LinkedIn company slug hints. Prioritize these role families: CEO, CTO, COO, managing director, founder, innovation, operations, partner, technology, engineering, product, and business development leadership. Search in this order: named contacts from the official website, LinkedIn company page / people view, direct LinkedIn profile searches, then broader web searches for names plus company and role. Do not invent any person names. Return only high-yield queries for normal search engines and Bing grounding. Return strict JSON: {"queries":["...","..."]}. Keep 6 to 10 queries, ranked best first.`,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Search Planner. Build the most effective web-search queries to find outreach-relevant people for the supplied company. You MUST start with exact LinkedIn profile search queries of the form site:linkedin.com/in plus the legal company name, company aliases, and strong role terms. Think LLM-first: infer adjacent role wording, likely legal entity names, German and English title variants, company aliases from the evidence, and likely LinkedIn company slug hints. Prioritize this order: 1) exact site:linkedin.com/in company-name queries, 2) manager-title variants, 3) developer-title variants only when manager-only discovery may stay below 4 people, 4) broader name-plus-company queries. Do not invent any person names. Return only high-yield queries for normal search engines and Azure web search. Return strict JSON: {"queries":["...","..."]}. Keep 6 to 10 queries, ranked best first.`,
           tools
         };
       }

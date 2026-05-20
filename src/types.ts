@@ -51,6 +51,7 @@ export interface CompanySample {
   country?: string;
   shortDescription: string;
   sourceFilter: string;
+  discoveryQuery?: string;
 }
 
 export interface CrawledWebsiteProfile {
@@ -111,6 +112,9 @@ export interface PublicContactCandidate {
   lastName?: string;
   jobTitle?: string;
   linkedinUrl?: string;
+  linkedinConnectionCount?: number;
+  sourceQuery?: string;
+  sourceSnippet?: string;
 }
 
 export interface ApolloContactCandidate {
@@ -207,6 +211,24 @@ export interface StoredFilterSnapshot {
   notes: string;
 }
 
+export interface SearchHistoryDropOffSummary {
+  filteredByPriorFeedback: number;
+  filteredByCache: number;
+  filteredByHubSpot: number;
+  categorizedIrrelevant: number;
+  categorizedOther: number;
+}
+
+export interface SearchHistoryDecisionSample {
+  companyName: string;
+  domain?: string;
+  sourceFilter?: string;
+  discoveryQuery?: string;
+  category: LeadCategory;
+  relevanceScore: number;
+  rationale: string;
+}
+
 export interface SearchHistoryEntry {
   timestamp: string;
   companySearchMode: CompanySearchMode;
@@ -222,6 +244,11 @@ export interface SearchHistoryEntry {
   categoryBreakdown: Record<LeadCategory, number>;
   passedThreshold: boolean;
   recommendation: string;
+  fetchedSampleCount?: number;
+  eligibleSampleCount?: number;
+  discoveryQueries?: string[];
+  dropOffSummary?: SearchHistoryDropOffSummary;
+  decisionSamples?: SearchHistoryDecisionSample[];
 }
 
 export interface GeneratedLeadRecord {

@@ -17,6 +17,7 @@
     "@azure/identity": "^4.8.0",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
+    "playwright": "^1.60.0",
     "undici": "^7.16.0",
     "zod": "^3.24.4"
   },

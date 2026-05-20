@@ -24,6 +24,7 @@ import {
   PrequalificationConfig,
   PublicContactCandidate,
   ResearchBrief,
+  SearchHistoryDecisionSample,
   SearchHistoryEntry
 } from "../types";
 
@@ -62,7 +63,7 @@ const CREDITLESS_EXPANSION_BATCH_SIZE = 20;
 const MAX_FILTER_REVISIONS = 1;
 const MIN_COMPANIES_REVIEWED_BEFORE_FILTER_GIVE_UP = 40;
 const CONTACT_DISCOVERY_CONCURRENCY = env.CONTACT_DISCOVERY_CONCURRENCY;
-const PUBLIC_CONTACT_DISCOVERY_TIMEOUT_MS = 15_000;
+const PUBLIC_CONTACT_DISCOVERY_TIMEOUT_MS = 90_000;
 const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
 const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
@@ -81,13 +82,21 @@ type ProbedFilterCandidate = {
   activeCategory: LeadCategory;
   reviewedCompanies: PreCategorizedCompany[];
   categorizedInitialSample: PreCategorizedCompany[];
-  rawSampleCount: number;
-  eligibleSampleCount: number;
+  sampleDiagnostics: SearchSampleDiagnostics;
   initialEvaluation: FilterEvaluation;
   initialRelevant: PreCategorizedCompany[];
   useWebSearchForExpansion: boolean;
   expansionSearchMode: import("../types").CompanySearchMode;
   apolloExpansionPage: number;
+};
+
+type SearchSampleDiagnostics = {
+  fetchedSampleCount: number;
+  filteredByPriorFeedbackCount: number;
+  filteredByCacheCount: number;
+  filteredByHubSpotCount: number;
+  eligibleSampleCount: number;
+  discoveryQueries: string[];
 };
 
 type ExpandedFilterOutcome = {
@@ -617,12 +626,13 @@ export class LeadPipelineAgent {
               candidate.filter,
               targetCategories,
               request.market,
-              earlyStopThreshold
+              earlyStopThreshold,
+              candidate.sampleDiagnostics
             )
           );
 
           emitFilterProgress(
-            `Probe fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.rawSampleCount}, nach Cache/Vorfilter ${candidate.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}, Weiterlauf ab ${earlyStopMinRelevantCount} relevanten Treffern.`
+            `Probe fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}, Weiterlauf ab ${earlyStopMinRelevantCount} relevanten Treffern.`
           );
         }
 
@@ -962,6 +972,7 @@ export class LeadPipelineAgent {
       targetCategories,
       learning
     );
+    let sampleDiagnostics = probeFetch.diagnostics;
     let initialEvaluation = this.evaluateFilter(
       filter.name,
       categorizedInitialSample,
@@ -1026,6 +1037,7 @@ export class LeadPipelineAgent {
         ) {
           categorizedInitialSample = categorizedWebFallbackProbe;
           initialEvaluation = webFallbackEvaluation;
+          sampleDiagnostics = webFallbackProbe.diagnostics;
           useWebSearchForExpansion = true;
           expansionSearchMode = "internet_research";
         }
@@ -1039,8 +1051,7 @@ export class LeadPipelineAgent {
       activeCategory,
       reviewedCompanies,
       categorizedInitialSample,
-      rawSampleCount: probeFetch.rawSampleCount,
-      eligibleSampleCount: probeFetch.eligibleSampleCount,
+      sampleDiagnostics,
       initialEvaluation,
       initialRelevant: this.getRelevantCompanies(categorizedInitialSample, filter, targetCategories, market),
       useWebSearchForExpansion,
@@ -1086,7 +1097,7 @@ export class LeadPipelineAgent {
         recommendation: `${candidate.initialEvaluation.recommendation} Web expansion stopped because the initial probe found no relevant companies.`
       };
       emitFilterProgress(
-        `Filter "${candidate.filter.name}" frueh gestoppt nach Web-Probe: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant, Rohmenge ${candidate.rawSampleCount}, nach Cache/Vorfilter ${candidate.eligibleSampleCount}.`
+        `Filter "${candidate.filter.name}" frueh gestoppt nach Web-Probe: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant, Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}.`
       );
 
       return {
@@ -1209,7 +1220,8 @@ export class LeadPipelineAgent {
           candidate.filter,
           targetCategories,
           request.market,
-          earlyStopThreshold
+          earlyStopThreshold,
+          expandedFetch.diagnostics
         )
       );
 
@@ -2907,11 +2919,23 @@ export class LeadPipelineAgent {
     filter: import("../types").ApolloOrganizationFilter,
     targetCategories: LeadCategory[],
     market: string | undefined,
-    threshold: number
+    threshold: number,
+    diagnostics?: SearchSampleDiagnostics
   ): SearchHistoryEntry {
     const relevantCount = this.getRelevantCompanies(companies, filter, targetCategories, market).length;
     const relevanceRatio = companies.length === 0 ? 0 : relevantCount / companies.length;
     const categoryBreakdown = this.evaluateFilter(filterName, companies, filter, targetCategories, market, requestedCount, false).categoryBreakdown;
+    const decisionSamples = companies
+      .slice(0, 8)
+      .map<SearchHistoryDecisionSample>((company) => ({
+        companyName: company.name,
+        domain: company.domain,
+        sourceFilter: company.sourceFilter,
+        discoveryQuery: company.discoveryQuery,
+        category: company.category,
+        relevanceScore: company.relevanceScore,
+        rationale: company.rationale
+      }));
 
     return {
       timestamp: new Date().toISOString(),
@@ -2936,7 +2960,20 @@ export class LeadPipelineAgent {
       passedThreshold: relevanceRatio >= threshold,
       recommendation: relevanceRatio >= threshold
         ? "Continue expanding this search."
-        : "Revise the search before spending more credits."
+        : "Revise the search before spending more credits.",
+      fetchedSampleCount: diagnostics?.fetchedSampleCount,
+      eligibleSampleCount: diagnostics?.eligibleSampleCount,
+      discoveryQueries: diagnostics?.discoveryQueries.slice(0, 6),
+      dropOffSummary: diagnostics
+        ? {
+            filteredByPriorFeedback: diagnostics.filteredByPriorFeedbackCount,
+            filteredByCache: diagnostics.filteredByCacheCount,
+            filteredByHubSpot: diagnostics.filteredByHubSpotCount,
+            categorizedIrrelevant: categoryBreakdown.irrelevant ?? 0,
+            categorizedOther: categoryBreakdown.other ?? 0
+          }
+        : undefined,
+      decisionSamples
     };
   }
 
@@ -3022,32 +3059,55 @@ export class LeadPipelineAgent {
     disableHubSpotDeduplication: boolean,
     targetCategories: LeadCategory[],
     syncToHubSpot: boolean
-  ): Promise<CompanySample[]> {
+  ): Promise<{ companies: CompanySample[]; filteredByCacheCount: number; filteredByHubSpotCount: number }> {
     if (dryRun || disableHubSpotDeduplication || syncToHubSpot || companies.length === 0) {
-      return this.excludeCachedScreenedCompanies(companies, targetCategories);
+      const filteredByCache = this.excludeCachedScreenedCompanies(companies, targetCategories);
+      return {
+        companies: filteredByCache,
+        filteredByCacheCount: Math.max(0, companies.length - filteredByCache.length),
+        filteredByHubSpotCount: 0
+      };
     }
 
     const filteredByCache = this.excludeCachedScreenedCompanies(companies, targetCategories);
+    const filteredByCacheCount = Math.max(0, companies.length - filteredByCache.length);
     if (filteredByCache.length === 0) {
-      return filteredByCache;
+      return {
+        companies: filteredByCache,
+        filteredByCacheCount,
+        filteredByHubSpotCount: 0
+      };
     }
 
     const domains = filteredByCache
       .map((company) => company.domain)
       .filter((domain): domain is string => Boolean(domain));
     if (domains.length === 0) {
-      return filteredByCache;
+      return {
+        companies: filteredByCache,
+        filteredByCacheCount,
+        filteredByHubSpotCount: 0
+      };
     }
 
     const existingDomains = await this.getKnownHubSpotDomains(domains);
     if (existingDomains.size === 0) {
-      return filteredByCache;
+      return {
+        companies: filteredByCache,
+        filteredByCacheCount,
+        filteredByHubSpotCount: 0
+      };
     }
 
-    return filteredByCache.filter((company) => {
+    const filteredByHubSpot = filteredByCache.filter((company) => {
       const normalizedDomain = company.domain?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
       return !normalizedDomain || !existingDomains.has(normalizedDomain);
     });
+    return {
+      companies: filteredByHubSpot,
+      filteredByCacheCount,
+      filteredByHubSpotCount: Math.max(0, filteredByCache.length - filteredByHubSpot.length)
+    };
   }
 
   private async fetchAvailableSearchSample(
@@ -3070,7 +3130,7 @@ export class LeadPipelineAgent {
       webSearchRawCollectionMultiplier?: number;
     },
     progressHeartbeat?: () => void
-  ): Promise<{ companies: CompanySample[]; nextPage: number; rawSampleCount: number; eligibleSampleCount: number }> {
+  ): Promise<{ companies: CompanySample[]; nextPage: number; diagnostics: SearchSampleDiagnostics }> {
     const collected: CompanySample[] = [];
     const seenKeys = new Set(reviewedCompanies.map((company) => this.getCompanyKey(company)));
     const isOpenCrawlerSearch = companySearchMode === "open_crawler_search";
@@ -3094,8 +3154,11 @@ export class LeadPipelineAgent {
       : requestedCount;
     const plannedPages = this.buildSearchPagePlan(page, maxPages, useWebSearch, requestedCount);
     let nextPage = page;
-    let rawSampleCount = 0;
-    let eligibleSampleCount = 0;
+    let fetchedSampleCount = 0;
+    let filteredByPriorFeedbackCount = 0;
+    let filteredByCacheCount = 0;
+    let filteredByHubSpotCount = 0;
+    const discoveryQueries = new Set<string>();
     const shouldSkipDiscoveryDomain = (domain: string) => this.shouldSkipDiscoveryDomain(domain, targetCategories);
     const discoveryCheckpointContext = this.discoveryCheckpointContext ??= {
       runId: this.createDiscoveryCheckpointRunId(),
@@ -3126,10 +3189,15 @@ export class LeadPipelineAgent {
         page: plannedPage,
         companies: rawSample
       });
+      fetchedSampleCount += rawSample.length;
+      rawSample
+        .map((company) => company.discoveryQuery?.trim())
+        .filter((query): query is string => Boolean(query))
+        .forEach((query) => discoveryQueries.add(query));
       const sample = this.excludeRejectedCompanies(rawSample, learning);
+      filteredByPriorFeedbackCount += Math.max(0, rawSample.length - sample.length);
 
       nextPage = plannedPage + 1;
-      rawSampleCount += sample.length;
 
       if (sample.length === 0) {
         if (useWebSearch) {
@@ -3147,9 +3215,10 @@ export class LeadPipelineAgent {
         targetCategories,
         syncToHubSpot
       );
-      eligibleSampleCount += availableSample.length;
+      filteredByCacheCount += availableSample.filteredByCacheCount;
+      filteredByHubSpotCount += availableSample.filteredByHubSpotCount;
 
-      for (const company of availableSample) {
+      for (const company of availableSample.companies) {
         const companyKey = this.getCompanyKey(company);
         if (seenKeys.has(companyKey)) {
           continue;
@@ -3174,8 +3243,14 @@ export class LeadPipelineAgent {
     return {
       companies: collected,
       nextPage,
-      rawSampleCount,
-      eligibleSampleCount
+      diagnostics: {
+        fetchedSampleCount,
+        filteredByPriorFeedbackCount,
+        filteredByCacheCount,
+        filteredByHubSpotCount,
+        eligibleSampleCount: collected.length,
+        discoveryQueries: [...discoveryQueries]
+      }
     };
   }
 

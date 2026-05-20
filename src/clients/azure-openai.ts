@@ -8,6 +8,7 @@ import {
   LeadLearningData,
   PreCategorizedCompany,
   PrequalificationConfig,
+  PublicContactCandidate,
   ResearchBrief
 } from "../types";
 import {
@@ -418,6 +419,62 @@ export class AzureOpenAIClient {
     } catch {
       return rankedCandidates.slice(0, 5);
     }
+  }
+
+  async choosePublicContacts(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country" | "category">,
+    candidates: PublicContactCandidate[],
+    dryRun: boolean
+  ): Promise<PublicContactCandidate[]> {
+    const rankedCandidates = candidates.slice(0, 12);
+    if (rankedCandidates.length <= 4 || dryRun || !readiness.azureConfigured) {
+      return rankedCandidates.slice(0, 4);
+    }
+
+    try {
+      const contactPayload = rankedCandidates.map((candidate, index) => ({
+        contactId: `contact_${index + 1}`,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle: candidate.jobTitle,
+        email: candidate.email,
+        phone: candidate.phone,
+        linkedinUrl: candidate.linkedinUrl,
+        linkedinConnectionCount: candidate.linkedinConnectionCount,
+        sourceUrl: candidate.sourceUrl,
+        sourceQuery: candidate.sourceQuery,
+        sourceSnippet: candidate.sourceSnippet,
+        label: candidate.label
+      }));
+
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Select up to 4 public web-search contacts for outbound outreach. Apply these rules strictly: managers and decision-makers first; if fewer than 4 relevant manager-type people are evidence-backed, fill remaining slots with developers or engineering contacts; exclude unclear people unless titles are missing across the candidate set, and then use the highest LinkedIn connection counts as the fallback. Treat founder or company-founding evidence in snippets, for example wording like "we founded <company>", as a strong executive-leadership signal even if no explicit CEO title is present. Prefer one executive sponsor plus one technical or operational owner when possible. Prefer contacts that combine multiple reachable data points such as LinkedIn URL, email, and phone. Avoid HR, recruiting, finance, legal, support, generic sales, marketing, students, advisors, and unrelated contacts. Use only the provided evidence. Return strict JSON with {"selectedContactIds":["..."],"reason":"..."}.`
+        },
+        {
+          role: "user",
+          content: [
+            `Company: ${company.name}`,
+            company.domain ? `Domain: ${company.domain}` : undefined,
+            company.country ? `Country: ${company.country}` : undefined,
+            company.category ? `Category: ${company.category}` : undefined,
+            `Candidates JSON: ${JSON.stringify(contactPayload)}`
+          ].filter(Boolean).join("\n\n")
+        }
+      ], { maxTokens: 220 });
+
+      const parsed = this.parseJsonObject<{ selectedContactIds?: string[] }>(content);
+      const selectedIds = new Set(parsed.selectedContactIds ?? []);
+      const selected = rankedCandidates.filter((_, index) => selectedIds.has(`contact_${index + 1}`));
+      if (selected.length > 0) {
+        return selected.slice(0, 4);
+      }
+    } catch {
+      // Fall back to the heuristic order provided by the caller.
+    }
+
+    return rankedCandidates.slice(0, 4);
   }
 
   getUsageTotals(): AzureUsageCost {
@@ -2340,7 +2397,16 @@ export class AzureOpenAIClient {
           .slice(0, MAX_FILTER_STRATEGY_HISTORY)
           .map((entry) => [
             `${entry.filterName} | ${entry.batchType} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}% | ${entry.recommendation}`,
+            entry.fetchedSampleCount !== undefined
+              ? `  Prefilter: fetched ${entry.fetchedSampleCount}, eligible ${entry.eligibleSampleCount ?? entry.returnedCount}, rejected feedback ${entry.dropOffSummary?.filteredByPriorFeedback ?? 0}, cache ${entry.dropOffSummary?.filteredByCache ?? 0}, hubspot ${entry.dropOffSummary?.filteredByHubSpot ?? 0}`
+              : undefined,
+            entry.discoveryQueries && entry.discoveryQueries.length > 0
+              ? `  Queries: ${entry.discoveryQueries.join(" || ")}`
+              : undefined,
             `  Categories: ${Object.entries(entry.categoryBreakdown ?? {}).filter(([, count]) => count > 0).map(([category, count]) => `${category}=${count}`).join(", ") || "none"}`,
+            entry.decisionSamples && entry.decisionSamples.length > 0
+              ? `  Decisions: ${entry.decisionSamples.slice(0, 3).map((sample) => `${sample.companyName} => ${sample.category} (${sample.relevanceScore}) because ${sample.rationale}`).join(" || ")}`
+              : undefined,
             entry.filterSnapshot ? `  Snapshot: ${this.formatFilterSnapshot(entry.filterSnapshot)}` : undefined
           ].filter(Boolean).join("\n"));
 

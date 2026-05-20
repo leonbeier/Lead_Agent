@@ -1,0 +1,11 @@
+[variables]
+PLAYWRIGHT_BROWSERS_PATH = '0'
+
+[phases.install]
+cmds = ['npm ci', 'npx playwright install --with-deps chromium']
+
+[phases.build]
+cmds = ['npm run build']
+
+[start]
+cmd = 'npm run start'

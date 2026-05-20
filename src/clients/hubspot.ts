@@ -1,5 +1,6 @@
 import { env, readiness } from "../config";
 import { ApolloClient } from "./apollo";
+import { AzureOpenAIClient } from "./azure-openai";
 import { FoundryAgentsClient } from "./foundry-agents";
 import { OpenAIWebSearchClient } from "./openai-web-search";
 import { PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../types";
@@ -46,25 +47,61 @@ interface WebSearchHit {
   query: string;
 }
 
+interface BrowserSearchArticle {
+  url: string;
+  title: string;
+  snippet: string;
+}
+
 const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
 const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
+const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 90000;
+const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
-const PUBLIC_CONTACT_ROLE_PATTERNS = [
+const DDG_BROWSER_SEARCH_TIMEOUT_MS = 15000;
+const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
   "CTO",
   "Chief Technology Officer",
   "COO",
   "Chief Operating Officer",
+  "Founder",
+  "Co-Founder",
+  "Owner",
   "Innovation Manager",
   "Partner Manager",
   "Technology Manager",
   "Operations Manager",
-  "Managing Director"
+  "Managing Director",
+  "Managing Partner",
+  "Head of Engineering",
+  "Head of Operations",
+  "Head of Product",
+  "Head of Technology",
+  "Director",
+  "VP",
+  "Vice President"
 ];
+const PUBLIC_CONTACT_DEVELOPER_PATTERNS = [
+  "Software Developer",
+  "Software Engineer",
+  "Engineer",
+  "Developer",
+  "Pipeline Engineer",
+  "Technical Director",
+  "Technical Artist",
+  "Machine Learning Engineer",
+  "AI Engineer",
+  "Computer Vision Engineer"
+];
+const PUBLIC_CONTACT_ROLE_PATTERNS = [...PUBLIC_CONTACT_MANAGER_PATTERNS, ...PUBLIC_CONTACT_DEVELOPER_PATTERNS];
 const PUBLIC_CONTACT_ROLE_REGEX = new RegExp(PUBLIC_CONTACT_ROLE_PATTERNS.join("|"), "i");
+const PUBLIC_CONTACT_MANAGER_REGEX = new RegExp(PUBLIC_CONTACT_MANAGER_PATTERNS.join("|"), "i");
+const PUBLIC_CONTACT_DEVELOPER_REGEX = new RegExp(PUBLIC_CONTACT_DEVELOPER_PATTERNS.join("|"), "i");
+const PUBLIC_CONTACT_EXCLUDED_REGEX = /\b(hr|human resources|recruit(ing|er)|talent|people ops|finance|legal|support|customer support|student|intern|marketing|sdr|bdr|account executive|sales representative)\b/i;
 const HIGH_PRIORITY_PAGE_PATTERNS = ["contact", "kontakt", "impressum", "imprint", "legal", "legal notice", "legal-notice", "about", "team", "management"];
 const MEDIUM_PRIORITY_PAGE_PATTERNS = [
   "software",
@@ -136,6 +173,8 @@ export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
 
   private readonly apolloClient = new ApolloClient();
+
+  private readonly azureOpenAIClient = new AzureOpenAIClient();
 
   private readonly foundryAgentsClient = new FoundryAgentsClient();
 
@@ -401,7 +440,7 @@ export class HubSpotClient {
     availableProperties: Set<string>
   ): Promise<HubSpotObjectResponse | null> {
     const normalizedContact = this.normalizeContactForHubSpot(contact);
-    if (!normalizedContact?.email) {
+    if (!normalizedContact) {
       return null;
     }
 
@@ -412,6 +451,8 @@ export class HubSpotClient {
         lastname: normalizedContact.lastName,
         phone: normalizedContact.phone,
         jobtitle: normalizedContact.jobTitle,
+        hs_linkedin_url: normalizedContact.linkedinUrl,
+        linkedinconnections: this.toNumericPropertyValue(normalizedContact.linkedinConnectionCount),
         hs_lead_status: "NEW",
         lead_source: "AI Agent",
         lead_source_details: "AI Agent"
@@ -419,7 +460,11 @@ export class HubSpotClient {
       availableProperties
     );
 
-    const existingContact = await this.findExistingContact(normalizedContact.email);
+    if (Object.keys(properties).length === 0 || (!properties.email && !properties.firstname && !properties.lastname && !properties.hs_linkedin_url)) {
+      return null;
+    }
+
+    const existingContact = await this.findExistingContact(normalizedContact, availableProperties);
     if (existingContact) {
       return this.requestJson<HubSpotObjectResponse>(
         `${env.HUBSPOT_BASE_URL}/crm/v3/objects/contacts/${existingContact.id}`,
@@ -439,12 +484,12 @@ export class HubSpotClient {
   private normalizeContactForHubSpot(contact: PublicContactCandidate): PublicContactCandidate | null {
     const email = contact.email?.trim().toLowerCase();
     const linkedinUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
-    if (!email) {
-      return null;
-    }
-
     const firstName = this.normalizeNamePart(contact.firstName);
     const lastName = this.normalizeNamePart(contact.lastName);
+    const hasReachableIdentity = Boolean(email || linkedinUrl || firstName || lastName);
+    if (!hasReachableIdentity) {
+      return null;
+    }
 
     return {
       ...contact,
@@ -513,8 +558,61 @@ export class HubSpotClient {
     return this.searchObject("companies", "name", company.name);
   }
 
-  private async findExistingContact(email: string): Promise<HubSpotObjectResponse | null> {
-    return this.searchObject("contacts", "email", email);
+  private async findExistingContact(
+    contact: PublicContactCandidate,
+    availableProperties: Set<string>
+  ): Promise<HubSpotObjectResponse | null> {
+    if (contact.email) {
+      const byEmail = await this.searchObject("contacts", "email", contact.email);
+      if (byEmail) {
+        return byEmail;
+      }
+    }
+
+    if (contact.linkedinUrl && availableProperties.has("hs_linkedin_url")) {
+      const byLinkedIn = await this.searchObject("contacts", "hs_linkedin_url", contact.linkedinUrl);
+      if (byLinkedIn) {
+        return byLinkedIn;
+      }
+    }
+
+    if (contact.firstName && contact.lastName) {
+      return this.searchContactByName(contact.firstName, contact.lastName);
+    }
+
+    return null;
+  }
+
+  private async searchContactByName(firstName: string, lastName: string): Promise<HubSpotObjectResponse | null> {
+    const response = await this.scheduleSearchRequest(() =>
+      this.requestJson<{ results?: HubSpotObjectResponse[] }>(
+        `${env.HUBSPOT_BASE_URL}/crm/v3/objects/contacts/search`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            limit: 1,
+            filterGroups: [
+              {
+                filters: [
+                  {
+                    propertyName: "firstname",
+                    operator: "EQ",
+                    value: firstName
+                  },
+                  {
+                    propertyName: "lastname",
+                    operator: "EQ",
+                    value: lastName
+                  }
+                ]
+              }
+            ]
+          })
+        }
+      )
+    );
+
+    return response.results?.[0] ?? null;
   }
 
   private getCompanyKey(company: Pick<PreCategorizedCompany, "name" | "domain">): string {
@@ -705,26 +803,44 @@ export class HubSpotClient {
       [...candidates.values()].filter((candidate) => !this.isLowValueMailbox(candidate.email ?? "")),
       namedWebsiteContacts
     );
-    const webSearchContacts = await this.discoverWebSearchContacts(company, pages, websiteContacts);
+    const webSearchContacts = await this.withTimeout(
+      this.discoverWebSearchContacts(company, pages, websiteContacts),
+      PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
+      [] as PublicContactCandidate[]
+    );
     const mergedContacts = this.mergeDiscoveredContacts(websiteContacts, webSearchContacts);
-    const enrichedContacts = await this.mapWithSearchInterval(
-      mergedContacts.map((contact) => async () => this.enrichContactWithLinkedInUrl(company, contact)),
-      1
+    const enrichedContacts = await this.withTimeout(
+      this.mapWithSearchInterval(
+        mergedContacts.map((contact) => async () => this.enrichContactWithLinkedInUrl(company, contact)),
+        1
+      ),
+      PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS,
+      mergedContacts
     );
 
-    return this.collapseDuplicateMailboxContacts(enrichedContacts)
-      .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""))
+    const dedupedContacts = this.collapseDuplicateMailboxContacts(enrichedContacts)
+      .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""));
+
+    const selectedEmployees = await this.selectRelevantEmployeeContacts(company, dedupedContacts);
+    if (selectedEmployees.length > 0) {
+      return selectedEmployees;
+    }
+
+    return dedupedContacts
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
-      .slice(0, 5);
+      .slice(0, 4);
   }
 
   private collapseDuplicateMailboxContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
     const bestByKey = new Map<string, PublicContactCandidate>();
 
     for (const contact of contacts) {
+      const fullName = `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim().toLowerCase();
       const key = contact.email && this.isGenericMailbox(contact.email)
         ? `generic:${contact.email.trim().toLowerCase()}`
-        : this.getPublicContactIdentity(contact);
+        : (contact.linkedinUrl?.trim().toLowerCase()
+          || contact.email?.trim().toLowerCase()
+          || (fullName ? `person:${fullName}` : this.getPublicContactIdentity(contact)));
       const existing = bestByKey.get(key);
       if (!existing || this.getPublicContactScore(contact) > this.getPublicContactScore(existing)) {
         bestByKey.set(key, contact);
@@ -759,7 +875,9 @@ export class HubSpotClient {
       companyAliases.length > 0 ? `Company aliases: ${companyAliases.join(" | ")}` : undefined
     ].filter(Boolean).join("\n\n");
     const suggestedQueries = await this.foundryAgentsClient.suggestPublicContactQueries(company, queryPlanningEvidence, false);
-    const queries = Array.from(new Set([...suggestedQueries, ...this.buildPublicContactSearchQueries(company, companyAliases)])).slice(0, 12);
+    const preferredQueries = this.buildPublicContactSearchQueries(company, companyAliases)
+      .filter((query) => /site:linkedin\.com\/in/i.test(query));
+    const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 4);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => this.searchBingResults(query, 5)),
       1
@@ -775,19 +893,16 @@ export class HubSpotClient {
     const searchEvidence = relevantHits
       .map((hit) => `Query: ${hit.query}\nTitle: ${hit.title}\nURL: ${hit.url}\nSnippet: ${hit.snippet}`)
       .join("\n\n");
-
+    const heuristicContacts = this.extractContactsFromSearchHits(company, relevantHits, companyAliases);
     const evidence = [
       websiteEvidence ? `Official website evidence:\n${websiteEvidence}` : undefined,
       knownContactEvidence ? `Known website contacts:\n${knownContactEvidence}` : undefined,
       searchEvidence ? `Web search evidence:\n${searchEvidence}` : undefined
     ].filter(Boolean).join("\n\n");
-
-    if (!evidence.trim()) {
-      return [];
-    }
-
-    const heuristicContacts = this.extractContactsFromSearchHits(company, relevantHits, companyAliases);
-    const foundryContacts = await this.foundryAgentsClient.discoverPublicContacts(company, evidence, false);
+    const strongHeuristicContacts = heuristicContacts.filter((contact) => this.isNamedEmployeeContact(contact));
+    const foundryContacts = evidence.trim() && strongHeuristicContacts.length < 4
+      ? await this.foundryAgentsClient.discoverPublicContacts(company, evidence, false)
+      : [];
     const mergedContacts = this.mergeDiscoveredContacts(foundryContacts, heuristicContacts);
 
     return mergedContacts.map((contact) => ({
@@ -804,30 +919,36 @@ export class HubSpotClient {
     const companyToken = normalizedDomain?.split(".")[0];
     const simplifiedCompanyToken = companyToken?.split(/[-_]/).filter(Boolean)[0];
     const simplifiedCompanyName = companyName.replace(/\b(ai|gmbh|ug|ag|ltd|llc|inc)\b/gi, "").replace(/\s+/g, " ").trim();
-    const roleQuery = '"CEO" OR "CTO" OR "COO" OR "Innovation Manager" OR "Partner Manager" OR "Technology Manager" OR "Operations Manager" OR "Managing Director"';
+    const managerRoleQuery = '"CEO" OR "CTO" OR "COO" OR "Founder" OR "Managing Director" OR "Head of Engineering" OR "Head of Operations" OR "Technology Manager" OR "Operations Manager"';
+    const developerRoleQuery = '"Engineer" OR "Developer" OR "Software Engineer" OR "Pipeline Engineer" OR "Technical Director"';
     const aliasQueries = aliases.flatMap((alias) => [
       `site:linkedin.com/in "${alias}"`,
-      `${alias} ${roleQuery}`,
+      `${alias} ${managerRoleQuery}`,
       `site:linkedin.com/company "${alias}" people`,
-      `site:linkedin.com/in "${alias}" ${roleQuery}`,
-      `${alias} linkedin ${roleQuery}`
+      `site:linkedin.com/in "${alias}" ${managerRoleQuery}`,
+      `site:linkedin.com/in "${alias}" ${developerRoleQuery}`,
+      `${alias} linkedin ${managerRoleQuery}`,
+      `${alias} linkedin ${developerRoleQuery}`
     ]);
 
     return Array.from(
       new Set(
         [
           `site:linkedin.com/in "${companyName}"`,
-          `${companyName} ${roleQuery}`,
+          `${companyName} ${managerRoleQuery}`,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}"` : undefined,
-          simplifiedCompanyName && simplifiedCompanyName !== companyName ? `${simplifiedCompanyName} ${roleQuery}` : undefined,
+          simplifiedCompanyName && simplifiedCompanyName !== companyName ? `${simplifiedCompanyName} ${managerRoleQuery}` : undefined,
           `site:linkedin.com/company "${companyName}" people`,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/company "${simplifiedCompanyName}" people` : undefined,
-          `site:linkedin.com/in "${companyName}" ${roleQuery}`,
-          simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}" ${roleQuery}` : undefined,
-          normalizedDomain ? `site:linkedin.com/in "${normalizedDomain}" ${roleQuery}` : undefined,
-          companyToken ? `site:linkedin.com/in "${companyToken}" ${roleQuery}` : undefined,
-          simplifiedCompanyToken && simplifiedCompanyToken !== companyToken ? `site:linkedin.com/in "${simplifiedCompanyToken}" ${roleQuery}` : undefined,
-          `${companyName} linkedin ${roleQuery}`,
+          `site:linkedin.com/in "${companyName}" ${managerRoleQuery}`,
+          `site:linkedin.com/in "${companyName}" ${developerRoleQuery}`,
+          simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}" ${managerRoleQuery}` : undefined,
+          simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}" ${developerRoleQuery}` : undefined,
+          normalizedDomain ? `site:linkedin.com/in "${normalizedDomain}" ${managerRoleQuery}` : undefined,
+          companyToken ? `site:linkedin.com/in "${companyToken}" ${managerRoleQuery}` : undefined,
+          simplifiedCompanyToken && simplifiedCompanyToken !== companyToken ? `site:linkedin.com/in "${simplifiedCompanyToken}" ${managerRoleQuery}` : undefined,
+          `${companyName} linkedin ${managerRoleQuery}`,
+          `${companyName} linkedin ${developerRoleQuery}`,
           ...aliasQueries
         ].filter((query): query is string => Boolean(query))
       )
@@ -887,8 +1008,11 @@ export class HubSpotClient {
         contacts.push({
           ...name,
           jobTitle: this.extractJobTitleFromSearchText(title, snippet),
+          linkedinConnectionCount: this.extractLinkedInConnectionCount(snippet),
           linkedinUrl,
           sourceUrl: linkedinUrl,
+          sourceQuery: hit.query,
+          sourceSnippet: snippet,
           label: "linkedin_profile"
         });
         continue;
@@ -902,7 +1026,10 @@ export class HubSpotClient {
       contacts.push({
         ...name,
         jobTitle: this.extractJobTitleFromSearchText(title, snippet),
+        linkedinConnectionCount: this.extractLinkedInConnectionCount(snippet),
         sourceUrl: hit.url,
+        sourceQuery: hit.query,
+        sourceSnippet: snippet,
         label: "web_search_contact"
       });
     }
@@ -989,14 +1116,50 @@ export class HubSpotClient {
   }
 
   private extractJobTitleFromSearchText(title: string, snippet: string): string | undefined {
-    const directRole = PUBLIC_CONTACT_ROLE_PATTERNS.find((role) => new RegExp(`\\b${role}\\b`, "i").test(`${title} ${snippet}`));
+    const directRole = PUBLIC_CONTACT_ROLE_PATTERNS.find((role) => new RegExp(`\\b${this.escapeRegex(role)}\\b`, "i").test(`${title} ${snippet}`));
     if (directRole) {
-      return directRole;
+      return this.normalizeJobTitle(directRole);
+    }
+
+    if (/\b(founded|founder|co-founder|gruender|gr[uü]ndete)\b/i.test(snippet)) {
+      return "Founder";
+    }
+
+    const snippetSegments = snippet
+      .split(/\s+[·|]\s+|\s+-\s+/)
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const likelySnippetTitle = snippetSegments.find((segment) => this.looksLikeJobTitle(segment));
+    if (likelySnippetTitle) {
+      return this.normalizeJobTitle(likelySnippetTitle) ?? likelySnippetTitle;
     }
 
     const titleSegments = title.split(" - ").map((segment) => segment.trim()).filter(Boolean);
-    const likelyTitle = titleSegments.find((segment, index) => index > 0 && segment.split(/\s+/).length <= 6 && !/linkedin/i.test(segment));
-    return likelyTitle || undefined;
+    const likelyTitle = titleSegments.find((segment, index) => index > 0 && this.looksLikeJobTitle(segment) && !/linkedin/i.test(segment));
+    return likelyTitle ? (this.normalizeJobTitle(likelyTitle) ?? likelyTitle) : undefined;
+  }
+
+  private extractLinkedInConnectionCount(snippet: string): number | undefined {
+    const match = snippet.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\+?\s*(?:connections|kontakte)\b/i);
+    if (!match) {
+      return undefined;
+    }
+
+    const numericValue = Number(match[1].replace(/[.,]/g, ""));
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+  }
+
+  private looksLikeJobTitle(value: string): boolean {
+    if (!value || value.split(/\s+/).length > 8) {
+      return false;
+    }
+
+    if (PUBLIC_CONTACT_EXCLUDED_REGEX.test(value)) {
+      return false;
+    }
+
+    return PUBLIC_CONTACT_ROLE_REGEX.test(value)
+      || /\b(founder|owner|lead|manager|director|engineer|developer|architect|product|operations|technology|innovation)\b/i.test(value);
   }
 
   private async searchBingResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
@@ -1023,6 +1186,14 @@ export class HubSpotClient {
 
       return normalizedResults;
     };
+
+    const wantsLinkedInResults = /site:linkedin\.com\/(?:in|company)/i.test(query);
+    if (wantsLinkedInResults) {
+      const browserDuckDuckGoHits = await this.searchDuckDuckGoBrowserResults(query, maxResults);
+      if (browserDuckDuckGoHits.length > 0) {
+        return normalizedHits(browserDuckDuckGoHits);
+      }
+    }
 
     try {
       const response = await fetch(`https://www.bing.com/search?q=${encodeURIComponent(query)}`, {
@@ -1058,15 +1229,14 @@ export class HubSpotClient {
 
       if (bingHtmlHits.length > 0 && !/Noch ein letzter Schritt|challenge|turnstile/i.test(html)) {
         const normalizedBingHits = normalizedHits(bingHtmlHits);
-        const wantsLinkedInResults = /site:linkedin\.com\/(?:in|company)/i.test(query);
         if (!wantsLinkedInResults || normalizedBingHits.some((hit) => /linkedin\.com\/(?:in|company)\//i.test(hit.url))) {
           return normalizedBingHits;
         }
 
         const fallbackHits: WebSearchHit[] = [];
-        fallbackHits.push(...(await this.searchBingRssResults(query, maxResults)));
         fallbackHits.push(...(await this.searchDuckDuckGoResults(query, maxResults)));
-        return normalizedHits([...normalizedBingHits, ...fallbackHits]);
+        fallbackHits.push(...(await this.searchBingRssResults(query, maxResults)));
+        return normalizedHits([...fallbackHits, ...normalizedBingHits]);
       }
     } catch {
       // Fall back to alternative search endpoints below.
@@ -1076,6 +1246,85 @@ export class HubSpotClient {
     fallbackHits.push(...(await this.searchBingRssResults(query, maxResults)));
     fallbackHits.push(...(await this.searchDuckDuckGoResults(query, maxResults)));
     return normalizedHits(fallbackHits);
+  }
+
+  private async searchDuckDuckGoBrowserResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
+    try {
+      const { chromium } = await import("playwright");
+      const browser = await chromium.launch({
+        headless: true,
+        channel: "chromium"
+      });
+
+      try {
+        const page = await browser.newPage({
+          locale: "de-DE",
+          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
+        });
+
+        await page.goto(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&ia=web`, {
+          waitUntil: "domcontentloaded",
+          timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
+        });
+        await page.waitForSelector('article[data-testid="result"]', {
+          timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
+        }).catch(() => undefined);
+        await page.waitForTimeout(800);
+
+        const articles = await page.evaluate((limit) => {
+          const parseSnippet = (articleText: string, title: string, url: string): string => {
+            const normalizedUrl = url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+            const lines = articleText
+              .split(/\r?\n/)
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .filter((line) => line !== title)
+              .filter((line) => line !== url)
+              .filter((line) => line !== normalizedUrl)
+              .filter((line) => !/^LinkedIn/i.test(line));
+
+            return lines.join(" ");
+          };
+
+          return Array.from(document.querySelectorAll('article[data-testid="result"]'))
+            .map((article) => {
+              const element = article as HTMLElement;
+              const titleLinks = Array.from(element.querySelectorAll('a[href*="linkedin.com/in"]')) as HTMLAnchorElement[];
+              const titleLink = titleLinks.find((link) => {
+                const text = (link.textContent || "").trim();
+                return text.length > 0 && /linkedin/i.test(text) && !/^https?:/i.test(text) && !/›/.test(text);
+              }) ?? titleLinks.find((link) => {
+                const text = (link.textContent || "").trim();
+                return text.length > 0 && !/^https?:/i.test(text) && !/›/.test(text);
+              });
+              if (!titleLink) {
+                return null;
+              }
+
+              const title = (titleLink.textContent || "").trim();
+              const url = titleLink.href;
+              const snippet = parseSnippet(element.innerText || "", title, url);
+
+              return {
+                url,
+                title,
+                snippet
+              };
+            })
+            .filter((article): article is BrowserSearchArticle => Boolean(article))
+            .slice(0, limit);
+        }, Math.max(maxResults, 8));
+
+        return articles.map((article) => ({
+          ...article,
+          query
+        }));
+      } finally {
+        await browser.close().catch(() => undefined);
+      }
+    } catch {
+      return [];
+    }
   }
 
   private async searchBingRssResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
@@ -1108,7 +1357,7 @@ export class HubSpotClient {
 
   private async searchDuckDuckGoResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
     try {
-      const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+      const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=de-de`, {
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; LeadAgent/1.0; +https://leadagent-production-4555.up.railway.app)"
         },
@@ -1122,7 +1371,7 @@ export class HubSpotClient {
       }
 
       const html = await response.text();
-      const blocks = [...html.matchAll(/<div class="result results_links[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/gi)].map((match) => match[0]);
+      const blocks = [...html.matchAll(/<div class="result results_links[\s\S]*?<div class="clear"><\/div>\s*<\/div>\s*<\/div>/gi)].map((match) => match[0]);
       return blocks
         .map<WebSearchHit | null>((block) => {
           const url = block.match(/class="result__a" href="([^"]+)"/i)?.[1] ?? block.match(/class="result__url" href="([^"]+)"/i)?.[1];
@@ -1130,7 +1379,7 @@ export class HubSpotClient {
             return null;
           }
 
-          const title = this.decodeHtmlEntities(this.stripHtml(block.match(/class="result__title">([\s\S]*?)<\/h2>/i)?.[1] ?? "")).trim();
+          const title = this.decodeHtmlEntities(this.stripHtml(block.match(/class="result__a"[^>]*>([\s\S]*?)<\/a>/i)?.[1] ?? "")).trim();
           const snippet = this.decodeHtmlEntities(this.stripHtml(block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i)?.[1] ?? "")).trim();
 
           return {
@@ -1190,20 +1439,63 @@ export class HubSpotClient {
     primaryContacts: PublicContactCandidate[],
     additionalContacts: PublicContactCandidate[]
   ): PublicContactCandidate[] {
-    const merged = [...primaryContacts];
-    const seenKeys = new Set(primaryContacts.map((contact) => this.getPublicContactIdentity(contact)));
+    const merged = new Map<string, PublicContactCandidate>();
 
-    for (const contact of additionalContacts) {
-      const contactKey = this.getPublicContactIdentity(contact);
-      if (seenKeys.has(contactKey)) {
-        continue;
-      }
-
-      seenKeys.add(contactKey);
-      merged.push(contact);
+    for (const contact of primaryContacts) {
+      this.upsertMergedContact(merged, contact);
     }
 
-    return merged;
+    for (const contact of additionalContacts) {
+      this.upsertMergedContact(merged, contact);
+    }
+
+    return [...merged.values()];
+  }
+
+  private upsertMergedContact(target: Map<string, PublicContactCandidate>, contact: PublicContactCandidate): void {
+    const mergeKeys = this.getPublicContactMergeKeys(contact);
+    const existingKey = mergeKeys.find((key) => target.has(key));
+    if (!existingKey) {
+      target.set(mergeKeys[0] ?? this.getPublicContactIdentity(contact), contact);
+      return;
+    }
+
+    const existing = target.get(existingKey)!;
+    target.set(existingKey, this.mergePublicContactRecord(existing, contact));
+  }
+
+  private getPublicContactMergeKeys(contact: PublicContactCandidate): string[] {
+    const fullName = `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim().toLowerCase();
+    return Array.from(new Set([
+      contact.linkedinUrl?.trim().toLowerCase(),
+      contact.email?.trim().toLowerCase(),
+      fullName ? `name:${fullName}` : undefined,
+      contact.phone?.trim() ? `phone:${contact.phone.trim()}` : undefined,
+      this.getPublicContactIdentity(contact)
+    ].filter((value): value is string => Boolean(value))));
+  }
+
+  private mergePublicContactRecord(existing: PublicContactCandidate, incoming: PublicContactCandidate): PublicContactCandidate {
+    const preferred = this.getPublicContactScore(incoming) > this.getPublicContactScore(existing)
+      ? incoming
+      : existing;
+    const secondary = preferred === incoming ? existing : incoming;
+
+    return {
+      ...preferred,
+      personId: preferred.personId ?? secondary.personId,
+      email: preferred.email ?? secondary.email,
+      phone: preferred.phone ?? secondary.phone,
+      firstName: preferred.firstName ?? secondary.firstName,
+      lastName: preferred.lastName ?? secondary.lastName,
+      jobTitle: preferred.jobTitle ?? secondary.jobTitle,
+      linkedinUrl: preferred.linkedinUrl ?? secondary.linkedinUrl,
+      linkedinConnectionCount: preferred.linkedinConnectionCount ?? secondary.linkedinConnectionCount,
+      sourceUrl: preferred.sourceUrl || secondary.sourceUrl,
+      sourceQuery: preferred.sourceQuery ?? secondary.sourceQuery,
+      sourceSnippet: preferred.sourceSnippet ?? secondary.sourceSnippet,
+      label: preferred.label || secondary.label
+    };
   }
 
   private getPublicContactIdentity(contact: PublicContactCandidate): string {
@@ -1288,6 +1580,8 @@ export class HubSpotClient {
     }
 
     if (this.isPriorityContactTitle(contact.jobTitle)) {
+      score += 8;
+    } else if (this.isDeveloperContact(contact)) {
       score += 4;
     }
 
@@ -1295,11 +1589,86 @@ export class HubSpotClient {
       score += 1;
     }
 
+    if (contact.linkedinConnectionCount) {
+      score += Math.min(6, Math.floor(contact.linkedinConnectionCount / 100));
+    }
+
+    if (this.isExcludedContact(contact)) {
+      score -= 20;
+    }
+
     return score;
   }
 
   private isPriorityContactTitle(jobTitle: string | undefined): boolean {
-    return Boolean(jobTitle && PUBLIC_CONTACT_ROLE_REGEX.test(jobTitle));
+    return Boolean(jobTitle && PUBLIC_CONTACT_MANAGER_REGEX.test(jobTitle));
+  }
+
+  private isDeveloperContact(contact: PublicContactCandidate): boolean {
+    return Boolean(contact.jobTitle && PUBLIC_CONTACT_DEVELOPER_REGEX.test(contact.jobTitle));
+  }
+
+  private isExcludedContact(contact: PublicContactCandidate): boolean {
+    return Boolean(contact.jobTitle && PUBLIC_CONTACT_EXCLUDED_REGEX.test(contact.jobTitle));
+  }
+
+  private isNamedEmployeeContact(contact: PublicContactCandidate): boolean {
+    return Boolean((contact.firstName || contact.lastName) && !this.isGenericMailbox(contact.email ?? ""));
+  }
+
+  private async selectRelevantEmployeeContacts(
+    company: PreCategorizedCompany,
+    contacts: PublicContactCandidate[]
+  ): Promise<PublicContactCandidate[]> {
+    const employeeCandidates = contacts
+      .filter((contact) => this.isNamedEmployeeContact(contact))
+      .filter((contact) => !this.isExcludedContact(contact))
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left));
+
+    if (employeeCandidates.length === 0) {
+      return [];
+    }
+
+    const managers = employeeCandidates.filter((contact) => this.isPriorityContactTitle(contact.jobTitle));
+    const developers = employeeCandidates.filter((contact) => !this.isPriorityContactTitle(contact.jobTitle) && this.isDeveloperContact(contact));
+    const unclear = employeeCandidates
+      .filter((contact) => !this.isPriorityContactTitle(contact.jobTitle) && !this.isDeveloperContact(contact))
+      .sort((left, right) => (right.linkedinConnectionCount ?? 0) - (left.linkedinConnectionCount ?? 0));
+
+    const heuristicSelection = [...managers];
+    for (const contact of developers) {
+      if (heuristicSelection.some((existing) => this.getPublicContactIdentity(existing) === this.getPublicContactIdentity(contact))) {
+        continue;
+      }
+
+      heuristicSelection.push(contact);
+      if (heuristicSelection.length >= 4) {
+        break;
+      }
+    }
+
+    if (heuristicSelection.length < 4) {
+      for (const contact of unclear) {
+        if (heuristicSelection.some((existing) => this.getPublicContactIdentity(existing) === this.getPublicContactIdentity(contact))) {
+          continue;
+        }
+
+        heuristicSelection.push(contact);
+        if (heuristicSelection.length >= 4) {
+          break;
+        }
+      }
+    }
+
+    const rankedForAzure = heuristicSelection.length > 0
+      ? heuristicSelection.concat(employeeCandidates.filter((contact) => !heuristicSelection.includes(contact)))
+      : employeeCandidates;
+
+    return this.azureOpenAIClient.choosePublicContacts(company, rankedForAzure.slice(0, 12), false);
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private inferJobTitleFromPageContext(html: string, anchor: string): string | undefined {
@@ -2331,6 +2700,23 @@ export class HubSpotClient {
 
   private async delay(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
+    let timeoutHandle: NodeJS.Timeout | undefined;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((resolve) => {
+          timeoutHandle = setTimeout(() => resolve(fallbackValue), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 
   private async mapWithSearchInterval<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
