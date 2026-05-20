@@ -60,7 +60,7 @@ const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 90000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
-const DDG_BROWSER_SEARCH_TIMEOUT_MS = 15000;
+const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -1193,6 +1193,11 @@ export class HubSpotClient {
       if (browserDuckDuckGoHits.length > 0) {
         return normalizedHits(browserDuckDuckGoHits);
       }
+
+      const rawDuckDuckGoHits = await this.searchDuckDuckGoResults(query, maxResults);
+      if (rawDuckDuckGoHits.length > 0) {
+        return normalizedHits(rawDuckDuckGoHits);
+      }
     }
 
     try {
@@ -1269,7 +1274,7 @@ export class HubSpotClient {
         await page.waitForSelector('article[data-testid="result"]', {
           timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
         }).catch(() => undefined);
-        await page.waitForTimeout(800);
+        await page.waitForTimeout(3000);
 
         const articles = await page.evaluate((limit) => {
           const parseSnippet = (articleText: string, title: string, url: string): string => {
