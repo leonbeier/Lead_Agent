@@ -66,3 +66,14 @@ test("known camera manufacturers do not remain in integrator buckets", () => {
 
   assert.equal(result.category, "camera_manufacturer_partner");
 });
+
+test("direct exa path prefers the machine-builder debug filter for machine_builder_ai_enablement", () => {
+  const agent = new LeadPipelineAgent() as any;
+
+  const filter = agent.buildDirectExaSearchFilter(["machine_builder_ai_enablement", "integrator_general_ai"], "DE");
+
+  assert.ok(filter.targetCategories?.includes("machine_builder_ai_enablement"));
+  assert.deepEqual(filter.locations, ["Germany"]);
+  assert.match(filter.name, /Machine Builders For AI Options/i);
+  assert.match(filter.name, /\[debug Germany\]$/);
+});

@@ -8,6 +8,7 @@ import { AzureOpenAIClient } from "../clients/azure-openai";
 import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { ControlPlaneStore } from "../control-plane";
+import { buildDebugSearchFilter } from "../debug/test-console";
 import {
   ApolloOrganizationFilter,
   CompanyScreeningDatabase,
@@ -26,7 +27,8 @@ import {
   PublicContactCandidate,
   ResearchBrief,
   SearchHistoryDecisionSample,
-  SearchHistoryEntry
+  SearchHistoryEntry,
+  SelectableLeadCategory
 } from "../types";
 
 const RELEVANT_CATEGORIES: LeadCategory[] = [
@@ -228,6 +230,12 @@ export class LeadPipelineAgent {
       includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
       maxQueryCount: request.exaQueryCount ?? 3
     });
+    this.exaPreviewClient.setApiKey(request.exaApiKey);
+    this.exaPreviewClient.setSearchPayloadOptions({
+      includeExcludeDomains: request.useExaExcludeDomains ?? true,
+      includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
+      maxQueryCount: request.exaQueryCount ?? 3
+    });
     const deadlineAt = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS);
     const wasStopped = () => Boolean(options?.shouldStop?.());
     const hasTimedOut = () => Date.now() >= deadlineAt;
@@ -259,26 +267,28 @@ export class LeadPipelineAgent {
         );
     const prequalification = request.prequalification ?? (request.prequalificationContext ? { mainContext: request.prequalificationContext } : undefined);
     this.companyScreeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
-    const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false
+    const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false || companySearchMode === "exa_search"
       ? []
       : this.getCachedQualifiedCompanies(targetCategories, request.market, request.targetLeadCount);
     await this.preloadKnownHubSpotDomains(disableHubSpotDeduplication);
     this.apolloClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
-    let suggestedFilters = this.orderFiltersByLearning(
-      await this.getSuggestedFilters(
-        request.market,
-        request.customGoal,
-        mainContext,
-        request.searchStrategyContext,
-        targetCategories,
-        dryRun,
-        learning,
-        companySearchMode
-      ),
-      learning,
-      request.market,
-      request.customGoal
-    );
+    let suggestedFilters = companySearchMode === "exa_search"
+      ? [this.buildDirectExaSearchFilter(targetCategories, request.market)]
+      : this.orderFiltersByLearning(
+          await this.getSuggestedFilters(
+            request.market,
+            request.customGoal,
+            mainContext,
+            request.searchStrategyContext,
+            targetCategories,
+            dryRun,
+            learning,
+            companySearchMode
+          ),
+          learning,
+          request.market,
+          request.customGoal
+        );
     emitProgress({
       stage: "screening_filters",
       stageLabel: companySearchMode === "exa_search" ? "Exa sammelt Rohfirmen" : "Filter werden bewertet",
@@ -505,17 +515,140 @@ export class LeadPipelineAgent {
       }
     };
 
+    if (companySearchMode === "exa_search") {
+      const exaFilter = suggestedFilters[0] ?? this.buildDirectExaSearchFilter(targetCategories, request.market);
+      const maxQueryCount = Math.max(1, request.exaQueryCount ?? 3);
+      const emitDirectExaProgress = (progressValue: number, detail: string, foundCandidates = shortlistedCompanies.length) => {
+        emitProgress({
+          stage: "screening_filters",
+          stageLabel: "Exa -> KI Vorfilter",
+          progressValue,
+          progressMax: 100,
+          progressDescription: `${foundCandidates}/${request.targetLeadCount} qualifiziert nach direktem Exa->KI Lauf`,
+          detail,
+          processedFilters: 1,
+          totalFilters: 1,
+          foundCandidates,
+          targetLeadCount: request.targetLeadCount,
+          funnel: this.buildFunnel(
+            companySearchMode,
+            hubSpotDedupQualifiedKeys.size,
+            foundCandidates,
+            incrementalHubspotSync.companySyncedCount
+          )
+        });
+      };
+
+      emitDirectExaProgress(
+        14,
+        `Direkter Test-Lab-Pfad aktiv. Exa sammelt jetzt bis zu ${maxQueryCount} Query-Batches fuer ${this.describeLeadCategory(exaFilter.targetCategories?.[0] ?? targetCategories[0] ?? "machine_builder_ai_enablement")}.`
+      );
+
+      const rawCompanies = await this.runDirectExaCompanySearch(exaFilter, targetCategories, maxQueryCount, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
+        emitDirectExaProgress(
+          Math.min(42, 14 + executedQueries * 8),
+          `Exa Query ${executedQueries}/${totalQueries}: "${query}". Bisher ${rawCompaniesFound} Rohfirmen gesammelt.`
+        );
+      });
+
+      emitDirectExaProgress(
+        48,
+        `${rawCompanies.length} Rohfirmen aus Exa gefunden. KI-Vorfilter prueft jetzt die Websites parallel.`,
+        0
+      );
+
+      const categorizedCompanies = await this.categorizeCompanies(
+        rawCompanies,
+        dryRun,
+        mainContext,
+        prequalification,
+        targetCategories,
+        learning
+      );
+      const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, exaFilter, targetCategories, request.market);
+      const shortlistLengthBeforeDirectPath = shortlistedCompanies.length;
+      const addedDirectCompanies = this.addUniqueCompanies(shortlistedCompanies, relevantCompanies, shortlistedKeys);
+      shortlistedCompanies.slice(shortlistLengthBeforeDirectPath).forEach((company) => {
+        categoryCounts.set(company.category, (categoryCounts.get(company.category) ?? 0) + 1);
+      });
+
+      searchHistory.push(
+        this.buildSearchHistoryEntry(
+          request.companySearchMode ?? "exa_search",
+          exaFilter.name,
+          exaFilter.targetCategories?.[0] ?? targetCategories[0] ?? "machine_builder_ai_enablement",
+          "expand_50",
+          1,
+          rawCompanies.length,
+          categorizedCompanies,
+          exaFilter,
+          targetCategories,
+          request.market,
+          0,
+          {
+            fetchedSampleCount: rawCompanies.length,
+            eligibleSampleCount: rawCompanies.length,
+            filteredByPriorFeedbackCount: 0,
+            filteredByCacheCount: 0,
+            filteredByHubSpotCount: 0,
+            discoveryQueries: rawCompanies
+              .map((company) => company.discoveryQuery?.trim())
+              .filter((query): query is string => Boolean(query))
+          }
+        )
+      );
+
+      emitDirectExaProgress(
+        66,
+        `KI-Vorfilter abgeschlossen: ${relevantCompanies.length}/${categorizedCompanies.length} Firmen passen zur Zielkategorie.`,
+        shortlistedCompanies.length
+      );
+
+      if (addedDirectCompanies > 0) {
+        await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeDirectPath), shortlistedCompanies.length);
+      }
+
+      if (shortlistedCompanies.length === 0) {
+        return finalizeInterruptedRun(
+          shortlistedCompanies,
+          "Direct Exa + AI prefilter completed, but no qualified companies matched the selected category."
+        );
+      }
+
+      shortlistedCompanies.forEach((company) => hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company)));
+
+      return this.finalizeLeadRun(
+        request,
+        suggestedFilters,
+        evaluations,
+        shortlistedCompanies,
+        collectPreparedResearchBriefs(shortlistedCompanies),
+        searchHistory,
+        incrementalHubspotSync,
+        filtersStoppedEarly,
+        companiesSkippedAfterEarlyStop,
+        this.buildFunnel(
+          companySearchMode,
+          hubSpotDedupQualifiedKeys.size,
+          shortlistedCompanies.length,
+          incrementalHubspotSync.companySyncedCount
+        ),
+        hasTimedOut(),
+        wasStopped(),
+        completionReason,
+        contactCandidatesByCompany
+      );
+    }
+
     const emitFilterProgress = (detail: string) => {
       const processedFilters = evaluations.length;
       const totalFilters = Math.max(suggestedFilters.length, processedFilters || 1);
       emitProgress({
         stage: "screening_filters",
-        stageLabel: companySearchMode === "exa_search" ? "Exa sammelt Rohfirmen" : "Filter werden bewertet",
+        stageLabel: "Filter werden bewertet",
         progressValue: Math.min(70, 10 + Math.round((processedFilters / totalFilters) * 60)),
         progressMax: 100,
-        progressDescription: companySearchMode === "exa_search"
-          ? "Exa liefert weitere Rohfirmen, die KI prueft laufend die Websites."
-          : `${processedFilters} von ${totalFilters} Filtern bewertet`,
+        progressDescription: `${processedFilters} von ${totalFilters} Filtern bewertet`,
         detail,
         processedFilters,
         totalFilters,
@@ -607,9 +740,7 @@ export class LeadPipelineAgent {
         }
 
         emitFilterProgress(
-          companySearchMode === "exa_search"
-            ? `Starte Roh-Exa-Suchlauf fuer ${this.describeLeadCategory(nextCategoryState.category)}.`
-            : `Starte direkten Suchlauf fuer ${this.describeLeadCategory(nextCategoryState.category)} mit Filter "${filter.name}".`
+          `Starte direkten Suchlauf fuer ${this.describeLeadCategory(nextCategoryState.category)} mit Filter "${filter.name}".`
         );
 
         const candidate = await this.probeFilterCandidate(
@@ -653,9 +784,7 @@ export class LeadPipelineAgent {
         );
 
         emitFilterProgress(
-          companySearchMode === "exa_search"
-            ? `Roh-Exa-Suchlauf fuer ${this.describeLeadCategory(nextCategoryState.category)}: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} passend (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}.`
-            : `Direkter Lauf fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}.`
+          `Direkter Lauf fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}.`
         );
 
         await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeProbe), shortlistedCompanies.length);
@@ -937,9 +1066,7 @@ export class LeadPipelineAgent {
     await flushQualifiedCompanies(toppedUpShortlist.slice(sortedShortlist.length), toppedUpShortlist.length);
 
     if (!hasReachedRequestedTarget() && !shouldFinishEarly() && !completionReason) {
-      completionReason = companySearchMode === "exa_search"
-        ? `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} Roh-Exa-Suchlaeufen mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`
-        : `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} getesteten Filtern und ausgeschopfter Top-up-Suche mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`;
+      completionReason = `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} getesteten Filtern und ausgeschopfter Top-up-Suche mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`;
     }
     const filteredShortlist = await this.excludeExistingHubSpotDomains(
       toppedUpShortlist,
@@ -3366,6 +3493,89 @@ export class LeadPipelineAgent {
       companies: filteredCompanies,
       researchBriefs: researchBriefs.filter((brief) => filteredCompanyNames.has(brief.companyName))
     };
+  }
+
+  private buildDirectExaSearchFilter(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter {
+    const primaryCategory = (targetCategories.includes("machine_builder_ai_enablement")
+      ? "machine_builder_ai_enablement"
+      : targetCategories[0] ?? "machine_builder_ai_enablement") as SelectableLeadCategory;
+
+    return buildDebugSearchFilter(primaryCategory, market);
+  }
+
+  private async runDirectExaCompanySearch(
+    filter: ApolloOrganizationFilter,
+    targetCategories: LeadCategory[],
+    maxQueryCount: number,
+    onQueryProgress?: (update: { executedQueries: number; totalQueries: number; query: string; rawCompaniesFound: number }) => void
+  ): Promise<CompanySample[]> {
+    const exaClient = this.exaPreviewClient as unknown as {
+      runtimeApiKey?: string;
+      buildQueries: (filter: ApolloOrganizationFilter, page: number) => string[];
+      runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
+      toExcludeDomain: (value: string | undefined) => string | undefined;
+      normalizeUrl: (url: string | undefined) => string | undefined;
+      toCanonicalCompanyDomain: (url: string) => string;
+      deriveCompanyName: (domain: string, title?: string) => string;
+      inferCountryFromDomain: (domain: string, result: { title?: string; highlights?: string[]; summary?: string; text?: string }, fallbackLocation?: string) => string | undefined;
+      buildDescription: (result: { title?: string; highlights?: string[]; summary?: string; text?: string }, filter: ApolloOrganizationFilter) => string;
+      loadKnownExcludedDomains: () => Promise<Set<string>>;
+    };
+    const apiKey = exaClient.runtimeApiKey ?? env.EXA_API_KEY;
+    if (!apiKey) {
+      return [];
+    }
+
+    const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
+    const excludedDomains = await exaClient.loadKnownExcludedDomains();
+
+    for (const record of screeningDatabase.records) {
+      if (!record.normalizedDomain) {
+        continue;
+      }
+
+      if (record.existsInHubSpot || (record.category && !targetCategories.includes(record.category))) {
+        excludedDomains.add(record.normalizedDomain);
+      }
+    }
+
+    const discoveredCompanies: CompanySample[] = [];
+    const queries = exaClient.buildQueries(filter, 1).slice(0, Math.max(1, maxQueryCount));
+
+    for (let index = 0; index < queries.length; index += 1) {
+      const query = queries[index] ?? "";
+      const payload = await exaClient.runSearch(apiKey, query, 20, Array.from(excludedDomains));
+
+      for (const result of payload.results ?? []) {
+        const normalizedDomain = exaClient.normalizeUrl(result.url);
+        if (!normalizedDomain) {
+          continue;
+        }
+
+        const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
+        if (excludeDomain) {
+          excludedDomains.add(excludeDomain);
+        }
+
+        discoveredCompanies.push({
+          name: exaClient.deriveCompanyName(normalizedDomain, result.title),
+          domain: exaClient.toCanonicalCompanyDomain(normalizedDomain),
+          country: exaClient.inferCountryFromDomain(normalizedDomain, result, filter.locations[0]),
+          shortDescription: exaClient.buildDescription(result, filter),
+          sourceFilter: `${filter.name} (exa-search: ${query.slice(0, 72)})`,
+          discoveryQuery: query
+        });
+      }
+
+      onQueryProgress?.({
+        executedQueries: index + 1,
+        totalQueries: queries.length,
+        query,
+        rawCompaniesFound: discoveredCompanies.length
+      });
+    }
+
+    return discoveredCompanies;
   }
 
   private buildSearchHistoryEntry(

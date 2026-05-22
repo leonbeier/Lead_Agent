@@ -37,6 +37,7 @@ export type ExaSearchRequestPayload = {
 type ExaSearchPayloadOptions = {
   includeExcludeDomains?: boolean;
   includeCompanyCategoryFilter?: boolean;
+  maxQueryCount?: number;
 };
 
 const EXA_ENDPOINT = "https://api.exa.ai/search";
@@ -83,8 +84,8 @@ export class ExaSearchClient {
       this.includeCompanyCategoryFilter = options.includeCompanyCategoryFilter;
     }
 
-    if (typeof (options as ExaSearchPayloadOptions & { maxQueryCount?: number }).maxQueryCount === "number") {
-      this.maxQueryCount = Math.max(1, Math.floor((options as ExaSearchPayloadOptions & { maxQueryCount?: number }).maxQueryCount ?? 1));
+    if (typeof options.maxQueryCount === "number") {
+      this.maxQueryCount = Math.max(1, Math.floor(options.maxQueryCount ?? 1));
     }
   }
 
