@@ -413,7 +413,7 @@ const defaultSettings: LeadAgentSettings = {
   runDeepResearch: true,
   dryRun: false,
   syncToHubSpot: true,
-  exaQueryCount: 1,
+  exaQueryCount: 3,
   useExaExcludeDomains: true,
   useExaCompanyCategory: false,
   maxRuntimeMs: 600_000,

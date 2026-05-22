@@ -226,7 +226,7 @@ export class LeadPipelineAgent {
     this.apolloClient.setExaSearchPayloadOptions({
       includeExcludeDomains: request.useExaExcludeDomains ?? true,
       includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
-      maxQueryCount: request.exaQueryCount ?? 1
+      maxQueryCount: request.exaQueryCount ?? 3
     });
     const deadlineAt = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS);
     const wasStopped = () => Boolean(options?.shouldStop?.());
