@@ -794,7 +794,7 @@ export class OpenCrawlerSearchClient {
         return [];
       }
 
-      const html = await response.text();
+      const html = await this.readResponseTextWithTimeout(response, SEARCH_RESULT_DDG_TIMEOUT_MS);
       this.recordCrawledPage();
       const matches = Array.from(html.matchAll(/<a[^>]+class=["'][^"']*result__a[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/gi));
       return this.extractSearchResultUrls(matches.map((match) => match[1] ?? ""), shouldSkipDomain, allowSourceDomains, maxResults);
@@ -824,7 +824,7 @@ export class OpenCrawlerSearchClient {
         return [];
       }
 
-      const html = await response.text();
+      const html = await this.readResponseTextWithTimeout(response, SEARCH_RESULT_BING_TIMEOUT_MS);
       this.recordCrawledPage();
       const matches = Array.from(html.matchAll(/<h2[^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["']/gi));
       return this.extractSearchResultUrls(matches.map((match) => match[1] ?? ""), shouldSkipDomain, allowSourceDomains, maxResults);
@@ -1044,7 +1044,7 @@ export class OpenCrawlerSearchClient {
           continue;
         }
 
-        const html = await response.text();
+        const html = await this.readResponseTextWithTimeout(response, SOURCE_PAGE_FETCH_TIMEOUT_MS);
         this.recordCrawledPage();
         const anchors = this.extractAnchors(html, response.url || nextPage);
         const embeddedUrls = this.extractEmbeddedUrls(html);
@@ -1137,7 +1137,7 @@ export class OpenCrawlerSearchClient {
         }
 
         const landingUrl = response.url || url;
-        const html = await response.text();
+        const html = await this.readResponseTextWithTimeout(response, WEBSITE_CRAWL_TIMEOUT_MS);
         this.recordCrawledPage();
         const homePage = this.extractPageCrawlResult(html, landingUrl, "home");
         if (!homePage) {
@@ -1202,6 +1202,15 @@ export class OpenCrawlerSearchClient {
 
   private delay(durationMs: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, durationMs));
+  }
+
+  private async readResponseTextWithTimeout(response: Response, timeoutMs: number): Promise<string> {
+    return await Promise.race([
+      response.text(),
+      new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error(`Open crawler response body timed out after ${timeoutMs}ms`)), timeoutMs);
+      })
+    ]);
   }
 
   private extractPageCrawlResult(html: string, url: string, label: string): PageCrawlResult | null {
@@ -1352,7 +1361,7 @@ export class OpenCrawlerSearchClient {
             return null;
           }
 
-          const pageHtml = await pageResponse.text();
+          const pageHtml = await this.readResponseTextWithTimeout(pageResponse, INTERNAL_PAGE_CRAWL_TIMEOUT_MS);
           this.recordCrawledPage();
           return this.extractPageCrawlResult(pageHtml, pageResponse.url || link.url, link.label);
         } catch {
