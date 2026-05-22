@@ -45,6 +45,7 @@ const MAX_EXA_EXCLUDE_DOMAINS = 1200;
 const EXA_MIN_REQUEST_INTERVAL_MS = 250;
 const EXA_MAX_RETRIES = 3;
 const EXA_QUERY_CONCURRENCY = 3;
+const EXA_REQUEST_TIMEOUT_MS = 30_000;
 const GENERIC_COMPANY_NAMES = new Set(["home", "homepage", "startseite", "services", "solutions", "products", "company"]);
 export class ExaSearchClient {
   private static requestChain: Promise<void> = Promise.resolve();
@@ -67,6 +68,8 @@ export class ExaSearchClient {
 
   private includeCompanyCategoryFilter = false;
 
+  private maxQueryCount = Number.POSITIVE_INFINITY;
+
   setApiKey(apiKey: string | undefined): void {
     this.runtimeApiKey = apiKey?.trim() || undefined;
   }
@@ -78,6 +81,10 @@ export class ExaSearchClient {
 
     if (typeof options.includeCompanyCategoryFilter === "boolean") {
       this.includeCompanyCategoryFilter = options.includeCompanyCategoryFilter;
+    }
+
+    if (typeof (options as ExaSearchPayloadOptions & { maxQueryCount?: number }).maxQueryCount === "number") {
+      this.maxQueryCount = Math.max(1, Math.floor((options as ExaSearchPayloadOptions & { maxQueryCount?: number }).maxQueryCount ?? 1));
     }
   }
 
@@ -116,7 +123,7 @@ export class ExaSearchClient {
       return [];
     }
 
-    const queries = this.buildQueries(filter, page);
+    const queries = this.buildQueries(filter, page).slice(0, this.maxQueryCount);
     const requestedCompanyCount = Math.max(limit, MAX_EXA_RESULTS_PER_QUERY);
     const companies: CompanySample[] = [];
     const excludedDomains = await this.loadKnownExcludedDomains();
@@ -200,14 +207,26 @@ export class ExaSearchClient {
       await this.waitForRateLimitSlot();
       const payload = this.buildSearchPayload(query, numResults, excludeDomains);
 
-      const response = await fetch(EXA_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey
-        },
-        body: JSON.stringify(payload)
-      });
+      let response: Response;
+      try {
+        response = await fetch(EXA_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(EXA_REQUEST_TIMEOUT_MS)
+        });
+      } catch (error) {
+        if (attempt === EXA_MAX_RETRIES) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`Exa search request failed: ${message}`);
+        }
+
+        await this.sleep(EXA_MIN_REQUEST_INTERVAL_MS * attempt * 2);
+        continue;
+      }
 
       if (response.ok) {
         return await response.json() as ExaSearchResponse;

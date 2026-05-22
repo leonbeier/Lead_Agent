@@ -157,6 +157,9 @@ export interface LeadAgentSettings {
   syncToHubSpot?: boolean;
   exaApiKey?: string;
   diffbotToken?: string;
+  exaQueryCount?: number;
+  useExaExcludeDomains?: boolean;
+  useExaCompanyCategory?: boolean;
   maxRuntimeMs?: number;
   aiPrefilterConcurrency?: number;
   outreachPrepConcurrency?: number;
@@ -371,6 +374,9 @@ export interface LeadJobRequest {
   reuseQualifiedCompanyCache?: boolean;
   exaApiKey?: string;
   diffbotToken?: string;
+  exaQueryCount?: number;
+  useExaExcludeDomains?: boolean;
+  useExaCompanyCategory?: boolean;
   aiPrefilterConcurrency?: number;
   outreachPrepConcurrency?: number;
   contactSearchConcurrency?: number;

@@ -486,6 +486,10 @@
               Zeitlimit in Minuten
               <input id="maxRuntimeMinutes" name="maxRuntimeMinutes" type="number" min="1" max="180" step="1" required />
             </label>
+            <label>
+              Exa Suchversuche
+              <input id="exaQueryCount" name="exaQueryCount" type="number" min="1" max="50" required />
+            </label>
             <label id="exaApiKeyField" style="grid-column: 1 / -1; display: none;">
               Exa API Key
               <input id="exaApiKey" name="exaApiKey" type="password" autocomplete="off" placeholder="Optional fuer Exa Search. Lauf endet bei Lead-Ziel, Zeitlimit oder fehlenden Credits." />
@@ -527,6 +531,14 @@
               Kontaktsuche parallel
               <input id="contactSearchConcurrency" name="contactSearchConcurrency" type="number" min="1" max="32" required />
             </label>
+            <div class="checkbox-row">
+              <input id="useExaExcludeDomains" name="useExaExcludeDomains" type="checkbox" />
+              <label for="useExaExcludeDomains">Exclude Domains in Exa aktiv</label>
+            </div>
+            <div class="checkbox-row">
+              <input id="useExaCompanyCategory" name="useExaCompanyCategory" type="checkbox" />
+              <label for="useExaCompanyCategory">Exa category = company aktiv</label>
+            </div>
             <div class="checkbox-row">
               <input id="runDeepResearch" name="runDeepResearch" type="checkbox" />
               <label for="runDeepResearch">Deep Research aktivieren</label>
@@ -606,7 +618,7 @@
               </label>
               <label>
                 Exa Suchversuche
-                <input id="debug-exaQueryCount" name="debug-exaQueryCount" type="number" min="1" max="50" value="3" />
+                <input id="debug-exaQueryCount" name="debug-exaQueryCount" type="number" min="1" max="50" value="1" />
               </label>
               <label>
                 KI Vorfilter parallel
@@ -914,6 +926,7 @@
         document.getElementById("market").value = settings.market;
         document.getElementById("companySearchMode").value = normalizedSearchMode;
         document.getElementById("maxRuntimeMinutes").value = String(Math.max(1, Math.round((settings.maxRuntimeMs || 10800000) / 60000)));
+        document.getElementById("exaQueryCount").value = settings.exaQueryCount || 1;
         document.getElementById("exaApiKey").value = settings.exaApiKey || "";
         document.getElementById("diffbotToken").value = settings.diffbotToken || "";
         document.getElementById("mainContext").value = settings.mainContext || "";
@@ -921,9 +934,14 @@
         document.getElementById("aiPrefilterConcurrency").value = settings.aiPrefilterConcurrency || 20;
         document.getElementById("outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
         document.getElementById("contactSearchConcurrency").value = settings.contactSearchConcurrency || 20;
+        document.getElementById("useExaExcludeDomains").checked = settings.useExaExcludeDomains !== false;
+        document.getElementById("useExaCompanyCategory").checked = Boolean(settings.useExaCompanyCategory);
+        document.getElementById("debug-exaQueryCount").value = settings.exaQueryCount || 1;
         document.getElementById("debug-aiPrefilterConcurrency").value = debugAiPrefilterConcurrency;
         document.getElementById("debug-outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
         document.getElementById("debug-contactSearchConcurrency").value = settings.contactSearchConcurrency || 20;
+        document.getElementById("debug-useExaExcludeDomains").checked = settings.useExaExcludeDomains !== false;
+        document.getElementById("debug-useExaCompanyCategory").checked = Boolean(settings.useExaCompanyCategory);
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
           checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
         });
@@ -968,6 +986,9 @@
           creditLessMode: true,
           exaApiKey: document.getElementById("exaApiKey").value.trim() || undefined,
           diffbotToken: document.getElementById("diffbotToken").value.trim() || undefined,
+          exaQueryCount: Number(document.getElementById("exaQueryCount").value) || 1,
+          useExaExcludeDomains: document.getElementById("useExaExcludeDomains").checked,
+          useExaCompanyCategory: document.getElementById("useExaCompanyCategory").checked,
           maxRuntimeMs: Math.max(60000, Math.round(Math.max(1, maxRuntimeMinutes || 180) * 60 * 1000)),
           aiPrefilterConcurrency: Number(document.getElementById("aiPrefilterConcurrency").value) || 20,
           outreachPrepConcurrency: Number(document.getElementById("outreachPrepConcurrency").value) || 20,

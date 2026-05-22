@@ -26,6 +26,10 @@ export class WebSearchAgent {
     this.exaSearchClient.setAdditionalExcludedDomains(domains);
   }
 
+  setExaSearchPayloadOptions(options: { includeExcludeDomains?: boolean; includeCompanyCategoryFilter?: boolean; maxQueryCount?: number }): void {
+    this.exaSearchClient.setSearchPayloadOptions(options);
+  }
+
   setDiffbotToken(token: string | undefined): void {
     this.diffbotSearchClient.setToken(token);
   }

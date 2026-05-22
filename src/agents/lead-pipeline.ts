@@ -223,6 +223,11 @@ export class LeadPipelineAgent {
     const companySearchMode = request.companySearchMode ?? (request.creditLessMode ? "internet_research" : "apollo_search");
     this.apolloClient.setExaApiKey(request.exaApiKey);
     this.apolloClient.setDiffbotToken(request.diffbotToken);
+    this.apolloClient.setExaSearchPayloadOptions({
+      includeExcludeDomains: request.useExaExcludeDomains ?? true,
+      includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
+      maxQueryCount: request.exaQueryCount ?? 1
+    });
     const deadlineAt = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS);
     const wasStopped = () => Boolean(options?.shouldStop?.());
     const hasTimedOut = () => Date.now() >= deadlineAt;
