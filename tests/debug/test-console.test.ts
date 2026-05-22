@@ -105,6 +105,37 @@ test("runExaCompanySearch executes the requested number of queries even when the
   assert.equal(result.discoveredCompanies.length, 60);
 });
 
+test("runAiPrefilterStage honors high requested concurrency in test lab", async () => {
+  const service = new DebugConsoleService() as any;
+  let capturedConcurrency = 0;
+
+  service.buildWebsiteCompanies = () => ([
+    { name: "one", domain: "https://one.example", shortDescription: "desc", sourceFilter: "debug" },
+    { name: "two", domain: "https://two.example", shortDescription: "desc", sourceFilter: "debug" },
+    { name: "three", domain: "https://three.example", shortDescription: "desc", sourceFilter: "debug" }
+  ]);
+  service.classifyWebsite = async (company: { name: string }) => ({ company, categorizedCompany: { category: "other" } });
+  service.persistScreeningResults = async () => undefined;
+  service.mapWithConcurrency = async (tasks: Array<() => Promise<unknown>>, concurrency: number) => {
+    capturedConcurrency = concurrency;
+    return Promise.all(tasks.map((task) => task()));
+  };
+
+  await service.runAiPrefilterStage(
+    {
+      stage: "ai_prefilter",
+      targetCategory: "machine_builder_ai_enablement",
+      targetCategories: ["machine_builder_ai_enablement"],
+      companySearchMode: "exa_search",
+      limit: 20,
+      aiPrefilterConcurrency: 20
+    },
+    buildDebugSearchFilter("machine_builder_ai_enablement", "Germany")
+  );
+
+  assert.equal(capturedConcurrency, 20);
+});
+
 test("clearCompanyScreeningCache removes only debug exclusions for debug scope", async () => {
   const store = new ControlPlaneStore() as any;
   let writtenDatabase: { records: Array<{ domain: string }> } | undefined;

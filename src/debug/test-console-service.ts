@@ -139,7 +139,7 @@ export class DebugConsoleService {
 
   private readonly controlPlaneStore = new ControlPlaneStore();
 
-  private readonly defaultAiPrefilterConcurrency = 2;
+  private readonly defaultAiPrefilterConcurrency = 20;
 
   private readonly defaultOutreachPrepConcurrency = 6;
 
