@@ -563,7 +563,14 @@ export class LeadPipelineAgent {
         mainContext,
         prequalification,
         targetCategories,
-        learning
+        learning,
+        ({ completed, total, matched, companyName, category }) => {
+          emitDirectExaProgress(
+            Math.min(66, 48 + Math.round((completed / Math.max(total, 1)) * 18)),
+            `KI-Vorfilter ${completed}/${total}: ${companyName} -> ${category}. Bisher ${matched} passend.`,
+            matched
+          );
+        }
       );
       const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, exaFilter, targetCategories, request.market);
       const shortlistLengthBeforeDirectPath = shortlistedCompanies.length;
@@ -1904,8 +1911,13 @@ export class LeadPipelineAgent {
     mainContext?: string,
     prequalification?: PrequalificationConfig,
     targetCategories?: LeadCategory[],
-    learning?: LeadLearningData
+    learning?: LeadLearningData,
+    onProgress?: (update: { completed: number; total: number; matched: number; companyName: string; category: LeadCategory }) => void
   ): Promise<PreCategorizedCompany[]> {
+    let completed = 0;
+    let matched = 0;
+    const total = companies.length;
+
     return this.mapWithConcurrency(
       companies.map((company) => async () => {
         const useWebsiteBackedClassification = Boolean(company.domain);
@@ -1920,6 +1932,17 @@ export class LeadPipelineAgent {
             relevanceScore: resolvedCachedCategorization.relevanceScore,
             rationale: resolvedCachedCategorization.rationale
           });
+          completed += 1;
+          if (!targetCategories || targetCategories.includes(resolvedCachedCategorization.category)) {
+            matched += 1;
+          }
+          onProgress?.({
+            completed,
+            total,
+            matched,
+            companyName: resolvedCachedCategorization.name,
+            category: resolvedCachedCategorization.category
+          });
           return resolvedCachedCategorization;
         }
 
@@ -1933,6 +1956,17 @@ export class LeadPipelineAgent {
             category: resolvedLocalCategorization.category,
             relevanceScore: resolvedLocalCategorization.relevanceScore,
             rationale: resolvedLocalCategorization.rationale
+          });
+          completed += 1;
+          if (!targetCategories || targetCategories.includes(resolvedLocalCategorization.category)) {
+            matched += 1;
+          }
+          onProgress?.({
+            completed,
+            total,
+            matched,
+            companyName: resolvedLocalCategorization.name,
+            category: resolvedLocalCategorization.category
           });
           return resolvedLocalCategorization;
         }
@@ -1967,6 +2001,18 @@ export class LeadPipelineAgent {
           category: normalizedCategorization.category,
           relevanceScore: normalizedCategorization.relevanceScore,
           rationale: normalizedCategorization.rationale
+        });
+
+        completed += 1;
+        if (!targetCategories || targetCategories.includes(normalizedCategorization.category)) {
+          matched += 1;
+        }
+        onProgress?.({
+          completed,
+          total,
+          matched,
+          companyName: normalizedCategorization.name,
+          category: normalizedCategorization.category
         });
 
         return normalizedCategorization;
