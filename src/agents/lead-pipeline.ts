@@ -262,8 +262,8 @@ export class LeadPipelineAgent {
     const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false
       ? []
       : this.getCachedQualifiedCompanies(targetCategories, request.market, request.targetLeadCount);
-    this.apolloClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
     await this.preloadKnownHubSpotDomains(disableHubSpotDeduplication);
+    this.apolloClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
     let suggestedFilters = this.orderFiltersByLearning(
       await this.getSuggestedFilters(
         request.market,

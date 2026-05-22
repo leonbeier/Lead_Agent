@@ -504,7 +504,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
               ? `Roh von Exa erkannt: ${runStatus.funnel.afterCrawlerPrefilter}. `
               : ""}
             {typeof runStatus?.funnel?.afterHubSpotDedup === "number"
-              ? `Nach Deduplizierung: ${runStatus.funnel.afterHubSpotDedup}. `
+              ? `Qualifiziert und nicht schon in HubSpot: ${runStatus.funnel.afterHubSpotDedup}. `
               : ""}
             {typeof runStatus?.funnel?.syncedToHubSpot === "number" && syncToHubSpot
               ? `Nach HubSpot synchronisiert: ${runStatus.funnel.syncedToHubSpot}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}. `

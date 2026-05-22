@@ -1810,8 +1810,8 @@
           progressDescription: runStatus.progressDescription,
           detail: runStatus.detail,
           exaRawCompanies: runStatus.funnel?.afterCrawlerPrefilter ?? 0,
-          afterDeduplication: runStatus.funnel?.afterHubSpotDedup ?? 0,
-          afterAiCheck: runStatus.funnel?.afterAzureAICheck ?? runStatus.foundCandidates ?? 0,
+          qualifiedAfterHubSpotCheck: runStatus.funnel?.afterHubSpotDedup ?? 0,
+          qualifiedAfterAiCheck: runStatus.funnel?.afterAzureAICheck ?? runStatus.foundCandidates ?? 0,
           syncedToHubSpot: runStatus.funnel?.syncedToHubSpot ?? 0,
           targetLeadCount: runStatus.targetLeadCount,
           updatedAt: runStatus.updatedAt
