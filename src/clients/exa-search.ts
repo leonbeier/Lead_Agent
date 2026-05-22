@@ -229,10 +229,10 @@ export class ExaSearchClient {
       }
 
       if (response.ok) {
-        return await response.json() as ExaSearchResponse;
+        return JSON.parse(await this.readResponseTextWithTimeout(response)) as ExaSearchResponse;
       }
 
-      const errorText = await response.text();
+      const errorText = await this.readResponseTextWithTimeout(response);
       if (response.status !== 429 || attempt === EXA_MAX_RETRIES) {
         throw new Error(`Exa search failed: ${response.status} ${errorText}`);
       }
@@ -361,6 +361,15 @@ export class ExaSearchClient {
 
   private async sleep(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async readResponseTextWithTimeout(response: Response): Promise<string> {
+    return await Promise.race([
+      response.text(),
+      new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error(`Exa response body timed out after ${EXA_REQUEST_TIMEOUT_MS}ms`)), EXA_REQUEST_TIMEOUT_MS);
+      })
+    ]);
   }
 
   buildQueries(filter: ApolloOrganizationFilter, page: number): string[] {
