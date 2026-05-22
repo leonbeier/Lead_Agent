@@ -1,0 +1,64 @@
+{
+  "version": 3,
+  "hits": 594,
+  "results": 50,
+  "kgversion": "468",
+  "diffbot_type": "Organization",
+  "facet": false,
+  "textFallback": false,
+  "request": {
+    "endpoint": "https://kg.diffbot.com/kg/v3/dql",
+    "type": "query",
+    "size": 50,
+    "from": 0,
+    "query": "type:Organization\nhas:homepageUri\nor(\n  location.country.name:or(\"Germany\",\"France\",\"Italy\",\"Netherlands\",\"Switzerland\",\"Sweden\",\"Austria\",\"Spain\"),\n  locations.country.name:or(\"Germany\",\"France\",\"Italy\",\"Netherlands\",\"Switzerland\",\"Sweden\",\"Austria\",\"Spain\")\n)\nor(\n    description:or(\"machine vision\",\"industrial vision\",\"visual inspection\",\"optical inspection\",\"automated optical inspection\",\"quality inspection\",\"vision-guided robotics\"),\n    allDescriptions:or(\"machine vision\",\"industrial vision\",\"visual inspection\",\"optical inspection\",\"automated optical inspection\",\"quality inspection\",\"vision-guided robotics\",\"industrielle Bildverarbeitung\",\"optische Inspektion\")\n)\nor(\n    description:or(\"system integrator\",\"system integration\",\"turnkey\",\"custom solution\",\"customer-specific\",\"engineering services\",\"commissioning\",\"robot guidance\",\"inspection system\",\"automation solution\",\"inspection solutions\",\"quality control\",\"implementation\",\"project\"),\n    allDescriptions:or(\"system integrator\",\"system integration\",\"turnkey\",\"custom solution\",\"customer-specific\",\"engineering services\",\"commissioning\",\"robot guidance\",\"inspection system\",\"automation solution\",\"inspection solutions\",\"quality control\",\"implementation\",\"project\",\"Systemintegration\",\"kundenspezifisch\",\"Automatisierungstechnik\",\"Sondermaschinenbau\")\n)\nnot(\n  or(\n    description:or(\"face recognition\",\"face tracking\",\"biometrics\",\"virtual try-on\",\"security\",\"smart city\",\"traffic enforcement\",\"marketing research\",\"camera module\",\"smart camera\",\"embedded vision\",\"led lighting\",\"x-ray inspection\",\"distributor\",\"reseller\"),\n    allDescriptions:or(\"face recognition\",\"face tracking\",\"biometrics\",\"virtual try-on\",\"security\",\"smart city\",\"traffic enforcement\",\"marketing research\",\"camera module\",\"smart camera\",\"embedded vision\",\"led lighting\",\"x-ray inspection\",\"distributor\",\"reseller\")\n  )\n)",
+    "filter": null,
+    "requested_fields": "full entity payload"
+  },
+  "response": {
+    "status_code": 200,
+    "response_time_seconds": 7.766,
+    "response_size_bytes": 2054192,
+    "returned_entities": 50,
+    "csv_path": "data\\diffbot\\eu_ai_machine_vision_integrators_50_balanced_v3.csv",
+    "raw_json_path": "data\\diffbot\\eu_ai_machine_vision_integrators_50_balanced_v3.raw.json",
+    "usage_headers": {}
+  },
+  "account_usage": {
+    "before": {
+      "plan": "kgfree",
+      "today": "2026-05-14",
+      "today_entry": {
+        "date": "2026-05-14",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 273,
+        "giCalls": 0
+      },
+      "searchResults": 273,
+      "calls": 0
+    },
+    "after": {
+      "plan": "kgfree",
+      "today": "2026-05-14",
+      "today_entry": {
+        "date": "2026-05-14",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 273,
+        "giCalls": 0
+      },
+      "searchResults": 273,
+      "calls": 0
+    },
+    "searchResultsDelta": 0
+  }
+}

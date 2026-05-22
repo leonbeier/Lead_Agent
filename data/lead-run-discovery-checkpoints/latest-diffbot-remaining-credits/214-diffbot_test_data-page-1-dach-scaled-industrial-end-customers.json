@@ -1,0 +1,36 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:56.401Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 1,
+  "filter": {
+    "name": "DACH Scaled Industrial End Customers",
+    "keywords": [
+      "quality control",
+      "visual inspection",
+      "process automation",
+      "production line",
+      "machine vision"
+    ],
+    "locations": [
+      "Germany",
+      "Austria",
+      "Switzerland"
+    ],
+    "industries": [
+      "Food Production",
+      "Machinery",
+      "Industrial Automation",
+      "Automotive",
+      "Electrical Manufacturing"
+    ],
+    "employeeRanges": [
+      "201,500",
+      "501,1000",
+      "1001,5000",
+      "5001,10000"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

@@ -47,6 +47,8 @@ const SEARCH_RESULT_BING_TIMEOUT_MS = 5000;
 const SOURCE_PAGE_FETCH_TIMEOUT_MS = 5000;
 const WEBSITE_CRAWL_TIMEOUT_MS = 4500;
 const INTERNAL_PAGE_CRAWL_TIMEOUT_MS = 3500;
+const WEBSITE_CRAWL_RETRY_ATTEMPTS = 2;
+const WEBSITE_CRAWL_RETRY_DELAY_MS = 500;
 const SOURCE_DISCOVERY_MAX_SOURCE_PAGES = 4;
 const SOURCE_DISCOVERY_MAX_INTERNAL_PAGES = 2;
 const SOURCE_DISCOVERY_MAX_CANDIDATE_DOMAINS = 6;
@@ -596,7 +598,7 @@ export class OpenCrawlerSearchClient {
   }
 
   async crawlCompanyWebsite(domain: string | undefined): Promise<CrawledWebsiteProfile | null> {
-    const crawl = await this.crawlDomain(domain);
+    const crawl = await this.crawlDomainWithRetry(domain);
     if (!crawl) {
       return null;
     }
@@ -606,6 +608,21 @@ export class OpenCrawlerSearchClient {
       landingUrl: crawl.landingUrl,
       relevantUrls: crawl.relevantUrls
     };
+  }
+
+  private async crawlDomainWithRetry(domain: string | undefined, filter?: ApolloOrganizationFilter): Promise<DomainCrawlResult | null> {
+    for (let attempt = 0; attempt < WEBSITE_CRAWL_RETRY_ATTEMPTS; attempt += 1) {
+      const crawl = await this.crawlDomain(domain, filter);
+      if (crawl) {
+        return crawl;
+      }
+
+      if (attempt < WEBSITE_CRAWL_RETRY_ATTEMPTS - 1) {
+        await this.delay(WEBSITE_CRAWL_RETRY_DELAY_MS * (attempt + 1));
+      }
+    }
+
+    return null;
   }
 
   private buildSeedQueries(filter: ApolloOrganizationFilter, page: number): string[] {
@@ -1181,6 +1198,10 @@ export class OpenCrawlerSearchClient {
     }
 
     return null;
+  }
+
+  private delay(durationMs: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, durationMs));
   }
 
   private extractPageCrawlResult(html: string, url: string, label: string): PageCrawlResult | null {

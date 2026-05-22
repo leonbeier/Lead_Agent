@@ -1,0 +1,36 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:56.777Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 1,
+  "filter": {
+    "name": "Spain Vision Industrial Integradores",
+    "keywords": [
+      "vision artificial industrial",
+      "integrador vision artificial",
+      "inspeccion optica",
+      "control de calidad vision",
+      "sistemas de vision artificial",
+      "automatizacion inspeccion",
+      "integrador de sistemas industriales",
+      "inspeccion visual automatizada"
+    ],
+    "locations": [
+      "Spain"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

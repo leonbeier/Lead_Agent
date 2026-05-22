@@ -1,0 +1,31 @@
+{
+  "createdAt": "2026-05-15T20:12:55.605Z",
+  "inputCount": 13,
+  "alreadyInHubSpotCount": 2,
+  "notInHubSpotCount": 11,
+  "crawledCount": 10,
+  "crawlFailedCount": 1,
+  "categorizedCount": 10,
+  "integratorQualifiedCount": 2,
+  "categoryBreakdown": {
+    "irrelevant": 6,
+    "integrator_general_ai": 2,
+    "other": 2
+  },
+  "qualifiedCategoryBreakdown": {
+    "integrator_general_ai": 2
+  },
+  "researchBriefCount": 2,
+  "companiesNeedingApolloContactsCount": 1,
+  "companySyncedCount": 2,
+  "contactSyncedCount": 2,
+  "syncedCount": 4,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [],
+  "crawlFailures": [
+    {
+      "companyName": "KW Special Projects",
+      "domain": "https://kwspecialprojects.com"
+    }
+  ]
+}

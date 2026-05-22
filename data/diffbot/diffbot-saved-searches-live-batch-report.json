@@ -1,0 +1,764 @@
+{
+  "createdAt": "2026-05-15T14:12:24.963Z",
+  "inputFiles": [
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_precision_v4.csv",
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\vision_integrators_dach_plus_50_v1.csv",
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_50_balanced_v3.csv",
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100.csv",
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100_names_only_v2.csv",
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100_full_entity_v3.csv",
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_472_full_entity_v4.csv",
+    "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_industrial_ai_integrators_union_1000_v1.csv"
+  ],
+  "aggregate": {
+    "filesProcessed": 8,
+    "inputCount": 854,
+    "alreadyInHubSpotCount": 305,
+    "notInHubSpotCount": 549,
+    "crawledCount": 486,
+    "crawlFailedCount": 63,
+    "categorizedCount": 486,
+    "integratorQualifiedCount": 50,
+    "researchBriefCount": 50,
+    "companiesNeedingApolloContactsCount": 43,
+    "companySyncedCount": 50,
+    "contactSyncedCount": 85,
+    "syncedCount": 135,
+    "categoryCounts": {
+      "other": 106,
+      "camera_manufacturer_partner": 15,
+      "irrelevant": 299,
+      "software_platform_embedding": 16,
+      "machine_builder_ai_enablement": 9,
+      "industrial_end_customer_scaled": 15,
+      "integrator_general_ai": 13,
+      "integrator_vision_industrial_ai": 10,
+      "integrator_vision_ai_consulting": 3
+    },
+    "qualifiedCategoryBreakdown": {
+      "machine_builder_ai_enablement": 9,
+      "industrial_end_customer_scaled": 15,
+      "integrator_general_ai": 13,
+      "integrator_vision_industrial_ai": 10,
+      "integrator_vision_ai_consulting": 3
+    },
+    "hubspotErrors": []
+  },
+  "results": [
+    {
+      "fileName": "eu_ai_machine_vision_integrators_precision_v4.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_precision_v4.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_precision_v4.live-processing-report.json",
+        "inputCount": 9,
+        "alreadyInHubSpotCount": 4,
+        "notInHubSpotCount": 5,
+        "crawledCount": 5,
+        "crawlFailedCount": 0,
+        "categorizedCount": 5,
+        "integratorQualifiedCount": 0,
+        "qualifiedCategoryBreakdown": {},
+        "researchBriefCount": 0,
+        "companiesNeedingApolloContactsCount": 0,
+        "companySyncedCount": 0,
+        "contactSyncedCount": 0,
+        "syncedCount": 0,
+        "newlyCreatedCompanies": [],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {
+          "other": 1,
+          "camera_manufacturer_partner": 1,
+          "irrelevant": 2,
+          "software_platform_embedding": 1
+        },
+        "qualifiedCategoryBreakdown": {}
+      }
+    },
+    {
+      "fileName": "vision_integrators_dach_plus_50_v1.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\vision_integrators_dach_plus_50_v1.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\vision_integrators_dach_plus_50_v1.live-processing-report.json",
+        "inputCount": 50,
+        "alreadyInHubSpotCount": 20,
+        "notInHubSpotCount": 30,
+        "crawledCount": 27,
+        "crawlFailedCount": 3,
+        "categorizedCount": 27,
+        "integratorQualifiedCount": 0,
+        "qualifiedCategoryBreakdown": {},
+        "researchBriefCount": 0,
+        "companiesNeedingApolloContactsCount": 0,
+        "companySyncedCount": 0,
+        "contactSyncedCount": 0,
+        "syncedCount": 0,
+        "newlyCreatedCompanies": [],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {
+          "other": 6,
+          "irrelevant": 17,
+          "camera_manufacturer_partner": 2,
+          "software_platform_embedding": 2
+        },
+        "qualifiedCategoryBreakdown": {}
+      }
+    },
+    {
+      "fileName": "eu_ai_machine_vision_integrators_50_balanced_v3.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_50_balanced_v3.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_50_balanced_v3.live-processing-report.json",
+        "inputCount": 50,
+        "alreadyInHubSpotCount": 16,
+        "notInHubSpotCount": 34,
+        "crawledCount": 31,
+        "crawlFailedCount": 3,
+        "categorizedCount": 31,
+        "integratorQualifiedCount": 4,
+        "qualifiedCategoryBreakdown": {
+          "machine_builder_ai_enablement": 3,
+          "industrial_end_customer_scaled": 1
+        },
+        "researchBriefCount": 4,
+        "companiesNeedingApolloContactsCount": 3,
+        "companySyncedCount": 4,
+        "contactSyncedCount": 10,
+        "syncedCount": 14,
+        "newlyCreatedCompanies": [
+          {
+            "companyName": "PRIMECONCEPT",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075332799",
+            "publicContactEmails": [
+              "start@primeconcept.it"
+            ]
+          },
+          {
+            "companyName": "SYNERGX Technologies",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077275368",
+            "publicContactEmails": [
+              "info@synergx.com",
+              "kwawrew@synergx.com",
+              "sbaldo@synergx.com",
+              "slemieux@synergx.com"
+            ]
+          },
+          {
+            "companyName": "Struers",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075511007",
+            "publicContactEmails": [
+              "satoshi.takagi@struers.com",
+              "dan.vad@struers.dk",
+              "bo.byrialsen@struers.com"
+            ]
+          },
+          {
+            "companyName": "QUISS",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075454695",
+            "publicContactEmails": [
+              "fneumann@isravision.com",
+              "stephan.roskothen@quiss.com"
+            ]
+          }
+        ],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {
+          "irrelevant": 17,
+          "camera_manufacturer_partner": 4,
+          "machine_builder_ai_enablement": 3,
+          "other": 5,
+          "industrial_end_customer_scaled": 1,
+          "software_platform_embedding": 1
+        },
+        "qualifiedCategoryBreakdown": {
+          "machine_builder_ai_enablement": 3,
+          "industrial_end_customer_scaled": 1
+        }
+      }
+    },
+    {
+      "fileName": "eu_ai_machine_vision_integrators_100.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100.live-processing-report.json",
+        "inputCount": 100,
+        "alreadyInHubSpotCount": 32,
+        "notInHubSpotCount": 68,
+        "crawledCount": 60,
+        "crawlFailedCount": 8,
+        "categorizedCount": 60,
+        "integratorQualifiedCount": 4,
+        "qualifiedCategoryBreakdown": {
+          "integrator_general_ai": 2,
+          "machine_builder_ai_enablement": 1,
+          "industrial_end_customer_scaled": 1
+        },
+        "researchBriefCount": 4,
+        "companiesNeedingApolloContactsCount": 3,
+        "companySyncedCount": 4,
+        "contactSyncedCount": 8,
+        "syncedCount": 12,
+        "newlyCreatedCompanies": [
+          {
+            "companyName": "PCMP",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075478212",
+            "publicContactEmails": []
+          },
+          {
+            "companyName": "TechTribe",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077276387",
+            "publicContactEmails": [
+              "order@techtribe.se",
+              "info@techtribe.se"
+            ]
+          },
+          {
+            "companyName": "MDE Automation",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075677905",
+            "publicContactEmails": [
+              "e.denissen@mde-automation.nl",
+              "p.moerland@mde-automation.nl"
+            ]
+          },
+          {
+            "companyName": "Smart Automation",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075631848",
+            "publicContactEmails": [
+              "contact@smart-automation.fr",
+              "richard.bravais@smart-automation.fr",
+              "margaux.jaulin@smart-automation.fr"
+            ]
+          }
+        ],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {
+          "irrelevant": 32,
+          "other": 20,
+          "integrator_general_ai": 2,
+          "machine_builder_ai_enablement": 1,
+          "software_platform_embedding": 3,
+          "camera_manufacturer_partner": 1,
+          "industrial_end_customer_scaled": 1
+        },
+        "qualifiedCategoryBreakdown": {
+          "integrator_general_ai": 2,
+          "machine_builder_ai_enablement": 1,
+          "industrial_end_customer_scaled": 1
+        }
+      }
+    },
+    {
+      "fileName": "eu_ai_machine_vision_integrators_100_names_only_v2.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100_names_only_v2.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100_names_only_v2.live-processing-report.json",
+        "inputCount": 73,
+        "alreadyInHubSpotCount": 29,
+        "notInHubSpotCount": 44,
+        "crawledCount": 38,
+        "crawlFailedCount": 6,
+        "categorizedCount": 38,
+        "integratorQualifiedCount": 0,
+        "qualifiedCategoryBreakdown": {},
+        "researchBriefCount": 0,
+        "companiesNeedingApolloContactsCount": 0,
+        "companySyncedCount": 0,
+        "contactSyncedCount": 0,
+        "syncedCount": 0,
+        "newlyCreatedCompanies": [],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {
+          "other": 14,
+          "irrelevant": 23,
+          "software_platform_embedding": 1
+        },
+        "qualifiedCategoryBreakdown": {}
+      }
+    },
+    {
+      "fileName": "eu_ai_machine_vision_integrators_100_full_entity_v3.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100_full_entity_v3.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100_full_entity_v3.live-processing-report.json",
+        "inputCount": 100,
+        "alreadyInHubSpotCount": 56,
+        "notInHubSpotCount": 44,
+        "crawledCount": 42,
+        "crawlFailedCount": 2,
+        "categorizedCount": 42,
+        "integratorQualifiedCount": 3,
+        "qualifiedCategoryBreakdown": {
+          "integrator_vision_industrial_ai": 1,
+          "machine_builder_ai_enablement": 1,
+          "integrator_general_ai": 1
+        },
+        "researchBriefCount": 3,
+        "companiesNeedingApolloContactsCount": 3,
+        "companySyncedCount": 3,
+        "contactSyncedCount": 6,
+        "syncedCount": 9,
+        "newlyCreatedCompanies": [
+          {
+            "companyName": "SmartRay",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/429974526144",
+            "publicContactEmails": [
+              "mathias.reiter@smartray.com",
+              "patrick.schuckall@smartray.com",
+              "alexander.simon@smartray.com"
+            ]
+          },
+          {
+            "companyName": "Festo",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077699263",
+            "publicContactEmails": [
+              "ravi.sastry@festo.com",
+              "marco.schmidt@festo.com",
+              "andre.bos@festo.com"
+            ]
+          }
+        ],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {
+          "machine_builder_ai_enablement": 1,
+          "irrelevant": 27,
+          "camera_manufacturer_partner": 1,
+          "other": 10,
+          "software_platform_embedding": 1,
+          "integrator_general_ai": 1,
+          "integrator_vision_industrial_ai": 1
+        },
+        "qualifiedCategoryBreakdown": {
+          "integrator_vision_industrial_ai": 1,
+          "machine_builder_ai_enablement": 1,
+          "integrator_general_ai": 1
+        }
+      }
+    },
+    {
+      "fileName": "eu_ai_machine_vision_integrators_472_full_entity_v4.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_472_full_entity_v4.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_472_full_entity_v4.live-processing-report.json",
+        "inputCount": 472,
+        "alreadyInHubSpotCount": 148,
+        "notInHubSpotCount": 324,
+        "crawledCount": 283,
+        "crawlFailedCount": 41,
+        "categorizedCount": 283,
+        "integratorQualifiedCount": 39,
+        "qualifiedCategoryBreakdown": {
+          "integrator_vision_industrial_ai": 9,
+          "integrator_vision_ai_consulting": 3,
+          "integrator_general_ai": 10,
+          "machine_builder_ai_enablement": 4,
+          "industrial_end_customer_scaled": 13
+        },
+        "researchBriefCount": 39,
+        "companiesNeedingApolloContactsCount": 34,
+        "companySyncedCount": 39,
+        "contactSyncedCount": 61,
+        "syncedCount": 100,
+        "newlyCreatedCompanies": [
+          {
+            "companyName": "FS Solution",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077605057",
+            "publicContactEmails": [
+              "dana@fssolution.co.kr",
+              "sales@fssolution.co.kr"
+            ]
+          },
+          {
+            "companyName": "ADUK",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075643090",
+            "publicContactEmails": []
+          },
+          {
+            "companyName": "TesTex NDT",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077790394",
+            "publicContactEmails": [
+              "sales@testexndt.co.uk",
+              "simon@testexndt.co.uk",
+              "carl@testexndt.co.uk"
+            ]
+          },
+          {
+            "companyName": "ISSArt",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075546828",
+            "publicContactEmails": [
+              "crm@issart.com",
+              "info@issart.com"
+            ]
+          },
+          {
+            "companyName": "Elocal Group",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430038380766",
+            "publicContactEmails": [
+              "info@elocal.it",
+              "simone.gardella@elocal.it"
+            ]
+          },
+          {
+            "companyName": "Mabema",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430033499343",
+            "publicContactEmails": [
+              "magnus.lundberg@mabema.se"
+            ]
+          },
+          {
+            "companyName": "Favis",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077834427",
+            "publicContactEmails": [
+              "favis@favis.co.kr"
+            ]
+          },
+          {
+            "companyName": "Nommas",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075886810",
+            "publicContactEmails": [
+              "info@nommas.ai"
+            ]
+          },
+          {
+            "companyName": "Mabema",
+            "category": "integrator_vision_industrial_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430033499343",
+            "publicContactEmails": [
+              "magnus.lundberg@mabema.se"
+            ]
+          },
+          {
+            "companyName": "DataVision",
+            "category": "integrator_vision_ai_consulting",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077684959",
+            "publicContactEmails": [
+              "jindrich.hasek@datavision.cz",
+              "martina.chmelickova@datavision.cz"
+            ]
+          },
+          {
+            "companyName": "PVI Systems",
+            "category": "integrator_vision_ai_consulting",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077707509",
+            "publicContactEmails": [
+              "06357info@pvisys.com",
+              "kbakowski@pvisys.com"
+            ]
+          },
+          {
+            "companyName": "RiskCON",
+            "category": "integrator_vision_ai_consulting",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075788479",
+            "publicContactEmails": [
+              "info@riskcon.ca"
+            ]
+          },
+          {
+            "companyName": "APISSYS",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075788482",
+            "publicContactEmails": [
+              "fstercq@reflexces.com"
+            ]
+          },
+          {
+            "companyName": "PCB Arts",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077934809",
+            "publicContactEmails": [
+              "hello@pcb-arts.com",
+              "saber.kaygusuz@pcb-arts.com",
+              "philipp.joehl@pcb-arts.com"
+            ]
+          },
+          {
+            "companyName": "Ausil Systems",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075587782",
+            "publicContactEmails": [
+              "aperez@ausilsystems.eu"
+            ]
+          },
+          {
+            "companyName": "Amc Systeme",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430036641005",
+            "publicContactEmails": [
+              "info@amc-systeme.de",
+              "axel.meyer@amc-systeme.de",
+              "bernd.goebel@amc-systeme.de"
+            ]
+          },
+          {
+            "companyName": "MultiSystems",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/429974534365",
+            "publicContactEmails": [
+              "sales@multisystems.com",
+              "jdelmazo@multisystems.com"
+            ]
+          },
+          {
+            "companyName": "Seaberry Technologies",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077893880",
+            "publicContactEmails": [
+              "info@seaberrytech.com"
+            ]
+          },
+          {
+            "companyName": "Tooltech Global Engineering",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/429992402169",
+            "publicContactEmails": [
+              "rakesh.sardana@techmahindra.com"
+            ]
+          },
+          {
+            "companyName": "4DSP",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075625694",
+            "publicContactEmails": [
+              "michael.dryer@abaco.com",
+              "lb@abaco.com",
+              "paul.adams@abaco.com"
+            ]
+          },
+          {
+            "companyName": "Kiener Maschinenbau",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077568199",
+            "publicContactEmails": []
+          },
+          {
+            "companyName": "Takano Co",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075906288",
+            "publicContactEmails": [
+              "masao.takano@takano-net.co.jp"
+            ]
+          },
+          {
+            "companyName": "Erhardt + Leimer",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075726014",
+            "publicContactEmails": [
+              "digitalmarketing@erhardt-leimer.com"
+            ]
+          },
+          {
+            "companyName": "Regg Inspection",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075442422",
+            "publicContactEmails": [
+              "r.dambrosio@regginspection.it"
+            ]
+          },
+          {
+            "companyName": "ESPS",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077894847",
+            "publicContactEmails": [
+              "patrick.vanbezouw@ims-nl.com",
+              "henri.paus@ims-nl.com"
+            ]
+          },
+          {
+            "companyName": "Brooks Automation",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075741380",
+            "publicContactEmails": [
+              "kamran.sadri@brooks.com",
+              "martin.henseler@brooks.com",
+              "misza.tymowski@brooks.com"
+            ]
+          },
+          {
+            "companyName": "Piqapart",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077894871",
+            "publicContactEmails": []
+          },
+          {
+            "companyName": "Aiir Innovations",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430035735756",
+            "publicContactEmails": [
+              "hello@aiir.nl",
+              "fritjof.buettner@aiir.nl",
+              "steve.nowee@aiir.nl",
+              "miriam.huijser@aiir.nl"
+            ]
+          },
+          {
+            "companyName": "LEWA Attendorn",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075522267",
+            "publicContactEmails": [
+              "info@lewa-attendorn.com",
+              "a.volprecht@lewa-attendorn.com",
+              "s.kringe-schmeck@lewa-attendorn.com"
+            ]
+          },
+          {
+            "companyName": "Autoscan",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077510903",
+            "publicContactEmails": [
+              "info@autoscaninc.com",
+              "jmcnabb@autoscaninc.com"
+            ]
+          },
+          {
+            "companyName": "Microvision Instruments",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077935809",
+            "publicContactEmails": [
+              "christopher.forgeron@microvision.fr"
+            ]
+          },
+          {
+            "companyName": "Bertec",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075522275",
+            "publicContactEmails": [
+              "chris.muldrow@bertec.com",
+              "murat@bertec.com"
+            ]
+          },
+          {
+            "companyName": "inos Automationssoftware",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430045921515",
+            "publicContactEmails": [
+              "t.sypsis@inos-automation.de",
+              "anna.kyriakidou@inos-automation.com"
+            ]
+          },
+          {
+            "companyName": "Invar",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075644123",
+            "publicContactEmails": [
+              "jsaura@invaringenieria.com"
+            ]
+          },
+          {
+            "companyName": "Glassquality",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077629638",
+            "publicContactEmails": [
+              "georg.aigner@softsolution.at"
+            ]
+          },
+          {
+            "companyName": "KSV Koblenzer Steuerungs- und Verteilungsbau",
+            "category": "integrator_general_ai",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075808988",
+            "publicContactEmails": [
+              "christian.frink@ksv-koblenz.de"
+            ]
+          },
+          {
+            "companyName": "Dürr Somac",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075808990",
+            "publicContactEmails": []
+          },
+          {
+            "companyName": "Kaysun",
+            "category": "machine_builder_ai_enablement",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075690172",
+            "publicContactEmails": [
+              "kkohls@kaysun.com",
+              "bharrison@kaysun.com"
+            ]
+          },
+          {
+            "companyName": "PCBX",
+            "category": "industrial_end_customer_scaled",
+            "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/429974535367",
+            "publicContactEmails": [
+              "sales@pcbx.com"
+            ]
+          }
+        ],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {
+          "irrelevant": 181,
+          "camera_manufacturer_partner": 6,
+          "other": 50,
+          "software_platform_embedding": 7,
+          "industrial_end_customer_scaled": 13,
+          "integrator_vision_industrial_ai": 9,
+          "integrator_general_ai": 10,
+          "integrator_vision_ai_consulting": 3,
+          "machine_builder_ai_enablement": 4
+        },
+        "qualifiedCategoryBreakdown": {
+          "integrator_vision_industrial_ai": 9,
+          "integrator_vision_ai_consulting": 3,
+          "integrator_general_ai": 10,
+          "machine_builder_ai_enablement": 4,
+          "industrial_end_customer_scaled": 13
+        }
+      }
+    },
+    {
+      "fileName": "eu_industrial_ai_integrators_union_1000_v1.csv",
+      "filePath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_industrial_ai_integrators_union_1000_v1.csv",
+      "processing": {
+        "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_industrial_ai_integrators_union_1000_v1.live-processing-report.json",
+        "inputCount": 0,
+        "alreadyInHubSpotCount": 0,
+        "notInHubSpotCount": 0,
+        "crawledCount": 0,
+        "crawlFailedCount": 0,
+        "categorizedCount": 0,
+        "integratorQualifiedCount": 0,
+        "qualifiedCategoryBreakdown": {},
+        "researchBriefCount": 0,
+        "companiesNeedingApolloContactsCount": 0,
+        "companySyncedCount": 0,
+        "contactSyncedCount": 0,
+        "syncedCount": 0,
+        "newlyCreatedCompanies": [],
+        "hubspotErrors": []
+      },
+      "categories": {
+        "categoryCounts": {},
+        "qualifiedCategoryBreakdown": {}
+      }
+    }
+  ]
+}

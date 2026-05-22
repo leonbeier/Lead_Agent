@@ -1,0 +1,51 @@
+{
+  "runId": "2026-05-15T12-49-04-884Z",
+  "savedAt": "2026-05-15T12:53:21.224Z",
+  "companySearchMode": "open_crawler_search",
+  "page": 2,
+  "filter": {
+    "name": "Austria Switzerland Vision Inspection Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "optische inspektion",
+      "inline inspection",
+      "qualitaetskontrolle automation",
+      "industrielle bildverarbeitung",
+      "systemintegration vision",
+      "kundenspezifische pruefsysteme",
+      "automatisierung bildverarbeitung"
+    ],
+    "locations": [
+      "Austria",
+      "Switzerland"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 2,
+  "companies": [
+    {
+      "name": "Willkommen im Ausstellerportal zur Laser 2025",
+      "domain": "https://world-of-photonics.com",
+      "shortDescription": "Open-crawler high-fit score 14. Matched signals: machine vision, custom solution, mes, bildverarbeitung. index.cfm | Willkommen im Ausstellerportal zur Laser 2025 | Laser 2025 - Verschaffen Sie sich einen Überblick über Aussteller, Anwendungsgebiete und Produkte/Dienstleistungen | Top-Aussteller | Willkommen im Ausstellerportal zur Laser 2025 27. Weltleitmesse und Kongress für Komponenten, Systeme und Anwendungen der Photonik 24.&ndash;27. Juni 2025 | Messe München Ausstellerportal Favoriten verwalten Meine Favoriten Login EN EN - englisch DE - deutsch Home Aussteller Produkte/Dienstleistungen Anwendungsgebiete Hallenpläne Präsentationen Presse Willkommen im Ausstellerportal der Laser World of Photonics 2025 Zu den Ausstellern NovoViz Standardisierte rechnergestützte SPAD-Sensoren Von Punktdete || aussteller systeme nach anwenderbranchen | aussteller systeme nach anwenderbranchen: Systeme nach Anwenderbranchen - Produkte/Dienstleistungen der LASER 2025 | Verzeichnis aller Produkte/Dienstleistungen der LASER 2025 - Systeme nach Anwenderbranchen | Systeme nach Anwenderbranchen ( 112 Aussteller ) | Systeme nach Anwenderbranchen - Produkte/Dienstleistungen der LASER 2025 27. Weltleitmesse und Kongress für Komponenten, Systeme und Anwendungen der Photonik 24.&ndash;27. Juni 2025 | Messe München Ausstellerportal Favoriten verwalten Meine Favoriten Login EN EN - englisch DE - deutsch ",
+      "sourceFilter": "Austria Switzerland Vision Inspection Integrators (open-crawler: source:vision exhibitor list machine vision Austria)"
+    },
+    {
+      "name": "Baudisch Electronic GmbH",
+      "domain": "http://baudisch.de",
+      "country": "Germany",
+      "shortDescription": "Open-crawler review-fit score 10. Matched signals: mes, aoi, optische inspektion. EMS-Dienstleister | Rundum-Service | Baudisch Electronic GmbH | Baudisch Electronic ist der EMS-Dienstleister mit EMV-Labor in Süddeutschland. Wir entwickeln und fertigen Ihre elektronischen Geräte. | EMS-Dienstleister mit EMV-Labor | EMS-Dienstleister | Rundum-Service | Baudisch Electronic GmbH +49 (7172) 9 26 13-0 vertrieb@baudisch.de EMS-Dienstleistungen SMD-Bestückung THT-Bestückung Gerätemontage Lifecycle Management Qualitätsmanagement Elektronikentwicklung Elektronikfertigung EMV-Labor EMV-Prüfungen Laborausstattung RED-Richtlinie EMF-Messung EMV-Expertenforum Über uns Kontakt 360° Rundgang Meilensteine Karriere Aktuelles Archiv Blogbeiträge Downloads Seite wählen BAUDISCH ELECTRONIC D || ems dienstleistungen | EMS-Dienstleistungen: EMS-Dienstleistungen | Rundum-Service | Baudisch Electronic GmbH | EMS-Dienstleistungen · Elektronikentwicklung · SMD-Bestückung · THT-Bestückung · Qualitätssicherung · Montage · Lifecycle Management | Maßgeschneiderte EMS-Dienst­leistungen aus einer Hand | EMS-Dienstleistungen | Rundum-Service | Baudisch Electronic GmbH +49 (7172) 9 26 13-0 vertrieb@baudisch.de EMS-Dienstleistungen SMD-Bestückung THT-Bestückung Gerätemontage Lifecycle Management Qualitätsmanagement Elektronikentwicklung Elektronikfertigung EMV-Labor EMV-Prüfungen Laborausstattung RED-Richtlinie ",
+      "sourceFilter": "Austria Switzerland Vision Inspection Integrators (open-crawler: source:curated:wlw-bildverarbeitung)"
+    }
+  ]
+}

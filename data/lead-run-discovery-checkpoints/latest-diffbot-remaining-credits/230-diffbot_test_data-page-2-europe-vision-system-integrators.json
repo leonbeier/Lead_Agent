@@ -1,0 +1,43 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:56.474Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 2,
+  "filter": {
+    "name": "Europe Vision System Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "industrial vision integrator",
+      "visual inspection integrator",
+      "optical inspection system integrator",
+      "industrial image processing",
+      "quality inspection automation",
+      "system integration machine vision",
+      "industrielle bildverarbeitung"
+    ],
+    "locations": [
+      "Germany",
+      "France",
+      "Italy",
+      "Netherlands",
+      "Switzerland",
+      "Sweden",
+      "Austria",
+      "Spain"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

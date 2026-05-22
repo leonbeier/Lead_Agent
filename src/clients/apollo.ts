@@ -25,6 +25,10 @@ export class ApolloClient {
     this.webSearchAgent.setExaApiKey(apiKey);
   }
 
+  setExaExcludedDomains(domains: string[]): void {
+    this.webSearchAgent.setExaExcludedDomains(domains);
+  }
+
   setDiffbotToken(token: string | undefined): void {
     this.webSearchAgent.setDiffbotToken(token);
     this.diffbotSearchClient.setToken(token);

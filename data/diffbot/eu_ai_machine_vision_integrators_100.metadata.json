@@ -1,0 +1,30 @@
+{
+  "version": 3,
+  "hits": 1005,
+  "results": 100,
+  "kgversion": "468",
+  "diffbot_type": "Organization",
+  "facet": false,
+  "textFallback": false,
+  "request": {
+    "endpoint": "https://kg.diffbot.com/kg/v3/dql",
+    "type": "query",
+    "size": 100,
+    "from": 0,
+    "query": "type:Organization has:description has:homepageUri or(location.country.name:or(\"Germany\", \"France\", \"Italy\", \"Netherlands\", \"Switzerland\", \"Sweden\", \"Austria\", \"Spain\"), locations.country.name:or(\"Germany\", \"France\", \"Italy\", \"Netherlands\", \"Switzerland\", \"Sweden\", \"Austria\", \"Spain\")) description:or(\"machine vision\", \"computer vision\", \"vision systems\", \"quality inspection\", \"visual inspection\", \"industrial inspection\", \"robotic vision\", \"embedded vision\", \"factory automation\", \"industrial automation\", \"optical inspection\", \"image processing\", \"vision-guided robotics\", \"automation engineering\", \"robotics integration\") description:or(\"integrator\", \"system integrator\", \"engineering services\", \"automation solutions\", \"integration services\", \"industrial automation services\", \"robotics integrator\", \"machine vision integrator\", \"control systems integrator\", \"engineering consultancy\") not(description:or(\"camera manufacturer\", \"camera supplier\", \"lens manufacturer\", \"sensor manufacturer\", \"software platform\", \"video surveillance\", \"security cameras\", \"consumer electronics\", \"distributor\", \"reseller\", \"e-commerce\", \"job board\", \"staffing\"))",
+    "requested_fields": [
+      "name",
+      "homepageUri",
+      "description"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "response_time_seconds": 9.914,
+    "response_size_bytes": 71133,
+    "returned_entities": 100,
+    "csv_path": "data\\diffbot\\eu_ai_machine_vision_integrators_100.csv",
+    "usage_headers": {},
+    "estimated_diffbot_credit_usage": "unknown from API metadata; lower-bound estimate is 1 DQL Search request"
+  }
+}

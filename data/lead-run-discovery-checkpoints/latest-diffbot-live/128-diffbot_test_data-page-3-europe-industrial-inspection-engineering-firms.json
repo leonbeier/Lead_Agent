@@ -1,0 +1,42 @@
+{
+  "runId": "2026-05-15T11-11-49-116Z",
+  "savedAt": "2026-05-15T11:15:44.506Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 3,
+  "filter": {
+    "name": "Europe Industrial Inspection Engineering Firms",
+    "keywords": [
+      "automated optical inspection",
+      "aoi integrator",
+      "inline inspection",
+      "industrial image processing",
+      "optische inspektion",
+      "quality inspection engineering",
+      "computer vision engineering services",
+      "inspection system integrator"
+    ],
+    "locations": [
+      "Germany",
+      "France",
+      "Italy",
+      "Netherlands",
+      "Switzerland",
+      "Sweden",
+      "Austria",
+      "Spain"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "Industrial Software",
+      "System Integration",
+      "Electronics"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

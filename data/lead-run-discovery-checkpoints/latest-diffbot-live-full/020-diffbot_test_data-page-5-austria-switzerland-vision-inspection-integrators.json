@@ -1,0 +1,37 @@
+{
+  "runId": "2026-05-15T11-17-42-794Z",
+  "savedAt": "2026-05-15T11:39:53.249Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 5,
+  "filter": {
+    "name": "Austria Switzerland Vision Inspection Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "optische inspektion",
+      "inline inspection",
+      "qualitaetskontrolle automation",
+      "industrielle bildverarbeitung",
+      "systemintegration vision",
+      "kundenspezifische pruefsysteme",
+      "automatisierung bildverarbeitung"
+    ],
+    "locations": [
+      "Austria",
+      "Switzerland"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

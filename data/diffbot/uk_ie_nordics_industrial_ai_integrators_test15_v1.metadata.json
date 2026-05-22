@@ -1,0 +1,41 @@
+{
+  "version": 3,
+  "hits": 1417,
+  "results": 15,
+  "kgversion": "468",
+  "diffbot_type": "Organization",
+  "facet": false,
+  "textFallback": false,
+  "request": {
+    "endpoint": "https://kg.diffbot.com/kg/v3/dql",
+    "type": "query",
+    "size": 15,
+    "from": 0,
+    "query": "type:Organization\nhas:homepageUri\nor(\n  location.country.name:or(\"United Kingdom\",\"Ireland\",\"Norway\",\"Finland\",\"Sweden\",\"Denmark\",\"Iceland\",\"Estonia\",\"Latvia\",\"Lithuania\"),\n  locations.country.name:or(\"United Kingdom\",\"Ireland\",\"Norway\",\"Finland\",\"Sweden\",\"Denmark\",\"Iceland\",\"Estonia\",\"Latvia\",\"Lithuania\")\n)\nor(\n  description:or(\"machine vision\",\"computer vision\",\"visual inspection\",\"optical inspection\",\"automated optical inspection\",\"inline inspection\",\"quality inspection\",\"defect detection\",\"image processing\",\"robot guidance\",\"vision-guided robotics\",\"deep learning inspection\",\"industrial ai consulting\",\"ai consulting\",\"machine vision consulting\",\"computer vision consulting\",\"process automation with ai\",\"industrial analytics\",\"predictive quality\"),\n  allDescriptions:or(\"machine vision\",\"computer vision\",\"visual inspection\",\"optical inspection\",\"automated optical inspection\",\"inline inspection\",\"quality inspection\",\"defect detection\",\"image processing\",\"robot guidance\",\"vision-guided robotics\",\"deep learning inspection\",\"industrial ai consulting\",\"ai consulting\",\"machine vision consulting\",\"computer vision consulting\",\"process automation with ai\",\"industrial analytics\",\"predictive quality\")\n)\nor(\n  description:or(\"system integrator\",\"system integration\",\"turnkey\",\"customer-specific\",\"custom solution\",\"engineering services\",\"consulting\",\"implementation\",\"delivery\",\"project delivery\",\"solution delivery\",\"integration services\",\"commissioning\",\"retrofit\",\"quality control\",\"process automation\",\"workflow automation\",\"special purpose machine\",\"machine builder\",\"oem automation\",\"industrial software\"),\n  allDescriptions:or(\"system integrator\",\"system integration\",\"turnkey\",\"customer-specific\",\"custom solution\",\"engineering services\",\"consulting\",\"implementation\",\"delivery\",\"project delivery\",\"solution delivery\",\"integration services\",\"commissioning\",\"retrofit\",\"quality control\",\"process automation\",\"workflow automation\",\"special purpose machine\",\"machine builder\",\"oem automation\",\"industrial software\")\n)\nor(\n  description:or(\"industrial\",\"manufacturing\",\"factory\",\"production\",\"inspection\",\"quality\",\"automation\",\"warehouse automation\",\"robotics\",\"packaging\",\"pharma\",\"food processing\",\"automotive\"),\n  allDescriptions:or(\"industrial\",\"manufacturing\",\"factory\",\"production\",\"inspection\",\"quality\",\"automation\",\"warehouse automation\",\"robotics\",\"packaging\",\"pharma\",\"food processing\",\"automotive\")\n)\nnot(\n  or(\n    description:or(\"industrial cameras\",\"camera manufacturer\",\"sensor manufacturer\",\"barcode readers\",\"laser markers\",\"digital microscopes\",\"measurement systems\",\"distributor\",\"reseller\",\"wholesale\",\"catalog products\",\"technical education\",\"training provider\",\"recruiting\",\"video surveillance\",\"security cameras\",\"traffic enforcement\",\"marketing agency\",\"face recognition\",\"biometrics\",\"document scanners\",\"document capture\",\"industrial pc\",\"metering pumps\",\"consumer electronics\",\"semiconductor products\",\"product platform\"),\n    allDescriptions:or(\"industrial cameras\",\"camera manufacturer\",\"sensor manufacturer\",\"barcode readers\",\"laser markers\",\"digital microscopes\",\"measurement systems\",\"distributor\",\"reseller\",\"wholesale\",\"catalog products\",\"technical education\",\"training provider\",\"recruiting\",\"video surveillance\",\"security cameras\",\"traffic enforcement\",\"marketing agency\",\"face recognition\",\"biometrics\",\"document scanners\",\"document capture\",\"industrial pc\",\"metering pumps\",\"consumer electronics\",\"semiconductor products\",\"product platform\")\n  )\n)",
+    "requested_fields": "full entity payload"
+  },
+  "response": {
+    "status_code": 200,
+    "response_time_seconds": 29.794,
+    "response_size_bytes": 693233,
+    "returned_entities": 15,
+    "csv_path": "data\\diffbot\\uk_ie_nordics_industrial_ai_integrators_test15_v1.csv",
+    "raw_json_path": "data\\diffbot\\uk_ie_nordics_industrial_ai_integrators_test15_v1.raw.json"
+  },
+  "account_usage": {
+    "before": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {},
+      "searchResults": null,
+      "calls": null
+    },
+    "after": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {},
+      "searchResults": null,
+      "calls": null
+    }
+  }
+}

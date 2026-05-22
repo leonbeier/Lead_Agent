@@ -1,0 +1,51 @@
+{
+  "runId": "2026-05-15T12-49-04-884Z",
+  "savedAt": "2026-05-15T12:55:48.858Z",
+  "companySearchMode": "open_crawler_search",
+  "page": 2,
+  "filter": {
+    "name": "Germany Machine Vision System Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "industrielle bildverarbeitung",
+      "bildverarbeitungssysteme",
+      "industrial image processing",
+      "inspection systems",
+      "quality inspection",
+      "system integrator",
+      "machbarkeitsanalyse bildverarbeitung"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 2,
+  "companies": [
+    {
+      "name": "IUNA AI",
+      "domain": "https://iuna.ai",
+      "country": "Germany",
+      "shortDescription": "Open-crawler high-fit score 18. Matched signals: system integrator, turnkey, shop, lighting, computer vision, visual inspection, commissioning, integration. IUNA AI - AI Vision Systems for industrial Manufacturing | Leading provider of AI Vision Systems for automotive and manufacturing industries, specializing in weld seam inspection and dimensional measurement. | The New Standard for Visual Weld & Assembly Inspection | IUNA AI - AI Vision Systems for industrial Manufacturing Products Weld Inspector Assembly Inspector Use Cases Company Careers News EN Contact Sales The New Standard for Visual Weld & Assembly Inspection Replace subjective manual checks with objective AI precision. Move from random sampling to 100% inline inspection with the IUNA Weld Inspector and Assembly Inspector . Trusted by leading Automotive Manufacturers, Suppliers and Sys || company | Company: IUNA AI - AI Vision Systems for industrial Manufacturing | Leading provider of AI Vision Systems for automotive and manufacturing industries, specializing in weld seam inspection and dimensional measurement. | IUNA AI | IUNA AI - AI Vision Systems for industrial Manufacturing Products Weld Inspector Assembly Inspector Use Cases Company Careers News EN Contact Sales IUNA AI AI Made in Germany This is IUNA AI 100,000+ inspected vehicles 1,000,000+ labeled images 150M+ processed images Company IUNA AI Systems GmbH is ",
+      "sourceFilter": "Germany Machine Vision System Integrators (open-crawler: search:visual inspection system integrator Germany)"
+    },
+    {
+      "name": "Startseite",
+      "domain": "https://bvsys.de",
+      "country": "Germany",
+      "shortDescription": "Open-crawler review-fit score 11. Matched signals: bildverarbeitung, mes, optische inspektion. Startseite - bvSys | Startseite - bvSys Navigation überspringen Startseite Impressum Login English | Bahninspektion Gleisinspektion 3rdRailPositionCheck CrackCheck HeadCheck ProfileCheck RailCheck RailScan SideCheck VegetationCheck Oberleitungsinspektion CatenaryCheck WireCheck Zentrale Datenerfassung Zentrale Datenerfassung Holzoberflächeninspektion Holzoberflächeninspektion Optimat Basis-System Optimat Gesunde Äste Optimat ProfilScan Optimat Software Optimat Zweiseitig Referenzen Über uns QM Karriere Jobs Karriere Vertriebs-/Projektkaufmann Karriere Softwareentwickler/Teamleiter (m/w/d) Karriere Praktikanten / Werkstudenten (m/w/d) Karriere Applikationsspezialist Karriere Ingenieur im Bere || referenzen.html | Referenzen: Referenzen - bvSys | Referenzen | Referenzen - bvSys Navigation überspringen Startseite Impressum Login English | Bahninspektion Gleisinspektion 3rdRailPositionCheck CrackCheck HeadCheck ProfileCheck RailCheck RailScan SideCheck VegetationCheck Oberleitungsinspektion CatenaryCheck WireCheck Zentrale Datenerfassung Zentrale Datenerfassung Holzoberflächeninspektion Holzoberflächeninspektion Optimat Basis-System Optimat Gesunde Äste Optimat ProfilScan Optimat Software Optimat Zweiseitig Referenzen Über uns QM Karriere Jobs Karriere Vertriebs-/Projektkaufmann Karriere ",
+      "sourceFilter": "Germany Machine Vision System Integrators (open-crawler: search:\"bildverarbeitungssysteme\" \"engineering services\" Germany)"
+    }
+  ]
+}

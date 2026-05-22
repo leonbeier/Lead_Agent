@@ -47,6 +47,42 @@ interface WebSearchHit {
   query: string;
 }
 
+export interface HubSpotContactPreview {
+  skipped: boolean;
+  skipReason?: string;
+  normalizedContact: PublicContactCandidate | null;
+  properties: Record<string, string>;
+  outreachNote?: string;
+}
+
+export interface HubSpotSyncPreview {
+  companyProperties: Record<string, string>;
+  contacts: HubSpotContactPreview[];
+}
+
+export interface PublicContactDebugResult {
+  aliases: string[];
+  queries: string[];
+  websitePages?: Array<{
+    url: string;
+    evidenceSnippet: string;
+    emails: string[];
+    phones: string[];
+    linkedInProfileUrl?: string;
+    namedContacts: unknown[];
+  }>;
+  hitGroups: Array<{
+    query: string;
+    hits: Array<{
+      url: string;
+      title: string;
+      snippet: string;
+    }>;
+  }>;
+  heuristicContacts: PublicContactCandidate[];
+  selectedContacts: PublicContactCandidate[];
+}
+
 interface BrowserSearchArticle {
   url: string;
   title: string;
@@ -97,12 +133,14 @@ const PUBLIC_CONTACT_DEVELOPER_PATTERNS = [
   "AI Engineer",
   "Computer Vision Engineer"
 ];
+const buildPublicContactRoleRegex = (patterns: string[]) =>
+  new RegExp(`\\b(?:${patterns.map((pattern) => pattern.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")).join("|")})\\b`, "i");
 const PUBLIC_CONTACT_ROLE_PATTERNS = [...PUBLIC_CONTACT_MANAGER_PATTERNS, ...PUBLIC_CONTACT_DEVELOPER_PATTERNS];
-const PUBLIC_CONTACT_ROLE_REGEX = new RegExp(PUBLIC_CONTACT_ROLE_PATTERNS.join("|"), "i");
-const PUBLIC_CONTACT_MANAGER_REGEX = new RegExp(PUBLIC_CONTACT_MANAGER_PATTERNS.join("|"), "i");
-const PUBLIC_CONTACT_DEVELOPER_REGEX = new RegExp(PUBLIC_CONTACT_DEVELOPER_PATTERNS.join("|"), "i");
+const PUBLIC_CONTACT_ROLE_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_ROLE_PATTERNS);
+const PUBLIC_CONTACT_MANAGER_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_MANAGER_PATTERNS);
+const PUBLIC_CONTACT_DEVELOPER_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_DEVELOPER_PATTERNS);
 const PUBLIC_CONTACT_EXCLUDED_REGEX = /\b(hr|human resources|recruit(ing|er)|talent|people ops|finance|legal|support|customer support|student|intern|marketing|sdr|bdr|account executive|sales representative)\b/i;
-const HIGH_PRIORITY_PAGE_PATTERNS = ["contact", "kontakt", "impressum", "imprint", "legal", "legal notice", "legal-notice", "about", "team", "management"];
+const HIGH_PRIORITY_PAGE_PATTERNS = ["contact", "kontakt", "impressum", "imprint", "legal", "legal notice", "legal-notice", "about", "team", "management", "ansprechpartner", "leadership", "people", "staff", "employee", "employees", "profil", "profile", "ueber-uns", "ueber uns", "about-us", "about us"];
 const MEDIUM_PRIORITY_PAGE_PATTERNS = [
   "software",
   "service",
@@ -246,6 +284,92 @@ export class HubSpotClient {
     return this.findPublicContacts(company);
   }
 
+  async previewHubSpotSync(
+    company: PreCategorizedCompany,
+    brief: ResearchBrief | undefined,
+    contacts: PublicContactCandidate[],
+    options: { includeAddressLookup?: boolean } = {}
+  ): Promise<HubSpotSyncPreview> {
+    const extractedAddress = options.includeAddressLookup ? await this.extractCompanyAddress(company) : null;
+    const companyProperties = this.stripUndefinedProperties(this.buildRawCompanyProperties(company, brief, extractedAddress));
+
+    const contactPreviews = contacts.map((contact) => {
+      const normalizedContact = this.normalizeContactForHubSpot(contact);
+      if (!normalizedContact) {
+        return {
+          skipped: true,
+          skipReason: "Contact has no reachable identity.",
+          normalizedContact: null,
+          properties: {}
+        } satisfies HubSpotContactPreview;
+      }
+
+      if (
+        normalizedContact.email &&
+        this.isGenericMailbox(normalizedContact.email) &&
+        !normalizedContact.firstName &&
+        !normalizedContact.lastName &&
+        !normalizedContact.linkedinUrl
+      ) {
+        return {
+          skipped: true,
+          skipReason: "Generic mailbox without person identity is skipped.",
+          normalizedContact,
+          properties: {}
+        } satisfies HubSpotContactPreview;
+      }
+
+      return {
+        skipped: false,
+        normalizedContact,
+        properties: this.stripUndefinedProperties(this.buildRawContactProperties(normalizedContact)),
+        outreachNote: brief ? this.buildCombinedOutreachNote(company, normalizedContact, brief) : undefined
+      } satisfies HubSpotContactPreview;
+    });
+
+    return {
+      companyProperties,
+      contacts: contactPreviews
+    };
+  }
+
+  async debugPublicContactDiscovery(company: PreCategorizedCompany): Promise<PublicContactDebugResult> {
+    const pages = company.domain
+      ? await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain))
+      : [];
+    const aliases = this.extractCompanySearchAliases(company, pages);
+    const queries = this.buildPublicContactSearchQueries(company, aliases)
+      .filter((query) => /site:linkedin\.com\/in/i.test(query))
+      .slice(0, 4);
+    const hitGroups = await this.mapWithSearchInterval(
+      queries.map((query) => async () => ({
+        query,
+        hits: await this.searchBingResults(query, 5)
+      })),
+      1
+    );
+    const relevantHits = hitGroups.flatMap((group) =>
+      group.hits.filter((hit) =>
+        this.isRelevantCompanyHit(company, aliases, [hit.title, hit.snippet].filter(Boolean).join(" | "))
+      )
+    );
+
+    return {
+      aliases,
+      queries,
+      hitGroups: hitGroups.map((group) => ({
+        query: group.query,
+        hits: group.hits.map((hit) => ({
+          url: hit.url,
+          title: hit.title,
+          snippet: hit.snippet
+        }))
+      })),
+      heuristicContacts: this.extractContactsFromSearchHits(company, relevantHits, aliases),
+      selectedContacts: await this.findPublicContacts(company)
+    };
+  }
+
   async syncQualifiedCompanies(
     companies: PreCategorizedCompany[],
     researchBriefs: ResearchBrief[],
@@ -380,37 +504,10 @@ export class HubSpotClient {
     brief: ResearchBrief | undefined,
     availableProperties: Set<string>
   ): Promise<HubSpotObjectResponse> {
-    const companyDescription = this.buildCompanyDescription(company, brief);
     const extractedAddress = await this.extractCompanyAddress(company);
 
     const properties = this.pickAvailableProperties(
-      {
-        name: company.name,
-        domain: this.normalizeDomain(company.domain),
-        country: extractedAddress?.country ?? company.country,
-        address: extractedAddress?.address,
-        city: extractedAddress?.city,
-        zip: extractedAddress?.zip,
-        state: extractedAddress?.state,
-        industry: this.normalizeHubSpotIndustryValue(brief?.targetIndustry, companyDescription),
-        description: companyDescription,
-        ai_cc_category: this.mapCompanyCategory(company.category),
-        ai_cc_summary_short: brief?.isFallback ? company.rationale : (brief?.qualificationSummary ?? company.rationale),
-        ai_cc_summary_long: companyDescription,
-        ai_cc_pain_points: brief?.isFallback ? undefined : (brief?.businessPotentialReasoning ?? brief?.emailAngle ?? brief?.phoneAngle),
-        ai_cc_linkedin_message: brief?.linkedInMessage,
-        ai_cc_cold_call_linkedin: brief?.linkedInConnectionRequest ?? brief?.linkedInMessage,
-        ai_cc_email_subject: brief?.emailSubject,
-        ai_cc_cold_call_email: brief?.emailBody,
-        ai_cc_phone_script: brief?.phoneScript,
-        ai_cc__ow_business_potential: this.toNumericPropertyValue(brief?.businessPotentialEUR),
-        ai_cc_ranking_partner: this.toNumericPropertyValue(brief?.rankings.partner ?? this.getNumericRanking(company.category, "partner")),
-        ai_cc_ranking_serviceprovider: this.toNumericPropertyValue(brief?.rankings.serviceProvider ?? this.getNumericRanking(company.category, "serviceprovider")),
-        ai_cc_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
-        ai_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
-        ai_cc_customer_products_offered: brief?.productsOffered,
-        ai_cc_customer_target_industry: brief?.targetIndustry
-      },
+      this.buildRawCompanyProperties(company, brief, extractedAddress),
       availableProperties
     );
 
@@ -444,19 +541,18 @@ export class HubSpotClient {
       return null;
     }
 
+    if (
+      normalizedContact.email &&
+      this.isGenericMailbox(normalizedContact.email) &&
+      !normalizedContact.firstName &&
+      !normalizedContact.lastName &&
+      !normalizedContact.linkedinUrl
+    ) {
+      return null;
+    }
+
     const properties = this.pickAvailableProperties(
-      {
-        email: normalizedContact.email,
-        firstname: normalizedContact.firstName,
-        lastname: normalizedContact.lastName,
-        phone: normalizedContact.phone,
-        jobtitle: normalizedContact.jobTitle,
-        hs_linkedin_url: normalizedContact.linkedinUrl,
-        linkedinconnections: this.toNumericPropertyValue(normalizedContact.linkedinConnectionCount),
-        hs_lead_status: "NEW",
-        lead_source: "AI Agent",
-        lead_source_details: "AI Agent"
-      },
+      this.buildRawContactProperties(normalizedContact),
       availableProperties
     );
 
@@ -751,6 +847,63 @@ export class HubSpotClient {
       : undefined;
   }
 
+  private buildRawCompanyProperties(
+    company: PreCategorizedCompany,
+    brief: ResearchBrief | undefined,
+    extractedAddress: ExtractedCompanyAddress | null
+  ): Record<string, string | undefined> {
+    const companyDescription = this.buildCompanyDescription(company, brief);
+
+    return {
+      name: company.name,
+      domain: this.normalizeDomain(company.domain),
+      country: extractedAddress?.country ?? company.country,
+      address: extractedAddress?.address,
+      city: extractedAddress?.city,
+      zip: extractedAddress?.zip,
+      state: extractedAddress?.state,
+      industry: this.normalizeHubSpotIndustryValue(brief?.targetIndustry, companyDescription),
+      description: companyDescription,
+      ai_cc_category: this.mapCompanyCategory(company.category),
+      ai_cc_summary_short: brief?.isFallback ? company.rationale : (brief?.qualificationSummary ?? company.rationale),
+      ai_cc_summary_long: companyDescription,
+      ai_cc_pain_points: brief?.isFallback ? undefined : (brief?.businessPotentialReasoning ?? brief?.emailAngle ?? brief?.phoneAngle),
+      ai_cc_linkedin_message: brief?.linkedInMessage,
+      ai_cc_cold_call_linkedin: brief?.linkedInConnectionRequest ?? brief?.linkedInMessage,
+      ai_cc_email_subject: brief?.emailSubject,
+      ai_cc_cold_call_email: brief?.emailBody,
+      ai_cc_phone_script: brief?.phoneScript,
+      ai_cc__ow_business_potential: this.toNumericPropertyValue(brief?.businessPotentialEUR),
+      ai_cc_ranking_partner: this.toNumericPropertyValue(brief?.rankings.partner ?? this.getNumericRanking(company.category, "partner")),
+      ai_cc_ranking_serviceprovider: this.toNumericPropertyValue(brief?.rankings.serviceProvider ?? this.getNumericRanking(company.category, "serviceprovider")),
+      ai_cc_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
+      ai_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
+      ai_cc_customer_products_offered: brief?.productsOffered,
+      ai_cc_customer_target_industry: brief?.targetIndustry
+    };
+  }
+
+  private buildRawContactProperties(contact: PublicContactCandidate): Record<string, string | undefined> {
+    return {
+      email: contact.email,
+      firstname: contact.firstName,
+      lastname: contact.lastName,
+      phone: contact.phone,
+      jobtitle: contact.jobTitle,
+      hs_linkedin_url: contact.linkedinUrl,
+      linkedinconnections: this.toNumericPropertyValue(contact.linkedinConnectionCount),
+      hs_lead_status: "NEW",
+      lead_source: "AI Agent",
+      lead_source_details: "AI Agent"
+    };
+  }
+
+  private stripUndefinedProperties(properties: Record<string, string | undefined>): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(properties).filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0)
+    );
+  }
+
   private pickAvailableProperties(
     properties: Record<string, string | undefined>,
     availableProperties: Set<string>
@@ -819,11 +972,20 @@ export class HubSpotClient {
     );
 
     const dedupedContacts = this.collapseDuplicateMailboxContacts(enrichedContacts)
-      .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""));
+      .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""))
+      .filter((candidate) => !this.isLowConfidenceWebsiteNamedContact(candidate));
 
     const selectedEmployees = await this.selectRelevantEmployeeContacts(company, dedupedContacts);
     if (selectedEmployees.length > 0) {
       return selectedEmployees;
+    }
+
+    const namedFallbackContacts = dedupedContacts
+      .filter((contact) => this.isNamedFallbackContact(contact))
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
+      .slice(0, 4);
+    if (namedFallbackContacts.length > 0) {
+      return namedFallbackContacts;
     }
 
     return dedupedContacts
@@ -1621,7 +1783,43 @@ export class HubSpotClient {
   }
 
   private isNamedEmployeeContact(contact: PublicContactCandidate): boolean {
-    return Boolean((contact.firstName || contact.lastName) && !this.isGenericMailbox(contact.email ?? ""));
+    return Boolean(
+      (contact.firstName || contact.lastName)
+      && !this.isGenericMailbox(contact.email ?? "")
+      && !this.isLowConfidenceWebsiteNamedContact(contact)
+    );
+  }
+
+  private isNamedFallbackContact(contact: PublicContactCandidate): boolean {
+    return Boolean(
+      (contact.firstName || contact.lastName)
+      && !this.isExcludedContact(contact)
+      && !this.isLowConfidenceWebsiteNamedContact(contact)
+      && (
+        this.isPersonalLinkedInUrl(contact.linkedinUrl)
+        || Boolean(contact.email && !this.isGenericMailbox(contact.email))
+        || this.isPriorityContactTitle(contact.jobTitle)
+        || this.isDeveloperContact(contact)
+      )
+    );
+  }
+
+  private isLowConfidenceWebsiteNamedContact(contact: PublicContactCandidate): boolean {
+    if (contact.label !== "website_named_contact") {
+      return false;
+    }
+
+    const hasName = Boolean(contact.firstName && contact.lastName);
+    if (!hasName) {
+      return true;
+    }
+
+    return !Boolean(
+      (contact.email && !this.isGenericMailbox(contact.email))
+      || this.isPersonalLinkedInUrl(contact.linkedinUrl)
+      || this.isPriorityContactTitle(contact.jobTitle)
+      || this.isDeveloperContact(contact)
+    );
   }
 
   private dedupeNamedEmployeeContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
@@ -1943,6 +2141,14 @@ export class HubSpotClient {
       .map((part) => part.replace(/[^A-Za-zÄÖÜäöüß'’-]/g, ""))
       .filter(Boolean);
 
+    const normalizedNameParts = nameParts.map((part) => part.toLowerCase());
+    if (
+      normalizedNameParts.some((part) => ["learn", "more", "what", "expect", "area", "scan", "camera", "cameras", "line"].includes(part))
+      || (normalizedNameParts.length === 3 && ["to", "for", "and", "with", "of"].includes(normalizedNameParts[1]))
+    ) {
+      return null;
+    }
+
     if (nameParts.length < 2 || nameParts.length > 3) {
       return null;
     }
@@ -2037,7 +2243,7 @@ export class HubSpotClient {
     const queue = [rootUrl];
     const pages: Array<{ url: string; html: string }> = [];
 
-    while (queue.length > 0 && pages.length < 6) {
+    while (queue.length > 0 && pages.length < 10) {
       const url = queue.shift();
       if (!url || visited.has(url)) {
         continue;
@@ -2052,7 +2258,7 @@ export class HubSpotClient {
       pages.push({ url, html });
 
       for (const link of this.extractRelevantLinks(rootUrl, html)) {
-        if (!visited.has(link) && queue.length + pages.length < 12) {
+        if (!visited.has(link) && queue.length + pages.length < 18) {
           queue.push(link);
         }
       }

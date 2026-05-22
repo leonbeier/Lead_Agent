@@ -1,0 +1,35 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:34.258Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 4,
+  "filter": {
+    "name": "DACH Machine Builders For AI Options",
+    "keywords": [
+      "special machinery",
+      "oem",
+      "inspection systems",
+      "automation equipment",
+      "production machines"
+    ],
+    "locations": [
+      "Germany",
+      "Austria",
+      "Switzerland"
+    ],
+    "industries": [
+      "Machinery",
+      "Industrial Automation",
+      "Electrical Manufacturing",
+      "Robotics"
+    ],
+    "employeeRanges": [
+      "51,200",
+      "201,500",
+      "501,1000",
+      "1001,5000"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

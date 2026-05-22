@@ -1,0 +1,36 @@
+{
+  "runId": "2026-05-15T11-11-49-116Z",
+  "savedAt": "2026-05-15T11:16:16.470Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 1,
+  "filter": {
+    "name": "France Vision Industrielle Integrateurs",
+    "keywords": [
+      "vision industrielle",
+      "integrateur vision",
+      "controle qualite",
+      "inspection optique",
+      "inspection visuelle",
+      "systeme de vision industrielle",
+      "automatisation controle qualite",
+      "deep learning industriel"
+    ],
+    "locations": [
+      "France"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

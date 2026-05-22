@@ -1,0 +1,220 @@
+{
+  "createdAt": "2026-05-14T15:06:46.747Z",
+  "inputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_50_balanced_v3.relevant.csv",
+  "outputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_50_balanced_v3.relevant.dropoff-analysis.json",
+  "inputCount": 39,
+  "crawlFailures": [
+    {
+      "name": "obvioTec",
+      "website": "obviotec.com"
+    },
+    {
+      "name": "Sweeper",
+      "website": "sweeper-robot.eu"
+    },
+    {
+      "name": "GigaVis Co.",
+      "website": "gigavis.com"
+    },
+    {
+      "name": "Synsor.ai",
+      "website": "synsor.ai"
+    },
+    {
+      "name": "Cretec Cybernetics",
+      "website": "cretec-cybernetics.com"
+    }
+  ],
+  "categorizedByCategory": {
+    "irrelevant": [
+      {
+        "name": "CIMS",
+        "website": "cims.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "K | Lens",
+        "website": "k-lens.de",
+        "relevanceScore": 8
+      },
+      {
+        "name": "PlatiScan",
+        "website": "platiscan.de",
+        "relevanceScore": 8
+      },
+      {
+        "name": "MA micro automation",
+        "website": "micro-automation.de",
+        "relevanceScore": 8
+      },
+      {
+        "name": "Stratus Vision",
+        "website": "stratusvision.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "QualiVision",
+        "website": "qualivision.ch",
+        "relevanceScore": 8
+      },
+      {
+        "name": "Numetrix",
+        "website": "numetrix.ca",
+        "relevanceScore": 8
+      },
+      {
+        "name": "Al.ba. Automazione",
+        "website": "albaautomazione.it",
+        "relevanceScore": 8
+      },
+      {
+        "name": "APTO systems",
+        "website": "apto.systems",
+        "relevanceScore": 8
+      },
+      {
+        "name": "senswork",
+        "website": "senswork.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "Compar AG - vision systems & robotics",
+        "website": "compar.ch",
+        "relevanceScore": 8
+      },
+      {
+        "name": "DSS Automation Technologies",
+        "website": "dssautotech.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "HANZA",
+        "website": "hanza.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "Robotec Solutions",
+        "website": "robotec-ag.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "ADPIX",
+        "website": "adpix.fr",
+        "relevanceScore": 8
+      },
+      {
+        "name": "36ZERO Vision",
+        "website": "36zerovision.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "TRIGO",
+        "website": "trigo-group.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "Opto Engineering",
+        "website": "opto-e.com",
+        "relevanceScore": 8
+      },
+      {
+        "name": "xis.ai",
+        "website": "xis.ai",
+        "relevanceScore": 5
+      },
+      {
+        "name": "Ivisys",
+        "website": "ivisys.com",
+        "relevanceScore": 8
+      }
+    ],
+    "camera_manufacturer_partner": [
+      {
+        "name": "DVC Machinevision",
+        "website": "machinevision.nl",
+        "relevanceScore": 73
+      },
+      {
+        "name": "Qtechnology",
+        "website": "qtec.com",
+        "relevanceScore": 90
+      },
+      {
+        "name": "Datasensing",
+        "website": "datasensing.com",
+        "relevanceScore": 73
+      }
+    ],
+    "industrial_end_customer_scaled": [
+      {
+        "name": "Worldwide Quality Control",
+        "website": "worldwidequalitycontrol.com",
+        "relevanceScore": 75
+      }
+    ],
+    "other": [
+      {
+        "name": "ATHENAIS",
+        "website": "athenais.tech",
+        "relevanceScore": 35
+      },
+      {
+        "name": "Makar",
+        "website": "makartechnologies.com",
+        "relevanceScore": 40
+      },
+      {
+        "name": "DUMPS electronic Inh. Erhard Dumps",
+        "website": "dumps.de",
+        "relevanceScore": 40
+      },
+      {
+        "name": "Affix Engineering",
+        "website": "affixengineering.nl",
+        "relevanceScore": 40
+      },
+      {
+        "name": "Elbit Vision Systems",
+        "website": "evs.co.il",
+        "relevanceScore": 40
+      }
+    ],
+    "machine_builder_ai_enablement": [
+      {
+        "name": "SYNERGX Technologies",
+        "website": "synergx.com",
+        "relevanceScore": 48
+      },
+      {
+        "name": "QUISS",
+        "website": "quiss.net",
+        "relevanceScore": 48
+      },
+      {
+        "name": "GP Solar",
+        "website": "gpsolar.de",
+        "relevanceScore": 48
+      },
+      {
+        "name": "PRIMECONCEPT",
+        "website": "primeconcept.it",
+        "relevanceScore": 76
+      }
+    ],
+    "integrator_general_ai": [
+      {
+        "name": "Smitech",
+        "website": "smitech.ee",
+        "relevanceScore": 84
+      }
+    ]
+  },
+  "qualified": [
+    {
+      "name": "Smitech",
+      "website": "smitech.ee",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84
+    }
+  ]
+}

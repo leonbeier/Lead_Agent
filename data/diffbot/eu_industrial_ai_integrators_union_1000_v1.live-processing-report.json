@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-05-15T14:12:24.894Z",
+  "inputCount": 0,
+  "alreadyInHubSpotCount": 0,
+  "notInHubSpotCount": 0,
+  "crawledCount": 0,
+  "crawlFailedCount": 0,
+  "categorizedCount": 0,
+  "integratorQualifiedCount": 0,
+  "categoryBreakdown": {},
+  "qualifiedCategoryBreakdown": {},
+  "researchBriefCount": 0,
+  "companiesNeedingApolloContactsCount": 0,
+  "companySyncedCount": 0,
+  "contactSyncedCount": 0,
+  "syncedCount": 0,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [],
+  "crawlFailures": []
+}

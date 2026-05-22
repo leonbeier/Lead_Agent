@@ -553,6 +553,7 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_DEPLOYMENT` default `gpt-5.4-mini`
+- `AZURE_AI_CLASSIFICATION_CONCURRENCY` default `6`
 - `AZURE_OPENAI_API_VERSION`
 
 ### Azure AI Foundry

@@ -158,6 +158,9 @@ export interface LeadAgentSettings {
   exaApiKey?: string;
   diffbotToken?: string;
   maxRuntimeMs?: number;
+  aiPrefilterConcurrency?: number;
+  outreachPrepConcurrency?: number;
+  contactSearchConcurrency?: number;
   earlyStopEnabled: boolean;
   earlyStopReviewCount: number;
   earlyStopThreshold: number;
@@ -365,8 +368,12 @@ export interface LeadJobRequest {
   runDeepResearch?: boolean;
   dryRun?: boolean;
   syncToHubSpot?: boolean;
+  reuseQualifiedCompanyCache?: boolean;
   exaApiKey?: string;
   diffbotToken?: string;
+  aiPrefilterConcurrency?: number;
+  outreachPrepConcurrency?: number;
+  contactSearchConcurrency?: number;
   disableHubSpotDeduplication?: boolean;
   earlyStopEnabled?: boolean;
   earlyStopReviewCount?: number;

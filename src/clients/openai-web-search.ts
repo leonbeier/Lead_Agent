@@ -1025,12 +1025,16 @@ export class OpenAIWebSearchClient {
         );
 
         const relevantUrls: string[] = [];
+        const seenRelevantUrls = new Set<string>();
         for (const linkedPage of linkedPageResults) {
           if (!linkedPage) {
             continue;
           }
 
-          relevantUrls.push(linkedPage.url);
+          if (!seenRelevantUrls.has(linkedPage.url)) {
+            seenRelevantUrls.add(linkedPage.url);
+            relevantUrls.push(linkedPage.url);
+          }
           summaries.push(linkedPage.summary);
         }
 
@@ -1105,8 +1109,8 @@ export class OpenAIWebSearchClient {
 
   private selectRelevantInternalLinks(html: string, baseUrl: string): Array<{ url: string; label: string }> {
     const baseHostname = new URL(baseUrl).hostname.replace(/^www\./i, "");
-    const positivePattern = /(about|ueber|uber|unternehmen|company|services|service|leistungen|solutions|solution|loesungen|products|product|produkte|kompetenzen|portfolio|applications|anwendungen|industries|branchen|use cases|usecases|referenzen|references|docs|documentation|api|schnittstellen|integration|integrations|plugins|plugin|modules|module|drivers|devices|instrument|instrumente|platform|plattform|workflow|automation|diagnostic|pacs|viewer|scanner|scan|vision|inspection|quality)/i;
-    const negativePattern = /(news|blog|jobs|karriere|career|kontakt|contact|impressum|datenschutz|privacy|legal|terms|shop|cart|login)/i;
+    const positivePattern = /(about|ueber|uber|unternehmen|company|services|service|leistungen|solutions|solution|loesungen|products|product|produkte|kompetenzen|portfolio|applications|anwendungen|industries|branchen|use cases|usecases|referenzen|references|docs|documentation|api|schnittstellen|integration|integrations|plugins|plugin|modules|module|drivers|devices|instrument|instrumente|platform|plattform|workflow|automation|diagnostic|pacs|viewer|scanner|scan|vision|inspection|quality|kontakt|contact|ansprechpartner|team|management|leadership|people|staff|employee|profil|profile|impressum|legal|imprint)/i;
+    const negativePattern = /(news|blog|jobs|karriere|career|datenschutz|privacy|terms|shop|cart|login)/i;
     const seenUrls = new Set<string>();
     const selected: Array<{ url: string; label: string; score: number }> = [];
 
@@ -1136,7 +1140,7 @@ export class OpenAIWebSearchClient {
 
     return selected
       .sort((left, right) => right.score - left.score)
-      .slice(0, 4)
+        .slice(0, 6)
       .map(({ url, label }) => ({ url, label }));
   }
 
@@ -1146,6 +1150,10 @@ export class OpenAIWebSearchClient {
 
     if (/(about|ueber|uber|unternehmen|company)/.test(lowered)) {
       score += 1;
+    }
+
+    if (/(kontakt|contact|ansprechpartner|team|management|leadership|people|staff|employee|profil|profile|impressum|imprint|legal)/.test(lowered)) {
+      score += 5;
     }
 
     if (/(services|service|leistungen|solutions|loesungen|kompetenzen)/.test(lowered)) {

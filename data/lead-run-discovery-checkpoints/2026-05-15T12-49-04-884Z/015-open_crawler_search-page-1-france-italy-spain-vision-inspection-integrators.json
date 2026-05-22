@@ -1,0 +1,52 @@
+{
+  "runId": "2026-05-15T12-49-04-884Z",
+  "savedAt": "2026-05-15T12:50:18.814Z",
+  "companySearchMode": "open_crawler_search",
+  "page": 1,
+  "filter": {
+    "name": "France Italy Spain Vision Inspection Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "visual inspection automation",
+      "optical inspection systems",
+      "quality control integration",
+      "engineering services inspection",
+      "turnkey machine vision",
+      "industrial vision projects",
+      "inspection automation solution"
+    ],
+    "locations": [
+      "France",
+      "Italy",
+      "Spain"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 2,
+  "companies": [
+    {
+      "name": "3D Laser profilers and High",
+      "domain": "https://sincevision.com",
+      "shortDescription": "Open-crawler review-fit score 7. Matched signals: case study, mes, association, machine vision, custom solution, integration. 3D Laser profilers and High-Speed Cameras for Industrial Inspection | SinceVision provides high-speed cameras, 3D laser profilers, sCMOS cameras, color sensors, and displacement sensors. | 3D Laser profilers and High-Speed Cameras for Industrial Inspection info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Series SGI Series SD-C Series SD22 Series SD33 Series Spectral Confocal Displacement Sensor SCI Series Through-Beam Edge Sensor SE1 Series SE2 Series Full Spectrum Sensor SS2 Series Request a Trial Contact Us Scientific Imaging H || customer support.html | Service Network: Global Support & After-Sales Service | SinceVision Machine Vision | Dedicated support for SinceVision customers worldwide. Access professional technical advice, repair services, and on-site support for your industrial sensors & imaging systems. | Global Support & After-Sales Service | SinceVision Machine Vision info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Se",
+      "sourceFilter": "France Italy Spain Vision Inspection Integrators (open-crawler: source:curated:emva-members)"
+    },
+    {
+      "name": "MIPI MODULES",
+      "domain": "https://mipi-modules.com",
+      "country": "Germany",
+      "shortDescription": "Open-crawler high-fit score 14. Matched signals: bildverarbeitung, custom solution, integration, mes, inbetriebnahme. VC MIPI® Kameras entwickelt und produziert in Deutschland | Entdecken Sie VC MIPI® Kameras für industrielle Anwendungen - Made in Germany, entwickelt und hergestellt von Vision Components! | VC MIPI | VC MIPI® Kameras entwickelt und produziert in Deutschland Zum Inhalt wechseln MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN Zu allen -Produkten MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/E || vc mipi bricks system | MIPI Vision Solutions: VC MIPI Bricks: MIPI-Kameras, Zubehör und Prozessorboards | VC MIPI Bricks: perfekt abgestimmte MIPI-Kameras, Zubehör & Services. Schneller, einfacher und kostengünstiger zum Embedded-Vision-System! | VC Bricks System | VC MIPI Bricks: MIPI-Kameras, Zubehör und Prozessorboards Zum Inhalt wechseln MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN Zu allen -Pro",
+      "sourceFilter": "France Italy Spain Vision Inspection Integrators (open-crawler: source:curated:emva-members)"
+    }
+  ]
+}

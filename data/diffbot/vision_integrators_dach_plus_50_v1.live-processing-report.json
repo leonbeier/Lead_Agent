@@ -1,0 +1,38 @@
+{
+  "createdAt": "2026-05-15T13:45:00.175Z",
+  "inputCount": 50,
+  "alreadyInHubSpotCount": 20,
+  "notInHubSpotCount": 30,
+  "crawledCount": 27,
+  "crawlFailedCount": 3,
+  "categorizedCount": 27,
+  "integratorQualifiedCount": 0,
+  "categoryBreakdown": {
+    "other": 6,
+    "irrelevant": 17,
+    "camera_manufacturer_partner": 2,
+    "software_platform_embedding": 2
+  },
+  "qualifiedCategoryBreakdown": {},
+  "researchBriefCount": 0,
+  "companiesNeedingApolloContactsCount": 0,
+  "companySyncedCount": 0,
+  "contactSyncedCount": 0,
+  "syncedCount": 0,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [],
+  "crawlFailures": [
+    {
+      "companyName": "Kapsch",
+      "domain": "https://k-business.com"
+    },
+    {
+      "companyName": "Synsor.ai",
+      "domain": "https://synsor.ai"
+    },
+    {
+      "companyName": "Imago Group Benelux",
+      "domain": "https://imagogroup-benelux.com/web"
+    }
+  ]
+}

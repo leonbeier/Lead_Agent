@@ -1,0 +1,38 @@
+{
+  "runId": "2026-05-15T11-11-49-116Z",
+  "savedAt": "2026-05-15T11:13:21.092Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 2,
+  "filter": {
+    "name": "France Italy Spain Vision Inspection Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "visual inspection automation",
+      "optical inspection systems",
+      "quality control integration",
+      "engineering services inspection",
+      "turnkey machine vision",
+      "industrial vision projects",
+      "inspection automation solution"
+    ],
+    "locations": [
+      "France",
+      "Italy",
+      "Spain"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

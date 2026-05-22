@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "hits": 1065,
+  "results": 9,
+  "kgversion": "468",
+  "diffbot_type": "Organization",
+  "facet": false,
+  "textFallback": false,
+  "request": {
+    "endpoint": "https://kg.diffbot.com/kg/v3/dql",
+    "type": "query",
+    "size": 9,
+    "from": 0,
+    "query": "type:Organization\nhas:homepageUri\nor(\n  location.country.name:or(\"Germany\",\"Austria\",\"Switzerland\",\"Netherlands\",\"Belgium\",\"Denmark\",\"Sweden\",\"France\",\"Italy\",\"Spain\",\"Portugal\",\"Poland\",\"Czech Republic\"),\n  locations.country.name:or(\"Germany\",\"Austria\",\"Switzerland\",\"Netherlands\",\"Belgium\",\"Denmark\",\"Sweden\",\"France\",\"Italy\",\"Spain\",\"Portugal\",\"Poland\",\"Czech Republic\")\n)\nor(\n  description:or(\"machine vision\",\"computer vision\",\"visual inspection\",\"optical inspection\",\"automated optical inspection\",\"inline inspection\",\"quality inspection\",\"defect detection\",\"metrology\",\"vision-guided robotics\",\"robot guidance\",\"image processing\",\"AOI\",\"2D vision\",\"3D vision\"),\n  allDescriptions:or(\"machine vision\",\"computer vision\",\"visual inspection\",\"optical inspection\",\"automated optical inspection\",\"inline inspection\",\"quality inspection\",\"defect detection\",\"metrology\",\"vision-guided robotics\",\"robot guidance\",\"image processing\",\"AOI\",\"2D vision\",\"3D vision\",\"Bildverarbeitung\",\"industrielle Bildverarbeitung\",\"optische Inspektion\",\"Qualitaetspruefung\",\"Qualitätsprüfung\",\"Qualitaetskontrolle\",\"Qualitätskontrolle\")\n)\nor(\n  description:or(\"system integrator\",\"system integration\",\"turnkey\",\"customer-specific\",\"custom solution\",\"engineering services\",\"integration services\",\"software development\",\"commissioning\",\"retrofit\",\"inspection system\",\"inspection solutions\",\"automation solution\",\"special machine\",\"machine builder\",\"robot integration\",\"plc integration\",\"scada integration\"),\n  allDescriptions:or(\"system integrator\",\"system integration\",\"turnkey\",\"customer-specific\",\"custom solution\",\"engineering services\",\"integration services\",\"software development\",\"commissioning\",\"retrofit\",\"inspection system\",\"inspection solutions\",\"automation solution\",\"special machine\",\"machine builder\",\"robot integration\",\"plc integration\",\"scada integration\",\"Systemintegration\",\"kundenspezifisch\",\"Inbetriebnahme\",\"Retrofit\",\"Automatisierungstechnik\",\"Sondermaschinenbau\")\n)\nnot(\n  or(\n    description:or(\"supplier of components\",\"machine vision components\",\"industrial cameras\",\"camera housings\",\"frame grabbers\",\"optics\",\"smart cameras\",\"camera manufacturer\",\"sensor manufacturer\",\"distributor\",\"reseller\",\"wholesale\",\"catalog products\",\"pneumatic\",\"actuator\",\"valve terminal\",\"didactic\",\"technical education\",\"training provider\",\"consumer electronics\",\"job board\",\"staffing\",\"recruiting\",\"video surveillance\",\"security cameras\",\"smart city\",\"traffic enforcement\",\"marketing agency\"),\n    allDescriptions:or(\"supplier of components\",\"machine vision components\",\"industrial cameras\",\"camera housings\",\"frame grabbers\",\"optics\",\"smart cameras\",\"camera manufacturer\",\"sensor manufacturer\",\"distributor\",\"reseller\",\"wholesale\",\"catalog products\",\"pneumatic\",\"actuator\",\"valve terminal\",\"didactic\",\"technical education\",\"training provider\",\"consumer electronics\",\"job board\",\"staffing\",\"recruiting\",\"video surveillance\",\"security cameras\",\"smart city\",\"traffic enforcement\",\"marketing agency\")\n  )\n)",
+    "requested_fields": "full entity payload"
+  },
+  "response": {
+    "status_code": 200,
+    "response_time_seconds": 10.421,
+    "response_size_bytes": 1233090,
+    "returned_entities": 9,
+    "csv_path": "data\\diffbot\\eu_ai_machine_vision_integrators_precision_v4.csv",
+    "raw_json_path": "data\\diffbot\\eu_ai_machine_vision_integrators_precision_v4.raw.json"
+  },
+  "account_usage": {
+    "before": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {
+        "date": "2026-05-15",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 68,
+        "giCalls": 0
+      },
+      "searchResults": 68,
+      "calls": 0
+    },
+    "after": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {
+        "date": "2026-05-15",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 77,
+        "giCalls": 0
+      },
+      "searchResults": 77,
+      "calls": 0
+    }
+  }
+}

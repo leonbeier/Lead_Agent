@@ -1,0 +1,43 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:55.873Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 1,
+  "filter": {
+    "name": "Italy Visione Industriale Integratori",
+    "keywords": [
+      "visione industriale",
+      "integratore sistemi visione",
+      "ispezione ottica",
+      "controllo qualita",
+      "visione artificiale industriale",
+      "sistemi di visione",
+      "automazione controllo qualita",
+      "integrazione machine vision"
+    ],
+    "locations": [
+      "Italy"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 1,
+  "companies": [
+    {
+      "name": "Heliovision",
+      "domain": "https://heliovision.be",
+      "shortDescription": "Heliovision focuses on machine vision solutions utilizing Deep Learning, 2D/3D Imaging, custom software and AI. Heliovision provides turnkey quality inspection and object localisation solutions for an array of industries: automotive, aerospace, consumer goods, medical, pharmaceutical, packaging, and more. || Heliovision focuses on machine vision solutions utilizing Deep Learning, 2D/3D Imaging, custom software and AI. Heliovision provides turnkey quality inspection and object localisation solutions for an array of industries: automotive, aerospace, consumer goods, medical, pharmaceutical, packaging, and more. | Machine Vision Experts | Heliovision is a company dedicated to providing Machine and Computer vision solutions for customers in the EU market. Heliovision can select the correct hardware like camera, lenses and lighting for your application and build the right software and algorithms to perform the task needed. This can go from 3D robot guidance to quality control, measuring, and inspecting. | Machine vision integrator",
+      "sourceFilter": "Italy Visione Industriale Integratori (diffbot-test-data)"
+    }
+  ]
+}

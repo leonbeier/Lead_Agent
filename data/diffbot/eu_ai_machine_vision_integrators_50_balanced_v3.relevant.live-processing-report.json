@@ -1,0 +1,56 @@
+{
+  "createdAt": "2026-05-14T14:58:31.205Z",
+  "inputCount": 39,
+  "alreadyInHubSpotCount": 10,
+  "notInHubSpotCount": 29,
+  "crawledCount": 33,
+  "crawlFailedCount": 6,
+  "categorizedCount": 33,
+  "integratorQualifiedCount": 2,
+  "categoryBreakdown": {
+    "integrator_vision_industrial_ai": 1,
+    "irrelevant": 19,
+    "industrial_end_customer_scaled": 1,
+    "other": 5,
+    "machine_builder_ai_enablement": 4,
+    "camera_manufacturer_partner": 2,
+    "integrator_general_ai": 1
+  },
+  "qualifiedCategoryBreakdown": {
+    "integrator_vision_industrial_ai": 1,
+    "integrator_general_ai": 1
+  },
+  "researchBriefCount": 2,
+  "companiesNeedingApolloContactsCount": 0,
+  "companySyncedCount": 2,
+  "contactSyncedCount": 2,
+  "syncedCount": 4,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [],
+  "crawlFailures": [
+    {
+      "companyName": "CIMS",
+      "domain": "https://cims.com"
+    },
+    {
+      "companyName": "obvioTec",
+      "domain": "https://obviotec.com"
+    },
+    {
+      "companyName": "Sweeper",
+      "domain": "https://sweeper-robot.eu"
+    },
+    {
+      "companyName": "GigaVis Co.",
+      "domain": "https://gigavis.com"
+    },
+    {
+      "companyName": "Synsor.ai",
+      "domain": "https://synsor.ai"
+    },
+    {
+      "companyName": "Cretec Cybernetics",
+      "domain": "https://cretec-cybernetics.com"
+    }
+  ]
+}

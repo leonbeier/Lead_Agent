@@ -1,0 +1,58 @@
+{
+  "runId": "2026-05-15T13-06-55-854Z",
+  "savedAt": "2026-05-15T13:08:05.875Z",
+  "companySearchMode": "open_crawler_search",
+  "page": 1,
+  "filter": {
+    "name": "France Italy Spain Vision Inspection Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "visual inspection automation",
+      "optical inspection systems",
+      "quality control integration",
+      "engineering services inspection",
+      "turnkey machine vision",
+      "industrial vision projects",
+      "inspection automation solution"
+    ],
+    "locations": [
+      "France",
+      "Italy",
+      "Spain"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 3,
+  "companies": [
+    {
+      "name": "Precision 3D Vision Systems",
+      "domain": "https://eurekarobotics.com",
+      "shortDescription": "Open-crawler high-fit score 19. Matched signals: machine vision, system integrator, integration, plc, mes, quality inspection, automation solution. Precision 3D Vision Systems | Eureka Robotics | Advanced robotic vision systems for industrial automation. AI-powered 3D machine vision technology for precise pick & place operations. | 3D Picking Powered by AI Vision | Precision 3D Vision Systems | Eureka Robotics English 日本語 +1 (470) 318-2067 Products Eureka 3D Camera Eureka Controller Eureka AI Vision Software System setup Applications Applications Bin picking Machine tending Assembly Sorting Industries Injection molding System integrators Turbofan engine MRO Case studies Resources Brochures Datasheets & CAD User manuals Blog Company About Press Announcements Join the team Technical support Contact us Contact us English 日本語 3D Picking Pow || eureka 3d vision software | Eureka AI Vision Software: Eureka 3D Vision Software | Configure vision-guided robotics without coding. Pre-trained AI models, visual programming, and deep learning for bin picking, assembly, and machine tending. | Eureka AI Vision Software | Eureka 3D Vision Software English 日本語 +1 (470) 318-2067 Products Eureka 3D Camera Eureka Controller Eureka AI Vision Software System setup Applications Applications Bin picking Machine tending Assembly Sorting Industries Injection molding System integrators Turbofan engine MRO",
+      "sourceFilter": "France Italy Spain Vision Inspection Integrators (open-crawler: search:vision guided robotics integrator Italy)"
+    },
+    {
+      "name": "3D Laser profilers and High",
+      "domain": "https://sincevision.com",
+      "shortDescription": "Open-crawler review-fit score 7. Matched signals: case study, mes, association, machine vision, custom solution, integration. 3D Laser profilers and High-Speed Cameras for Industrial Inspection | SinceVision provides high-speed cameras, 3D laser profilers, sCMOS cameras, color sensors, and displacement sensors. | 3D Laser profilers and High-Speed Cameras for Industrial Inspection info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Series SGI Series SD-C Series SD22 Series SD33 Series Spectral Confocal Displacement Sensor SCI Series Through-Beam Edge Sensor SE1 Series SE2 Series Full Spectrum Sensor SS2 Series Request a Trial Contact Us Scientific Imaging H || customer support.html | Service Network: Global Support & After-Sales Service | SinceVision Machine Vision | Dedicated support for SinceVision customers worldwide. Access professional technical advice, repair services, and on-site support for your industrial sensors & imaging systems. | Global Support & After-Sales Service | SinceVision Machine Vision info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Se",
+      "sourceFilter": "France Italy Spain Vision Inspection Integrators (open-crawler: source:curated:emva-members)"
+    },
+    {
+      "name": "MIPI MODULES",
+      "domain": "https://mipi-modules.com",
+      "country": "Germany",
+      "shortDescription": "Open-crawler review-fit score 11. Matched signals: bildverarbeitung, custom solution, integration, mes. VC MIPI® Kameras entwickelt und produziert in Deutschland | Entdecken Sie VC MIPI® Kameras für industrielle Anwendungen - Made in Germany, entwickelt und hergestellt von Vision Components! | VC MIPI | VC MIPI® Kameras entwickelt und produziert in Deutschland Zum Inhalt wechseln MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN Zu allen -Produkten MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/E || vc mipi bricks system | MIPI Vision Solutions: VC MIPI Bricks: MIPI-Kameras, Zubehör und Prozessorboards | VC MIPI Bricks: perfekt abgestimmte MIPI-Kameras, Zubehör & Services. Schneller, einfacher und kostengünstiger zum Embedded-Vision-System! | VC Bricks System | VC MIPI Bricks: MIPI-Kameras, Zubehör und Prozessorboards Zum Inhalt wechseln MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN Zu allen -Produkten MIPI Ka",
+      "sourceFilter": "France Italy Spain Vision Inspection Integrators (open-crawler: source:curated:emva-members)"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "version": 3,
+  "hits": 73,
+  "results": 73,
+  "kgversion": "468",
+  "diffbot_type": "Organization",
+  "facet": false,
+  "textFallback": false,
+  "request": {
+    "endpoint": "https://kg.diffbot.com/kg/v3/dql",
+    "type": "query",
+    "size": 100,
+    "from": 0,
+    "query": "type:Organization has:description has:homepageUri or(location.country.name:or(\"Germany\", \"France\", \"Italy\", \"Netherlands\", \"Switzerland\", \"Sweden\", \"Austria\", \"Spain\"), locations.country.name:or(\"Germany\", \"France\", \"Italy\", \"Netherlands\", \"Switzerland\", \"Sweden\", \"Austria\", \"Spain\")) description:or(\"machine vision\", \"computer vision\", \"vision systems\", \"quality inspection\", \"visual inspection\", \"industrial inspection\", \"robotic vision\", \"embedded vision\", \"optical inspection\", \"image processing\", \"vision-guided robotics\") description:or(\"integrator\", \"system integrator\", \"engineering services\", \"integration services\", \"industrial automation services\", \"robotics integrator\", \"machine vision integrator\", \"control systems integrator\", \"engineering consultancy\") not(description:or(\"camera manufacturer\", \"camera supplier\", \"lens manufacturer\", \"sensor manufacturer\", \"software platform\", \"video surveillance\", \"security cameras\", \"consumer electronics\", \"distributor\", \"reseller\", \"e-commerce\", \"job board\", \"staffing\"))",
+    "requested_fields": [
+      "name",
+      "homepageUri"
+    ]
+  },
+  "response": {
+    "status_code": 200,
+    "response_time_seconds": 9.231,
+    "response_size_bytes": 12096,
+    "returned_entities": 73,
+    "csv_path": "data\\diffbot\\eu_ai_machine_vision_integrators_100_names_only_v2.csv",
+    "usage_headers": {}
+  },
+  "account_usage": {
+    "before": {
+      "plan": "kgfree",
+      "today": "2026-05-14",
+      "today_entry": {
+        "date": "2026-05-14",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 100,
+        "giCalls": 0
+      },
+      "searchResults": 100,
+      "calls": 0
+    },
+    "after": {
+      "plan": "kgfree",
+      "today": "2026-05-14",
+      "today_entry": {
+        "date": "2026-05-14",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 100,
+        "giCalls": 0
+      },
+      "searchResults": 100,
+      "calls": 0
+    },
+    "searchResultsDelta": 0
+  }
+}

@@ -46,6 +46,7 @@ const latestLeadRunPath = path.join(dataDirectory, "latest-lead-run.json");
 const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-review.json");
 const apolloSearchCursorPath = path.join(dataDirectory, "apollo-search-cursors.json");
 const companyScreeningDatabasePath = path.join(dataDirectory, "company-screening-database.json");
+const testLabExaCachePath = path.join(dataDirectory, "testlab-exa-cache.json");
 
 const openCrawlerTuningSchema = z.object({
   probeCount: z.number().int().min(1).max(200).optional(),
@@ -177,6 +178,9 @@ const settingsSchema = z.object({
   exaApiKey: z.string().optional(),
   diffbotToken: z.string().optional(),
   maxRuntimeMs: z.number().int().min(60_000).max(10_800_000).optional(),
+  aiPrefilterConcurrency: z.number().int().min(1).max(32).optional(),
+  outreachPrepConcurrency: z.number().int().min(1).max(32).optional(),
+  contactSearchConcurrency: z.number().int().min(1).max(32).optional(),
   earlyStopEnabled: z.boolean(),
   earlyStopReviewCount: z.number().int().min(5).max(30),
   earlyStopThreshold: z.number().min(0).max(1),
@@ -249,7 +253,26 @@ const searchHistoryEntrySchema = z.object({
   relevanceRatio: z.number().min(0).max(1),
   categoryBreakdown: z.record(leadCategorySchema, z.number().int().nonnegative()),
   passedThreshold: z.boolean(),
-  recommendation: z.string().min(1)
+  recommendation: z.string().min(1),
+  fetchedSampleCount: z.number().int().nonnegative().optional(),
+  eligibleSampleCount: z.number().int().nonnegative().optional(),
+  discoveryQueries: z.array(z.string().min(1)).optional(),
+  dropOffSummary: z.object({
+    filteredByPriorFeedback: z.number().int().nonnegative(),
+    filteredByCache: z.number().int().nonnegative(),
+    filteredByHubSpot: z.number().int().nonnegative(),
+    categorizedIrrelevant: z.number().int().nonnegative(),
+    categorizedOther: z.number().int().nonnegative()
+  }).optional(),
+  decisionSamples: z.array(z.object({
+    companyName: z.string().min(1),
+    domain: z.string().optional(),
+    sourceFilter: z.string().optional(),
+    discoveryQuery: z.string().optional(),
+    category: leadCategorySchema,
+    relevanceScore: z.number().min(0).max(100),
+    rationale: z.string().min(1)
+  })).optional()
 });
 
 const searchModeLearningSchema = z.object({
@@ -348,8 +371,15 @@ const companyScreeningDatabaseSchema = z.object({
   records: z.array(companyScreeningRecordSchema)
 });
 
+const testLabExaCacheSchema = z.object({
+  queryHistory: z.array(z.string().min(1)),
+  discoveredDomains: z.array(z.string().min(1))
+});
+
+type ScreeningCacheScope = "all" | "live" | "debug";
+
 const defaultSettings: LeadAgentSettings = {
-  targetLeadCount: 15,
+  targetLeadCount: 20,
   market: "Europe",
   mainContext: DEFAULT_MAIN_CONTEXT,
   searchStrategyContext: DEFAULT_SEARCH_STRATEGY_CONTEXT,
@@ -373,15 +403,19 @@ const defaultSettings: LeadAgentSettings = {
   },
   targetCategories: [
     "integrator_vision_industrial_ai",
+    "integrator_vision_ai_consulting",
+    "integrator_vision_ai_freelancer",
     "integrator_general_ai",
-    "integrator_relevant_focus"
   ],
   runDeepResearch: true,
   dryRun: false,
   syncToHubSpot: true,
-  maxRuntimeMs: 10_800_000,
-  earlyStopEnabled: true,
-  earlyStopReviewCount: 30,
+  maxRuntimeMs: 600_000,
+  aiPrefilterConcurrency: 20,
+  outreachPrepConcurrency: 20,
+  contactSearchConcurrency: 20,
+  earlyStopEnabled: false,
+  earlyStopReviewCount: 20,
   earlyStopThreshold: 0.15,
   earlyStopMinRelevantCount: 2
 };
@@ -418,6 +452,11 @@ const defaultLatestLeadRun: LatestLeadRunRecord = {
 
 const defaultCompanyScreeningDatabase: CompanyScreeningDatabase = {
   records: []
+};
+
+const defaultTestLabExaCache = {
+  queryHistory: [],
+  discoveredDomains: []
 };
 
 const suggestedControls = [
@@ -520,6 +559,7 @@ export class ControlPlaneStore {
     await ensureFile(latestOutreachReviewPath, defaultLatestLeadRun);
     await ensureFile(apolloSearchCursorPath, {});
     await ensureFile(companyScreeningDatabasePath, defaultCompanyScreeningDatabase);
+    await ensureFile(testLabExaCachePath, defaultTestLabExaCache);
   }
 
   private getApolloSearchCursorKey(filter: ApolloOrganizationFilter): string {
@@ -684,6 +724,28 @@ export class ControlPlaneStore {
     });
   }
 
+  async getTestLabExaCache(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
+    await this.ensureSeedData();
+    const cache = await readJsonFile<{ queryHistory?: string[]; discoveredDomains?: string[] }>(testLabExaCachePath);
+    return testLabExaCacheSchema.parse({
+      ...defaultTestLabExaCache,
+      ...cache
+    });
+  }
+
+  async writeTestLabExaCache(cache: { queryHistory: string[]; discoveredDomains: string[] }): Promise<void> {
+    await this.ensureSeedData();
+    await writeJsonFile(testLabExaCachePath, testLabExaCacheSchema.parse({
+      queryHistory: Array.from(new Set(cache.queryHistory)).slice(0, 500),
+      discoveredDomains: Array.from(new Set(cache.discoveredDomains)).slice(0, 5000)
+    }));
+  }
+
+  async clearTestLabExaCache(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
+    await this.writeTestLabExaCache(defaultTestLabExaCache);
+    return defaultTestLabExaCache;
+  }
+
   async getApolloSearchCursor(filter: ApolloOrganizationFilter): Promise<number> {
     await this.ensureSeedData();
     const cursorMap = apolloSearchCursorSchema.parse(
@@ -805,6 +867,50 @@ export class ControlPlaneStore {
     return nextLearning;
   }
 
+  async clearSearchHistoryMode(companySearchMode: LeadAgentSettings["companySearchMode"]): Promise<LeadLearningData> {
+    const learning = await this.getLearning();
+    const searchHistoryByMode = { ...(learning.searchHistoryByMode ?? {}) };
+    delete searchHistoryByMode[companySearchMode ?? "open_crawler_search"];
+
+    const nextLearning = {
+      ...learning,
+      filterPerformance: {},
+      searchHistory: [],
+      searchHistoryByMode
+    };
+
+    await writeJsonFile(learningPath, nextLearning);
+    return this.getLearning();
+  }
+
+  async clearCompanyScreeningCache(scope: ScreeningCacheScope = "all"): Promise<CompanyScreeningDatabase> {
+    const database = await this.getCompanyScreeningDatabase();
+    const nextDatabase = {
+      records: database.records.filter((record) => {
+        if (record.existsInHubSpot) {
+          return true;
+        }
+
+        if (scope === "all") {
+          return false;
+        }
+
+        const isDebugRecord = this.isDebugScreeningRecord(record.sourceFilter);
+        return scope === "debug"
+          ? !isDebugRecord
+          : isDebugRecord;
+      })
+    } satisfies CompanyScreeningDatabase;
+
+    await this.writeCompanyScreeningDatabase(nextDatabase);
+    return nextDatabase;
+  }
+
+  private isDebugScreeningRecord(sourceFilter?: string): boolean {
+    const normalized = sourceFilter?.trim().toLowerCase() ?? "";
+    return normalized.includes("manual-debug-input") || normalized.includes("debug-stage=") || normalized.includes("[debug");
+  }
+
   async writeLatestLeadRun(record: LatestLeadRunRecord): Promise<void> {
     await this.ensureSeedData();
     await writeJsonFile(latestLeadRunPath, record);
@@ -867,6 +973,8 @@ export class ControlPlaneStore {
     suggestedControls: string[];
     learning: LeadLearningData;
     latestLeadRun: LatestLeadRunRecord;
+    testLabExaCache: { queryHistory: string[]; discoveredDomains: string[] };
+    companyScreeningDatabase: CompanyScreeningDatabase;
   }> {
     return {
       settings: await this.getSettings(),
@@ -886,7 +994,9 @@ export class ControlPlaneStore {
       ],
       suggestedControls,
       learning: await this.getLearning(),
-      latestLeadRun: await this.getLatestLeadRun()
+      latestLeadRun: await this.getLatestLeadRun(),
+      testLabExaCache: await this.getTestLabExaCache(),
+      companyScreeningDatabase: await this.getCompanyScreeningDatabase()
     };
   }
 }

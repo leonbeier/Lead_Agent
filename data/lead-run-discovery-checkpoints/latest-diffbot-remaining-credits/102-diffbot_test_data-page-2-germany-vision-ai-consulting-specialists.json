@@ -1,0 +1,33 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:51.850Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 2,
+  "filter": {
+    "name": "Germany Vision AI Consulting Specialists",
+    "keywords": [
+      "machine vision consultant",
+      "bildverarbeitung beratung",
+      "industrial ai consulting",
+      "aoi beratung",
+      "embedded vision consultant",
+      "industrial image processing consulting",
+      "inspection ai consultant"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "Industrial Software",
+      "Computer Vision",
+      "Embedded Software"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

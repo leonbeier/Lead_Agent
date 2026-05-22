@@ -1,0 +1,812 @@
+{
+  "createdAt": "2026-05-15T20:40:04.282Z",
+  "inputCount": 313,
+  "alreadyInHubSpotCount": 8,
+  "notInHubSpotCount": 305,
+  "crawledCount": 260,
+  "crawlFailedCount": 45,
+  "categorizedCount": 260,
+  "integratorQualifiedCount": 50,
+  "categoryBreakdown": {
+    "integrator_vision_industrial_ai": 14,
+    "irrelevant": 145,
+    "integrator_vision_ai_consulting": 6,
+    "other": 51,
+    "industrial_end_customer_scaled": 10,
+    "integrator_general_ai": 15,
+    "software_platform_embedding": 7,
+    "machine_builder_ai_enablement": 5,
+    "camera_manufacturer_partner": 7
+  },
+  "qualifiedCategoryBreakdown": {
+    "integrator_vision_industrial_ai": 14,
+    "integrator_vision_ai_consulting": 6,
+    "integrator_general_ai": 15,
+    "machine_builder_ai_enablement": 5,
+    "industrial_end_customer_scaled": 10
+  },
+  "researchBriefCount": 50,
+  "companiesNeedingApolloContactsCount": 38,
+  "companySyncedCount": 50,
+  "contactSyncedCount": 59,
+  "syncedCount": 109,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [
+    {
+      "companyName": "Quatromatic",
+      "domain": "https://quatromatic.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430087916783",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430087916783",
+      "publicContactEmails": [
+        "info@quatromatic.com",
+        "kpanchenko@quatromatic.com",
+        "akozyrev@quatromatic.com",
+        "epashko@quatromatic.com"
+      ]
+    },
+    {
+      "companyName": "Rubedo Sistemos",
+      "domain": "https://rubedos.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088436925",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088436925",
+      "publicContactEmails": [
+        "henrikas.simonavicius@rubedos.com",
+        "gintare.aukstake@rubedos.com"
+      ]
+    },
+    {
+      "companyName": "Wildtrax Electronics",
+      "domain": "https://wildtrax-electronics.uk",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088436926",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088436926",
+      "publicContactEmails": [
+        "matthew.wilson@gbelectronics.com"
+      ]
+    },
+    {
+      "companyName": "Digital Design",
+      "domain": "https://digidescorp.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085439724",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085439724",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "EZ Automation Systems",
+      "domain": "https://ezsystemsllc.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088469739",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088469739",
+      "publicContactEmails": [
+        "support@ezsystemsllc.com",
+        "atawfik@ezsystemsllc.com",
+        "yvattipalli@ezsystemsllc.com"
+      ]
+    },
+    {
+      "companyName": "Railvision",
+      "domain": "https://rail-vision.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085302473",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085302473",
+      "publicContactEmails": [
+        "enquiries@rail-vision.com"
+      ]
+    },
+    {
+      "companyName": "VI Solutions",
+      "domain": "https://visolutions.org",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430087916786",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430087916786",
+      "publicContactEmails": [
+        "sunil@visolutions.org"
+      ]
+    },
+    {
+      "companyName": "Tezeract",
+      "domain": "https://tezeract.ai",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085302474",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085302474",
+      "publicContactEmails": [
+        "abdulhannan@tezeract.ai",
+        "humna@tezeract.ai"
+      ]
+    },
+    {
+      "companyName": "BPL Engineering",
+      "domain": "https://bpl-group.co.uk",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088302818",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088302818",
+      "publicContactEmails": [
+        "info@bpl-group.co.uk"
+      ]
+    },
+    {
+      "companyName": "Invite Vision",
+      "domain": "https://invite.se",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085389542",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085389542",
+      "publicContactEmails": [
+        "info@invite.se"
+      ]
+    },
+    {
+      "companyName": "Emergent Design",
+      "domain": "https://emergent-design.co.uk",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088436930",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088436930",
+      "publicContactEmails": [
+        "info@emergent-design.co.uk",
+        "justen@emergent-design.co.uk",
+        "dan@emergent-design.co.uk"
+      ]
+    },
+    {
+      "companyName": "Eghed",
+      "domain": "https://eghed.se",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088321223",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088321223",
+      "publicContactEmails": [
+        "fredrik.hofflander@eghed.se",
+        "hakan.roos@eghed.se"
+      ]
+    },
+    {
+      "companyName": "SEEMS",
+      "domain": "https://seems.gr",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088592611",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088592611",
+      "publicContactEmails": [
+        "info@seems.gr",
+        "paris.kouris@seems.gr"
+      ]
+    },
+    {
+      "companyName": "AJG Software",
+      "domain": "https://ajgsoftware.com",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 86,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085534942",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085534942",
+      "publicContactEmails": [
+        "sales@ajgsoftware.com"
+      ]
+    },
+    {
+      "companyName": "Alver Valley Software",
+      "domain": "https://alvervalleysoftware.com",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 86,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088526028",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088526028",
+      "publicContactEmails": [
+        "tom@alvervalleysoftware.com"
+      ]
+    },
+    {
+      "companyName": "Amenity Technologies",
+      "domain": "https://amenitytech.ai",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 86,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088436934",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088436934",
+      "publicContactEmails": [
+        "jenish.pithadiya@amenitytech.ai",
+        "vivek.agheda@amenitytech.ai",
+        "yagnik.thanki@amenitytech.ai"
+      ]
+    },
+    {
+      "companyName": "QIMA",
+      "domain": "https://qima.com",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 86,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088732913",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088732913",
+      "publicContactEmails": [
+        "hotline@qima.com"
+      ]
+    },
+    {
+      "companyName": "3C Care Systems",
+      "domain": "https://3ccaresystems.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085439734",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085439734",
+      "publicContactEmails": [
+        "info@3ccaresystems.com",
+        "support@3ccaresystems.com"
+      ]
+    },
+    {
+      "companyName": "wingenious.ai",
+      "domain": "https://wingenious.ai",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088109261",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088109261",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "World Programming",
+      "domain": "https://worldprogramming.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085534944",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085534944",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "CIM Industrial Systems",
+      "domain": "https://cim.as",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 84,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085504188",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085504188",
+      "publicContactEmails": [
+        "mse@cim.as",
+        "accounting@cim.as"
+      ]
+    },
+    {
+      "companyName": "RIGHI",
+      "domain": "https://righigroup.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 80,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085678327",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085678327",
+      "publicContactEmails": [
+        "luca.forni@righinet.com"
+      ]
+    },
+    {
+      "companyName": "MIOX",
+      "domain": "https://miox.io",
+      "category": "integrator_general_ai",
+      "relevanceScore": 80,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085440699",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085440699",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Silkwood",
+      "domain": "https://milkwood.dk",
+      "category": "integrator_general_ai",
+      "relevanceScore": 80,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085479654",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085479654",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "XLNC Technologies",
+      "domain": "https://xlnctechnologies.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 80,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085440701",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085440701",
+      "publicContactEmails": [
+        "enquiries@xlnctechnologies.com"
+      ]
+    },
+    {
+      "companyName": "NeverMiss",
+      "domain": "https://nevermisshq.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085164253",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085164253",
+      "publicContactEmails": [
+        "rayhanmahmood@nevermisshq.com"
+      ]
+    },
+    {
+      "companyName": "Pretius",
+      "domain": "https://pretius.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088494321",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088494321",
+      "publicContactEmails": [
+        "mlipinski@pretius.com",
+        "praca@pretius.com"
+      ]
+    },
+    {
+      "companyName": "NELA",
+      "domain": "https://nela-usa.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088732914",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088732914",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Streamline Automation",
+      "domain": "https://streamlineautomation.biz",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088705221",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088705221",
+      "publicContactEmails": [
+        "contact@streamlineautomation.biz"
+      ]
+    },
+    {
+      "companyName": "Industrial Manufacturing",
+      "domain": "https://industrialmfg.net",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430084782320",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430084782320",
+      "publicContactEmails": [
+        "info@industrialmfg.net"
+      ]
+    },
+    {
+      "companyName": "Rees Engineering",
+      "domain": "https://reesengineering.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085734595",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085734595",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Enar AI",
+      "domain": "https://enar.ai",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085617888",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085617888",
+      "publicContactEmails": [
+        "hello@enar.ai",
+        "info@enar.ai"
+      ]
+    },
+    {
+      "companyName": "ROBAT",
+      "domain": "https://robattest.com",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 76,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085330107",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085330107",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Acutek",
+      "domain": "https://acutek.com.mx",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088035573",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088035573",
+      "publicContactEmails": [
+        "contact@acutek.com.mx"
+      ]
+    },
+    {
+      "companyName": "WISEWARE",
+      "domain": "https://wisewaresolutions.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088109266",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088109266",
+      "publicContactEmails": [
+        "info@wisewaresolutions.com",
+        "gustavo.corrente@wisewaresolutions.com",
+        "flavia.silva@wisewaresolutions.com"
+      ]
+    },
+    {
+      "companyName": "Unser",
+      "domain": "https://unserrob.es",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085734596",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085734596",
+      "publicContactEmails": [
+        "santiago.losada@unserrob.es"
+      ]
+    },
+    {
+      "companyName": "Labra AI",
+      "domain": "https://labra.ai",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085330113",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085330113",
+      "publicContactEmails": [
+        "ville.juutilainen@labra.ai"
+      ]
+    },
+    {
+      "companyName": "TriVision",
+      "domain": "https://trivision.dk",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088528062",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088528062",
+      "publicContactEmails": [
+        "trivision@trivision.dk"
+      ]
+    },
+    {
+      "companyName": "DAFO AI",
+      "domain": "https://dafo.ai",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088413374",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088413374",
+      "publicContactEmails": [
+        "hello@dafo.ai"
+      ]
+    },
+    {
+      "companyName": "Any Graphics",
+      "domain": "https://anygraphics.in",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085847285",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085847285",
+      "publicContactEmails": [
+        "support@anygraphics.in",
+        "naveen.goel@anygraphics.in"
+      ]
+    },
+    {
+      "companyName": "Soft Options",
+      "domain": "https://softoptions.net",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085360882",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085360882",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Avitec",
+      "domain": "https://avitec.fr",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085440719",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085440719",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Lerocon",
+      "domain": "https://lerocon.com",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085479669",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085479669",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Stresstech",
+      "domain": "https://stresstech.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085330118",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085330118",
+      "publicContactEmails": [
+        "infousa@stresstech.com",
+        "infode@stresstech.com"
+      ]
+    },
+    {
+      "companyName": "Winged Horse",
+      "domain": "https://whl.co.il",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085646584",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085646584",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Innovative Automations",
+      "domain": "https://innovativeautomations.ai",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085646585",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085646585",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Tomaattinen",
+      "domain": "https://tomaattinen.com",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430087940342",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430087940342",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Perceptron",
+      "domain": "https://perceptron.com",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 48,
+      "existingBefore": false,
+      "hubspotCompanyId": "430088321240",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430088321240",
+      "publicContactEmails": [
+        "bradarms@perceptron.com"
+      ]
+    },
+    {
+      "companyName": "Skilcom",
+      "domain": "https://skilcom.co.uk",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 48,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085249249",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085249249",
+      "publicContactEmails": [
+        "accounts@skilcom.co.uk"
+      ]
+    },
+    {
+      "companyName": "Active Silicon",
+      "domain": "https://activesilicon.com",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 48,
+      "existingBefore": false,
+      "hubspotCompanyId": "430085360885",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430085360885",
+      "publicContactEmails": [
+        "sales.us@activesilicon.com",
+        "info@activesilicon.com"
+      ]
+    }
+  ],
+  "crawlFailures": [
+    {
+      "companyName": "View Engineering",
+      "domain": "https://viewengineering.com"
+    },
+    {
+      "companyName": "Anritsu",
+      "domain": "https://anritsu.com"
+    },
+    {
+      "companyName": "Advantage Ai Consulting",
+      "domain": "https://advantageaiconsulting.co.uk"
+    },
+    {
+      "companyName": "Robustech",
+      "domain": "https://robustech.sk"
+    },
+    {
+      "companyName": "PropagenAI",
+      "domain": "https://propagen.ai"
+    },
+    {
+      "companyName": "Addiva AI",
+      "domain": "https://addiva.se"
+    },
+    {
+      "companyName": "Baumer",
+      "domain": "https://baumer.com"
+    },
+    {
+      "companyName": "House of Design",
+      "domain": "https://thehouseofdesign.com"
+    },
+    {
+      "companyName": "Steinbichler UK",
+      "domain": "https://steinbichler.co.uk"
+    },
+    {
+      "companyName": "ANM Services",
+      "domain": "https://anm-us.com/welcome"
+    },
+    {
+      "companyName": "Delta Logix",
+      "domain": "https://deltalogix.co.uk"
+    },
+    {
+      "companyName": "Alice Labs AI",
+      "domain": "https://alicelabs.ai"
+    },
+    {
+      "companyName": "Premier Group Manufacturing (Coventry)",
+      "domain": "https://pgmanufacturing.co.uk"
+    },
+    {
+      "companyName": "PCS Industries",
+      "domain": "https://pcs-industries.co.uk"
+    },
+    {
+      "companyName": "FabriqaX",
+      "domain": "https://fabriqax.com"
+    },
+    {
+      "companyName": "NILDE engineering",
+      "domain": "https://nilde.se"
+    },
+    {
+      "companyName": "Express Manufacturing",
+      "domain": "https://eminc.com"
+    },
+    {
+      "companyName": "Looming Technologies",
+      "domain": "https://sglooming.com"
+    },
+    {
+      "companyName": "SWIFT GLOBAL ENERGY SERVICES",
+      "domain": "https://swiftglobalenergyservices.com"
+    },
+    {
+      "companyName": "Quality Testing Services",
+      "domain": "https://qualitytesting.com"
+    },
+    {
+      "companyName": "CLO Consulting",
+      "domain": "https://clo.cl"
+    },
+    {
+      "companyName": "Mekkanos",
+      "domain": "https://mekkanos.com"
+    },
+    {
+      "companyName": "Advanced NDT Solutions",
+      "domain": "https://ansndt.com"
+    },
+    {
+      "companyName": "Forta PRO",
+      "domain": "https://fortapro.com"
+    },
+    {
+      "companyName": "Optovue",
+      "domain": "https://optovue.com"
+    },
+    {
+      "companyName": "RPA Resourcing",
+      "domain": "https://rparesourcing.co.uk"
+    },
+    {
+      "companyName": "Randeria & Co",
+      "domain": "https://randeria.co.uk"
+    },
+    {
+      "companyName": "Visual Atoms",
+      "domain": "https://visualatoms.com"
+    },
+    {
+      "companyName": "INSPECTIA",
+      "domain": "https://inspectia.no"
+    },
+    {
+      "companyName": "MachineBlack",
+      "domain": "https://machineblack.com"
+    },
+    {
+      "companyName": "Platinum Engineering Solutions",
+      "domain": "https://platinum-engineering.co.uk"
+    },
+    {
+      "companyName": "Moses Technologies",
+      "domain": "https://mosestechnologies.ai"
+    },
+    {
+      "companyName": "HEBEI YUNHE TEXTILE CO.",
+      "domain": "https://yhbdc-china.com"
+    },
+    {
+      "companyName": "RHEMAENERGI",
+      "domain": "https://rhemaenergi.com"
+    },
+    {
+      "companyName": "KOBRO",
+      "domain": "https://kobros-tech.com"
+    },
+    {
+      "companyName": "The Discovery House",
+      "domain": "https://thediscoveryhouse.com"
+    },
+    {
+      "companyName": "Devionics.io",
+      "domain": "https://devionics.io"
+    },
+    {
+      "companyName": "Nanofoot Finland",
+      "domain": "https://nanofoot.fi"
+    },
+    {
+      "companyName": "Physical Digital",
+      "domain": "https://physicaldigital.com"
+    },
+    {
+      "companyName": "Phoenix Imaging",
+      "domain": "https://phoeniximaging.com"
+    },
+    {
+      "companyName": "D Fashion",
+      "domain": "https://dfashionbd.com"
+    },
+    {
+      "companyName": "Sheen Instruments",
+      "domain": "https://sheeninstruments.com"
+    },
+    {
+      "companyName": "evaster clothing",
+      "domain": "https://evaster.net"
+    },
+    {
+      "companyName": "Quality Select",
+      "domain": "https://amigoselect.de"
+    },
+    {
+      "companyName": "S.D ENGINEERS",
+      "domain": "https://sdengineers.in"
+    }
+  ]
+}

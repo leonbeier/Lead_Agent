@@ -5,6 +5,7 @@ import { env } from "../config";
 import { buildSuggestedFilters, extractExplicitMarketLocality, isGermanyFocusedMarket } from "../filters";
 import { ApolloClient } from "../clients/apollo";
 import { AzureOpenAIClient } from "../clients/azure-openai";
+import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { ControlPlaneStore } from "../control-plane";
 import {
@@ -76,6 +77,8 @@ const WEB_SEARCH_MAX_RAW_PROBE_COUNT = 20;
 const WEB_SEARCH_TOP_UP_SAMPLE_MULTIPLIER = 8;
 const WEB_SEARCH_TOP_UP_MIN_SAMPLE_SIZE = 12;
 const WEB_SEARCH_TOP_UP_MAX_PAGES = 3;
+const MIN_USER_CONCURRENCY = 1;
+const MAX_USER_CONCURRENCY = 32;
 
 type ProbedFilterCandidate = {
   filter: ApolloOrganizationFilter;
@@ -190,6 +193,8 @@ export class LeadPipelineAgent {
 
   private readonly azureClient = new AzureOpenAIClient();
 
+  private readonly exaPreviewClient = new ExaSearchClient();
+
   private readonly hubspotClient = new HubSpotClient();
 
   private readonly controlPlaneStore = new ControlPlaneStore();
@@ -197,6 +202,12 @@ export class LeadPipelineAgent {
   private companyScreeningDatabase: CompanyScreeningDatabase = { records: [] };
 
   private discoveryCheckpointContext?: { runId: string; nextSequence: number };
+
+  private aiPrefilterConcurrency = AZURE_WORKER_CONCURRENCY;
+
+  private outreachPrepConcurrency = AZURE_WORKER_CONCURRENCY;
+
+  private contactSearchConcurrency = CONTACT_DISCOVERY_CONCURRENCY;
 
   async run(request: LeadJobRequest, options?: LeadPipelineRunOptions): Promise<LeadJobResult> {
     const emitProgress = (progress: Omit<LeadRunProgress, "updatedAt">) => {
@@ -217,6 +228,9 @@ export class LeadPipelineAgent {
     const hasTimedOut = () => Date.now() >= deadlineAt;
     const shouldFinishEarly = () => wasStopped() || hasTimedOut();
     this.discoveryCheckpointContext = { runId: this.createDiscoveryCheckpointRunId(), nextSequence: 0 };
+    this.aiPrefilterConcurrency = this.resolveConcurrency(request.aiPrefilterConcurrency, AZURE_WORKER_CONCURRENCY);
+    this.outreachPrepConcurrency = this.resolveConcurrency(request.outreachPrepConcurrency, AZURE_WORKER_CONCURRENCY);
+    this.contactSearchConcurrency = this.resolveConcurrency(request.contactSearchConcurrency, CONTACT_DISCOVERY_CONCURRENCY);
     const useWebSearchCompanyDiscovery = companySearchMode !== "apollo_search";
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
     const mainContext = request.mainContext ?? request.agentContext;
@@ -240,6 +254,10 @@ export class LeadPipelineAgent {
         );
     const prequalification = request.prequalification ?? (request.prequalificationContext ? { mainContext: request.prequalificationContext } : undefined);
     this.companyScreeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
+    const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false
+      ? []
+      : this.getCachedQualifiedCompanies(targetCategories, request.market, request.targetLeadCount);
+    this.apolloClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
     await this.preloadKnownHubSpotDomains(disableHubSpotDeduplication);
     let suggestedFilters = this.orderFiltersByLearning(
       await this.getSuggestedFilters(
@@ -258,11 +276,15 @@ export class LeadPipelineAgent {
     );
     emitProgress({
       stage: "screening_filters",
-      stageLabel: "Filter werden bewertet",
+      stageLabel: companySearchMode === "exa_search" ? "Exa sammelt Rohfirmen" : "Filter werden bewertet",
       progressValue: 10,
       progressMax: 100,
-      progressDescription: `0 von ${suggestedFilters.length} Filtern bewertet`,
-      detail: "Der Lead Agent prueft jetzt die Suchfilter und sammelt erste Kandidaten.",
+      progressDescription: companySearchMode === "exa_search"
+        ? "Exa sammelt jetzt rohe Firmenkandidaten fuer die KI-Pruefung."
+        : `0 von ${suggestedFilters.length} Filtern bewertet`,
+      detail: companySearchMode === "exa_search"
+        ? "Der Lead Agent startet jetzt rohe Exa-Suchen und uebergibt alle Treffer an die KI-Kategorisierung."
+        : "Der Lead Agent prueft jetzt die Suchfilter und sammelt erste Kandidaten.",
       processedFilters: 0,
       totalFilters: suggestedFilters.length,
       foundCandidates: 0,
@@ -295,7 +317,10 @@ export class LeadPipelineAgent {
     const contactCandidatesByCompany = new Map<string, PublicContactCandidate[]>();
     const flushedQualifiedCompanyKeys = new Set<string>();
     const getCompletionCount = () => targetSynchronizedCompanies ? incrementalHubspotSync.companySyncedCount : shortlistedCompanies.length;
-    const hasReachedRequestedTarget = () => getCompletionCount() >= request.targetLeadCount;
+    const getTargetProgressCount = () => companySearchMode === "exa_search"
+      ? this.apolloClient.getDiscoveryMetrics(companySearchMode).acceptedCompanyDomains
+      : getCompletionCount();
+    const hasReachedRequestedTarget = () => getTargetProgressCount() >= request.targetLeadCount;
 
     const finalizeInterruptedRun = async (shortlisted: PreCategorizedCompany[], errorMessage: string) => {
       await flushQualifiedCompanies(shortlisted, shortlisted.length);
@@ -333,6 +358,27 @@ export class LeadPipelineAgent {
         .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
         .filter((brief): brief is ResearchBrief => Boolean(brief));
 
+    const cachedAdded = this.addUniqueCompanies(shortlistedCompanies, cachedQualifiedCompanies, shortlistedKeys);
+    if (cachedAdded > 0) {
+      for (const company of shortlistedCompanies) {
+        hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company));
+        categoryCounts.set(company.category, (categoryCounts.get(company.category) ?? 0) + 1);
+      }
+
+      emitProgress({
+        stage: "screening_filters",
+        stageLabel: "Cache-Treffer werden uebernommen",
+        progressValue: 12,
+        progressMax: 100,
+        progressDescription: `${cachedAdded} bereits bekannte Firmen direkt aus dem Cache uebernommen`,
+        detail: "Passend kategorisierte Firmen aus frueheren Runs wurden ohne neue Exa-Suche wiederverwendet.",
+        processedFilters: 0,
+        totalFilters: suggestedFilters.length,
+        foundCandidates: shortlistedCompanies.length,
+        targetLeadCount: request.targetLeadCount
+      });
+    }
+
     const flushQualifiedCompanies = async (companies: PreCategorizedCompany[], shortlistCount: number) => {
       const pendingCompanies = companies.filter((company) => !flushedQualifiedCompanyKeys.has(this.getCompanyKey(company)));
       if (pendingCompanies.length === 0) {
@@ -365,8 +411,11 @@ export class LeadPipelineAgent {
           : `${pendingCompanies.length} neue Firmen werden direkt recherchiert, mit Kontakten angereichert und nach HubSpot geschrieben.`
       );
 
-      emitSyncPreparationProgress(40, `Research-Briefs und Website-Kontakte werden parallel fuer ${pendingCompanies.length} Firmen vorbereitet.`);
-
+      if (companySearchMode === "exa_search") {
+        emitSyncPreparationProgress(40, `Research-Briefs und Website-Kontakte werden parallel fuer ${pendingCompanies.length} neue Firmen im aktuellen Sync-Block vorbereitet. Insgesamt aktuell ${shortlistCount} qualifiziert.`);
+      } else {
+        emitSyncPreparationProgress(40, `Research-Briefs und Website-Kontakte werden parallel fuer ${pendingCompanies.length} Firmen vorbereitet.`);
+      }
       const [preparedResearchEntries, publicContacts] = await Promise.all([
         dryRun
           ? Promise.resolve([])
@@ -377,7 +426,7 @@ export class LeadPipelineAgent {
                   includeWebResearch: request.runDeepResearch !== false
                 })
               })),
-              AZURE_WORKER_CONCURRENCY
+              this.outreachPrepConcurrency
             ),
         this.collectPublicContacts(pendingCompanies, dryRun)
       ]);
@@ -456,10 +505,12 @@ export class LeadPipelineAgent {
       const totalFilters = Math.max(suggestedFilters.length, processedFilters || 1);
       emitProgress({
         stage: "screening_filters",
-        stageLabel: "Filter werden bewertet",
+        stageLabel: companySearchMode === "exa_search" ? "Exa sammelt Rohfirmen" : "Filter werden bewertet",
         progressValue: Math.min(70, 10 + Math.round((processedFilters / totalFilters) * 60)),
         progressMax: 100,
-        progressDescription: `${processedFilters} von ${totalFilters} Filtern bewertet`,
+        progressDescription: companySearchMode === "exa_search"
+          ? "Exa liefert weitere Rohfirmen, die KI prueft laufend die Websites."
+          : `${processedFilters} von ${totalFilters} Filtern bewertet`,
         detail,
         processedFilters,
         totalFilters,
@@ -481,9 +532,10 @@ export class LeadPipelineAgent {
       nextFilterIndex: 0
     }));
     let filterReplenishmentRounds = 0;
+    const useHeuristicFilterOrchestration = companySearchMode === "apollo_search";
 
     while (!hasReachedRequestedTarget() && !shouldFinishEarly()) {
-      const remainingTargetCount = Math.max(1, request.targetLeadCount - getCompletionCount());
+      const remainingTargetCount = Math.max(1, request.targetLeadCount - getTargetProgressCount());
       const parallelFilterProbeCount = this.getParallelFilterProbeCount(companySearchMode, remainingTargetCount);
       const filtersToExpandAfterProbe = this.getFiltersToExpandAfterProbe(companySearchMode, remainingTargetCount);
       const nextCategoryState = categoryStates
@@ -501,6 +553,11 @@ export class LeadPipelineAgent {
         })[0];
 
       if (!nextCategoryState) {
+        if (!useHeuristicFilterOrchestration) {
+          completionReason = `Die Suche endete, weil alle ${suggestedFilters.length} Filter im direkten Ablauf verarbeitet wurden.`;
+          break;
+        }
+
         const additionalFilters = await this.replenishExhaustedFilters(
           suggestedFilters,
           evaluations,
@@ -533,6 +590,115 @@ export class LeadPipelineAgent {
         emitFilterProgress(
           `${replenishedFilters.length} neue Filter wurden nachgeneriert, weil die bisherige Liste ausgeschoepft war.`
         );
+        continue;
+      }
+
+      if (!useHeuristicFilterOrchestration) {
+        const filter = nextCategoryState.filters[nextCategoryState.nextFilterIndex];
+        nextCategoryState.nextFilterIndex += 1;
+
+        if (!filter) {
+          continue;
+        }
+
+        emitFilterProgress(
+          companySearchMode === "exa_search"
+            ? `Starte Roh-Exa-Suchlauf fuer ${this.describeLeadCategory(nextCategoryState.category)}.`
+            : `Starte direkten Suchlauf fuer ${this.describeLeadCategory(nextCategoryState.category)} mit Filter "${filter.name}".`
+        );
+
+        const candidate = await this.probeFilterCandidate(
+          filter,
+          nextCategoryState.category,
+          dryRun,
+          syncToHubSpot,
+          mainContext,
+          prequalification,
+          targetCategories,
+          learning,
+          request.market,
+          webRawProbeCount,
+          earlyStopReviewCount,
+          earlyStopThreshold,
+          companySearchMode,
+          useWebSearchCompanyDiscovery,
+          disableHubSpotDeduplication,
+          openCrawlerTuning,
+          emitFilterProgress
+        );
+
+        const shortlistLengthBeforeProbe = shortlistedCompanies.length;
+        const addedFromProbe = this.addUniqueCompanies(shortlistedCompanies, candidate.initialRelevant, shortlistedKeys);
+        categoryCounts.set(nextCategoryState.category, (categoryCounts.get(nextCategoryState.category) ?? 0) + addedFromProbe);
+        searchHistory.push(
+          this.buildSearchHistoryEntry(
+            request.companySearchMode ?? "internet_research",
+            candidate.filter.name,
+            nextCategoryState.category,
+            "probe_15",
+            candidate.useWebSearchForExpansion ? 1 : candidate.apolloExpansionPage - 1,
+            earlyStopReviewCount,
+            candidate.categorizedInitialSample,
+            candidate.filter,
+            targetCategories,
+            request.market,
+            earlyStopThreshold,
+            candidate.sampleDiagnostics
+          )
+        );
+
+        emitFilterProgress(
+          companySearchMode === "exa_search"
+            ? `Roh-Exa-Suchlauf fuer ${this.describeLeadCategory(nextCategoryState.category)}: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} passend (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}.`
+            : `Direkter Lauf fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}.`
+        );
+
+        await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeProbe), shortlistedCompanies.length);
+
+        if ((categoryCounts.get(nextCategoryState.category) ?? 0) < nextCategoryState.categoryTarget && !hasReachedRequestedTarget()) {
+          const shortlistLengthBeforeExpansion = shortlistedCompanies.length;
+          const expansionOutcome = await this.expandProbedFilter(
+            candidate,
+            request,
+            dryRun,
+            mainContext,
+            prequalification,
+            targetCategories,
+            learning,
+            disableHubSpotDeduplication,
+            nextCategoryState.categoryTarget,
+            categoryCounts,
+            shortlistedCompanies,
+            shortlistedKeys,
+            searchHistory,
+            earlyStopReviewCount,
+            earlyStopThreshold,
+            earlyStopMinRelevantCount,
+            minimumCompaniesBeforeFilterGiveUp,
+            openCrawlerTuning,
+            emitFilterProgress,
+            getCompletionCount,
+            hasReachedRequestedTarget
+          );
+
+          evaluations.push(expansionOutcome.evaluation);
+          if (expansionOutcome.stoppedEarly) {
+            filtersStoppedEarly += 1;
+            companiesSkippedAfterEarlyStop += expansionOutcome.skippedAfterEarlyStop;
+          }
+
+          await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeExpansion), shortlistedCompanies.length);
+        } else {
+          evaluations.push(candidate.initialEvaluation);
+        }
+
+        if (this.shouldAbortLowYieldExaRun(companySearchMode, evaluations.length, shortlistedCompanies.length)) {
+          return finalizeInterruptedRun(
+            shortlistedCompanies,
+            "Run was stopped early because Exa discovery kept crawling results without producing qualified companies."
+          );
+        }
+
         continue;
       }
 
@@ -766,7 +932,9 @@ export class LeadPipelineAgent {
     await flushQualifiedCompanies(toppedUpShortlist.slice(sortedShortlist.length), toppedUpShortlist.length);
 
     if (!hasReachedRequestedTarget() && !shouldFinishEarly() && !completionReason) {
-      completionReason = `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} getesteten Filtern und ausgeschopfter Top-up-Suche mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`;
+      completionReason = companySearchMode === "exa_search"
+        ? `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} Roh-Exa-Suchlaeufen mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`
+        : `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} getesteten Filtern und ausgeschopfter Top-up-Suche mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`;
     }
     const filteredShortlist = await this.excludeExistingHubSpotDomains(
       toppedUpShortlist,
@@ -928,8 +1096,11 @@ export class LeadPipelineAgent {
   ): Promise<ProbedFilterCandidate> {
     const reviewedCompanies: PreCategorizedCompany[] = [];
     const probeSourceLabel = this.getDiscoverySourceLabel(useWebSearchCompanyDiscovery ? companySearchMode : "apollo_search");
+    const exaQueryPreview = this.buildExaQueryPreview(filter);
+    const rawSearchProbeMessage = `Starte rohe Exa-Suche fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}${exaQueryPreview ? `, Exa-Query \"${exaQueryPreview}\"` : ""}. Es werden bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} roh gesammelt und danach von der KI kategorisiert.`;
+    const filterProbeMessage = `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} startet.`;
     emitFilterProgress(
-      `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} startet.`
+      companySearchMode === "exa_search" ? rawSearchProbeMessage : filterProbeMessage
     );
 
     let useWebSearchForExpansion = useWebSearchCompanyDiscovery;
@@ -958,9 +1129,7 @@ export class LeadPipelineAgent {
             webSearchRawCollectionMultiplier: openCrawlerTuning?.rawCollectionMultiplier
           }
         : undefined,
-      () => emitFilterProgress(
-        `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} startet.`
-      )
+      () => emitFilterProgress(companySearchMode === "exa_search" ? rawSearchProbeMessage : filterProbeMessage)
     );
     const probeSample = probeFetch.companies;
     apolloExpansionPage = probeFetch.nextPage;
@@ -1009,7 +1178,9 @@ export class LeadPipelineAgent {
               }
             : undefined,
           () => emitFilterProgress(
-            `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${webFallbackSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${webRawProbeCount} Web-Sites startet.`
+            companySearchMode === "exa_search"
+              ? `Starte rohe Exa-Suche fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${webFallbackSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}${exaQueryPreview ? `, Exa-Query \"${exaQueryPreview}\"` : ""}. Es werden bis zu ${webRawProbeCount} Web-Sites roh gesammelt und danach von der KI kategorisiert.`
+              : `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${webFallbackSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${webRawProbeCount} Web-Sites startet.`
           )
         );
         const categorizedWebFallbackProbe = await this.categorizeCompanies(
@@ -1085,6 +1256,7 @@ export class LeadPipelineAgent {
   ): Promise<ExpandedFilterOutcome> {
     const reviewedCompanies = [...candidate.reviewedCompanies];
     let apolloExpansionPage = candidate.apolloExpansionPage;
+    const isRawExaSearch = request.companySearchMode === "exa_search";
 
     if (
       candidate.useWebSearchForExpansion &&
@@ -1097,7 +1269,9 @@ export class LeadPipelineAgent {
         recommendation: `${candidate.initialEvaluation.recommendation} Web expansion stopped because the initial probe found no relevant companies.`
       };
       emitFilterProgress(
-        `Filter "${candidate.filter.name}" frueh gestoppt nach Web-Probe: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant, Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}.`
+        isRawExaSearch
+          ? `Roh-Exa-Suchlauf frueh gestoppt nach KI-Pruefung: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} passend, Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}.`
+          : `Filter "${candidate.filter.name}" frueh gestoppt nach Web-Probe: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant, Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}.`
       );
 
       return {
@@ -1121,7 +1295,9 @@ export class LeadPipelineAgent {
         recommendation: `${candidate.initialEvaluation.recommendation} Early stop triggered after ${candidate.categorizedInitialSample.length} reviews and fewer than ${earlyStopMinRelevantCount} relevant firms.`
       };
       emitFilterProgress(
-        `Filter "${candidate.filter.name}" frueh gestoppt: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%). Bisher ${shortlistedCompanies.length}/${request.targetLeadCount} Ziel-Firmen gesammelt.`
+        isRawExaSearch
+          ? `Roh-Exa-Suchlauf frueh gestoppt: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} passend (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%). Bisher ${shortlistedCompanies.length}/${request.targetLeadCount} Ziel-Firmen gesammelt.`
+          : `Filter "${candidate.filter.name}" frueh gestoppt: ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%). Bisher ${shortlistedCompanies.length}/${request.targetLeadCount} Ziel-Firmen gesammelt.`
       );
 
       return {
@@ -1163,7 +1339,9 @@ export class LeadPipelineAgent {
             }
           : undefined,
         () => emitFilterProgress(
-          `Filter "${candidate.filter.name}" wird weiter ausgebaut. Seite ${requestedPage}, Batch ${expansionBatchSize}, aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
+          isRawExaSearch
+            ? `Roh-Exa-Suchlauf wird erweitert. Seite ${requestedPage}, Batch ${expansionBatchSize}, aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
+            : `Filter "${candidate.filter.name}" wird weiter ausgebaut. Seite ${requestedPage}, Batch ${expansionBatchSize}, aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
         )
       );
       const expandedSample = expandedFetch.companies;
@@ -1237,7 +1415,9 @@ export class LeadPipelineAgent {
           recommendation: `${cumulativeEvaluation.recommendation} Expansion stopped because stronger filters are outperforming it.`
         };
         emitFilterProgress(
-          `Filter "${candidate.filter.name}" frueh gestoppt waehrend Expansion: ${evaluation.relevantCount}/${evaluation.totalReviewed} relevant (${Math.round(evaluation.relevanceRatio * 100)}%).`
+          isRawExaSearch
+            ? `Roh-Exa-Suchlauf waehrend Erweiterung frueh gestoppt: ${evaluation.relevantCount}/${evaluation.totalReviewed} passend (${Math.round(evaluation.relevanceRatio * 100)}%).`
+            : `Filter "${candidate.filter.name}" frueh gestoppt waehrend Expansion: ${evaluation.relevantCount}/${evaluation.totalReviewed} relevant (${Math.round(evaluation.relevanceRatio * 100)}%).`
         );
 
         return {
@@ -1267,7 +1447,9 @@ export class LeadPipelineAgent {
       false
     );
     emitFilterProgress(
-      `Filter "${candidate.filter.name}" abgeschlossen: ${evaluation.relevantCount}/${evaluation.totalReviewed} relevant (${Math.round(evaluation.relevanceRatio * 100)}%). Aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
+      isRawExaSearch
+        ? `Roh-Exa-Suchlauf abgeschlossen: ${evaluation.relevantCount}/${evaluation.totalReviewed} passend (${Math.round(evaluation.relevanceRatio * 100)}%). Aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
+        : `Filter "${candidate.filter.name}" abgeschlossen: ${evaluation.relevantCount}/${evaluation.totalReviewed} relevant (${Math.round(evaluation.relevanceRatio * 100)}%). Aktuell ${getCompletionCount()}/${request.targetLeadCount} Ziel-Firmen erreicht.`
     );
 
     return {
@@ -1288,6 +1470,10 @@ export class LeadPipelineAgent {
     learning?: LeadLearningData,
     companySearchMode?: import("../types").CompanySearchMode
   ) {
+    if (companySearchMode === "exa_search") {
+      return this.buildRawExaSearchFilters(market, customGoal, targetCategories);
+    }
+
     const baselineFilters = buildSuggestedFilters(market, customGoal)
       .filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
     const modeAdjustedBaselineFilters = companySearchMode === "open_crawler_search"
@@ -1316,6 +1502,43 @@ export class LeadPipelineAgent {
 
     return [...modeAdjustedBaselineFilters, ...generatedFilters.filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories))]
       .filter((filter, index, all) => all.findIndex((candidate) => candidate.name === filter.name) === index);
+  }
+
+  private buildRawExaSearchFilters(
+    market: string | undefined,
+    customGoal: string | undefined,
+    targetCategories: LeadCategory[]
+  ): ApolloOrganizationFilter[] {
+    const baselineFilters = buildSuggestedFilters(market, customGoal)
+      .filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
+    const filters: ApolloOrganizationFilter[] = [];
+
+    for (const targetCategory of targetCategories) {
+      const match = baselineFilters.find((filter) => {
+        const filterCategories = filter.targetCategories?.length ? filter.targetCategories : this.inferTargetCategories(filter.name);
+        return filterCategories.includes(targetCategory);
+      });
+
+      if (!match) {
+        continue;
+      }
+
+      filters.push({
+        ...match,
+        name: `Raw Exa Search - ${targetCategory}`,
+        notes: `${match.notes} Raw Exa discovery scaffold for ${targetCategory}. Forward every Exa result directly to AI categorization before any category-based exclusion.`
+      });
+    }
+
+    if (filters.length > 0) {
+      return filters;
+    }
+
+    return baselineFilters.slice(0, 1).map((filter) => ({
+      ...filter,
+      name: "Raw Exa Search",
+      notes: `${filter.notes} Raw Exa discovery scaffold. Forward every Exa result directly to AI categorization before any category-based exclusion.`
+    }));
   }
 
   private prioritizeFiltersForOpenCrawler(
@@ -1602,15 +1825,10 @@ export class LeadPipelineAgent {
               learning
             );
 
-        const resolvedCategorization = dryRun
-          ? {
-              ...company,
-              ...this.enforceIndustrialFit(company, categorization)
-            }
-          : {
-              ...company,
-              ...categorization
-            };
+        const resolvedCategorization = {
+          ...company,
+          ...this.enforceIndustrialFit(company, categorization)
+        };
         const normalizedCategorization = this.normalizeCompanyIdentity(resolvedCategorization);
 
         this.upsertCompanyScreeningRecord(normalizedCategorization, {
@@ -1621,8 +1839,16 @@ export class LeadPipelineAgent {
 
         return normalizedCategorization;
       }),
-      AZURE_WORKER_CONCURRENCY
+      this.aiPrefilterConcurrency
     );
+  }
+
+  private resolveConcurrency(requested: number | undefined, fallback: number): number {
+    if (typeof requested !== "number" || !Number.isFinite(requested)) {
+      return Math.min(MAX_USER_CONCURRENCY, Math.max(MIN_USER_CONCURRENCY, fallback));
+    }
+
+    return Math.min(MAX_USER_CONCURRENCY, Math.max(MIN_USER_CONCURRENCY, Math.round(requested)));
   }
 
   private prequalifyLocally(
@@ -2069,6 +2295,31 @@ export class LeadPipelineAgent {
       "manufacturing",
       "process automation"
     ];
+    const strongIndustrialSignals = [
+      "industrial automation",
+      "automatisierungstechnik",
+      "automation solutions",
+      "automation engineering",
+      "steuerungs- und antriebstechnik",
+      "control and drive technology",
+      "control systems integration",
+      "machine vision",
+      "bildverarbeitung",
+      "industrielle bildverarbeitung",
+      "factory",
+      "manufacturing",
+      "warehouse automation",
+      "production automation",
+      "process control",
+      "scada",
+      "plc",
+      "robot programming",
+      "commissioning",
+      "sondermaschinen",
+      "special machine",
+      "anlagenbau",
+      "machine builder"
+    ];
     const clearlyBadSignals = [
       "magazine",
       "magazin",
@@ -2143,6 +2394,8 @@ export class LeadPipelineAgent {
       "content creator",
       "commercial production",
       "vfx",
+      "animation",
+      "pipeline solutions",
       "storytelling"
     ];
     const clinicalSoftwareSignals = [
@@ -2170,6 +2423,10 @@ export class LeadPipelineAgent {
       "system integrator",
       "systems integrator",
       "integration services",
+      "automation solutions",
+      "automation engineering",
+      "control and drive technology",
+      "engineering partner",
       "software services",
       "software development",
       "software engineering",
@@ -2178,14 +2435,26 @@ export class LeadPipelineAgent {
       "engineering services",
       "solution provider",
       "implementation",
+      "general contractor",
+      "turnkey solutions",
+      "turnkey projects",
       "mes integration",
       "mes system integrator",
       "scada integration",
       "scada system integrator",
       "plc software integration",
+      "plc programming",
       "ot integration",
       "industrial software",
       "manufacturing software",
+      "electrical engineering",
+      "mechanical engineering",
+      "electrical construction",
+      "control cabinet",
+      "control cabinet construction",
+      "robot programming",
+      "assembly",
+      "inbetriebnahme",
       "smart factory",
       "process control",
       "commissioning",
@@ -2194,10 +2463,90 @@ export class LeadPipelineAgent {
       "kundenspezifisch",
       "systemintegration"
     ];
+    const explicitAISignals = [
+      "artificial intelligence",
+      "machine learning",
+      "deep learning",
+      "predictive analytics",
+      "predictive maintenance",
+      "data science",
+      "neural network",
+      "large language model",
+      "llm"
+    ];
+    const visionSignals = [
+      "computer vision",
+      "machine vision",
+      "vision ai",
+      "bildverarbeitung",
+      "industrielle bildverarbeitung",
+      "inspection",
+      "visual inspection",
+      "quality inspection",
+      "aoi",
+      "camera"
+    ];
+    const industrialVerticalSignals = [
+      "industrial",
+      "automation",
+      "automatisierung",
+      "embedded",
+      "mes",
+      "scada",
+      "plc",
+      "factory",
+      "manufacturing",
+      "process control",
+      "robotics",
+      "instrumentation",
+      "semiconductor",
+      "medtech",
+      "defence"
+    ];
+    const genericSoftwareConsultingSignals = [
+      "software consulting",
+      "consulting services",
+      "professional services",
+      "software and engineering services",
+      "technical expert",
+      "application software developer",
+      "firmware developer",
+      "os porting specialist",
+      "device driver",
+      "software architect",
+      "sap",
+      "embedded systems",
+      "embedded software services",
+      "design engineering",
+      "cybersecurity",
+      "smooth development processes",
+      "resource augmentation"
+    ];
+    const hasExplicitAI = explicitAISignals.some((signal) => text.includes(signal)) || /\bai\b/.test(text);
+    const hasVisionSignals = visionSignals.some((signal) => text.includes(signal));
+    const hasIndustrialVerticalSignals = industrialVerticalSignals.some((signal) => text.includes(signal));
+    const hasStrongIndustrialSignals = strongIndustrialSignals.some((signal) => text.includes(signal));
+    const genericSoftwareConsultingHits = genericSoftwareConsultingSignals.filter((signal) => text.includes(signal)).length;
     const productVendorSignals = [
       "manufacturer",
       "manufacturer",
       "oem",
+      "product portfolio",
+      "camera systems",
+      "intelligent camera systems",
+      "line scan cameras",
+      "lighting systems",
+      "gpu computing",
+      "high-performance systems",
+      "high performance computing",
+      "servers",
+      "server",
+      "workstation",
+      "dgx",
+      "robot fleet orchestration",
+      "its own software",
+      "own software",
+      "patent-pending",
       "industrial cameras",
       "machine vision cameras",
       "camera technology",
@@ -2216,6 +2565,39 @@ export class LeadPipelineAgent {
       "hardware platform",
       "product portfolio",
       "autonomous robot"
+    ];
+    const cameraVendorSignals = [
+      "camera systems",
+      "intelligent camera systems",
+      "industrial cameras",
+      "machine vision cameras",
+      "line scan cameras",
+      "lighting systems",
+      "camera technology",
+      "vision sensor",
+      "industrial image processing"
+    ];
+    const softwarePlatformSignals = [
+      "software platform",
+      "platform",
+      "sdk",
+      "development platform",
+      "software stack",
+      "toolchain",
+      "modules",
+      "scan modules",
+      "plugin",
+      "plugins",
+      "toolbox",
+      "hmi auto-generation",
+      "integrated data platform",
+      "autonomous software modules",
+      "runtime",
+      "api",
+      "app developers integrate",
+      "other app developers",
+      "customers embed",
+      "workflow"
     ];
     const knownManufacturerSignals = [
       "omron",
@@ -2239,6 +2621,9 @@ export class LeadPipelineAgent {
       "products",
       "services"
     ]);
+    const cameraVendorHits = cameraVendorSignals.filter((signal) => text.includes(signal)).length;
+    const softwarePlatformHits = softwarePlatformSignals.filter((signal) => text.includes(signal)).length;
+    const productVendorHits = productVendorSignals.filter((signal) => text.includes(signal)).length;
 
     if (clearlyBadSignals.some((signal) => text.includes(signal))) {
       return {
@@ -2296,7 +2681,35 @@ export class LeadPipelineAgent {
       (categorization.category === "integrator_vision_industrial_ai" ||
         categorization.category === "integrator_general_ai" ||
         categorization.category === "integrator_relevant_focus") &&
-      (productVendorSignals.some((signal) => text.includes(signal)) || knownManufacturerSignals.some((signal) => text.includes(signal))) &&
+      cameraVendorHits >= 1 &&
+      (!serviceSignals.some((signal) => text.includes(signal)) || /(manufactur|line scan cameras|lighting systems|oem)/.test(text))
+    ) {
+      return {
+        category: "camera_manufacturer_partner",
+        relevanceScore: Math.min(categorization.relevanceScore, 45),
+        rationale: "Company looks more like a camera or imaging product vendor than a delivery-led integrator."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_vision_industrial_ai" ||
+        categorization.category === "integrator_general_ai" ||
+        categorization.category === "integrator_relevant_focus") &&
+      softwarePlatformHits >= 2 &&
+      (!serviceSignals.some((signal) => text.includes(signal)) || /(sdk|software platform|development platform|software stack|toolchain|toolbox|plugin|modules)/.test(text))
+    ) {
+      return {
+        category: "software_platform_embedding",
+        relevanceScore: Math.min(categorization.relevanceScore, 54),
+        rationale: "Company looks like a productized software platform or SDK surface that customers embed into their own workflows."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_vision_industrial_ai" ||
+        categorization.category === "integrator_general_ai" ||
+        categorization.category === "integrator_relevant_focus") &&
+      (productVendorHits >= 1 || knownManufacturerSignals.some((signal) => text.includes(signal))) &&
       !serviceSignals.some((signal) => text.includes(signal))
     ) {
       return {
@@ -2326,12 +2739,54 @@ export class LeadPipelineAgent {
 
     if (
       (categorization.category === "integrator_vision_industrial_ai" || categorization.category === "integrator_general_ai") &&
-      !industrialSignals.some((signal) => text.includes(signal))
+      !hasStrongIndustrialSignals
     ) {
       return {
         category: "other",
         relevanceScore: Math.min(categorization.relevanceScore, 35),
         rationale: "Company may have software or AI capability, but the profile lacks clear industrial, automation, or vision-delivery signals."
+      };
+    }
+
+    if (
+      categorization.category === "integrator_general_ai" &&
+      !hasExplicitAI &&
+      hasIndustrialVerticalSignals &&
+      serviceSignals.some((signal) => text.includes(signal))
+    ) {
+      return {
+        category: "integrator_relevant_focus",
+        relevanceScore: categorization.relevanceScore,
+        rationale: "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_vision_industrial_ai" ||
+        categorization.category === "integrator_general_ai" ||
+        categorization.category === "integrator_relevant_focus") &&
+      !hasExplicitAI &&
+      genericSoftwareConsultingHits >= 2 &&
+      !hasStrongIndustrialSignals
+    ) {
+      return {
+        category: "other",
+        relevanceScore: Math.min(categorization.relevanceScore, 32),
+        rationale: "Profile reads like broad software consulting or engineering services without a verified industrial delivery focus."
+      };
+    }
+
+    if (
+      (categorization.category === "integrator_relevant_focus" || categorization.category === "integrator_vision_industrial_ai") &&
+      !hasExplicitAI &&
+      !hasVisionSignals &&
+      !hasIndustrialVerticalSignals &&
+      genericSoftwareConsultingHits >= 2
+    ) {
+      return {
+        category: "other",
+        relevanceScore: Math.min(categorization.relevanceScore, 34),
+        rationale: "Profile reads like broad software consulting or embedded engineering, not a clear industrial AI or vision fit."
       };
     }
 
@@ -3004,6 +3459,11 @@ export class LeadPipelineAgent {
     }
   }
 
+  private buildExaQueryPreview(filter: ApolloOrganizationFilter): string | undefined {
+    const query = this.exaPreviewClient.buildQueries(filter, 1)[0]?.trim();
+    return query || undefined;
+  }
+
   private addUniqueCompanies(
     target: PreCategorizedCompany[],
     incoming: PreCategorizedCompany[],
@@ -3143,8 +3603,11 @@ export class LeadPipelineAgent {
     const maxPages = useWebSearch
       ? (searchTuning?.webSearchMaxPages ?? (isOpenCrawlerSearch ? 2 : WEB_SEARCH_MAX_PAGES))
       : 6;
+    const exaRawCollectionLimit = useWebSearch && companySearchMode === "exa_search"
+      ? Math.max(requestedCount, rawCollectionTarget ?? requestedCount)
+      : undefined;
     const pageSize = useWebSearch
-      ? Math.max(webSearchMinSampleSize, requestedCount * webSearchSampleMultiplier)
+      ? exaRawCollectionLimit ?? Math.max(webSearchMinSampleSize, requestedCount * webSearchSampleMultiplier)
       : Math.max(MIN_EARLY_STOP_REVIEW_COUNT, requestedCount);
     const collectionTarget = useWebSearch
       ? Math.max(
@@ -3336,6 +3799,45 @@ export class LeadPipelineAgent {
 
       return record.normalizedName === normalizedName;
     });
+  }
+
+  private getCachedQualifiedCompanies(
+    targetCategories: LeadCategory[],
+    market: string | undefined,
+    limit: number
+  ): PreCategorizedCompany[] {
+    const scopeFilter = {
+      name: "cached_screening_database",
+      persona: "cached screening database",
+      industries: [],
+      keywords: [],
+      locations: [],
+      employeeRanges: [],
+      notes: "cached screening database"
+    } satisfies ApolloOrganizationFilter;
+
+    return this.companyScreeningDatabase.records
+      .filter((record) => Boolean(record.category) && targetCategories.includes(record.category as LeadCategory))
+      .filter((record) => !record.existsInHubSpot)
+      .map((record) => ({
+        name: record.companyName,
+        domain: record.domain,
+        country: undefined,
+        shortDescription: record.shortDescription || "Cached from prior qualification run.",
+        sourceFilter: record.sourceFilter || "cached_screening_database",
+        category: record.category as LeadCategory,
+        relevanceScore: record.relevanceScore ?? 60,
+        rationale: record.rationale || "Company matched a requested target category in a prior run and was reused from cache."
+      }))
+      .filter((company) => this.isCompanyInScope(company, scopeFilter, market))
+      .slice(0, Math.max(0, limit));
+  }
+
+  private getCachedExcludedDiscoveryDomains(targetCategories: LeadCategory[]): string[] {
+    return this.companyScreeningDatabase.records
+      .filter((record) => Boolean(record.normalizedDomain))
+      .filter((record) => Boolean(record.existsInHubSpot) || Boolean(record.category && !targetCategories.includes(record.category as LeadCategory)))
+      .map((record) => record.normalizedDomain as string);
   }
 
   private upsertCompanyScreeningRecord(
@@ -3580,7 +4082,7 @@ export class LeadPipelineAgent {
           [] as PublicContactCandidate[]
         )
       ] as const),
-      CONTACT_DISCOVERY_CONCURRENCY
+      this.contactSearchConcurrency
     );
 
     return new Map(entries);
@@ -3618,7 +4120,7 @@ export class LeadPipelineAgent {
 
         return [this.getCompanyKey(company), enrichedContacts] as const;
       }),
-      CONTACT_DISCOVERY_CONCURRENCY
+      this.contactSearchConcurrency
     );
 
     return new Map(entries);
@@ -3865,15 +4367,7 @@ export class LeadPipelineAgent {
       return PARALLEL_FILTER_PROBE_COUNT;
     }
 
-    if (targetLeadCount <= 10) {
-      return 1;
-    }
-
-    if (targetLeadCount <= 25) {
-      return 2;
-    }
-
-    return 3;
+    return 1;
   }
 
   private getFiltersToExpandAfterProbe(
@@ -3884,15 +4378,7 @@ export class LeadPipelineAgent {
       return FILTERS_TO_EXPAND_AFTER_PROBE;
     }
 
-    if (targetLeadCount <= 10) {
-      return 1;
-    }
-
-    if (targetLeadCount <= 25) {
-      return 2;
-    }
-
-    return 3;
+    return 0;
   }
 
   private async finalizeLeadRun(

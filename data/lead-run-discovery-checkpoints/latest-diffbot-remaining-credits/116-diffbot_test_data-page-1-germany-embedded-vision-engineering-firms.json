@@ -1,0 +1,49 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:51.917Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 1,
+  "filter": {
+    "name": "Germany Embedded Vision Engineering Firms",
+    "keywords": [
+      "embedded software services",
+      "embedded vision engineering",
+      "embedded software dienstleister",
+      "computer vision engineering services",
+      "bildverarbeitung dienstleistungen",
+      "industrial imaging integration",
+      "edge ai integration",
+      "industrial software engineering",
+      "softwareentwicklung support"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Embedded Software",
+      "Industrial Automation",
+      "Electronics",
+      "Industrial Software"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 2,
+  "companies": [
+    {
+      "name": "Elenco Automation",
+      "domain": "https://elenco.be",
+      "shortDescription": "Elenco is an integrator of industrial automation equipment. We work for machine constructors as well as end costumers. Part of our expertise is: * Machine vision * Vision guided robotics * PLC software * PC software in an industrial environment * Electrical engineering * Electrical wiring and installation || Elenco is an integrator of industrial automation equipment. We work for machine constructors as well as end costumers. Part of our expertise is: * Machine vision * Vision guided robotics * PLC software * PC software in an industrial environment * Electrical engineering * Electrical wiring and installation",
+      "sourceFilter": "Germany Embedded Vision Engineering Firms (diffbot-test-data)"
+    },
+    {
+      "name": "Heliovision",
+      "domain": "https://heliovision.be",
+      "shortDescription": "Heliovision focuses on machine vision solutions utilizing Deep Learning, 2D/3D Imaging, custom software and AI. Heliovision provides turnkey quality inspection and object localisation solutions for an array of industries: automotive, aerospace, consumer goods, medical, pharmaceutical, packaging, and more. || Heliovision focuses on machine vision solutions utilizing Deep Learning, 2D/3D Imaging, custom software and AI. Heliovision provides turnkey quality inspection and object localisation solutions for an array of industries: automotive, aerospace, consumer goods, medical, pharmaceutical, packaging, and more. | Machine Vision Experts | Heliovision is a company dedicated to providing Machine and Computer vision solutions for customers in the EU market. Heliovision can select the correct hardware like camera, lenses and lighting for your application and build the right software and algorithms to perform the task needed. This can go from 3D robot guidance to quality control, measuring, and inspecting. | Machine vision integrator",
+      "sourceFilter": "Germany Embedded Vision Engineering Firms (diffbot-test-data)"
+    }
+  ]
+}

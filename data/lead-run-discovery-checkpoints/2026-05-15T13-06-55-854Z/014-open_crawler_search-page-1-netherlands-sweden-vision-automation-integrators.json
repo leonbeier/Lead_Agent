@@ -1,0 +1,57 @@
+{
+  "runId": "2026-05-15T13-06-55-854Z",
+  "savedAt": "2026-05-15T13:08:08.610Z",
+  "companySearchMode": "open_crawler_search",
+  "page": 1,
+  "filter": {
+    "name": "Netherlands Sweden Vision Automation Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "optical inspection automation",
+      "quality inspection systems",
+      "vision-guided robotics",
+      "industrial image processing",
+      "inspection solution provider",
+      "automation engineering services",
+      "customer-specific inspection"
+    ],
+    "locations": [
+      "Netherlands",
+      "Sweden"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Electronics"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 3,
+  "companies": [
+    {
+      "name": "Mech-Mind Robotics",
+      "domain": "https://mech-mind.com",
+      "shortDescription": "Open-crawler review-fit score 10. Matched signals: machine vision, system integrator, integration. Embodied AI & 3D Vision for Robots and More | Mech-Mind Robotics | Mech-Mind provides 3D cameras and software suites for robotic system integrators. Typical 3D vision applications include bin picking, depalletizing, machine tending, piece picking and item picking. We have delivered 3000+ applications for 1000+ clients worldwide. | Embodied AI & 3D Vision for Robots and More | Mech-Mind Robotics Online Exhibition Hall Login Welcome, Modify Information My Download Quit X Name * Phone E-mail * Country/Area city * Industry Select Industry Agriculture, Forestry, Animal Husbandry And Fishery Industries Mining Industry Manufacturing Industry Electricity, Heat, Gas And Water Production And Supply In || Error.aspx | Versatile Across Applications and Industries: 错误提示",
+      "sourceFilter": "Netherlands Sweden Vision Automation Integrators (open-crawler: search:vision guided robotics integrator Sweden)"
+    },
+    {
+      "name": "3D Laser profilers and High",
+      "domain": "https://sincevision.com",
+      "shortDescription": "Open-crawler review-fit score 7. Matched signals: case study, mes, association, machine vision, custom solution, integration. 3D Laser profilers and High-Speed Cameras for Industrial Inspection | SinceVision provides high-speed cameras, 3D laser profilers, sCMOS cameras, color sensors, and displacement sensors. | 3D Laser profilers and High-Speed Cameras for Industrial Inspection info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Series SGI Series SD-C Series SD22 Series SD33 Series Spectral Confocal Displacement Sensor SCI Series Through-Beam Edge Sensor SE1 Series SE2 Series Full Spectrum Sensor SS2 Series Request a Trial Contact Us Scientific Imaging H || customer support.html | Service Network: Global Support & After-Sales Service | SinceVision Machine Vision | Dedicated support for SinceVision customers worldwide. Access professional technical advice, repair services, and on-site support for your industrial sensors & imaging systems. | Global Support & After-Sales Service | SinceVision Machine Vision info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Se",
+      "sourceFilter": "Netherlands Sweden Vision Automation Integrators (open-crawler: search:vision guided robotics integrator Sweden)"
+    },
+    {
+      "name": "MIPI MODULES",
+      "domain": "https://mipi-modules.com",
+      "country": "Germany",
+      "shortDescription": "Open-crawler high-fit score 14. Matched signals: bildverarbeitung, custom solution, integration, mes, inbetriebnahme. VC MIPI® Kameras entwickelt und produziert in Deutschland | Entdecken Sie VC MIPI® Kameras für industrielle Anwendungen - Made in Germany, entwickelt und hergestellt von Vision Components! | VC MIPI | VC MIPI® Kameras entwickelt und produziert in Deutschland Zum Inhalt wechseln MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN Zu allen -Produkten MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/E || vc mipi bricks system | MIPI Vision Solutions: VC MIPI Bricks: MIPI-Kameras, Zubehör und Prozessorboards | VC MIPI Bricks: perfekt abgestimmte MIPI-Kameras, Zubehör & Services. Schneller, einfacher und kostengünstiger zum Embedded-Vision-System! | VC Bricks System | VC MIPI Bricks: MIPI-Kameras, Zubehör und Prozessorboards Zum Inhalt wechseln MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN Zu allen -Pro",
+      "sourceFilter": "Netherlands Sweden Vision Automation Integrators (open-crawler: source:curated:emva-members)"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "createdAt": "2026-05-14T11:54:14.978Z",
+  "inputCount": 91,
+  "alreadyInHubSpotCount": 9,
+  "notInHubSpotCount": 82,
+  "crawledCount": 83,
+  "crawlFailedCount": 8,
+  "categorizedCount": 83,
+  "integratorQualifiedCount": 8,
+  "categoryBreakdown": {
+    "integrator_vision_industrial_ai": 7,
+    "machine_builder_ai_enablement": 8,
+    "irrelevant": 47,
+    "other": 17,
+    "integrator_vision_ai_consulting_freelancer": 1,
+    "camera_manufacturer_partner": 2,
+    "software_platform_embedding": 1
+  },
+  "qualifiedCategoryBreakdown": {
+    "integrator_vision_industrial_ai": 7,
+    "integrator_vision_ai_consulting_freelancer": 1
+  },
+  "researchBriefCount": 8,
+  "companiesNeedingApolloContactsCount": 7,
+  "companySyncedCount": 8,
+  "contactSyncedCount": 4,
+  "syncedCount": 12,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [
+    {
+      "companyName": "Visage Technologies",
+      "domain": "https://visagetechnologies.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430014884038",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430014884038",
+      "publicContactEmails": [
+        "thomas.van.gemeren@visagetechnologies.com",
+        "gordan.krekovic@visagetechnologies.com"
+      ]
+    }
+  ],
+  "crawlFailures": [
+    {
+      "companyName": "CIMS",
+      "domain": "https://cims.com"
+    },
+    {
+      "companyName": "SOLUTIONBANK",
+      "domain": "https://solutionbank.asia"
+    },
+    {
+      "companyName": "Synsor.ai",
+      "domain": "https://synsor.ai"
+    },
+    {
+      "companyName": "Sweeper",
+      "domain": "https://sweeper-robot.eu"
+    },
+    {
+      "companyName": "Merlicon Robotics",
+      "domain": "https://merlicon.com"
+    },
+    {
+      "companyName": "GM Tech",
+      "domain": "https://gms-technology.com"
+    },
+    {
+      "companyName": "Fill",
+      "domain": "https://fill.co.at"
+    },
+    {
+      "companyName": "GigaVis Co.",
+      "domain": "https://gigavis.com"
+    }
+  ]
+}

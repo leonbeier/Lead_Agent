@@ -1,0 +1,53 @@
+{
+  "createdAt": "2026-05-15T13:56:32.905Z",
+  "inputCount": 73,
+  "alreadyInHubSpotCount": 29,
+  "notInHubSpotCount": 44,
+  "crawledCount": 37,
+  "crawlFailedCount": 7,
+  "categorizedCount": 37,
+  "integratorQualifiedCount": 0,
+  "categoryBreakdown": {
+    "other": 14,
+    "irrelevant": 22,
+    "software_platform_embedding": 1
+  },
+  "qualifiedCategoryBreakdown": {},
+  "researchBriefCount": 0,
+  "companiesNeedingApolloContactsCount": 0,
+  "companySyncedCount": 0,
+  "contactSyncedCount": 0,
+  "syncedCount": 0,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [],
+  "crawlFailures": [
+    {
+      "companyName": "Lead Intelligent Equipment",
+      "domain": "https://leadchina.cn"
+    },
+    {
+      "companyName": "LEEC",
+      "domain": "https://leecdubai.com"
+    },
+    {
+      "companyName": "Siali | Experts in AI - Industry 4.0",
+      "domain": "https://sialitech.com"
+    },
+    {
+      "companyName": "CFP",
+      "domain": "https://cpfsrl.com"
+    },
+    {
+      "companyName": "Argos Global Partner Services",
+      "domain": "https://argosgps.com"
+    },
+    {
+      "companyName": "OG Engineering",
+      "domain": "https://agathandasa.com"
+    },
+    {
+      "companyName": "AGCES.",
+      "domain": "https://pruthviagces.com"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:56.508Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 1,
+  "filter": {
+    "name": "Germany Smart Factory Software Engineering Partners",
+    "keywords": [
+      "smart factory software",
+      "smart factory dienstleister",
+      "industrial software engineering",
+      "manufacturing software implementation",
+      "production data integration",
+      "ot integration",
+      "industrial digitalization",
+      "smart systems engineering",
+      "co engineering automation",
+      "produktionssoftware dienstleister"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Industrial Software",
+      "Industrial Automation",
+      "System Integration",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

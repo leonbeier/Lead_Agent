@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.tmp-live-search.txt
+.tmp-validation.txt
+memories/
+scripts/__pycache__/
+data/diffbot/
+data/lead-run-discovery-checkpoints/

@@ -1,0 +1,37 @@
+{
+  "runId": "2026-05-15T11-11-49-116Z",
+  "savedAt": "2026-05-15T11:15:44.441Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 4,
+  "filter": {
+    "name": "Netherlands Sweden Vision Automation Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "optical inspection automation",
+      "quality inspection systems",
+      "vision-guided robotics",
+      "industrial image processing",
+      "inspection solution provider",
+      "automation engineering services",
+      "customer-specific inspection"
+    ],
+    "locations": [
+      "Netherlands",
+      "Sweden"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Electronics"
+    ],
+    "employeeRanges": [
+      "1,10",
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

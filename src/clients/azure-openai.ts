@@ -37,16 +37,17 @@ interface BuildResearchBriefOptions {
   includeWebResearch?: boolean;
 }
 
-const MAX_AZURE_RETRIES = 3;
-const AZURE_RETRY_DELAYS_MS = [500, 1000, 2000];
+const MAX_AZURE_RETRIES = 6;
+const AZURE_RETRY_DELAYS_MS = [2000, 4000, 8000, 12000, 20000, 30000];
+const AZURE_REQUEST_TIMEOUT_MS = 60000;
 const CLASSIFIER_DEPLOYMENT = env.AZURE_OPENAI_CLASSIFIER_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT;
 const COMPANY_CLASSIFIER_INPUT_LIMIT = 700;
 const WEBSITE_CLASSIFIER_INPUT_LIMIT = 2200;
 const QUICK_QUALIFICATION_CONTEXT = [
   "# Identity\nYou classify company fit for ONE WARE from company descriptions and crawled website text.",
   "# Goal\nChoose exactly one category. Stay conservative and unbiased. Do not prefer integrators by default.",
-  "# Evidence Handling\nUse business-model evidence from homepage, about, products, services, documentation, integrations, reference pages, applications, and use cases. Ignore cookie banners, legal text, newsletter prompts, careers pages, and navigation fragments. Do not infer fit from the company name, source filter, or vague branding alone.",
-  "# Category Map\nintegrator_general_ai: explicit external delivery of software, AI, automation, MES, SCADA, enterprise integration, or a captive internal IT unit repeatedly building and integrating those systems for an industrial group. Generic engineering, generic IT, or systems-engineering capability pages alone are not enough.\nintegrator_relevant_focus: explicit customer-specific implementation ownership in a relevant vertical such as industrial automation, embedded systems, semiconductors, instrumentation, regulated/medtech, defence, or measurement-heavy environments. Pure MBSE, RBE, safety, or general development-process services alone are not enough.\nmachine_builder_ai_enablement: own shipped machine, OEM system, scanner, imaging product, hardware-centric inspection product, or single-purpose shipped software application where ONE WARE would improve the product itself.\nsoftware_platform_embedding: own software platform or modular software product where customers use modules, drivers, plugins, APIs, workflow builders, runtimes, app stores, installable extensions, or vendor-managed app lifecycles. This also includes OEM digital-service platforms where customers package once and deploy across many sites or machines.\nindustrial_end_customer_scaled: company primarily operates factories, plants, or production and the fit is their own internal inspection or process-automation need.\ncamera_manufacturer_partner: own camera or imaging hardware manufacturer.\nother: real company but weak, ambiguous, closed-niche, or non-priority fit. Use this when evidence is mixed or the fit path is not explicit.\nirrelevant: clear non-target such as media, publisher, event, investor, bank, insurer, recruiter, university, association, or comparable profile.",
+  "# Evidence Handling\nUse business-model evidence from homepage, about, products, services, documentation, integrations, reference pages, applications, and use cases. Ignore cookie banners, legal text, newsletter prompts, careers pages, and navigation fragments. Do not infer fit from the company name, source filter, or vague branding alone. Words such as vision, AI, smart, digital, or automation in the company name do not count as proof.",
+  "# Category Map\nintegrator_vision_industrial_ai: explicit external delivery of machine vision, computer vision, industrial inspection AI, optical quality control, image-processing systems, or edge-vision deployment for customers. Choose this when the company clearly implements customer-specific vision or inspection solutions rather than only selling a product.\nintegrator_vision_ai_consulting: consulting-shaped firm or specialist boutique with explicit machine vision, industrial AI, AOI, embedded vision, or inspection implementation work for customers. Use when the business is clearly services-led and hands-on, but consulting-shaped rather than a broader integrator organization.\nintegrator_vision_ai_freelancer: solo specialist or freelancer with explicit machine vision, industrial AI, AOI, embedded vision, or inspection implementation work for customers. Use only when the profile is clearly person-led rather than a firm.\nintegrator_general_ai: explicit external delivery of AI, machine learning, data-science, predictive analytics, or broadly reusable AI software for customers. Plain automation, PLC, SCADA, MES, embedded, or industrial software delivery without explicit AI evidence should not be integrator_general_ai. Generic engineering, generic IT, or systems-engineering capability pages alone are not enough.\nintegrator_relevant_focus: explicit customer-specific implementation ownership in a relevant industrial or technical vertical such as industrial automation, embedded systems, MES, SCADA, PLC, semiconductors, instrumentation, regulated/medtech, defence, robotics, or measurement-heavy environments, even when explicit AI wording is absent. Pure MBSE, RBE, safety, or general development-process services alone are not enough.\nmachine_builder_ai_enablement: own shipped machine, OEM system, scanner, imaging product, hardware-centric inspection product, or single-purpose shipped software application where ONE WARE would improve the product itself.\nsoftware_platform_embedding: own software platform or modular software product where customers use modules, drivers, plugins, APIs, workflow builders, runtimes, app stores, installable extensions, or vendor-managed app lifecycles. This also includes OEM digital-service platforms where customers package once and deploy across many sites or machines.\nindustrial_end_customer_scaled: company primarily operates factories, plants, or production and the fit is their own internal inspection or process-automation need.\ncamera_manufacturer_partner: own camera or imaging hardware manufacturer.\nother: real company but weak, ambiguous, closed-niche, or non-priority fit. Use this when evidence is mixed or the fit path is not explicit.\nirrelevant: clear non-target such as media, publisher, event, investor, bank, insurer, recruiter, university, association, or comparable profile.",
   "# Decision Process\n1. Identify the core business model: external delivery services, own shipped product, build-on-top platform, internal captive IT, industrial operator, camera/imaging manufacturer, or irrelevant.\n2. Identify the likely ONE WARE fit path: service delivery partner, embed into own product, embed into a customer-facing platform, internal industrial IT, end-customer need, or none.\n3. Map to the closest category from the full list.",
   "# Tie-Break Rules\nIf the main fit is embedding ONE WARE into the company's own shipped software product, diagnostic plugin, or hardware product, choose machine_builder_ai_enablement.\nIf customers can build, configure, distribute, train, or run their own apps, models, workflows, plugins, modules, or extensions on the company's platform, choose software_platform_embedding.\nIf the site describes packaging an app once, deploying it across customer sites, managing app lifecycles, monetizing digital services, controlled updates, turnkey appliances, dashboard builders, or modular extensibility, that is usually software_platform_embedding, not an external integrator.\nIf the vendor provides the productized integration stack so customers do not have to build the integration stack themselves, that is evidence for software_platform_embedding, not service delivery.\nMentions of PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration use cases do not make a vendor an integrator when those capabilities are delivered through the vendor's own runtime, app, or platform product.\nIf the company sells a closed niche municipal or route-planning platform for one operational workflow, choose other unless there is a clear open build-on-top surface.\nIf the company is a captive internal IT unit building MES, EDI, BI, process, or enterprise software for a larger industrial group, prefer integrator_general_ai over industrial_end_customer_scaled.\nIf evidence mixes catalog hardware with explicit custom system integration or engineering delivery, prefer machine_builder_ai_enablement, integrator_relevant_focus, or other over irrelevant.\nIf evidence is mixed, weak, or only capability-oriented without explicit fit-path proof, choose other rather than any integrator category.",
   "# Examples\nExample A: a certified radiology or medical-imaging plugin integrated into PACS or viewer systems is machine_builder_ai_enablement when it is a shipped product, not an open platform.\nExample B: an industrial software vendor that packages digital services as apps, deploys them to many customer sites through a runtime or appliance, and manages billing or update lifecycles is software_platform_embedding, not integrator_general_ai.\nExample C: a municipal waste, winter-service, street-cleaning, telematics, or route-planning cloud product with onboarding or rollout help still stays other unless customers clearly build their own apps, models, or extensions on top.\nExample D: a broad engineering generalist with MBSE, requirements engineering, hardware/software development, or system engineering pages but no explicit AI, automation, MES/SCADA, inspection, or embeddable platform/product surface should stay other.",
@@ -153,7 +154,7 @@ export class AzureOpenAIClient {
     }
 
     const websiteProfile = domain
-      ? await this.webSearchAgent.crawlCompanyWebsite(domain)
+      ? await this.webSearchAgent.crawlCompanyWebsite(domain, "open_crawler_search")
       : null;
     if (domain && !websiteProfile) {
       return {
@@ -249,7 +250,7 @@ export class AzureOpenAIClient {
     }
 
     const websiteProfile = company.domain
-      ? await this.webSearchAgent.crawlCompanyWebsite(company.domain)
+      ? await this.webSearchAgent.crawlCompanyWebsite(company.domain, "open_crawler_search")
       : null;
 
     if (!websiteProfile) {
@@ -274,7 +275,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(mainContext)}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Estimate whether the decision-makers or likely target contacts are German-speaking. If yes, produce outreach in German; otherwise produce it in English. For LinkedIn, always produce two separate texts: linkedInConnectionRequest as a short connection request with a hard maximum of 200 characters, and linkedInMessage as the longer follow-up message after connecting. For German outreach, always start emailBody naturally with "Hallo [Name]," and never with "Hello". Keep German phrasing natural and direct, avoid long list-like opener sentences, avoid vague department enumerations that sound AI-written, and do not use dash punctuation such as "–" or "—" in outreach copy. Prefer commas or full sentences instead. Estimate all three commercial rankings on a 0-10 scale: customer, serviceProvider, partner. Estimate businessPotentialEUR as a realistic euro value, not a score. Use the following commercial framing: a single AI use case often starts around 7000 EUR, can be 20000 to 40000 EUR per AI for more complex or production-grade deployments, can multiply across many use cases, and OEM or camera-manufacturer partner rollouts can be much larger, including six- or seven-figure potential in recurring machine volumes. Also return targetIndustry and productsOffered. Use any supplied web evidence as your factual grounding. If no web evidence is supplied, reason only from the provided company facts and keep uncertainty explicit. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. The outreach must not open with generic flattery. If the evidence contains a concrete company hook such as 2D/3D machine vision, AOI, visual inspection, quality control, robot guidance, Sondermaschinenbau, MES, SCADA, factory software, or a named industrial use case, reference that hook in the first sentence of linkedInMessage and emailBody. Make the first sentence sound company-specific, not template-generic. Keep linkedInConnectionRequest shorter, simpler, and curiosity-driven than linkedInMessage. For service-provider or partner-leaning companies, keep phoneScript collaboration-first: first ask whether they already implement Vision AI or have relevant experience, then position ONE WARE as a software layer for faster production-ready models, and finally test whether a delivery partnership or joint customer work could make sense. Keep placeholders only for the contact name and sender name, not for the company-specific hook. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInConnectionRequest, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
+          content: `${buildMainContextBlock(mainContext)}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Estimate whether the decision-makers or likely target contacts are German-speaking. If yes, produce outreach in German; otherwise produce it in English. For LinkedIn, always produce two separate texts: linkedInConnectionRequest as a short connection request with a hard maximum of 200 characters, and linkedInMessage as the longer follow-up message after connecting. Treat linkedInConnectionRequest as a compact teaser, not a compressed full pitch. Good example style for German outreach: "Hi Marc, eure Physical-AI Loesungen bei Sereact finde ich sehr spannend. Wir haben einen neuen Ansatz, der passende Vision-AI-Architekturen automatisiert erzeugt. Wuerde mich ueber einen Austausch freuen". For German outreach, always start emailBody naturally with "Hallo [Name]," and never with "Hello". Keep German phrasing natural and direct, avoid long list-like opener sentences, avoid vague department enumerations that sound AI-written, and do not use dash punctuation such as "–" or "—" in outreach copy. Prefer commas or full sentences instead. Estimate all three commercial rankings on a 0-10 scale: customer, serviceProvider, partner. Estimate businessPotentialEUR as a realistic euro value, not a score. Use the following commercial framing: a single AI use case often starts around 7000 EUR, can be 20000 to 40000 EUR per AI for more complex or production-grade deployments, can multiply across many use cases, and OEM or camera-manufacturer partner rollouts can be much larger, including six- or seven-figure potential in recurring machine volumes. Also return targetIndustry and productsOffered. Use any supplied web evidence as your factual grounding. If no web evidence is supplied, reason only from the provided company facts and keep uncertainty explicit. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. The outreach must not open with generic flattery. If the evidence contains a concrete company hook such as 2D/3D machine vision, AOI, visual inspection, quality control, robot guidance, Sondermaschinenbau, MES, SCADA, factory software, or a named industrial use case, reference that hook in the first sentence of linkedInMessage and emailBody. Make the first sentence sound company-specific, not template-generic. Keep linkedInConnectionRequest shorter, simpler, and curiosity-driven than linkedInMessage. For service-provider or partner-leaning companies, keep phoneScript collaboration-first: first ask whether they already implement Vision AI or have relevant experience, then position ONE WARE as a software layer for faster production-ready models, and finally test whether a delivery partnership or joint customer work could make sense. Keep placeholders only for the contact name and sender name, not for the company-specific hook. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInConnectionRequest, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
         },
         {
           role: "user",
@@ -2222,35 +2223,51 @@ export class AzureOpenAIClient {
     const deployment = options.deployment ?? env.AZURE_OPENAI_DEPLOYMENT;
     const url = `${env.AZURE_OPENAI_ENDPOINT}/openai/deployments/${deployment}/chat/completions?api-version=${env.AZURE_OPENAI_API_VERSION}`;
     let response: Response | undefined;
+    let lastError: unknown;
 
     for (let attempt = 0; attempt <= MAX_AZURE_RETRIES; attempt += 1) {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": env.AZURE_OPENAI_API_KEY as string
-        },
-        body: JSON.stringify({
-          messages,
-          temperature: 0,
-          max_completion_tokens: options.maxTokens,
-          response_format: { type: "json_object" }
-        })
-      });
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "api-key": env.AZURE_OPENAI_API_KEY as string
+          },
+          body: JSON.stringify({
+            messages,
+            temperature: 0,
+            max_completion_tokens: options.maxTokens,
+            response_format: { type: "json_object" }
+          }),
+          signal: AbortSignal.timeout(AZURE_REQUEST_TIMEOUT_MS)
+        });
+      } catch (error) {
+        lastError = error;
+        if (!this.isRetryableAzureError(error) || attempt === MAX_AZURE_RETRIES) {
+          throw error;
+        }
+
+        await this.delay(AZURE_RETRY_DELAYS_MS[attempt] ?? AZURE_RETRY_DELAYS_MS[AZURE_RETRY_DELAYS_MS.length - 1] ?? 30000);
+        continue;
+      }
 
       if (response.ok) {
         break;
       }
 
-      if (response.status !== 429 || attempt === MAX_AZURE_RETRIES) {
+      if (!this.isRetryableAzureStatus(response.status) || attempt === MAX_AZURE_RETRIES) {
         const errorText = await response.text();
         throw new Error(`Azure OpenAI request failed: ${response.status} ${errorText}`);
       }
 
-      await this.delay(AZURE_RETRY_DELAYS_MS[attempt] ?? 2000);
+      await this.delay(this.resolveAzureRetryDelayMs(response, attempt));
     }
 
     if (!response?.ok) {
+      if (lastError instanceof Error) {
+        throw lastError;
+      }
+
       throw new Error("Azure OpenAI request failed without a usable response.");
     }
 
@@ -2292,6 +2309,35 @@ export class AzureOpenAIClient {
         `Azure OpenAI cost limit reached: ${this.usageTotals.estimatedCostUsd.toFixed(4)} >= ${maxCostUsd.toFixed(4)} budget units.`
       );
     }
+  }
+
+  private isRetryableAzureStatus(status: number): boolean {
+    return status === 408 || status === 409 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  }
+
+  private isRetryableAzureError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return error.name === "AbortError" || error.name === "TimeoutError" || /fetch failed/i.test(error.message);
+  }
+
+  private resolveAzureRetryDelayMs(response: Response, attempt: number): number {
+    const retryAfterMsHeader = response.headers.get("retry-after-ms");
+    const retryAfterHeader = response.headers.get("retry-after");
+
+    const retryAfterMs = retryAfterMsHeader ? Number.parseInt(retryAfterMsHeader, 10) : Number.NaN;
+    if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+      return retryAfterMs;
+    }
+
+    const retryAfterSeconds = retryAfterHeader ? Number.parseFloat(retryAfterHeader) : Number.NaN;
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+      return Math.ceil(retryAfterSeconds * 1000);
+    }
+
+    return AZURE_RETRY_DELAYS_MS[attempt] ?? AZURE_RETRY_DELAYS_MS[AZURE_RETRY_DELAYS_MS.length - 1] ?? 30000;
   }
 
   private parseJsonObject<T>(content: string): T {
@@ -2656,9 +2702,9 @@ export class AzureOpenAIClient {
       },
       integrator_relevant_focus_template: {
         subject: "Deliver vision AI faster in demanding vertical projects",
-        emailBody: "Hello Mr./Ms. [Name],\n\nIn demanding projects, vision AI is often the part that consumes the most time even when the actual application is already clear.\n\nWith ONE WARE, task-specific models can be generated much faster, with less trial and error, and in a way that also makes smaller or cheaper hardware setups realistic. That makes projects easier to plan and often opens the door to additional automation steps for the customer.\n\nFor integrators this is especially relevant because more projects become feasible in the same amount of time. And when it fits, we can also connect partners with concrete end-customer opportunities.\n\nWould a short exchange make sense to see whether this could fit your projects?\n\nBest regards,\n[Your Name]",
-        linkedInConnectionRequest: "Quick question: do you already have hands-on vision-AI experience? Less trial and error often makes far more automation possible than expected.",
-        linkedInMessage: "Quick question: do you already have hands-on vision-AI experience in your projects? We often see that with less trial and error and more efficient deployment, customers can automate much more than expected.",
+        emailBody: "Hello Mr./Ms. [Name],\n\nI saw that you implement topics such as quality management and production control. Have you already had practical experience integrating vision AI for use cases such as quality inspection?\n\nThat is exactly where ONE WARE can be relevant. Our software creates task-specific vision-AI models much faster, with far less trial and error, and often in a way that also makes smaller or cheaper hardware setups realistic.\n\nFor integrators this is especially valuable because projects become easier to deliver and additional automation use cases often become economically feasible. And when it fits, we can also connect partners with concrete end-customer opportunities.\n\nWould a short exchange make sense to see whether this could fit your projects?\n\nBest regards,\n[Your Name]",
+        linkedInConnectionRequest: "Quick question: have you already integrated vision AI in cases such as quality inspection? If yes, ONE WARE could be relevant.",
+        linkedInMessage: "Quick question: have you already integrated vision AI in projects such as quality inspection? If yes, ONE WARE could help make that part much faster and more efficient.",
         phoneScript: "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. I wanted to ask whether your team already implements vision-AI applications in customer projects or has relevant experience there. We provide software that gets production-ready vision-AI models much faster. Because we cannot cover every integration project ourselves, we are talking to specialized partners about joint delivery where it fits. Would that be interesting for your team?"
       },
       industrial_end_customer_scaled_template: {

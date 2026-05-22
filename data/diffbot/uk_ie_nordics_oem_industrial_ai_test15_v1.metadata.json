@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "hits": 474,
+  "results": 15,
+  "kgversion": "468",
+  "diffbot_type": "Organization",
+  "facet": false,
+  "textFallback": false,
+  "request": {
+    "endpoint": "https://kg.diffbot.com/kg/v3/dql",
+    "type": "query",
+    "size": 15,
+    "from": 0,
+    "query": "type:Organization\nhas:homepageUri\nor(\n  location.country.name:or(\"United Kingdom\",\"Ireland\",\"Norway\",\"Finland\",\"Sweden\",\"Denmark\",\"Estonia\"),\n  locations.country.name:or(\"United Kingdom\",\"Ireland\",\"Norway\",\"Finland\",\"Sweden\",\"Denmark\",\"Estonia\")\n)\nor(\n  description:or(\"industrial ai\",\"ai consulting\",\"process automation with ai\",\"predictive quality\",\"quality control ai\",\"machine learning for manufacturing\",\"industrial software\",\"factory automation software\",\"automation engineering\",\"robotics integration\",\"special purpose machine\",\"machine builder\",\"oem automation\"),\n  allDescriptions:or(\"industrial ai\",\"ai consulting\",\"process automation with ai\",\"predictive quality\",\"quality control ai\",\"machine learning for manufacturing\",\"industrial software\",\"factory automation software\",\"automation engineering\",\"robotics integration\",\"special purpose machine\",\"machine builder\",\"oem automation\")\n)\nor(\n  description:or(\"consulting\",\"implementation\",\"delivery\",\"project delivery\",\"engineering services\",\"custom solution\",\"system integration\",\"commissioning\",\"retrofit\",\"solution provider\",\"industrial automation\",\"plc\",\"scada\",\"mes\",\"vision-guided robotics\"),\n  allDescriptions:or(\"consulting\",\"implementation\",\"delivery\",\"project delivery\",\"engineering services\",\"custom solution\",\"system integration\",\"commissioning\",\"retrofit\",\"solution provider\",\"industrial automation\",\"plc\",\"scada\",\"mes\",\"vision-guided robotics\")\n)\nor(\n  description:or(\"manufacturing\",\"factory\",\"production\",\"warehouse automation\",\"packaging\",\"food processing\",\"pharma manufacturing\",\"automotive manufacturing\",\"assembly automation\",\"inspection\"),\n  allDescriptions:or(\"manufacturing\",\"factory\",\"production\",\"warehouse automation\",\"packaging\",\"food processing\",\"pharma manufacturing\",\"automotive manufacturing\",\"assembly automation\",\"inspection\")\n)\nnot(\n  or(\n    description:or(\"camera manufacturer\",\"industrial cameras\",\"sensor manufacturer\",\"measurement systems\",\"distributor\",\"reseller\",\"wholesale\",\"technical education\",\"training provider\",\"video surveillance\",\"security cameras\",\"face recognition\",\"biometrics\",\"document scanners\",\"consumer electronics\",\"semiconductor products\",\"product platform\",\"machine vision distributor\",\"metrology instruments\"),\n    allDescriptions:or(\"camera manufacturer\",\"industrial cameras\",\"sensor manufacturer\",\"measurement systems\",\"distributor\",\"reseller\",\"wholesale\",\"technical education\",\"training provider\",\"video surveillance\",\"security cameras\",\"face recognition\",\"biometrics\",\"document scanners\",\"consumer electronics\",\"semiconductor products\",\"product platform\",\"machine vision distributor\",\"metrology instruments\")\n  )\n)",
+    "requested_fields": "full entity payload"
+  },
+  "response": {
+    "status_code": 200,
+    "response_time_seconds": 15.656,
+    "response_size_bytes": 4270677,
+    "returned_entities": 15,
+    "csv_path": "data\\diffbot\\uk_ie_nordics_oem_industrial_ai_test15_v1.csv",
+    "raw_json_path": "data\\diffbot\\uk_ie_nordics_oem_industrial_ai_test15_v1.raw.json"
+  },
+  "account_usage": {
+    "before": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {
+        "date": "2026-05-15",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 15,
+        "giCalls": 0
+      },
+      "searchResults": 15,
+      "calls": 0
+    },
+    "after": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {
+        "date": "2026-05-15",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 15,
+        "giCalls": 0
+      },
+      "searchResults": 15,
+      "calls": 0
+    }
+  }
+}

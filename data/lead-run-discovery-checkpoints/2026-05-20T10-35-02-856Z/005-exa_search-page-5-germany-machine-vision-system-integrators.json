@@ -1,0 +1,43 @@
+{
+  "runId": "2026-05-20T10-35-02-856Z",
+  "savedAt": "2026-05-20T10:36:26.316Z",
+  "companySearchMode": "exa_search",
+  "page": 5,
+  "filter": {
+    "name": "Germany Machine Vision System Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "industrielle bildverarbeitung",
+      "bildverarbeitungssysteme",
+      "industrial image processing",
+      "inspection systems",
+      "quality inspection",
+      "system integrator",
+      "machbarkeitsanalyse bildverarbeitung"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 1,
+  "companies": [
+    {
+      "name": "en US",
+      "domain": "https://mozilla.org",
+      "shortDescription": "en US | Mozilla - Internet for people, not profit (US) | We’re working to put control of the internet back in the hands of the people using it. | Welcome to Mozilla | Mozilla - Internet for people, not profit (US) | Help us improve your Mozilla experience | From trustworthy tech to policies that defend your digital rights, we put you first — always. | A stylized green flag on a black background, built from the ‘M’ for Mozilla and a pixel that is displaced to reference its original dinosaur logo. | A stylized green flag on a black background, built from the ‘M’ for Mozilla and a pixel that is displaced to reference its original dinosaur logo. | Break free from big tech — our products put you in control of a safer, more private internet experience. | Go chaos-free with one app for all your emails, calendars and contacts. | Keep your location and online adventures private — stream like a local, anywhere. | Get a heads-up if your personal info is at risk and lock it down like a pro. | Mask your email and phone number so you only get the messages you want. | Instantly create a beautiful website so you can grow your business. | Secure your AI by finding and fixing GenAI vulnerabilities before attackers do. | Reliably automate web tasks with a simple developer-focused API. | We’re proudly non-profit. Will you donate to Mozilla today? | Join the movement: AI for the people | Our mission is to make it easy for people to build with, and collaborate on, open-source, trustworthy AI. | Mozilla Data Collective is rebuilding the AI data ecosystem with communities at the center. | Join our new Open Source AI community.\nproducts | Products: Mozilla’s products — Mozilla (US) — Mozilla | Mozilla’s family of products are all designed to keep you safer and smarter online | Products | Mozilla’s products — Mozilla (US) — Mozilla | Help us improve your Mozilla experience | Firefox is just the beginning. | Mozilla’s family of products are all designed to keep you safer and smarter online. | Get the browser that blocks 2000+ data trackers automatically. Enhanced Tracking Protection comes standard in every Firefox browser. | Firefox is no longer supported on Windows 8.1 and below. | Please download Firefox ESR (Extended Support Release) to use Firefox. | Firefox is no longer supported on macOS 10.14 and below. | Please download Firefox ESR (Extended Support Release) to use Firefox. | Protect your real email address to help control your inbox. | See if your personal information has been compromised in a corporate data breach, and sign up for future alerts. | Surf, stream and get work done on servers in over 30 countries for a secure internet connection with a new perspective. | Resources for developers, by developers. Support MDN and make it your own with collections, notifications, and playgrounds. | Access all your email, calendars, and contacts in one fast app. Filter and organize them the way you like. | Instantly create a beautiful website so you can grow your business. Connect and host your custom domain for free. | Connect your AI systems to a global community of security experts who uncover and help fix GenAI vulnerabilities early. | Connect your apps to the web with reliable automation and turn live web pages into clean, structured results. | Enter your email to create a Mozilla account.\nvpn | Mozilla VPN: Get Mozilla VPN — Mozilla (US) | Use Mozilla VPN for full-device protection for all apps. With servers in 57+ countries, you can connect to anywhere, from anywhere. | Powerful privacy for peace of mind | Get Mozilla VPN — Mozilla (US) | Help us improv",
+      "sourceFilter": "Germany Machine Vision System Integrators (browser-search: industrielle bildverarbeitung projektentwicklung Germany)"
+    }
+  ]
+}

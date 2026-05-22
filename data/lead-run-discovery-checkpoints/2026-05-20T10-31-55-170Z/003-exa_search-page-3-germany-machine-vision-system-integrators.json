@@ -1,0 +1,43 @@
+{
+  "runId": "2026-05-20T10-31-55-170Z",
+  "savedAt": "2026-05-20T10:32:51.934Z",
+  "companySearchMode": "exa_search",
+  "page": 3,
+  "filter": {
+    "name": "Germany Machine Vision System Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "industrielle bildverarbeitung",
+      "bildverarbeitungssysteme",
+      "industrial image processing",
+      "inspection systems",
+      "quality inspection",
+      "system integrator",
+      "machbarkeitsanalyse bildverarbeitung"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 1,
+  "companies": [
+    {
+      "name": "BleepingComputer",
+      "domain": "https://bleepingcomputer.com",
+      "shortDescription": "BleepingComputer | Cybersecurity, Technology News and Support | BleepingComputer is a premier destination for cybersecurity news for over 20 years, delivering breaking stories on the latest hacks, malware threats, and how to protect your devices. | BleepingComputer | Cybersecurity, Technology News and Support | INTERPOL ‘Operation Ramz’ seizes 53 malware, phishing servers | Leaked Shai-Hulud malware fuels new npm infostealer campaign | Grafana says stolen GitHub token let hackers steal codebase | Microsoft confirms Windows 11 security update install issues | GitHub confirms breach of 3,800 repos via malicious VSCode extension | Microsoft shares mitigation for YellowKey Windows zero-day | GitHub investigates internal repositories breach claimed by TeamPCP | Max-severity flaw in ChromaDB for AI apps allows server hijacking | How to access the Dark Web using the Tor Browser | How to enable Kernel-mode Hardware-enforced Stack Protection in Windows 11 | How to use the Windows Registry Editor | How to backup and restore the Windows Registry | How to start Windows in Safe Mode | How to remove a Trojan, Virus, Worm, or other Malware | How to show hidden files in Windows 7 | How to see hidden files in Windows | INTERPOL ‘Operation Ramz’ seizes 53 malware, phishing servers\nabout | About BleepingComputer: About BleepingComputer.com | The BleepingComputer About Us page explains how the site was started and lets you meet our editorial staff. | INTERPOL ‘Operation Ramz’ seizes 53 malware, phishing servers | Leaked Shai-Hulud malware fuels new npm infostealer campaign | Grafana says stolen GitHub token let hackers steal codebase | Microsoft confirms Windows 11 security update install issues | GitHub confirms breach of 3,800 repos via malicious VSCode extension | Microsoft shares mitigation for YellowKey Windows zero-day | GitHub investigates internal repositories breach claimed by TeamPCP | Max-severity flaw in ChromaDB for AI apps allows server hijacking | How to access the Dark Web using the Tor Browser | How to enable Kernel-mode Hardware-enforced Stack Protection in Windows 11 | How to use the Windows Registry Editor | How to backup and restore the Windows Registry | How to start Windows in Safe Mode | How to remove a Trojan, Virus, Worm, or other Malware | How to show hidden files in Windows 7 | How to see hidden files in Windows | Bleeping Computer &reg; is an information security and technology news publication created in 2004 by Lawrence Abrams. Millions of visitors come to BleepingComputer.com every month to learn about the latest security threats, technology news, ways to stay protected online, and how to use their computers more efficiently. | For our work in analyzing ransomware, issuing news alerts about the latest security threats, and offering free ransomware decryptors, BleepingComputer is the first news and support site to be added as a partner of the No More Ransom Project . This project was started in 2016 as an alliance between Europol's European Cybercrime Centre, the National High Tech Crime U",
+      "sourceFilter": "Germany Machine Vision System Integrators (browser-search: industrielle bildverarbeitung automation partner Germany)"
+    }
+  ]
+}

@@ -55,6 +55,8 @@ const SIDEBAR_CATEGORY_OPTIONS: CategoryOption[] = [
   { value: "software_platform_embedding", label: "Softwareplattformen fuer Embedding-Partnerschaften" }
 ];
 
+const SIDEBAR_DEFAULT_TARGET_LEADS = 20;
+
 type SettingsPayload = {
   settings?: {
     targetLeadCount?: number;
@@ -65,6 +67,9 @@ type SettingsPayload = {
     exaApiKey?: string;
     diffbotToken?: string;
     maxRuntimeMs?: number;
+    aiPrefilterConcurrency?: number;
+    outreachPrepConcurrency?: number;
+    contactSearchConcurrency?: number;
   };
 };
 
@@ -122,6 +127,19 @@ function formatTimestamp(value?: string) {
   });
 }
 
+function compactSidebarStatus(value: string | undefined, maxLength = 120) {
+  if (!value) {
+    return "";
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}...`;
+}
+
 function isMeaningfulRunStatus(runStatus?: RunStatusPayload["runStatus"]) {
   if (!runStatus) {
     return false;
@@ -163,7 +181,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const [isStoppingRun, setIsStoppingRun] = React.useState(false);
   const [isResettingRun, setIsResettingRun] = React.useState(false);
   const [isRefreshingStatus, setIsRefreshingStatus] = React.useState(false);
-  const [targetLeadCount, setTargetLeadCount] = React.useState<number>(50);
+  const [targetLeadCount, setTargetLeadCount] = React.useState<number>(SIDEBAR_DEFAULT_TARGET_LEADS);
   const [market, setMarket] = React.useState<string>("Europe");
   const [companySearchMode, setCompanySearchMode] = React.useState<SidebarSearchMode>("exa_search");
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
@@ -175,6 +193,9 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const [exaApiKey, setExaApiKey] = React.useState("");
   const [diffbotToken, setDiffbotToken] = React.useState("");
   const [maxRuntimeMinutes, setMaxRuntimeMinutes] = React.useState<number>(20);
+  const [aiPrefilterConcurrency, setAiPrefilterConcurrency] = React.useState<number>(8);
+  const [outreachPrepConcurrency, setOutreachPrepConcurrency] = React.useState<number>(6);
+  const [contactSearchConcurrency, setContactSearchConcurrency] = React.useState<number>(8);
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
   const consoleUrl = `${normalizedBaseUrl}/hubspot/ui?portalId=${encodeURIComponent(portalId)}&key=${encodeURIComponent(sharedKey)}`;
   const canOpenConsole = Boolean(normalizedBaseUrl && sharedKey && openIframe);
@@ -274,13 +295,16 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           return;
         }
 
-        setTargetLeadCount(settingsPayload.settings?.targetLeadCount ?? 50);
+        setTargetLeadCount(Math.max(settingsPayload.settings?.targetLeadCount ?? SIDEBAR_DEFAULT_TARGET_LEADS, SIDEBAR_DEFAULT_TARGET_LEADS));
         setMarket(settingsPayload.settings?.market ?? "Europe");
         setCompanySearchMode(normalizeSidebarSearchMode(settingsPayload.settings?.companySearchMode));
         setSyncToHubSpot(settingsPayload.settings?.syncToHubSpot ?? true);
         setExaApiKey(settingsPayload.settings?.exaApiKey ?? "");
         setDiffbotToken(settingsPayload.settings?.diffbotToken ?? "");
         setMaxRuntimeMinutes(Math.max(1, Math.round((settingsPayload.settings?.maxRuntimeMs ?? 1_200_000) / 60_000)));
+        setAiPrefilterConcurrency(settingsPayload.settings?.aiPrefilterConcurrency ?? 8);
+        setOutreachPrepConcurrency(settingsPayload.settings?.outreachPrepConcurrency ?? 6);
+        setContactSearchConcurrency(settingsPayload.settings?.contactSearchConcurrency ?? 8);
         setSelectedCategories(settingsPayload.settings?.targetCategories ?? []);
       } catch (error) {
         if (!isCancelled) {
@@ -401,9 +425,14 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           creditLessMode: true,
           dryRun: false,
           syncToHubSpot,
+          reuseQualifiedCompanyCache: false,
           exaApiKey: exaApiKey.trim() || undefined,
           diffbotToken: diffbotToken.trim() || undefined,
-          maxRuntimeMs: Math.max(60_000, Math.round(Math.max(1, maxRuntimeMinutes || 20) * 60_000))
+          maxRuntimeMs: Math.max(60_000, Math.round(Math.max(1, maxRuntimeMinutes || 20) * 60_000)),
+          earlyStopEnabled: false,
+          aiPrefilterConcurrency,
+          outreachPrepConcurrency,
+          contactSearchConcurrency
         }
       });
 
@@ -461,24 +490,30 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           </StatusTag>
         </Flex>
         <ProgressBar
-          title={runStatus?.progressDescription || "Noch kein aktiver Lead-Run."}
+          title={runStatus?.running ? "Lead-Run Fortschritt" : "Noch kein aktiver Lead-Run."}
           value={progressValue}
           maxValue={progressMax}
           showPercentage={true}
-          valueDescription={runStatus?.detail || undefined}
           variant={runStatus?.lastError ? "danger" : runStatus?.running ? "warning" : "success"}
         />
-        {(typeof runStatus?.processedFilters === "number" || typeof runStatus?.foundCandidates === "number") && (
+        {runStatus?.progressDescription && <Text>{compactSidebarStatus(runStatus.progressDescription, 96)}</Text>}
+        {runStatus?.detail && <Text>{compactSidebarStatus(runStatus.detail, 96)}</Text>}
+        {(typeof runStatus?.funnel?.afterCrawlerPrefilter === "number" || typeof runStatus?.foundCandidates === "number") && (
           <Text>
-            {typeof runStatus?.processedFilters === "number" && typeof runStatus?.totalFilters === "number"
-              ? `Filter: ${runStatus.processedFilters}/${runStatus.totalFilters}. `
+            {typeof runStatus?.funnel?.afterCrawlerPrefilter === "number"
+              ? `Roh von Exa erkannt: ${runStatus.funnel.afterCrawlerPrefilter}. `
+              : ""}
+            {typeof runStatus?.funnel?.afterHubSpotDedup === "number"
+              ? `Nach Deduplizierung: ${runStatus.funnel.afterHubSpotDedup}. `
               : ""}
             {typeof runStatus?.funnel?.syncedToHubSpot === "number" && syncToHubSpot
               ? `Nach HubSpot synchronisiert: ${runStatus.funnel.syncedToHubSpot}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}. `
               : ""}
-            {typeof runStatus?.foundCandidates === "number"
-              ? `Qualifizierte Firmen: ${runStatus.foundCandidates}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}.`
-              : ""}
+            {typeof runStatus?.funnel?.afterAzureAICheck === "number"
+              ? `Nach KI geprueft passend: ${runStatus.funnel.afterAzureAICheck}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}.`
+              : typeof runStatus?.foundCandidates === "number"
+                ? `Nach KI geprueft passend: ${runStatus.foundCandidates}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}.`
+                : ""}
           </Text>
         )}
         <Text>HubSpot-Sync fuer Starts aus dieser Karte: {syncToHubSpot ? "aktiv" : "deaktiviert"}. Suchmodus: {getSearchModeLabel(companySearchMode)}. Markt: {market}.</Text>
@@ -509,6 +544,36 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           step={1}
           value={maxRuntimeMinutes}
           onChange={(value) => setMaxRuntimeMinutes(Number(value) || 1)}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <NumberInput
+          label="KI Vorfilter parallel"
+          name="aiPrefilterConcurrency"
+          min={1}
+          max={32}
+          step={1}
+          value={aiPrefilterConcurrency}
+          onChange={(value) => setAiPrefilterConcurrency(Number(value) || 1)}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <NumberInput
+          label="Outreach parallel"
+          name="outreachPrepConcurrency"
+          min={1}
+          max={32}
+          step={1}
+          value={outreachPrepConcurrency}
+          onChange={(value) => setOutreachPrepConcurrency(Number(value) || 1)}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <NumberInput
+          label="Kontaktsuche parallel"
+          name="contactSearchConcurrency"
+          min={1}
+          max={32}
+          step={1}
+          value={contactSearchConcurrency}
+          onChange={(value) => setContactSearchConcurrency(Number(value) || 1)}
           readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
         />
         <TextArea
@@ -580,10 +645,10 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       <NumberInput
         label="Zielanzahl Leads"
         name="targetLeadCount"
-        min={1}
+        min={SIDEBAR_DEFAULT_TARGET_LEADS}
         max={1000}
         value={targetLeadCount}
-        onChange={(value) => setTargetLeadCount(Number(value) || 1)}
+        onChange={(value) => setTargetLeadCount(Math.max(Number(value) || SIDEBAR_DEFAULT_TARGET_LEADS, SIDEBAR_DEFAULT_TARGET_LEADS))}
         readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
       />
       <Flex direction="column" gap="flush">

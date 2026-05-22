@@ -1,0 +1,54 @@
+{
+  "version": 3,
+  "hits": 472,
+  "results": 100,
+  "kgversion": "468",
+  "diffbot_type": "Organization",
+  "facet": false,
+  "textFallback": false,
+  "request": {
+    "endpoint": "https://kg.diffbot.com/kg/v3/dql",
+    "type": "query",
+    "size": 100,
+    "from": 0,
+    "query": "type:Organization\nhas:homepageUri\nor(\n  location.country.name:or(\"Germany\",\"France\",\"Italy\",\"Netherlands\",\"Switzerland\",\"Sweden\",\"Austria\",\"Spain\"),\n  locations.country.name:or(\"Germany\",\"France\",\"Italy\",\"Netherlands\",\"Switzerland\",\"Sweden\",\"Austria\",\"Spain\")\n)\nor(\n  description:or(\"machine vision\",\"computer vision\",\"industrial vision\",\"visual inspection\",\"optical inspection\",\"automated inspection\",\"vision systems\",\"image processing\",\"vision-guided robotics\",\"3D vision\",\"2D vision\"),\n  allDescriptions:or(\"machine vision\",\"computer vision\",\"industrial vision\",\"visual inspection\",\"optical inspection\",\"automated inspection\",\"vision systems\",\"image processing\",\"vision-guided robotics\",\"3D vision\",\"2D vision\",\"Bildverarbeitung\",\"industrielle Bildverarbeitung\",\"optische Inspektion\",\"Prüftechnik\")\n)\nor(\n  description:or(\"integrator\",\"system integrator\",\"turnkey\",\"custom solution\",\"engineering services\",\"automation solution\",\"inspection system\",\"quality inspection\",\"special machine\",\"robotics integrator\"),\n  allDescriptions:or(\"integrator\",\"system integrator\",\"turnkey\",\"custom solution\",\"engineering services\",\"automation solution\",\"inspection system\",\"quality inspection\",\"special machine\",\"robotics integrator\",\"Sondermaschinenbau\",\"Automatisierungstechnik\",\"Systemintegration\")\n)\nnot(\n  or(\n    description:or(\"consumer electronics\",\"job board\",\"staffing\",\"recruiting\",\"e-commerce\",\"video surveillance\",\"security cameras\"),\n    allDescriptions:or(\"consumer electronics\",\"job board\",\"staffing\",\"recruiting\",\"e-commerce\",\"video surveillance\",\"security cameras\")\n  )\n)",
+    "filter": null,
+    "requested_fields": "full entity payload"
+  },
+  "response": {
+    "status_code": 200,
+    "response_time_seconds": 10.138,
+    "response_size_bytes": 4407627,
+    "returned_entities": 100,
+    "csv_path": "data\\diffbot\\eu_ai_machine_vision_integrators_100_full_entity_v3.csv",
+    "raw_json_path": "data\\diffbot\\eu_ai_machine_vision_integrators_100_full_entity_v3.raw.json",
+    "usage_headers": {}
+  },
+  "account_usage": {
+    "before": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {},
+      "searchResults": null,
+      "calls": null
+    },
+    "after": {
+      "plan": "kgfree",
+      "today": "2026-05-15",
+      "today_entry": {
+        "date": "2026-05-15",
+        "dqlFacetCount": 0,
+        "calls": 0,
+        "proxyCalls": 0,
+        "enhanceCount": 0,
+        "enhanceRefreshCount": 0,
+        "websearchCount": 0,
+        "searchResults": 100,
+        "giCalls": 0
+      },
+      "searchResults": 100,
+      "calls": 0
+    },
+    "searchResultsDelta": null
+  }
+}

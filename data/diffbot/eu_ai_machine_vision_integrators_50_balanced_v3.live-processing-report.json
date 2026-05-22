@@ -1,0 +1,111 @@
+{
+  "createdAt": "2026-05-15T13:51:41.082Z",
+  "inputCount": 50,
+  "alreadyInHubSpotCount": 17,
+  "notInHubSpotCount": 33,
+  "crawledCount": 30,
+  "crawlFailedCount": 3,
+  "categorizedCount": 30,
+  "integratorQualifiedCount": 5,
+  "categoryBreakdown": {
+    "irrelevant": 16,
+    "industrial_end_customer_scaled": 3,
+    "camera_manufacturer_partner": 4,
+    "machine_builder_ai_enablement": 2,
+    "other": 4,
+    "software_platform_embedding": 1
+  },
+  "qualifiedCategoryBreakdown": {
+    "industrial_end_customer_scaled": 3,
+    "machine_builder_ai_enablement": 2
+  },
+  "researchBriefCount": 5,
+  "companiesNeedingApolloContactsCount": 5,
+  "companySyncedCount": 5,
+  "contactSyncedCount": 12,
+  "syncedCount": 17,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [
+    {
+      "companyName": "Worldwide Quality Control",
+      "domain": "https://worldwidequalitycontrol.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075613409",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075613409",
+      "publicContactEmails": [
+        "c.wu@asiaqualitycontrol.com"
+      ]
+    },
+    {
+      "companyName": "Struers",
+      "domain": "https://struers.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075511007",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075511007",
+      "publicContactEmails": [
+        "satoshi.takagi@struers.com",
+        "dan.vad@struers.dk",
+        "bo.byrialsen@struers.com"
+      ]
+    },
+    {
+      "companyName": "Creaform",
+      "domain": "https://creaform3d.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075600076",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075600076",
+      "publicContactEmails": [
+        "charly.mony@sympatico.ca"
+      ]
+    },
+    {
+      "companyName": "SYNERGX Technologies",
+      "domain": "https://synergx.com",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 48,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077275368",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077275368",
+      "publicContactEmails": [
+        "info@synergx.com",
+        "kwawrew@synergx.com",
+        "sbaldo@synergx.com",
+        "dfromont@synergx.com"
+      ]
+    },
+    {
+      "companyName": "QUISS",
+      "domain": "https://quiss.net",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 48,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075454695",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075454695",
+      "publicContactEmails": [
+        "fneumann@isravision.com",
+        "dleonhardt@isravision.com",
+        "stephan.roskothen@quiss.com"
+      ]
+    }
+  ],
+  "crawlFailures": [
+    {
+      "companyName": "Affix Engineering",
+      "domain": "https://affixengineering.nl"
+    },
+    {
+      "companyName": "Synsor.ai",
+      "domain": "https://synsor.ai"
+    },
+    {
+      "companyName": "Cretec Cybernetics",
+      "domain": "https://cretec-cybernetics.com"
+    }
+  ]
+}

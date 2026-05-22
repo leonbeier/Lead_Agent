@@ -1,0 +1,46 @@
+{
+  "runId": "2026-05-15T12-49-04-884Z",
+  "savedAt": "2026-05-15T12:54:41.143Z",
+  "companySearchMode": "open_crawler_search",
+  "page": 2,
+  "filter": {
+    "name": "France Italy Spain Vision Inspection Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "visual inspection automation",
+      "optical inspection systems",
+      "quality control integration",
+      "engineering services inspection",
+      "turnkey machine vision",
+      "industrial vision projects",
+      "inspection automation solution"
+    ],
+    "locations": [
+      "France",
+      "Italy",
+      "Spain"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 1,
+  "companies": [
+    {
+      "name": "NEXVISION",
+      "domain": "https://nexvision.fr",
+      "country": "France",
+      "shortDescription": "Open-crawler review-fit score 8. Matched signals: computer vision, integration, mes. Embedded optronic vision systems expert for situational awareness | Nexvision designs embedded optronic vision systems combining night, NIR, SWIR, MWIR, LWIR/Thermal sensors and AI for situational awareness | Advanced embedded vision systems for situational awareness | Embedded optronic vision systems expert for situational awareness Skip to content Insights You Your needs You are CEO, CINO, CTIO, CTO R&D engineer SME looking for a collaborative project partner Candidate Your industry Space Aerospace Defense and security Agriculture Other industries Us Expertise Solutions Reference design : optional electronic modules Our modules architecture Electronic module architecture HW Electronic modu || about | Nexvision at a glance: Discover Nexvision optronic design office | Learn about Nexvision, the pioneer in advanced vision systems. Our expertise drives innovation. Discover more here! | About Nexvision | Discover Nexvision optronic design office Skip to content Insights You Your needs You are CEO, CINO, CTIO, CTO R&D engineer SME looking for a collaborative project partner Candidate Your industry Space Aerospace Defense and security Agriculture Other industries Us Expertise Solutions Reference design : optional electronic modules Our modules architecture Electronic module architecture HW Electroni",
+      "sourceFilter": "France Italy Spain Vision Inspection Integrators (open-crawler: search:\"optical inspection systems\" \"engineering services\" France)"
+    }
+  ]
+}

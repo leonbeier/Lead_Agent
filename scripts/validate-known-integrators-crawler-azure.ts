@@ -42,6 +42,7 @@ const negativeReferenceCompanies = [
 
 const acceptedTargetCategories = new Set([
   "integrator_vision_industrial_ai",
+  "integrator_vision_ai_consulting_freelancer",
   "integrator_general_ai",
   "integrator_relevant_focus"
 ]);

@@ -1,0 +1,36 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:52.024Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 5,
+  "filter": {
+    "name": "Germany Embedded Vision Engineering Firms",
+    "keywords": [
+      "embedded software services",
+      "embedded vision engineering",
+      "embedded software dienstleister",
+      "computer vision engineering services",
+      "bildverarbeitung dienstleistungen",
+      "industrial imaging integration",
+      "edge ai integration",
+      "industrial software engineering",
+      "softwareentwicklung support"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Embedded Software",
+      "Industrial Automation",
+      "Electronics",
+      "Industrial Software"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

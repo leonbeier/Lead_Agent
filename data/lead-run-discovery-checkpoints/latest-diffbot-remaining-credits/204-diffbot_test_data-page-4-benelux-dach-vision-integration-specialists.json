@@ -1,0 +1,38 @@
+{
+  "runId": "2026-05-15T12-06-49-566Z",
+  "savedAt": "2026-05-15T12:07:56.359Z",
+  "companySearchMode": "diffbot_test_data",
+  "page": 4,
+  "filter": {
+    "name": "Benelux DACH Vision Integration Specialists",
+    "keywords": [
+      "machine vision integration",
+      "vision-guided robotics",
+      "inspection solutions",
+      "customer-specific automation",
+      "turnkey inspection systems",
+      "robot guidance",
+      "kundenspezifisch bildverarbeitung",
+      "systemintegration vision"
+    ],
+    "locations": [
+      "Germany",
+      "Netherlands",
+      "Switzerland",
+      "Austria"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Electronics"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

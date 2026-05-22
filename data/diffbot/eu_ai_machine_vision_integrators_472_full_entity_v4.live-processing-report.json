@@ -1,0 +1,691 @@
+{
+  "createdAt": "2026-05-15T14:14:22.019Z",
+  "inputCount": 472,
+  "alreadyInHubSpotCount": 148,
+  "notInHubSpotCount": 324,
+  "crawledCount": 282,
+  "crawlFailedCount": 42,
+  "categorizedCount": 282,
+  "integratorQualifiedCount": 39,
+  "categoryBreakdown": {
+    "irrelevant": 183,
+    "camera_manufacturer_partner": 6,
+    "other": 47,
+    "software_platform_embedding": 7,
+    "industrial_end_customer_scaled": 13,
+    "integrator_vision_industrial_ai": 9,
+    "integrator_general_ai": 10,
+    "integrator_vision_ai_consulting": 3,
+    "machine_builder_ai_enablement": 4
+  },
+  "qualifiedCategoryBreakdown": {
+    "integrator_vision_industrial_ai": 9,
+    "integrator_vision_ai_consulting": 3,
+    "integrator_general_ai": 10,
+    "machine_builder_ai_enablement": 4,
+    "industrial_end_customer_scaled": 13
+  },
+  "researchBriefCount": 39,
+  "companiesNeedingApolloContactsCount": 34,
+  "companySyncedCount": 39,
+  "contactSyncedCount": 60,
+  "syncedCount": 99,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [
+    {
+      "companyName": "FS Solution",
+      "domain": "https://fssolution.co.kr",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077605057",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077605057",
+      "publicContactEmails": [
+        "dana@fssolution.co.kr",
+        "sales@fssolution.co.kr"
+      ]
+    },
+    {
+      "companyName": "ADUK",
+      "domain": "https://aduk.de",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075643090",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075643090",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "TesTex NDT",
+      "domain": "https://testexndt.co.uk",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077790394",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077790394",
+      "publicContactEmails": [
+        "sales@testexndt.co.uk",
+        "simon@testexndt.co.uk",
+        "carl@testexndt.co.uk"
+      ]
+    },
+    {
+      "companyName": "ISSArt",
+      "domain": "https://issart.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075546828",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075546828",
+      "publicContactEmails": [
+        "crm@issart.com",
+        "info@issart.com"
+      ]
+    },
+    {
+      "companyName": "Elocal Group",
+      "domain": "https://elocal.it",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430038380766",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430038380766",
+      "publicContactEmails": [
+        "info@elocal.it",
+        "simone.gardella@elocal.it"
+      ]
+    },
+    {
+      "companyName": "Mabema",
+      "domain": "https://mabema.se",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430033499343",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430033499343",
+      "publicContactEmails": [
+        "magnus.lundberg@mabema.se"
+      ]
+    },
+    {
+      "companyName": "Favis",
+      "domain": "https://favis.co.kr",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077834427",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077834427",
+      "publicContactEmails": [
+        "favis@favis.co.kr"
+      ]
+    },
+    {
+      "companyName": "Nommas",
+      "domain": "https://nommas.ai",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075886810",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075886810",
+      "publicContactEmails": [
+        "info@nommas.ai"
+      ]
+    },
+    {
+      "companyName": "Mabema",
+      "domain": "https://mabema.com",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "existingBefore": false,
+      "hubspotCompanyId": "430033499343",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430033499343",
+      "publicContactEmails": [
+        "magnus.lundberg@mabema.se"
+      ]
+    },
+    {
+      "companyName": "DataVision",
+      "domain": "https://datavision.software",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 86,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077684959",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077684959",
+      "publicContactEmails": [
+        "jindrich.hasek@datavision.cz",
+        "martina.chmelickova@datavision.cz"
+      ]
+    },
+    {
+      "companyName": "PVI Systems",
+      "domain": "https://pvisys.com",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 86,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077707509",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077707509",
+      "publicContactEmails": [
+        "06357info@pvisys.com",
+        "kbakowski@pvisys.com"
+      ]
+    },
+    {
+      "companyName": "RiskCON",
+      "domain": "https://riskcon.ca",
+      "category": "integrator_vision_ai_consulting",
+      "relevanceScore": 86,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075788479",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075788479",
+      "publicContactEmails": [
+        "info@riskcon.ca"
+      ]
+    },
+    {
+      "companyName": "APISSYS",
+      "domain": "https://apissys.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075788482",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075788482",
+      "publicContactEmails": [
+        "fstercq@reflexces.com"
+      ]
+    },
+    {
+      "companyName": "PCB Arts",
+      "domain": "https://pcb-arts.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077934809",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077934809",
+      "publicContactEmails": [
+        "hello@pcb-arts.com",
+        "saber.kaygusuz@pcb-arts.com",
+        "philipp.joehl@pcb-arts.com"
+      ]
+    },
+    {
+      "companyName": "Ausil Systems",
+      "domain": "https://ausilsystems.eu",
+      "category": "integrator_general_ai",
+      "relevanceScore": 80,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075587782",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075587782",
+      "publicContactEmails": [
+        "aperez@ausilsystems.eu"
+      ]
+    },
+    {
+      "companyName": "Amc Systeme",
+      "domain": "https://amc-systeme.de",
+      "category": "integrator_general_ai",
+      "relevanceScore": 80,
+      "existingBefore": false,
+      "hubspotCompanyId": "430036641005",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430036641005",
+      "publicContactEmails": [
+        "info@amc-systeme.de",
+        "axel.meyer@amc-systeme.de",
+        "bernd.goebel@amc-systeme.de"
+      ]
+    },
+    {
+      "companyName": "MultiSystems",
+      "domain": "https://multisystems.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "429974534365",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/429974534365",
+      "publicContactEmails": [
+        "sales@multisystems.com",
+        "jdelmazo@multisystems.com"
+      ]
+    },
+    {
+      "companyName": "Seaberry Technologies",
+      "domain": "https://seaberrytech.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077893880",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077893880",
+      "publicContactEmails": [
+        "info@seaberrytech.com"
+      ]
+    },
+    {
+      "companyName": "Tooltech Global Engineering",
+      "domain": "https://tooltech.net",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "429992402169",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/429992402169",
+      "publicContactEmails": [
+        "rakesh.sardana@techmahindra.com"
+      ]
+    },
+    {
+      "companyName": "4DSP",
+      "domain": "https://4dsp.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075625694",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075625694",
+      "publicContactEmails": [
+        "michael.dryer@abaco.com",
+        "james.sweeney@abaco.com"
+      ]
+    },
+    {
+      "companyName": "Kiener Maschinenbau",
+      "domain": "https://kiener-maschinenbau.de",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 76,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077568199",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077568199",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Takano Co",
+      "domain": "https://takano-net.co.jp",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 76,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075906288",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075906288",
+      "publicContactEmails": [
+        "masao.takano@takano-net.co.jp"
+      ]
+    },
+    {
+      "companyName": "Erhardt + Leimer",
+      "domain": "https://erhardt-leimer.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075726014",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075726014",
+      "publicContactEmails": [
+        "digitalmarketing@erhardt-leimer.com"
+      ]
+    },
+    {
+      "companyName": "Regg Inspection",
+      "domain": "https://regginspection.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075442422",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075442422",
+      "publicContactEmails": [
+        "r.dambrosio@regginspection.it"
+      ]
+    },
+    {
+      "companyName": "ESPS",
+      "domain": "https://esps.nl",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077894847",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077894847",
+      "publicContactEmails": [
+        "patrick.vanbezouw@ims-nl.com",
+        "henri.paus@ims-nl.com"
+      ]
+    },
+    {
+      "companyName": "Brooks Automation",
+      "domain": "https://brooks.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075741380",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075741380",
+      "publicContactEmails": [
+        "kamran.sadri@brooks.com",
+        "martin.henseler@brooks.com",
+        "cornelia.baumeister@brooks.com"
+      ]
+    },
+    {
+      "companyName": "Piqapart",
+      "domain": "https://piqapart.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077894871",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077894871",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Aiir Innovations",
+      "domain": "https://aiir.nl",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430035735756",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430035735756",
+      "publicContactEmails": [
+        "hello@aiir.nl",
+        "fritjof.buettner@aiir.nl",
+        "steve.nowee@aiir.nl",
+        "miriam.huijser@aiir.nl"
+      ]
+    },
+    {
+      "companyName": "LEWA Attendorn",
+      "domain": "https://lewa-attendorn.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075522267",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075522267",
+      "publicContactEmails": [
+        "info@lewa-attendorn.com",
+        "a.volprecht@lewa-attendorn.com",
+        "s.kringe-schmeck@lewa-attendorn.com"
+      ]
+    },
+    {
+      "companyName": "Autoscan",
+      "domain": "https://autoscaninc.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077510903",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077510903",
+      "publicContactEmails": [
+        "info@autoscaninc.com",
+        "jmcnabb@autoscaninc.com"
+      ]
+    },
+    {
+      "companyName": "Microvision Instruments",
+      "domain": "https://microvision.fr",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077935809",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077935809",
+      "publicContactEmails": [
+        "christopher.forgeron@microvision.fr"
+      ]
+    },
+    {
+      "companyName": "Bertec",
+      "domain": "https://bertec.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075522275",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075522275",
+      "publicContactEmails": [
+        "chris.muldrow@bertec.com",
+        "murat@bertec.com"
+      ]
+    },
+    {
+      "companyName": "inos Automationssoftware",
+      "domain": "https://inos-automation.de",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430045921515",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430045921515",
+      "publicContactEmails": [
+        "t.sypsis@inos-automation.de",
+        "anna.kyriakidou@inos-automation.com"
+      ]
+    },
+    {
+      "companyName": "Invar",
+      "domain": "https://invaringenieria.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075644123",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075644123",
+      "publicContactEmails": [
+        "jsaura@invaringenieria.com"
+      ]
+    },
+    {
+      "companyName": "Glassquality",
+      "domain": "https://glassquality.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077629638",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077629638",
+      "publicContactEmails": [
+        "georg.aigner@softsolution.at"
+      ]
+    },
+    {
+      "companyName": "KSV Koblenzer Steuerungs- und Verteilungsbau",
+      "domain": "https://ksv-koblenz.de",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075808988",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075808988",
+      "publicContactEmails": [
+        "christian.frink@ksv-koblenz.de"
+      ]
+    },
+    {
+      "companyName": "PCBX",
+      "domain": "https://pcbx.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "429974535367",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/429974535367",
+      "publicContactEmails": [
+        "sales@pcbx.com"
+      ]
+    },
+    {
+      "companyName": "Dürr Somac",
+      "domain": "https://somac-filling.com",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 48,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075808990",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075808990",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "Kaysun",
+      "domain": "https://kaysun.com",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 48,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075690172",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075690172",
+      "publicContactEmails": [
+        "kkohls@kaysun.com",
+        "bharrison@kaysun.com"
+      ]
+    }
+  ],
+  "crawlFailures": [
+    {
+      "companyName": "Synsor.ai",
+      "domain": "https://synsor.ai"
+    },
+    {
+      "companyName": "Fill",
+      "domain": "https://fill.co.at"
+    },
+    {
+      "companyName": "Itera Técnica",
+      "domain": "https://itera-t.es"
+    },
+    {
+      "companyName": "Lead Intelligent Equipment",
+      "domain": "https://leadchina.cn"
+    },
+    {
+      "companyName": "Delft Robotics",
+      "domain": "https://delftrobotics.com"
+    },
+    {
+      "companyName": "SIGNUM Computer",
+      "domain": "https://signum-vision.com"
+    },
+    {
+      "companyName": "OCR7",
+      "domain": "https://ocr.tur.ai"
+    },
+    {
+      "companyName": "Xenia Progetti",
+      "domain": "https://xeniaprogetti.it"
+    },
+    {
+      "companyName": "Cobot Automation by Konica Minolta",
+      "domain": "https://smartfactory.konicaminolta.eu"
+    },
+    {
+      "companyName": "Rolta",
+      "domain": "https://rolta.com"
+    },
+    {
+      "companyName": "Robodex",
+      "domain": "https://robodex.de"
+    },
+    {
+      "companyName": "Roding Embedded",
+      "domain": "https://roding-embedded.de"
+    },
+    {
+      "companyName": "jovisaib.com: Applied AI Consulting",
+      "domain": "https://jovisaib.com"
+    },
+    {
+      "companyName": "Imago Group Benelux",
+      "domain": "https://imagogroup-benelux.com/web"
+    },
+    {
+      "companyName": "CyberOptics",
+      "domain": "https://cyberoptics.com"
+    },
+    {
+      "companyName": "Broens",
+      "domain": "https://broens.com.au"
+    },
+    {
+      "companyName": "MYESTRO",
+      "domain": "https://myestro.de"
+    },
+    {
+      "companyName": "MLabs Optronics",
+      "domain": "https://mlabsoptronics.com"
+    },
+    {
+      "companyName": "FotoNow-AI",
+      "domain": "https://fotonow.ai"
+    },
+    {
+      "companyName": "Amlogic",
+      "domain": "https://amlogic.com"
+    },
+    {
+      "companyName": "Equipments dimaTEC",
+      "domain": "https://e-dimatec.eu"
+    },
+    {
+      "companyName": "AIEX",
+      "domain": "https://aiex.ai"
+    },
+    {
+      "companyName": "Data Engineering",
+      "domain": "https://dataengineering.com.au"
+    },
+    {
+      "companyName": "VUC",
+      "domain": "https://vuc.us"
+    },
+    {
+      "companyName": "Fischer Robotics & Engineering",
+      "domain": "https://fischerrobotics.at"
+    },
+    {
+      "companyName": "SOLMET-7",
+      "domain": "https://solmet-7.com"
+    },
+    {
+      "companyName": "Laser Navigation",
+      "domain": "https://lasernavigation.it"
+    },
+    {
+      "companyName": "Robotronix",
+      "domain": "https://robotronix.it"
+    },
+    {
+      "companyName": "EMSY",
+      "domain": "https://emsysgroup.com"
+    },
+    {
+      "companyName": "ROBOT PROGRAMMERS",
+      "domain": "https://robotprogrammer.eu"
+    },
+    {
+      "companyName": "Last Vision",
+      "domain": "https://lastvision-sa.com"
+    },
+    {
+      "companyName": "DAISHIN",
+      "domain": "https://daishin-sa.co.jp"
+    },
+    {
+      "companyName": "ADEVI",
+      "domain": "https://adevi.io"
+    },
+    {
+      "companyName": "Consyd Software GmbH & Co.",
+      "domain": "https://consyd.de"
+    },
+    {
+      "companyName": "Teknique",
+      "domain": "https://oclea.com"
+    },
+    {
+      "companyName": "Intecro",
+      "domain": "https://intecro.com.tr"
+    },
+    {
+      "companyName": "SEEMAX Société Distribution Didier Branchard",
+      "domain": "https://sd2b.com"
+    },
+    {
+      "companyName": "Retinex",
+      "domain": "https://retinex.tech"
+    },
+    {
+      "companyName": "SYSCOC Automatisierungstechnik",
+      "domain": "https://irs-faude.de"
+    },
+    {
+      "companyName": "PNEUSCAN",
+      "domain": "https://pneuscan.com"
+    },
+    {
+      "companyName": "PLANOLITH",
+      "domain": "https://planolith.de"
+    },
+    {
+      "companyName": "Boschen-Oetting",
+      "domain": "https://boschen-oetting.de"
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "createdAt": "2026-05-15T13:55:01.887Z",
+  "inputCount": 100,
+  "alreadyInHubSpotCount": 33,
+  "notInHubSpotCount": 67,
+  "crawledCount": 60,
+  "crawlFailedCount": 7,
+  "categorizedCount": 60,
+  "integratorQualifiedCount": 5,
+  "categoryBreakdown": {
+    "irrelevant": 33,
+    "integrator_general_ai": 2,
+    "other": 18,
+    "industrial_end_customer_scaled": 2,
+    "software_platform_embedding": 3,
+    "camera_manufacturer_partner": 1,
+    "machine_builder_ai_enablement": 1
+  },
+  "qualifiedCategoryBreakdown": {
+    "integrator_general_ai": 2,
+    "industrial_end_customer_scaled": 2,
+    "machine_builder_ai_enablement": 1
+  },
+  "researchBriefCount": 5,
+  "companiesNeedingApolloContactsCount": 3,
+  "companySyncedCount": 5,
+  "contactSyncedCount": 9,
+  "syncedCount": 14,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [
+    {
+      "companyName": "PCMP",
+      "domain": "https://pcmp.co.za",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075478212",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075478212",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "TechTribe",
+      "domain": "https://techtribe.se",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430077276387",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430077276387",
+      "publicContactEmails": [
+        "order@techtribe.se",
+        "info@techtribe.se"
+      ]
+    },
+    {
+      "companyName": "Chiyoda",
+      "domain": "https://chiyodacorp.com",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075716839",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075716839",
+      "publicContactEmails": [
+        "yasui.makoto@chiyodacorp.com",
+        "ryu.ohgo@chiyodacorp.com",
+        "ito.taku@chiyodacorp.com"
+      ]
+    },
+    {
+      "companyName": "MDE Automation",
+      "domain": "https://mde-automation.eu",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "existingBefore": false,
+      "hubspotCompanyId": "430075677905",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430075677905",
+      "publicContactEmails": [
+        "e.denissen@mde-automation.nl",
+        "p.moerland@mde-automation.nl"
+      ]
+    }
+  ],
+  "crawlFailures": [
+    {
+      "companyName": "Phoenix Contact",
+      "domain": "https://phoenixcontact.com"
+    },
+    {
+      "companyName": "Lafre",
+      "domain": "https://lafre.it"
+    },
+    {
+      "companyName": "Cimlec Industrie",
+      "domain": "https://cimlec.fr"
+    },
+    {
+      "companyName": "AENTEC",
+      "domain": "https://aentec.es"
+    },
+    {
+      "companyName": "NIVE",
+      "domain": "https://nivetechnologies.com"
+    },
+    {
+      "companyName": "PRO-AT",
+      "domain": "https://pro-at.nl"
+    },
+    {
+      "companyName": "Genn",
+      "domain": "https://genn.co.in"
+    }
+  ]
+}

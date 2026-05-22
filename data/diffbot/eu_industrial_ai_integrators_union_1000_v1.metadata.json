@@ -1,0 +1,55 @@
+{
+  "targetRows": 1000,
+  "rowsWritten": 0,
+  "queries": [
+    {
+      "query": "vision_integrators_dach_plus",
+      "hits": null,
+      "pagesFetched": 1,
+      "rowsAdded": 0,
+      "stoppedOnStatus": 401,
+      "message": null
+    },
+    {
+      "query": "vision_integrators_south_eu",
+      "hits": null,
+      "pagesFetched": 1,
+      "rowsAdded": 0,
+      "stoppedOnStatus": 401,
+      "message": null
+    },
+    {
+      "query": "industrial_software_integrators",
+      "hits": null,
+      "pagesFetched": 1,
+      "rowsAdded": 0,
+      "stoppedOnStatus": 401,
+      "message": null
+    }
+  ],
+  "requestLog": [
+    {
+      "offset": 0,
+      "statusCode": 401,
+      "message": null,
+      "accountStatusCode": 200,
+      "accountSearchResultsToday": 8
+    },
+    {
+      "offset": 0,
+      "statusCode": 401,
+      "message": null,
+      "accountStatusCode": 200,
+      "accountSearchResultsToday": 8
+    },
+    {
+      "offset": 0,
+      "statusCode": 401,
+      "message": null,
+      "accountStatusCode": 200,
+      "accountSearchResultsToday": 8
+    }
+  ],
+  "csvPath": "data\\diffbot\\eu_industrial_ai_integrators_union_1000_v1.csv",
+  "rawPath": "data\\diffbot\\eu_industrial_ai_integrators_union_1000_v1.raw.json"
+}

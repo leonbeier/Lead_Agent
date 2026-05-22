@@ -1,0 +1,38 @@
+{
+  "createdAt": "2026-05-15T13:58:40.086Z",
+  "inputCount": 100,
+  "alreadyInHubSpotCount": 59,
+  "notInHubSpotCount": 41,
+  "crawledCount": 38,
+  "crawlFailedCount": 3,
+  "categorizedCount": 38,
+  "integratorQualifiedCount": 0,
+  "categoryBreakdown": {
+    "irrelevant": 27,
+    "camera_manufacturer_partner": 1,
+    "other": 8,
+    "software_platform_embedding": 2
+  },
+  "qualifiedCategoryBreakdown": {},
+  "researchBriefCount": 0,
+  "companiesNeedingApolloContactsCount": 0,
+  "companySyncedCount": 0,
+  "contactSyncedCount": 0,
+  "syncedCount": 0,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [],
+  "crawlFailures": [
+    {
+      "companyName": "Synsor.ai",
+      "domain": "https://synsor.ai"
+    },
+    {
+      "companyName": "Fill",
+      "domain": "https://fill.co.at"
+    },
+    {
+      "companyName": "Itera Técnica",
+      "domain": "https://itera-t.es"
+    }
+  ]
+}

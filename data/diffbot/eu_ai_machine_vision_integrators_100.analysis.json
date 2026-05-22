@@ -1,0 +1,1146 @@
+{
+  "inputPath": "C:\\Users\\LeonBeier\\GitHub\\Lead_Agent\\data\\diffbot\\eu_ai_machine_vision_integrators_100.csv",
+  "analyzedEntities": 100,
+  "relevantEntities": 91,
+  "irrelevantEntities": 9,
+  "categoryCounts": {
+    "machine_builder_ai_enablement": 5,
+    "integrator_general_ai": 62,
+    "integrator_vision_industrial_ai": 14,
+    "integrator_vision_ai_consulting_freelancer": 7,
+    "other": 8,
+    "industrial_end_customer_scaled": 3,
+    "irrelevant": 1
+  },
+  "relevantCategoryCounts": {
+    "machine_builder_ai_enablement": 5,
+    "integrator_general_ai": 62,
+    "integrator_vision_industrial_ai": 14,
+    "integrator_vision_ai_consulting_freelancer": 7,
+    "industrial_end_customer_scaled": 3
+  },
+  "topRelevant": [
+    {
+      "name": "IT+Robotics",
+      "website": "it-robotics.it",
+      "description": "IT+Robotics is a manufacturing company specializing in advanced machine vision solutions for industrial automation. Their products and services include 3D vision systems for bin-picking, quality inspection, and logistics automation. They also develop custom machine vision projects tailored to specific client needs, such as metrology and in-line checks.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Delivers custom machine vision projects with industrial automation and inspection implementation ownership."
+    },
+    {
+      "name": "Inovako",
+      "website": "inovako.com",
+      "description": "Inovako is an ‘Industry 4.0’ system integrator and supplies solutions by computer vision, artificial intelligence and industrial internet of things technologies.\nWe serve to a wide range of industries such as automotive, white goods, machinery, food industry, electronics and we are capable of developing projects from process quality control applications until comprehensive R&D projects which usually need deep scientific approach.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "ROKI Co",
+      "website": "roki-jp.com",
+      "description": "ROKI CO., LTD. designs and manufactures filtration and separation components for vehicles and industrial equipment. Offerings include oil, fuel, air, crankcase breather, and canister filters for passenger cars, motorcycles, and commercial applications. The company develops process and purification cartridges used in chemical handling and production lines. Capabilities cover filter media development, product design, prototyping, molding, and automated assembly with quality inspection. Engineering services include performance testing, durability evaluation, contamination analysis, and customization to meet OEM specifications and regulations. Additional support spans supply of replacement elements, documentation, and technical guidance throughout product lifecycles.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "TRIGO",
+      "website": "trigo-group.com",
+      "description": "Founded in 1997, TRIGO is a multinational company providing operational Quality Management solutions for the manufacturing sector, especially in the transportation industries. With a team of more than 5000 professionals present in 20 countries across 4 continents, TRIGO offers a comprehensive portfolio of Quality Inspection, Engineering and Management Services all along the supply chain.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "Sweeper",
+      "website": "sweeper-robot.eu",
+      "description": "SWEEPER’s main objective is to put the first generation greenhouse harvesting robots onto the market. Until now this has never been achieved and it will ensure Europe’s leading role in agricultural robotics.  In modern greenhouses there is a high demand to automate labour. The availability of a skilled workforce that accepts repetitive tasks in the harsh climate conditions of a greenhouse is decreasing rapidly. The current state of the art in automated harvesting of fruits and vegetables has remained remarkably stationary in the past decades. In the EU-FP7-project CROPS (www.crops-robots.eu) extensive research has been performed on agricultural robotics. One of the applications was a sweet pepper harvesting robot. SWEEPER will use the technology developed in CROPS to introduce, test and validate a robotic harvesting solution for sweet pepper under real-world conditions.  The project involves 6 partners from 4 different countries (The Netherlands, Belgium, Sweden and Israel). The consortium consist out of fundamental and applied research organisations, a system integrator and a modern grower of sweet pepper. In the consortium a wide-range of disciplines are available, including: horticulture, horticultural engineering, machine vision, sensing, robotics, control, intelligent systems, software architecture, system integration and greenhouse crop management.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "ROVIMATICA",
+      "website": "rovimatica.com",
+      "description": "ROVIMATICA develops and integrates industrial automation solutions focused on intralogistics, robotics and vehicle automation. The company designs, manufactures and commissions robotic cells, assembly and manufacturing lines, automated inspection systems, autonomous vehicles and PLC/SCADA control systems. Its teams work across mechatronics, electrical engineering, industrial robotics, AGVs and AMRs, automation and control, and machine vision and artificial intelligence. ROVIMATICA also delivers turnkey projects, covering concept design, engineering, programming, installation, start-up and maintenance. In addition, it runs R&D and innovation projects in machine vision, AI, cognitive robotics, edge computing and software-defined vehicle platforms for multiple industrial sectors. These solutions are applied in areas such as logistics, automotive, agrifood, recycling, energy, mobility and infrastructure management.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "AUTFORCE Vision Systems",
+      "website": "autforce.com",
+      "description": "AUTFORCE Vision Systems adds three business areas to a portfolio that is capable of performance, with services for projects of any size. The company offers solutions in the fields of machine vision, industrial identification and laser marking. The management of AUTFORCE Vision Systems GmbH is in the responsibility of Mr. Mag. (FH) Stefan Perg and Mr. Markus Piffer. The young company, headquartered in Lienz, East Tyrol, specializes in automation mechatronics. In three interrelated but also detached functional business areas, the expert team realizes tailor-made solutions from A to Z - from the in-depth feasibility study to implementation for commissioning, quality assurance and traceability. Today, industrial image processing systems face the challenge of having to meet a multitude of objectives in a dynamic environment and increasingly complex contexts. From 100% quality assurance through clear traceability to internal process optimization and increased fail-safety, the expectations of the manufacturing industry are sufficient. Three business areas complement each other to form a performance-oriented portfolio of machine vision, Industrial Identification and Lasermarking by working together with the affiliated company AUTFORCE Automations GmbH, complete automation solutions are just as possible as individual projects or just the purchase of suitable hardware.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "Silicann Systems",
+      "website": "silicann.com",
+      "description": "Silicann Systems develops and produces optoelectronic sensor solutions and optical inspection and measurement systems for industrial and laboratory automation. The company focuses on NIR spectrometers, including the Spektralwerk Core series for inline inspection, identification, and content analysis in process environments. It offers application software such as Spectrotron and APIs for configuring and operating its spectrometers. Silicann Systems provides engineering services covering custom optical sensor and light source design, spectrometric calibration models, and algorithm development. Its electronics services include circuit and PCB design, firmware and embedded Linux development, interface integration, and prototyping through to small-series production. These offerings target research organizations and manufacturing companies that require precise photometric, spectral, and color measurement solutions integrated into automated processes.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "HAHN Automation Group US",
+      "website": "hahnautomation.group",
+      "description": "The HAHN Automation Group is your global solution partner for factory automation. From manual stations to semi-automated cells and full production lines, our 1,800 employees across 22 locations worldwide provide custom automation solutions.\n\nOur MedTech global lead plant (formerly Invotec) is headquartered in the US and specializes in applications with small components and intricate assemblies—scaling automation to meet the unique needs of medical device manufacturers. Our flexible approach allows customers to refine their product design while we engineer the equipment.\n\nOur core competencies include: controls engineering, error proofing, machine vision systems, assembly systems, micro laser processing, and test systems.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "ASINOVA SOLUCIONES",
+      "website": "asinova.es",
+      "description": "ASINOVA SOLUCIONES provides industrial automation and software services for manufacturing companies. The company designs and implements plant control systems, including PLC and SCADA solutions for production lines and process plants. It develops industrial software for supervision, data acquisition, and production management, along with traceability systems to track materials and products. ASINOVA SOLUCIONES also delivers machine vision projects for inspection and quality control. Its solutions are used in sectors such as waste treatment, recovery plants, and other industrial environments that require automation and real-time information.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "C G Controls",
+      "website": "cgcontrols.ie",
+      "description": "CG Controls Ltd. specializes in automation solutions for industries such as medical devices, pharmaceuticals, and food & beverage. The company offers expertise in PLC, SCADA, and machine vision systems, focusing on industrial automation, serialization, and track & trace. CG Controls Ltd. supports third-party process control and automation systems, ensuring efficient and compliant operations in regulated industries.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "20/20 Robotics",
+      "website": "2020robotics.com",
+      "description": "20/20 Robotics is a robotics automation company that provides integrated machine vision systems and industrial automation solutions.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "PROMEXX Technical Automation",
+      "website": "promexx.nl",
+      "description": "PROMEXX Technical Automation delivers industrial automation services and control solutions for production lines and machine builders. It designs, engineers, and integrates PLC, HMI, and SCADA software, builds electrical panels, and commissions systems on site. Services include robotics and motion integration, machine vision, data acquisition, MES/IIoT connectivity, and functional safety upgrades. The team executes retrofit projects, new machine control, and line optimization from concept to handover. Support covers troubleshooting, lifecycle maintenance, and technical documentation. Consultancy assists with requirements, architecture, and standardization. Training prepares operators and technicians to use and maintain automated equipment.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Metapack Engineering",
+      "website": "metapack.it",
+      "description": "Metapack Engineering S.r.l is an Italian company which operates in the field of industrial automation since 2000. \n\nWith the founding values of specific competence, innovation and strong customer orientation, Metapack turns innovative solutions into fully engineered systems taylored to the specific needs of Customers. \n\nMainly specialized in the fields of pharmaceuticals, chemicals, food and beverage, and converting, Metapack provides for each phase of the solution deployment, from Customer URS analisys, through Detailed Design and machine manufacturing, up to the FAT/SAT processes and final installation, training and take-over support.\n\nAmong the specific competences of Metapack Engineering:\n•\tLate stage customization of cartons, labels, blister and Pharma Foils\n•\tDigital Identification/Printing systems (DOD UV, TIJ, CIJ and LASER printing)\n•\tVision systems (COGNEX certified integrator) \n•\tTraceability systems (pharmaceutical serialization, aggregation and related technologies)\n•\tFast Decoding and print quality inspection in one system (V-Plus)\n•\tBlow Fill Seal Monodoses - Print and fill level inspection\n•\tBlister Single - Print and inspection\n•\tPrint on Pharma Foils\n\nOver the years, Metapack has developed uninterrupted tracking systems not only in Italy.\nMany of our customers are pharmaceutical companies from all over the world (American, Asian and European companies). Our assistance services, guaranteed on site for the whole time of the cooperation, are structured with a team of engineers all over the world.\n\nThe entire production chain is carried out within the industrial plant. The design is managed by our team of engineers, who allows us to create machines that can be customized for all needs.\n\nWe are looking for new projects, \nKeep in touch",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Smitech",
+      "website": "smitech.ee",
+      "description": "Smitech develops and delivers turnkey automation solutions for manufacturing companies. The company designs and builds production lines, fully automated and semi-automated assembly equipment, and industrial robot systems, including collaborative and mobile robots. Its engineers implement industrial automation and control systems, machine vision solutions for quality inspection, and custom machine-building projects across sectors such as electronics, automotive, wood, plastics, and construction. Smitech supports customers from concept development through engineering, component sourcing, assembly, software development, on-site installation, and commissioning. It also provides aftercare services including maintenance, upgrades, spare parts, and training for production personnel.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Gestalt Robotics",
+      "website": "gestalt-robotics.com",
+      "description": "Gestalt Robotics is a software and solution provider working at the interface of classic industrial automation and artificial intelligence. We accompany our clients in the innovation process from ideation through prototyping to the integration of finished products. In addition to software development, the range of services includes consultingactivities (e.g. feasibility studies and automation concepts) as well as support for the customer after the end of the project. Based on the extensive technical experience and expertise of the core team in applied research, Gestalt Robotics serves the ever growing demand for automation solutions from companies in various industries, but with a clear focus on manufacturing. The core of the business model of GESTALT Robotics is the project-based development of tailored software for the four application fields: (data-efficient) AI-powered image processing in 2D and 3D, intelligent robotics, (edge) platform services for autonomous mobility and innovative worker assistance systems.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Robotec Solutions",
+      "website": "robotec-ag.com",
+      "description": "Robotec Solutions designs and implements customized robot-based automation solutions for industrial customers. The company develops individual robot cells, testing stations, and fully integrated production lines that cover production and manufacturing, material flow and intralogistics, and quality assurance and testing. Its systems include mobile robots, cobots, industrial robots, AI-supported visual inspection, rails and traversing axes, and complete robot cells and lines. Robotec Solutions serves electronics and semiconductors, plastics, food, luxury goods and watches, medtech and pharma, and the metal industry. Its services span feasibility studies, concept and system design, project management, commissioning, maintenance, support, extensions, training, and retrofit solutions. The company also offers a practice-integrated study program in cooperation with a university of applied sciences.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Machine Vision",
+      "website": "machinevision.ch",
+      "description": "A - Machine Vision System Integrator : Quality control, automatic positionning, datamatrix reading, biosensor reading, length measurements, etc.\r\n\r\nB - Laser systems automatic drive for laser welding, laser microwelding, laser engraving, laser cutting. See www.visioweld.com\r\n\r\nC - High quality numeric microscope with live embeded guides (6 lines, position set by operator) for manual positionning. See www.visionindustrielle.ch\r\n\r\nD - LABVIEW Develpment & Consulting:\r\nOur experts are qualified developers with more than 10 years experience",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Sinfiny Smart Technologies",
+      "website": "sinfiny.com",
+      "description": "Sinfiny Smart Technologies designs and implements automation and robotics solutions for smart factories and industrial production. The company delivers turnkey engineering projects that cover process analysis, custom production line design, and integration of advanced technologies. Its mechanical and electrical engineering teams develop and optimize machinery, automation hardware, and control systems. Sinfiny provides programming and software services including PLC and robot programming, machine vision, SCADA systems, and traceability. It also offers process consulting and technical support to improve efficiency and reliability in sectors such as automotive, food, industrial manufacturing, and construction. The company develops standardized robotic cells like RoboPACK for packing and palletizing end-of-line products.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Ruhrbotics",
+      "website": "ruhrbotics.de",
+      "description": "Ruhrbotics develops and integrates industrial automation solutions with a focus on robotics, special-purpose machinery, and complete production systems. The company designs and builds custom machines, automation cells, and material handling systems such as palletizing and automated storage solutions. Its engineers integrate and program industrial and collaborative robots, PLCs, safety controls, and machine vision for tasks like assembly, sorting, quality inspection, and logistics. Ruhrbotics also distributes industrial and collaborative robots from major manufacturers and provides CE-related services. In addition, it offers training courses on FANUC and KUKA robots, Profinet, and robot safety, as well as ongoing service and support for installed systems. These offerings address customers in industries including automotive, healthcare, electronics, intralogistics, and metal processing.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Delivers custom automation with machine vision integration and industrial robotics programming."
+    },
+    {
+      "name": "PRAUTEC",
+      "website": "prautec.de",
+      "description": "PRAUTEC serves industrial automation services. Their services are automation industry robots, industrial image processing, robot programming, SPS programming, and construction invertor services.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Delivers industrial automation with robot programming and industrial image processing services."
+    },
+    {
+      "name": "iSAM",
+      "website": "isam-ag.de",
+      "description": "iSAM AG specializes in autonomous systems for bulk and container handling, automated processing of fiber-reinforced materials, and individual process automation. The company focuses on innovation in industrial automation, providing solutions for large-scale equipment such as autonomous grab ship unloaders for coal and iron. iSAM AG is known for its expertise in automating industrial processes, enhancing efficiency and productivity in various sectors.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "GEVA",
+      "website": "gevaonline.com",
+      "description": "GEVA is an industrial automation company that specializes in providing a range of automation solutions for hot metal forging processes.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "EKB",
+      "website": "ekb.nl",
+      "description": "EKB is a system integrator in industrial automation that specializes in cyber security, robotics, machines and artificial intelligence.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Gesta",
+      "website": "gestambh.de",
+      "description": "GESTA Society for electronic control and drive technology Ltd provides an industrial automation services such as project planning, control cabinet construction, plc programming and international commissioning of high-availability switchgear, as well as the design and implementation of optimized drive solutions are business.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "PCMP",
+      "website": "pcmp.co.za",
+      "description": "PCMP is an industrial automation system integrator providing turnkey solutions for manufacturing clients across various sectors, including food and beverage, automotive, mining, and oil and gas. The company offers services such as PLC programming, SCADA development, electrical panel design, robotics integration, and industrial networking. PCMP uses technologies from brands like Siemens, Schneider, and Rockwell to deliver customized automation solutions to enhance manufacturing efficiency.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Gritec",
+      "website": "gritec.ch",
+      "description": "Gritec offers technical support for IoT products, industrial automation, manufacturing, and engineering services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "S.I.A.",
+      "website": "sia-bv.nl",
+      "description": "SIA focuses on industrial automation and control technology services for machine builders and manufacturing companies. The company offers advisory services on automation projects, including industrial control concepts using sensor, PLC, pneumatic, and servo technology. Its engineering and software services cover functional design, electrical engineering, industrial PLC software development, and creation of human-machine interfaces. SIA also supervises projects and supports customers facing temporary capacity peaks. Implementation services span the complete control system, from detailed design and electrical diagrams to panel building, on-site installation, and commissioning. These offerings support customers seeking partial or turnkey control solutions for industrial equipment and production lines.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "MANIAS",
+      "website": "manias.nl",
+      "description": "MANIAS is delivering services which will lead to success in Industrial Automation engineering. The services go beyond the coding of PLC’s, making graphic interfaces and hardware drawings. MANIAS is focusing on the complete design and the process of getting there smart, efficient and with the use new technologies and innovative ideas.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "TechTribe",
+      "website": "techtribe.se",
+      "description": "TechTribe operates in the industrial automation and robotics sector. The company offers complete solutions within industrial automation, with a focus on technology developed by humans for humans. TechTribe's services include robotic technological development and system integration. The company has been recognized for its innovative approach, receiving the System Integrator Innovation award from Rockwell Automation.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Puranova",
+      "website": "puranova.tech",
+      "description": "Puranova designs and delivers solar water pumping, smart building, lighting, healthcare, and industrial automation solutions. The company acts as a manufacturer, system integrator, and partner to global brands in pumping, smart buildings, and automation. It provides Lorentz-based solar pump systems, PV modules, and accessories for pools, irrigation, and drinking water projects. Puranova Automation offers PLC, SCADA, DCS, and IIoT-based control systems, panel building, maintenance, and legacy system migrations across industries such as water, wastewater, food and beverage, and cement. Its smart building and lighting teams implement ELV security, guest room management, and energy-saving controls for residential, office, and industrial facilities.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Cimlec Industrie",
+      "website": "cimlec.fr",
+      "description": "Cimlec Industrie provides industrial automation services. The Compnay offers robotics, iron works, automation, and electrical engineering services. Cimlec Industrie serves customers worldwide.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "INDEFF",
+      "website": "indeff.com",
+      "description": "INDEFF is an experienced Industrial Automation and Manufacturing Execution Systems expert. We boast more almost 20 years of experience as an Endorsed AVEVA System Integrator and have successfully completed more than 1000 projects all over the world. How does INDEFF innovate? We prepare companies for Industry 4.0 by creating smart factories. As a proud AVEVA partner, we take full advantage of the possibilities of the Industrial Internet of Things and set up fully connected supply chains for maximum efficiency. INDEFF has operating companies in Europe, Middle East, Southeast Asia, and North America to support our global customers.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "SCIO Automation",
+      "website": "scio-automation.com",
+      "description": "SCIO is a global industrial automation conglomerate whose mission is to support and simplify its customer’s successful journey to Industry 4.0. By applying SCIO's expert services as a system integrator using new digital-age solutions, SCIO helps its customers to automate production and logistics processes to achieve superior efficiency. As a technical innovator, SCIO develops value-adding automation solutions tailored to customer-specific needs - helping to turn industrial plants into Smart Factories. SCIO stands for quality, reliability and value, and through close cooperation SCIO rapidly improves production processes and systems to extract valuable, tangible benefits - both for today and for tomorrow.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "2Pro Automation & Engineering GmbH & Co.",
+      "website": "2pro-automation.de",
+      "description": "2Pro Automation & Engineering provides services for industrial automation, robotics integration, mechanical and electrical engineering, and plant construction. The company plans, implements and optimizes production systems, including robot programming, software development and industrial service. It also offers personnel services, supplying specialists such as robot programmers, software developers, mechanics and electromechanics. In addition, 2Pro delivers cybersecurity services such as vulnerability scanning and managed security operations, external data protection and whistleblower systems, and e-learning courses on IT security and data protection.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "General Control Systems",
+      "website": "generalcontrolsystems.com",
+      "description": "General Control Systems, Inc. (GCS) is a Control Systems Integrator with professional automation engineers specializing in Robotics, Process Control and Industrial Automation Control Systems. GCS is a certified member of the Control System Integrator Association (CSiA). GCS specializes in the semiconductor, pharmaceutical, biotech, food & beverage, water & wastewater, and industrial automation sectors. From process control systems to certified panel design, controls upgrades to robotic integration, we'll deliver the right solution for you!",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "LCS Group",
+      "website": "lcsgroup.it",
+      "description": "Since the establishment of the company in 1989 LCS Group is one the Italian and European market as a System Integrator, offering turnkey solutions for material handling and automatic warehouse. LCS headquarter in Usmate Velate (MB) deals with: - planning and supply of automated handling and storage systems; - revamping of inhouse automatic material handling systems; - software solutions, feasibility studies. LCS Automation in Rivalta di Torino (TO) is the company of LCS Group dedicated to design, installation and maintenance of systems for industrial automation. The company offers: - design and installation of turnkey systems for industrial automation and motorized transport; - welding islands; - electrical, software and fluidics engineering; - PLC design and commissioning and motion control systems.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "LC Engineers & Consultants",
+      "website": "lcec.nl",
+      "description": "LC Engineers & Consultants BV, also known in short as “LC”, is an independent and specialized engineering-, and consultancy company in the field of industrial automation and process control. LC is performing in optima forma as an extension of the end-users organization. The LC company provides professional consulting- and engineering services, delivered by talented and highly motivated professionals with extensive and integral industry know-how of a diversity of techniques related to the Industrial Automation domain. Implementing new information-systems-migration-strategies demands well designed process control system architectures, efficient projects execution and professional operated and maintained process control-, information-, and management systems and applications. Budget estimations have to be prepared, system concepts and software platforms are to be selected and benchmarking of suppliers has to be done. Here is where LC can bring added value in this selection process in offering our field proven LC-method! Our services contains a complete package of solutions and methodologies to purchase or rearrange complete industrial automation systems and solutions. “Do we have a business case or not?” is in such a question often asked as a starting point of a first meeting.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "AENTEC",
+      "website": "aentec.es",
+      "description": "Aentec provided industrial automation and engineering solutions, including design and integration services for manufacturing systems.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Spiratec Solutions",
+      "website": "spiratec.com",
+      "description": "SpiraTec Solutions provides industrial engineering, automation, and IT services for production plants in the process industry. The company focuses on the planning, implementation and support of process engineering facilities, covering process, piping and civil, IT, automation, and electrical and instrumentation engineering. It delivers process automation and discrete automation projects, including control system implementation, batch and recipe control, safety systems, migrations and system integration. SpiraTec Solutions also implements industrial IT solutions such as IT/OT system integration, MES and MOM applications, data historians, performance management and industrial cyber security. Its services extend across the lifecycle of production systems, from consulting and functional design through commissioning, optimization and ongoing technical support for sectors such as pharmaceuticals, food and beverages, chemicals and energy.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    }
+  ],
+  "allResults": [
+    {
+      "name": "Phoenix Contact",
+      "website": "phoenixcontact.com",
+      "description": "Phoenix Contact GmbH & Co. KG provides electrification, networking, and industrial automation technology solutions. The Company offers cloud computing, software, marking, assembling, installation, switching, measuring, and related services. Phoenix Contact serves customers worldwide.",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 60,
+      "rationale": "Industrial automation and networking focus with potential for AI enablement but mainly hardware-led."
+    },
+    {
+      "name": "Amalfi Systems",
+      "website": "amalfisystems.com",
+      "description": "Amalfi Systems offers networking, distributed systems, embedded applications, network management solutions, kernel-mode, device-driver development. They offer industrial automation solutions, distributed manufacturing systems, embedded systems software, and network infrastructure design. They provide a variety of services that help clients speed up the time it takes for their products to reach the market. They develop open industry standards that enable internet connectivity. For a large industrial company, they plan and develop a factory automation system.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 65,
+      "rationale": "Delivers industrial automation and factory automation systems with embedded and distributed software solutions."
+    },
+    {
+      "name": "Belden",
+      "website": "belden.com",
+      "description": "Belden Inc. is an American, multinational, publicly traded company specializing in the design, manufacture, and distribution of end-to-end networking, security and connectivity products. The company serves the Industrial Automation Solutions, Smart Buildings and Broadband & 5G markets.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "iSAM",
+      "website": "isam-ag.de",
+      "description": "iSAM AG specializes in autonomous systems for bulk and container handling, automated processing of fiber-reinforced materials, and individual process automation. The company focuses on innovation in industrial automation, providing solutions for large-scale equipment such as autonomous grab ship unloaders for coal and iron. iSAM AG is known for its expertise in automating industrial processes, enhancing efficiency and productivity in various sectors.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "IT+Robotics",
+      "website": "it-robotics.it",
+      "description": "IT+Robotics is a manufacturing company specializing in advanced machine vision solutions for industrial automation. Their products and services include 3D vision systems for bin-picking, quality inspection, and logistics automation. They also develop custom machine vision projects tailored to specific client needs, such as metrology and in-line checks.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Delivers custom machine vision projects with industrial automation and inspection implementation ownership."
+    },
+    {
+      "name": "Orise",
+      "website": "orise.com",
+      "description": "Process Automation Solutions is a provider of automation engineering solutions in the industrial automation industry.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "GEVA",
+      "website": "gevaonline.com",
+      "description": "GEVA is an industrial automation company that specializes in providing a range of automation solutions for hot metal forging processes.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "EKB",
+      "website": "ekb.nl",
+      "description": "EKB is a system integrator in industrial automation that specializes in cyber security, robotics, machines and artificial intelligence.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "PROMEXX Technical Automation",
+      "website": "promexx.nl",
+      "description": "PROMEXX Technical Automation delivers industrial automation services and control solutions for production lines and machine builders. It designs, engineers, and integrates PLC, HMI, and SCADA software, builds electrical panels, and commissions systems on site. Services include robotics and motion integration, machine vision, data acquisition, MES/IIoT connectivity, and functional safety upgrades. The team executes retrofit projects, new machine control, and line optimization from concept to handover. Support covers troubleshooting, lifecycle maintenance, and technical documentation. Consultancy assists with requirements, architecture, and standardization. Training prepares operators and technicians to use and maintain automated equipment.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Gesta",
+      "website": "gestambh.de",
+      "description": "GESTA Society for electronic control and drive technology Ltd provides an industrial automation services such as project planning, control cabinet construction, plc programming and international commissioning of high-availability switchgear, as well as the design and implementation of optimized drive solutions are business.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "SIKO",
+      "website": "siko-global.com",
+      "description": "SIKO-global is an Industrial Automation  that offer solutions for a wide range of different measuring tasks and applications.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "IXION",
+      "website": "ixion.es",
+      "description": "IXION is a highly innovative SME that develops automation solutions and assimilates the most advanced and efficient technologies. Its products are aimed to the industrial sector, also linked with robotics and solutions based on autonomous vehicles.The company aims to provide industry with the advances of the newest technologies in an easy way. Asa result, companies will increase their efficiency and safety, and will also reduce costs and risks.Apart from its work for the European Space Agency, Axiom develops highly advanced solutions for robotic systems, specially for autonomous vehicles. These solutions are based on highly innovative progress regarding leading technologies, such as Computer Vision, Sensor Fusion, Control and Navigation Advanced Systems, Artificial Intelligence and advanced human-machine interfaces.",
+      "category": "other",
+      "relevanceScore": 40,
+      "rationale": "Innovative automation and robotics focus but lacks clear delivery ownership or explicit vision AI evidence."
+    },
+    {
+      "name": "PCMP",
+      "website": "pcmp.co.za",
+      "description": "PCMP is an industrial automation system integrator providing turnkey solutions for manufacturing clients across various sectors, including food and beverage, automotive, mining, and oil and gas. The company offers services such as PLC programming, SCADA development, electrical panel design, robotics integration, and industrial networking. PCMP uses technologies from brands like Siemens, Schneider, and Rockwell to deliver customized automation solutions to enhance manufacturing efficiency.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Gritec",
+      "website": "gritec.ch",
+      "description": "Gritec offers technical support for IoT products, industrial automation, manufacturing, and engineering services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "S.I.A.",
+      "website": "sia-bv.nl",
+      "description": "SIA focuses on industrial automation and control technology services for machine builders and manufacturing companies. The company offers advisory services on automation projects, including industrial control concepts using sensor, PLC, pneumatic, and servo technology. Its engineering and software services cover functional design, electrical engineering, industrial PLC software development, and creation of human-machine interfaces. SIA also supervises projects and supports customers facing temporary capacity peaks. Implementation services span the complete control system, from detailed design and electrical diagrams to panel building, on-site installation, and commissioning. These offerings support customers seeking partial or turnkey control solutions for industrial equipment and production lines.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "MANIAS",
+      "website": "manias.nl",
+      "description": "MANIAS is delivering services which will lead to success in Industrial Automation engineering. The services go beyond the coding of PLC’s, making graphic interfaces and hardware drawings. MANIAS is focusing on the complete design and the process of getting there smart, efficient and with the use new technologies and innovative ideas.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "TechTribe",
+      "website": "techtribe.se",
+      "description": "TechTribe operates in the industrial automation and robotics sector. The company offers complete solutions within industrial automation, with a focus on technology developed by humans for humans. TechTribe's services include robotic technological development and system integration. The company has been recognized for its innovative approach, receiving the System Integrator Innovation award from Rockwell Automation.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "KS Engineers",
+      "website": "ksengineers.com",
+      "description": "KS ENGINEERS provides automotive testing, industrial automation, and building services from a single source.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Puranova",
+      "website": "puranova.tech",
+      "description": "Puranova designs and delivers solar water pumping, smart building, lighting, healthcare, and industrial automation solutions. The company acts as a manufacturer, system integrator, and partner to global brands in pumping, smart buildings, and automation. It provides Lorentz-based solar pump systems, PV modules, and accessories for pools, irrigation, and drinking water projects. Puranova Automation offers PLC, SCADA, DCS, and IIoT-based control systems, panel building, maintenance, and legacy system migrations across industries such as water, wastewater, food and beverage, and cement. Its smart building and lighting teams implement ELV security, guest room management, and energy-saving controls for residential, office, and industrial facilities.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Lafre",
+      "website": "lafre.it",
+      "description": "Lafre is a machinery manufacturing company that provides welding, metal processing, and industrial automation services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Cimlec Industrie",
+      "website": "cimlec.fr",
+      "description": "Cimlec Industrie provides industrial automation services. The Compnay offers robotics, iron works, automation, and electrical engineering services. Cimlec Industrie serves customers worldwide.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "INDEFF",
+      "website": "indeff.com",
+      "description": "INDEFF is an experienced Industrial Automation and Manufacturing Execution Systems expert. We boast more almost 20 years of experience as an Endorsed AVEVA System Integrator and have successfully completed more than 1000 projects all over the world. How does INDEFF innovate? We prepare companies for Industry 4.0 by creating smart factories. As a proud AVEVA partner, we take full advantage of the possibilities of the Industrial Internet of Things and set up fully connected supply chains for maximum efficiency. INDEFF has operating companies in Europe, Middle East, Southeast Asia, and North America to support our global customers.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "SCIO Automation",
+      "website": "scio-automation.com",
+      "description": "SCIO is a global industrial automation conglomerate whose mission is to support and simplify its customer’s successful journey to Industry 4.0. By applying SCIO's expert services as a system integrator using new digital-age solutions, SCIO helps its customers to automate production and logistics processes to achieve superior efficiency. As a technical innovator, SCIO develops value-adding automation solutions tailored to customer-specific needs - helping to turn industrial plants into Smart Factories. SCIO stands for quality, reliability and value, and through close cooperation SCIO rapidly improves production processes and systems to extract valuable, tangible benefits - both for today and for tomorrow.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "2Pro Automation & Engineering GmbH & Co.",
+      "website": "2pro-automation.de",
+      "description": "2Pro Automation & Engineering provides services for industrial automation, robotics integration, mechanical and electrical engineering, and plant construction. The company plans, implements and optimizes production systems, including robot programming, software development and industrial service. It also offers personnel services, supplying specialists such as robot programmers, software developers, mechanics and electromechanics. In addition, 2Pro delivers cybersecurity services such as vulnerability scanning and managed security operations, external data protection and whistleblower systems, and e-learning courses on IT security and data protection.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "General Control Systems",
+      "website": "generalcontrolsystems.com",
+      "description": "General Control Systems, Inc. (GCS) is a Control Systems Integrator with professional automation engineers specializing in Robotics, Process Control and Industrial Automation Control Systems. GCS is a certified member of the Control System Integrator Association (CSiA). GCS specializes in the semiconductor, pharmaceutical, biotech, food & beverage, water & wastewater, and industrial automation sectors. From process control systems to certified panel design, controls upgrades to robotic integration, we'll deliver the right solution for you!",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Ruhrbotics",
+      "website": "ruhrbotics.de",
+      "description": "Ruhrbotics develops and integrates industrial automation solutions with a focus on robotics, special-purpose machinery, and complete production systems. The company designs and builds custom machines, automation cells, and material handling systems such as palletizing and automated storage solutions. Its engineers integrate and program industrial and collaborative robots, PLCs, safety controls, and machine vision for tasks like assembly, sorting, quality inspection, and logistics. Ruhrbotics also distributes industrial and collaborative robots from major manufacturers and provides CE-related services. In addition, it offers training courses on FANUC and KUKA robots, Profinet, and robot safety, as well as ongoing service and support for installed systems. These offerings address customers in industries including automotive, healthcare, electronics, intralogistics, and metal processing.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Delivers custom automation with machine vision integration and industrial robotics programming."
+    },
+    {
+      "name": "LCS Group",
+      "website": "lcsgroup.it",
+      "description": "Since the establishment of the company in 1989 LCS Group is one the Italian and European market as a System Integrator, offering turnkey solutions for material handling and automatic warehouse. LCS headquarter in Usmate Velate (MB) deals with: - planning and supply of automated handling and storage systems; - revamping of inhouse automatic material handling systems; - software solutions, feasibility studies. LCS Automation in Rivalta di Torino (TO) is the company of LCS Group dedicated to design, installation and maintenance of systems for industrial automation. The company offers: - design and installation of turnkey systems for industrial automation and motorized transport; - welding islands; - electrical, software and fluidics engineering; - PLC design and commissioning and motion control systems.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "LC Engineers & Consultants",
+      "website": "lcec.nl",
+      "description": "LC Engineers & Consultants BV, also known in short as “LC”, is an independent and specialized engineering-, and consultancy company in the field of industrial automation and process control. LC is performing in optima forma as an extension of the end-users organization. The LC company provides professional consulting- and engineering services, delivered by talented and highly motivated professionals with extensive and integral industry know-how of a diversity of techniques related to the Industrial Automation domain. Implementing new information-systems-migration-strategies demands well designed process control system architectures, efficient projects execution and professional operated and maintained process control-, information-, and management systems and applications. Budget estimations have to be prepared, system concepts and software platforms are to be selected and benchmarking of suppliers has to be done. Here is where LC can bring added value in this selection process in offering our field proven LC-method! Our services contains a complete package of solutions and methodologies to purchase or rearrange complete industrial automation systems and solutions. “Do we have a business case or not?” is in such a question often asked as a starting point of a first meeting.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "AENTEC",
+      "website": "aentec.es",
+      "description": "Aentec provided industrial automation and engineering solutions, including design and integration services for manufacturing systems.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Metapack Engineering",
+      "website": "metapack.it",
+      "description": "Metapack Engineering S.r.l is an Italian company which operates in the field of industrial automation since 2000. \n\nWith the founding values of specific competence, innovation and strong customer orientation, Metapack turns innovative solutions into fully engineered systems taylored to the specific needs of Customers. \n\nMainly specialized in the fields of pharmaceuticals, chemicals, food and beverage, and converting, Metapack provides for each phase of the solution deployment, from Customer URS analisys, through Detailed Design and machine manufacturing, up to the FAT/SAT processes and final installation, training and take-over support.\n\nAmong the specific competences of Metapack Engineering:\n•\tLate stage customization of cartons, labels, blister and Pharma Foils\n•\tDigital Identification/Printing systems (DOD UV, TIJ, CIJ and LASER printing)\n•\tVision systems (COGNEX certified integrator) \n•\tTraceability systems (pharmaceutical serialization, aggregation and related technologies)\n•\tFast Decoding and print quality inspection in one system (V-Plus)\n•\tBlow Fill Seal Monodoses - Print and fill level inspection\n•\tBlister Single - Print and inspection\n•\tPrint on Pharma Foils\n\nOver the years, Metapack has developed uninterrupted tracking systems not only in Italy.\nMany of our customers are pharmaceutical companies from all over the world (American, Asian and European companies). Our assistance services, guaranteed on site for the whole time of the cooperation, are structured with a team of engineers all over the world.\n\nThe entire production chain is carried out within the industrial plant. The design is managed by our team of engineers, who allows us to create machines that can be customized for all needs.\n\nWe are looking for new projects, \nKeep in touch",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "RR Service",
+      "website": "rrservice.cz",
+      "description": "RR Service provides logistics, packaging, consulting and industrial automation services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Spiratec Solutions",
+      "website": "spiratec.com",
+      "description": "SpiraTec Solutions provides industrial engineering, automation, and IT services for production plants in the process industry. The company focuses on the planning, implementation and support of process engineering facilities, covering process, piping and civil, IT, automation, and electrical and instrumentation engineering. It delivers process automation and discrete automation projects, including control system implementation, batch and recipe control, safety systems, migrations and system integration. SpiraTec Solutions also implements industrial IT solutions such as IT/OT system integration, MES and MOM applications, data historians, performance management and industrial cyber security. Its services extend across the lifecycle of production systems, from consulting and functional design through commissioning, optimization and ongoing technical support for sectors such as pharmaceuticals, food and beverages, chemicals and energy.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Inovako",
+      "website": "inovako.com",
+      "description": "Inovako is an ‘Industry 4.0’ system integrator and supplies solutions by computer vision, artificial intelligence and industrial internet of things technologies.\nWe serve to a wide range of industries such as automotive, white goods, machinery, food industry, electronics and we are capable of developing projects from process quality control applications until comprehensive R&D projects which usually need deep scientific approach.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "Bonetto",
+      "website": "bonetto-group.com",
+      "description": "Bonetto specializes in providing customized industrial automation solutions and machine tools for various sectors.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "HAHN Automation Group US",
+      "website": "hahnautomation.group",
+      "description": "The HAHN Automation Group is your global solution partner for factory automation. From manual stations to semi-automated cells and full production lines, our 1,800 employees across 22 locations worldwide provide custom automation solutions.\n\nOur MedTech global lead plant (formerly Invotec) is headquartered in the US and specializes in applications with small components and intricate assemblies—scaling automation to meet the unique needs of medical device manufacturers. Our flexible approach allows customers to refine their product design while we engineer the equipment.\n\nOur core competencies include: controls engineering, error proofing, machine vision systems, assembly systems, micro laser processing, and test systems.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "Chiyoda",
+      "website": "chiyodacorp.com",
+      "description": "Chiyoda Corporation constructs, inspects, and maintains industrial plants around the world. Those plants include oil refinery, petrochemical, food, and pharmaceutical plants. The Company also provides comprehensive engineering services for such as energy saving, factory automation (FA), and environmental preservation for water treatment and soil purification.",
+      "category": "other",
+      "relevanceScore": 30,
+      "rationale": "Industrial plant construction with some automation but no clear vision or AI delivery ownership."
+    },
+    {
+      "name": "QING",
+      "website": "qing.nl",
+      "description": "QING specializes in production automation, on-site engineering, development and mechanical engineering, and energy consultancy.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "SEU",
+      "website": "seugmbh.de",
+      "description": "SEU provides automation and visualization solutions for industrial processes, with a focus on flue gas denitrification, energy management and other control tasks. The company delivers engineering services covering planning, design and optimization of plants and processes. SEU develops and programs automation systems using platforms such as Siemens TIA Portal and Step 7 and supports communication via Modbus, Bacnet, Profibus and Profinet. It designs and builds control cabinets for industrial and building automation, including installation, wiring, integration of control and communication systems, commissioning and maintenance. SEU also supplies control technology and switchgear for NOx reduction plants and associated tank farms and supports on-site commissioning. Its offerings target industrial customers across various sectors that require tailored automation and electrical engineering solutions.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "SODEREL",
+      "website": "soderel.com",
+      "description": "Soderel provides industrial automation solutions. The Company develops robotics for leak testing and filling activities, as well as offers maintenance, supervision, installation, assembling, commissioning, training, and engineering services. Soderel serves customers worldwide.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Vesta Engineering",
+      "website": "vestaengineering.it",
+      "description": "Vesta Engineering Srl provides engineering and consulting services focused on Industry 4.0 projects for manufacturing environments. The company designs production plants and equipment, including structural calculations, 3D modeling, and electromechanical project development. It delivers system integration and automation, covering construction strategies, methods analysis, and monitoring of assembly and automation tests. Vesta Engineering Srl also offers feasibility studies for Industry 4.0 investments, analysis of fiscal and financial instruments, and revamping of databases and ERP systems. Additional services include strengthening industrial interconnection through SCADA software and providing customized turnkey factory automation solutions across sectors such as automotive, textile, packaging, food, special machinery, woodworking, biomedical, and chemical industries.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Inovance Technology Europe",
+      "website": "inovance.eu",
+      "description": "The Inovance Group is a $3.4bn+ global provider of industrial automation solutions. Inovance's flexible production techniques and expert understanding of all industry sectors - from elevators to plastics to electric vehicles to robotics - has allowed the company to establish globally leading industry-specific business units. The product portfolio includes Low Voltage AC Drives, Medium Voltage Drives, Servo Drives & Motors, Intelligent Controllers, Industrial Robots, Electric Vehicle Inverters, Light Rail Transit Converters and Industrial Internet.",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "rationale": "Description suggests industrial production context where QC/process automation is relevant."
+    },
+    {
+      "name": "NIVE",
+      "website": "nivetechnologies.com",
+      "description": "NIVE Technologies helps global enterprises re-imagine their businesses for the digital age. Through innovative technology solutions built around Digital, IoT, Cloud, Industrial Automation,   Engineering Services, amongst others, we solve complex business problems for our Customers. We provide optimum solutions to meet our client's requirements with reliable and innovative technologies.\\nWe offer the full spectrum of services including Hardware Engineering, Software Engineering, IT & networking solutions, Installation & Commissioning to take your project from concept to completion. Our solution based approaches solve business problems more intelligently and efficiently.\\nWe strive to exceed our customer expectations by offering cost effective solutions using Technological & Domain expertise with a commitment for a long-term relationship. Our team of experienced professionals having capabilities in multiple products and industry specific engineering solutions enables us to provide a wider range of support which gives the customer an added advantage in terms of availability, flexibility, greater efficiency and cost effective services. \\n",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Batenburg JB Systems",
+      "website": "batenburg.nl",
+      "description": "Batenburg JB Systems provides industrial automation solutions. Their services include installation work, offshore automation, simulations, software engineering, and user interface design hmi.",
+      "category": "other",
+      "relevanceScore": 20,
+      "rationale": "Company description looks like a display, HMI, or optical product engineering vendor rather than a target software integrator."
+    },
+    {
+      "name": "PRAUTEC",
+      "website": "prautec.de",
+      "description": "PRAUTEC serves industrial automation services. Their services are automation industry robots, industrial image processing, robot programming, SPS programming, and construction invertor services.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Delivers industrial automation with robot programming and industrial image processing services."
+    },
+    {
+      "name": "Tecno Logica",
+      "website": "tecno-logica.com",
+      "description": "Tecno Logica offers industrial automation solutions. Their services include after-sales service, preventive maintenance, on-site service, plant updating and improvements, customized spare parts packages, and so on.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "MDE Automation",
+      "website": "mde-automation.eu",
+      "description": "MDE Automation is an industrial automation services company that offers robotics and digital factory integration services for manufacturers.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "ROKI Co",
+      "website": "roki-jp.com",
+      "description": "ROKI CO., LTD. designs and manufactures filtration and separation components for vehicles and industrial equipment. Offerings include oil, fuel, air, crankcase breather, and canister filters for passenger cars, motorcycles, and commercial applications. The company develops process and purification cartridges used in chemical handling and production lines. Capabilities cover filter media development, product design, prototyping, molding, and automated assembly with quality inspection. Engineering services include performance testing, durability evaluation, contamination analysis, and customization to meet OEM specifications and regulations. Additional support spans supply of replacement elements, documentation, and technical guidance throughout product lifecycles.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "ASINOVA SOLUCIONES",
+      "website": "asinova.es",
+      "description": "ASINOVA SOLUCIONES provides industrial automation and software services for manufacturing companies. The company designs and implements plant control systems, including PLC and SCADA solutions for production lines and process plants. It develops industrial software for supervision, data acquisition, and production management, along with traceability systems to track materials and products. ASINOVA SOLUCIONES also delivers machine vision projects for inspection and quality control. Its solutions are used in sectors such as waste treatment, recovery plants, and other industrial environments that require automation and real-time information.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "PRO-AT",
+      "website": "pro-at.nl",
+      "description": "PRO-AT specializes in industrial automation, services & maintenance and IT services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "VSE",
+      "website": "vse.nl",
+      "description": "VSE is a highly competent system integrator of industrial automation applications. We: • Are experts in motion control; • Design and write the applicable, client-specific software; • Engineer and build control panels. The aims of our clients are leading; they mainly focus on less production costs, more efficiency and higher-quality processes. We take care of that by analyzing their situation and possibilities and developing the best solution for their specific needs. VSE is very active in commissioning and problem solving for clients worldwide, mainly in the high-tech industry. We design new installations but also take care of retrofitting and boosting output on machines through eliminating obsolete technologies and integrating servo and motion control. We cooperate with the leading brands in motion controllers, drives, robots, PLC’s and IPC’s. A spinn-off of VSE is Fledlight. Fledlight offers sustainable solutions for lighting needs, especially in hygienic production conditions as in foor and pharmacy. Specialties: industrial automation, motion control, engineering, electrification machines, consultancy, turn-key projects. Want to take a look inside VSE once a month? Subscribe and receive our popular newsletter! https://vse.nl/inschrijven",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "eReM Elektrotechnici",
+      "website": "erem.nl",
+      "description": "eReM Electrotechnicians provides industrial automation services, including E and I engineering, installation, software engineering, and services. They specialise in the production of control cabinets and switchgear systems.",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 60,
+      "rationale": "Provides industrial automation and control cabinet production with potential for AI enablement."
+    },
+    {
+      "name": "VIFER automation",
+      "website": "viferautomation.com",
+      "description": "VIFER automation S.L. provides industrial automation services for small and medium-sized enterprises, focusing on Industry 4.0 projects. The company designs and assembles electrical panels and programs PLC, HMI, SCADA, and vision systems from multiple brands. It integrates collaborative robotics and artificial vision into production lines and industrial processes. VIFER AUTOMATION, S.L. develops control software that monitors, collects, and processes real-time data locally or remotely. It also offers maintenance and repair of existing automation systems and supports industrial digitization initiatives.",
+      "category": "other",
+      "relevanceScore": 20,
+      "rationale": "Company description looks like a display, HMI, or optical product engineering vendor rather than a target software integrator."
+    },
+    {
+      "name": "Bami Technologies",
+      "website": "bamitechnologies.com",
+      "description": "Bami Technologies LLC provides electrical power system design and industrial automation and testing services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Eekels Technology",
+      "website": "eekels.com",
+      "description": "For over 110 years, Eekels has been operating in the Marine & Offshore and Industry & Infrastructure markets. Its employees, totalling almost 900, carry out projects and maintenance & service operations in technical automation, electrical engineering and mechanical engineering. Marine & Offshore In the Marine & Offshore market Eekels delivers complete electrotechnical installations for the following types of vessels: passenger ships, luxury superyachts, research and marine vessels, merchant navy and ships used for the offshore (including wind). As an independent system integrator, Eekels takes care of the entire chain, from engineering, panel building, implementation, commissioning to maintenance and service. Often the following systems are part of our delivery: electrical propulsion systems, shore power convertor systems and ship automation systems. Industry & Infrastructure The customers of Eekels in the Industry & Infrastructure market segment are active in the energy, petrochemical, chemical, food and stimulants industry, paper and cardboard industry, water abstraction and machinery sector. In addition, Eekels provides services to organisations that manage bridges, sluice gates and water treatment plants. As an independent system integrator, Eekels carries out both projects and maintenance work in technical automation, electrotechnical engineering and mechanical engineering. Marpower Under the brand name Marpower, Eekels provides its own solutions for various electrotechnical issues such as electrical propulsion solutions (frequency converters), shore power convertor systems, ship automation systems and various electronic products. Eekels achieves a turnover of approximately 100 million euros. In the Netherlands, Eekels is located in Kolham (head office), Zaandam, Emmen, Gorinchem, Delfzijl and Joure. Moreover, Eekels has a branch at Kleve (Germany) and at Galaţi (Romania), a joint venture with SaierNico in China and offices in China and Vietnam.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "C G Controls",
+      "website": "cgcontrols.ie",
+      "description": "CG Controls Ltd. specializes in automation solutions for industries such as medical devices, pharmaceuticals, and food & beverage. The company offers expertise in PLC, SCADA, and machine vision systems, focusing on industrial automation, serialization, and track & trace. CG Controls Ltd. supports third-party process control and automation systems, ensuring efficient and compliant operations in regulated industries.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "TRIGO",
+      "website": "trigo-group.com",
+      "description": "Founded in 1997, TRIGO is a multinational company providing operational Quality Management solutions for the manufacturing sector, especially in the transportation industries. With a team of more than 5000 professionals present in 20 countries across 4 continents, TRIGO offers a comprehensive portfolio of Quality Inspection, Engineering and Management Services all along the supply chain.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "EK Robotics",
+      "website": "ek-robotics.com",
+      "description": "EK Robotics is a manufacturing company that offers logistics consulting, automated guided vehicles, and industrial automation services.",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 75,
+      "rationale": "Manufacturing company with industrial automation and AGV services suggests machine-building with AI enablement potential."
+    },
+    {
+      "name": "EveryBotics",
+      "website": "everybotics.it",
+      "description": "EveryBotics offers a laboratory of industrial automation and robotics services. They provide design, development, engineering, and integration of systems and services for automation, ICT, and robotics.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "BIESSE",
+      "website": "bi-esse.com",
+      "description": "Biesse specializes in firefighting, studio lighting, painting, and industrial automation services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Inprotec",
+      "website": "inprotec.it",
+      "description": "Inprotec offers control system design, reliability, safety, and supply of industrial automation services to oil & gas industries.",
+      "category": "other",
+      "relevanceScore": 40,
+      "rationale": "Industrial automation services for oil & gas but no explicit vision or AI delivery evidence."
+    },
+    {
+      "name": "SYNEO",
+      "website": "syneos.swiss",
+      "description": "Syneos is an automation company that offers consulting, industrial, and commercial automation services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Eltra Engineering",
+      "website": "eltra.nl",
+      "description": "Eltra Engineering B.V. delivers industrial IT, automation, and engineering solutions, including systems integration and process automation.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "T.T.C.",
+      "website": "ttc-mi.it",
+      "description": "TTC S.r.l. provides engineering services. The Company offers designing, developing, testing, installation, commissioning, revamping, and maintenance services. TTC also provides industrial automation services and equipment. TTC serves customers in Italy.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "E+H Gross",
+      "website": "gross-schaltschrankbau.de",
+      "description": "E+H Gross is a manufacturing company that offers industrial automation services by building control cabinets.",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 60,
+      "rationale": "Builds control cabinets for industrial automation, indicating machine-building with AI enablement potential."
+    },
+    {
+      "name": "JDT J.D. Theile GmbH & Co.",
+      "website": "jdt.de",
+      "description": "JDT is a leading global manufacturer of complete chain systems and accessories for mining and industry, as well as a system integrator of robots in the field of industrial automation. As a company that is proud to offer products that are Made in Germany, we at JDT have been passionately offering top quality products, innovation, performance, availability and customer-oriented service in all areas since 1819. For more than 200 years, JDT has been improving production processes and products with new ideas and groundbreaking inventions - always for the customer’s benefit.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Siemac",
+      "website": "siemac.in",
+      "description": "SIEMAC Automation Pvt. Ltd. is India's leading ENGINEERING Company providing high quality integrated Turnkey solutions for Industrial Automation, Electrical & Field Instrumentation. we are dedicated to delivering exceptional engineering solutions that drive innovation and propel our clients’ success. With a solid commitment to excellence, cutting-edge technology, and a customer-centric approach, we have established ourselves as a trusted partner in the industry. SIEMAC is a leading solutions partner and system integrator of HONEYWELL in North India and is empowering large industrial units transform their processes using Industry 4.0 techniques. we offers the industry's broadest product portfolio, ranging from Distributed Control Systems (DCS),and advanced controllers, to best-in-class Transmitters, Actuators, Recorders, Sensors Gas Detection and Thermal products for the process environment. SIEMAC takes pride in offering cutting-edge solutions that enhance the power factor and energy efficiency of your electrical systems. We manufacture, install and commission all type of Electrical, Electronics and Instrumentation panels of the Highest quality for a variety of indoor and outdoor industrial applications for all process & production industries (i.e. System Automation Control Panel , VFD Panel, Distribution Panel, APFC Panel, Control & Junction Box, Control Desk Panel, Motor & Power Control Centre Panel, Meter Panel etc.) Our Panels are designed to optimise power usage, reduce electricity costs, and improve the overall performance of your industrial or commercial facility. We are specialised in complete turnkey EPC Electrical ,Automation & Instrumentation solutions for all Process Plants such as Petrochemical, Chemical, Distillery, Power, Cogeneration, Edible Oil, Dairy, Pharma, Sugar, Food & Beverages etc.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Seneca",
+      "website": "seneca.it",
+      "description": "With over 35 years manufacturing in the industrial automation field, SENECA has grown to be a major force in the signal conditioning and “ModBUS” I/O arenas. Our innovative product lines, professional approach and worldwide network of trained distributors guarantee the most elegant solutions to all your process interfacing and data acquisition challenges. As an ISO 9001 certified company, your highest quality expectations are exceeded. SENECA intends to confirm and expand their offer of excellence across a broad product range. Three business units (Automation Interfaces, Engineering Division, Industrial Supplies) organized according to the best quality criteria. SENECA offers a complete range of automation solutions: from the single component up to a complete engineering plant.",
+      "category": "irrelevant",
+      "relevanceScore": 10,
+      "rationale": "Company description looks like a distributor, trader platform, or parts marketplace rather than an implementation-led delivery partner."
+    },
+    {
+      "name": "Smitech",
+      "website": "smitech.ee",
+      "description": "Smitech develops and delivers turnkey automation solutions for manufacturing companies. The company designs and builds production lines, fully automated and semi-automated assembly equipment, and industrial robot systems, including collaborative and mobile robots. Its engineers implement industrial automation and control systems, machine vision solutions for quality inspection, and custom machine-building projects across sectors such as electronics, automotive, wood, plastics, and construction. Smitech supports customers from concept development through engineering, component sourcing, assembly, software development, on-site installation, and commissioning. It also provides aftercare services including maintenance, upgrades, spare parts, and training for production personnel.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "20/20 Robotics",
+      "website": "2020robotics.com",
+      "description": "20/20 Robotics is a robotics automation company that provides integrated machine vision systems and industrial automation solutions.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 87,
+      "rationale": "Description signals vision or industrial AI delivery capability."
+    },
+    {
+      "name": "Genn",
+      "website": "genn.co.in",
+      "description": "Genn specializes in industrial automation, offering services such as electrification, automation, and digitalization solutions. The company manufactures industrial automation and electrical control panels, including PLC-based systems. As an authorized system house for Siemens, Genn Automation provides products like variable frequency drives (VFDs), programmable logic controllers (PLCs), and other automation solutions.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Gestalt Robotics",
+      "website": "gestalt-robotics.com",
+      "description": "Gestalt Robotics is a software and solution provider working at the interface of classic industrial automation and artificial intelligence. We accompany our clients in the innovation process from ideation through prototyping to the integration of finished products. In addition to software development, the range of services includes consultingactivities (e.g. feasibility studies and automation concepts) as well as support for the customer after the end of the project. Based on the extensive technical experience and expertise of the core team in applied research, Gestalt Robotics serves the ever growing demand for automation solutions from companies in various industries, but with a clear focus on manufacturing. The core of the business model of GESTALT Robotics is the project-based development of tailored software for the four application fields: (data-efficient) AI-powered image processing in 2D and 3D, intelligent robotics, (edge) platform services for autonomous mobility and innovative worker assistance systems.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "PSI Technics",
+      "website": "psi-technics.com",
+      "description": "Our vision is simple:\nWe want to improve workflows to enhance your profitability.\n\nThe digital transformation is well underway. We help you to meet challenges in production and logistics while sustainably improving quality and throughput.\n\nKarl-Heinz Förderer founded PSI Technics in 2005 in Koblenz, Germany. His passion for innovative, future-oriented and custom solutions is the driving force behind new developments and continuously improved processes that extend to a broad range of industrial sectors. We assist customers with optimizing and digitalizing workflows in production, railway transport and logistics, leveraging the multidisciplinary know-how of our engineers and the creativity of our developers.\n\nWe design our solutions as part of a custom, comprehensive approach aimed at increasing throughput and quality, saving resources and minimizing claims and rejects. PSI Technics offers reliable solutions for companies across all industries that provide added value for its customers. Market-leading companies around the world rely on PSI Technics as a full-service engineering provider.\n\nWe focus on:\nIndustrial image processing, advanced industrial positioning systems for ASRS/crane systems, industrial automation solutions, automated train inspection and rolling stock maintenance / railway maintenance, data mining, artificial intelligence and thermal protection/cooling cases for sensitive sensors. Our portfolio also includes modernization and retrofitting solutions as well as analyses for enhanced throughput and system availability. Due to our extensive expertise we are well equipped for taking on projects in a wide variety of fields. We invite you to put us to the test!\n\nAUTOMATE. OPTIMIZE. INCREASE QUALITY. SAVE ENERGY.",
+      "category": "other",
+      "relevanceScore": 40,
+      "rationale": "Company focuses on digital transformation and workflow optimization but lacks explicit vision AI or implementation evidence."
+    },
+    {
+      "name": "Van der Pol industrial automation",
+      "website": "pol-elektro.nl",
+      "description": "Van der Pol industrial automation is a system integrator founded in 1988. Van der Pol preforms services as automation, engineering and panel building for new and old (refit) machines or processes. Van der Pol delivers these services to clients in sectors as the water industry, machine industry (robotics), food industry, process industry and infrastructure.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "RIOP",
+      "website": "riop.nl",
+      "description": "RIOP is a provider of industrial automation services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 75,
+      "rationale": "Description suggests implementation or integration services."
+    },
+    {
+      "name": "Boll Automation",
+      "website": "bollautomation.de",
+      "description": "Boll Automation is an innovative & effective system integrator when it comes to integrating robot-assisted systems for industrial automation",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "PGA Automation",
+      "website": "pga-automation.de",
+      "description": "We are the PGA Gesellschaft für Prozess- und Gebäudeautomatisierungstechnik mbH. For more than 20 years we have been working according to the future-oriented and worldwide standards for continuous integration and automation. Our goal is to develop flexible and timely solutions in process and building automation, which can be created according to customer-specific requirements. These solutions are environmentally friendly, energy and resource-saving, thus striving for the goals of Industry 4.0.\n\nWe plan, develop and implement integrated system solutions across the entire spectrum of modern digital automation technology. As a system integrator and solution provider, we provide completely integrated solutions for all applications of the:  \n\n- Process and industrial automation\n- Building technology\n- Room and building automation\n- Facility Management\n- Environmental, water and sewage technology\n- Energy management, energy and process data processing\n- WEB-based HMI, SCADA and management solutions",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Sweeper",
+      "website": "sweeper-robot.eu",
+      "description": "SWEEPER’s main objective is to put the first generation greenhouse harvesting robots onto the market. Until now this has never been achieved and it will ensure Europe’s leading role in agricultural robotics.  In modern greenhouses there is a high demand to automate labour. The availability of a skilled workforce that accepts repetitive tasks in the harsh climate conditions of a greenhouse is decreasing rapidly. The current state of the art in automated harvesting of fruits and vegetables has remained remarkably stationary in the past decades. In the EU-FP7-project CROPS (www.crops-robots.eu) extensive research has been performed on agricultural robotics. One of the applications was a sweet pepper harvesting robot. SWEEPER will use the technology developed in CROPS to introduce, test and validate a robotic harvesting solution for sweet pepper under real-world conditions.  The project involves 6 partners from 4 different countries (The Netherlands, Belgium, Sweden and Israel). The consortium consist out of fundamental and applied research organisations, a system integrator and a modern grower of sweet pepper. In the consortium a wide-range of disciplines are available, including: horticulture, horticultural engineering, machine vision, sensing, robotics, control, intelligent systems, software architecture, system integration and greenhouse crop management.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "RHOEL",
+      "website": "rhoel.it",
+      "description": "Rhoel develops customized industrial automation solutions for engineering companies and various sectors.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Mujin",
+      "website": "mujin.co.jp",
+      "description": "Mujin develops automation solutions for industrial robots to simplify factory and logistics automation and increase worldwide productivity.",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "rationale": "Description suggests industrial production context where QC/process automation is relevant."
+    },
+    {
+      "name": "Robotec Solutions",
+      "website": "robotec-ag.com",
+      "description": "Robotec Solutions designs and implements customized robot-based automation solutions for industrial customers. The company develops individual robot cells, testing stations, and fully integrated production lines that cover production and manufacturing, material flow and intralogistics, and quality assurance and testing. Its systems include mobile robots, cobots, industrial robots, AI-supported visual inspection, rails and traversing axes, and complete robot cells and lines. Robotec Solutions serves electronics and semiconductors, plastics, food, luxury goods and watches, medtech and pharma, and the metal industry. Its services span feasibility studies, concept and system design, project management, commissioning, maintenance, support, extensions, training, and retrofit solutions. The company also offers a practice-integrated study program in cooperation with a university of applied sciences.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "ROVIMATICA",
+      "website": "rovimatica.com",
+      "description": "ROVIMATICA develops and integrates industrial automation solutions focused on intralogistics, robotics and vehicle automation. The company designs, manufactures and commissions robotic cells, assembly and manufacturing lines, automated inspection systems, autonomous vehicles and PLC/SCADA control systems. Its teams work across mechatronics, electrical engineering, industrial robotics, AGVs and AMRs, automation and control, and machine vision and artificial intelligence. ROVIMATICA also delivers turnkey projects, covering concept design, engineering, programming, installation, start-up and maintenance. In addition, it runs R&D and innovation projects in machine vision, AI, cognitive robotics, edge computing and software-defined vehicle platforms for multiple industrial sectors. These solutions are applied in areas such as logistics, automotive, agrifood, recycling, energy, mobility and infrastructure management.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "BILA",
+      "website": "bila.dk",
+      "description": "Bila A/S is a provider of industrial automation solutions using industrial robots to help automate simple tasks to entire production lines.",
+      "category": "industrial_end_customer_scaled",
+      "relevanceScore": 75,
+      "rationale": "Description suggests industrial production context where QC/process automation is relevant."
+    },
+    {
+      "name": "DWG",
+      "website": "dwg.nl",
+      "description": "DWG provides consultancy, process engineering, functional safety, electrical engineering, industrial automation, IT engineering, and maintenance engineering services. Their consulting department consists of experts who all have a technical background. They take care of both the design of new process installations and the optimization of existing installations.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "The Automation Alliance LLC Switzerland",
+      "website": "theautomationalliance.com",
+      "description": "The Automation Alliance is a global expert community offering Industrial Automation engineering services to system integrators and providing engineering and start-up services across a diverse range of industry sectors. Thanks to our talented resources, we are able to guarantee the reliable completion of projects for our customers. We also bring valuable expertise to projects. Our engineers have extensive experience in all areas of Industrial Automation including: manufacturing intelligence and integration, plant data report and analytics. We can assist with maintenance, commissioning installation and programming as well as designing, conceptualising and planning of projects. With skilled engineers based in Switzerland, Germany, Austria, Morocco, Egypt and the Czech Republic, we can quickly and efficiently provide engineering resources to anywhere in the World. Most recently we have worked on projects for clients in the United States, Germany, Poland and Mexico.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "AUTFORCE Vision Systems",
+      "website": "autforce.com",
+      "description": "AUTFORCE Vision Systems adds three business areas to a portfolio that is capable of performance, with services for projects of any size. The company offers solutions in the fields of machine vision, industrial identification and laser marking. The management of AUTFORCE Vision Systems GmbH is in the responsibility of Mr. Mag. (FH) Stefan Perg and Mr. Markus Piffer. The young company, headquartered in Lienz, East Tyrol, specializes in automation mechatronics. In three interrelated but also detached functional business areas, the expert team realizes tailor-made solutions from A to Z - from the in-depth feasibility study to implementation for commissioning, quality assurance and traceability. Today, industrial image processing systems face the challenge of having to meet a multitude of objectives in a dynamic environment and increasingly complex contexts. From 100% quality assurance through clear traceability to internal process optimization and increased fail-safety, the expectations of the manufacturing industry are sufficient. Three business areas complement each other to form a performance-oriented portfolio of machine vision, Industrial Identification and Lasermarking by working together with the affiliated company AUTFORCE Automations GmbH, complete automation solutions are just as possible as individual projects or just the purchase of suitable hardware.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "Sofcon",
+      "website": "sofcononline.com",
+      "description": "Sofcon Systems is an industrial automation company that provides substation automation and engineering services. It combines the capabilities of a full-service organization with the responsiveness and flexibility of specialty engineering practice. It has expertise in industrial automation, industry 4.0, IIoT, Industry 5.0, substation automation, and energy management systems.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Machine Vision",
+      "website": "machinevision.ch",
+      "description": "A - Machine Vision System Integrator : Quality control, automatic positionning, datamatrix reading, biosensor reading, length measurements, etc.\r\n\r\nB - Laser systems automatic drive for laser welding, laser microwelding, laser engraving, laser cutting. See www.visioweld.com\r\n\r\nC - High quality numeric microscope with live embeded guides (6 lines, position set by operator) for manual positionning. See www.visionindustrielle.ch\r\n\r\nD - LABVIEW Develpment & Consulting:\r\nOur experts are qualified developers with more than 10 years experience",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "Smart Automation",
+      "website": "smart-automation.fr",
+      "description": "Smart Automation specializes in industrial automation services, focusing on maintaining production tools for various industries. The company offers technical assistance, engineering, and implementation services to enhance operational efficiency. It connects smart devices to work in harmony, providing intelligent solutions that improve convenience and safety.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Silicann Systems",
+      "website": "silicann.com",
+      "description": "Silicann Systems develops and produces optoelectronic sensor solutions and optical inspection and measurement systems for industrial and laboratory automation. The company focuses on NIR spectrometers, including the Spektralwerk Core series for inline inspection, identification, and content analysis in process environments. It offers application software such as Spectrotron and APIs for configuring and operating its spectrometers. Silicann Systems provides engineering services covering custom optical sensor and light source design, spectrometric calibration models, and algorithm development. Its electronics services include circuit and PCB design, firmware and embedded Linux development, interface integration, and prototyping through to small-series production. These offerings target research organizations and manufacturing companies that require precise photometric, spectral, and color measurement solutions integrated into automated processes.",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "rationale": "Company description shows clear machine-vision or inspection delivery ownership for customer projects."
+    },
+    {
+      "name": "AGMAH",
+      "website": "agmah.ai",
+      "description": "We are an AI software company working on industrial automation solutions, to make the factories of today, smarter for tomorrow.",
+      "category": "other",
+      "relevanceScore": 40,
+      "rationale": "AI software for industrial automation stated but lacks clear delivery or vision AI implementation evidence."
+    },
+    {
+      "name": "Sinfiny Smart Technologies",
+      "website": "sinfiny.com",
+      "description": "Sinfiny Smart Technologies designs and implements automation and robotics solutions for smart factories and industrial production. The company delivers turnkey engineering projects that cover process analysis, custom production line design, and integration of advanced technologies. Its mechanical and electrical engineering teams develop and optimize machinery, automation hardware, and control systems. Sinfiny provides programming and software services including PLC and robot programming, machine vision, SCADA systems, and traceability. It also offers process consulting and technical support to improve efficiency and reliability in sectors such as automotive, food, industrial manufacturing, and construction. The company develops standardized robotic cells like RoboPACK for packing and palletizing end-of-line products.",
+      "category": "integrator_vision_ai_consulting_freelancer",
+      "relevanceScore": 86,
+      "rationale": "Company description shows hands-on machine-vision or industrial AI consulting delivery for clients."
+    },
+    {
+      "name": "PWL Elektrotechnik",
+      "website": "pwl-gmbh.de",
+      "description": "PWL Electrical Engineering offers industrial automation, environmental engineering, and building automation solutions.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Van Doren Engineers",
+      "website": "vandoren.nl",
+      "description": "Van Doren Engineers offers industrial automation and electrical engineering manufacturing services with electrical products.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "AE Solutions",
+      "website": "ae-sol.net",
+      "description": "Main services:\n- Industrial Automation\n   - Design of automation solutions\n   - PLC programming\n   - HMI design\n   - Troubleshooting\n   - Electrical drawings\n   - Panel assembly\n   - Installation\n   - Start up",
+      "category": "other",
+      "relevanceScore": 20,
+      "rationale": "Company description looks like a display, HMI, or optical product engineering vendor rather than a target software integrator."
+    },
+    {
+      "name": "Comak",
+      "website": "comak.eu",
+      "description": "Our company specializes in industrial automation services, with a focus on simulation, robot programming, and PLC programming. In addition to our expertise in these areas, we provide skilled programmers and management to offer comprehensive support to our clients. Our goal is to deliver tailored solutions that enhance efficiency in automation processes, catering to the specific needs of diverse industries.",
+      "category": "machine_builder_ai_enablement",
+      "relevanceScore": 65,
+      "rationale": "Delivers industrial automation with robot and PLC programming, indicating machine-building and integration capability."
+    },
+    {
+      "name": "thyssenkrupp Industrial Solutions",
+      "website": "thyssenkrupp-industrial-solutions.com",
+      "description": "thyssenkrupp Industrial Solutions AG provides planning and constructing machines and plants for cement and mineral industries worldwide. The company offers raw material preparation, clinker manufacturing and cement manufacturing, lime production, and factory automation solutions. It also provides grinding plants, pyroprocessing systems, and metallurgical injection systems. In addition, the company offers project elaboration, engineering and design, shipment, field assembly, and commissioning services, as well as comprehensive service activities for complete production lines, individual products, plant conversions, and upgrades. Further, it provides spare parts and after sales services. The c...",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Key Solution",
+      "website": "key-solution.eu",
+      "description": "Key Solution is an engineering company with 10+ years of experience in industrial automation and digital services for the Oil & Gas sector. We simplify complexity, delivering innovative, efficient solutions in automation, digitalization, and consulting. With 200+ international projects and certified expertise, our team supports global operations with reliability and excellence.\n\nDiscover more at www.key-solution.eu",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Arelec",
+      "website": "arelec.com.ve",
+      "description": "Arelec C. A. offers industrial automation, engineering solutions, and technical support for process optimization.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "rationale": "Description suggests service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Dynamic Process Automation",
+      "website": "dpautom.fr",
+      "description": "Dynamic Process Automation specializes in industrial automation, electrical engineering, and process control systems. The company offers tailored solutions to optimize production systems, enhancing efficiency and competitiveness. Their expertise encompasses industrial automation, industrial electricity, industrial information systems, vision and traceability, and robotics. They provide project management, system design, software development, commissioning, and training. They also offer turnkey solutions for process installations, retrofitting existing equipment, and integrating automation systems. The company is part of the MAVENTIS group, which combines various industrial and logistics expertise. They collaborate with partners to deliver fully integrated automation solutions.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 84,
+      "rationale": "Company description shows service-led industrial software or automation implementation ownership."
+    },
+    {
+      "name": "Framaval",
+      "website": "framaval.com",
+      "description": "Framaval is a manufacturing firm that offers electrical installations, programming, and industrial automation services.",
+      "category": "integrator_general_ai",
+      "relevanceScore": 65,
+      "rationale": "Offers industrial automation and programming services with likely project delivery but no explicit vision AI focus."
+    }
+  ]
+}

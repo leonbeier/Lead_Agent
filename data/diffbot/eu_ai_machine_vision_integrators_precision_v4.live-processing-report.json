@@ -1,0 +1,25 @@
+{
+  "createdAt": "2026-05-15T13:44:06.336Z",
+  "inputCount": 9,
+  "alreadyInHubSpotCount": 4,
+  "notInHubSpotCount": 5,
+  "crawledCount": 5,
+  "crawlFailedCount": 0,
+  "categorizedCount": 5,
+  "integratorQualifiedCount": 0,
+  "categoryBreakdown": {
+    "other": 1,
+    "camera_manufacturer_partner": 1,
+    "irrelevant": 2,
+    "software_platform_embedding": 1
+  },
+  "qualifiedCategoryBreakdown": {},
+  "researchBriefCount": 0,
+  "companiesNeedingApolloContactsCount": 0,
+  "companySyncedCount": 0,
+  "contactSyncedCount": 0,
+  "syncedCount": 0,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [],
+  "crawlFailures": []
+}

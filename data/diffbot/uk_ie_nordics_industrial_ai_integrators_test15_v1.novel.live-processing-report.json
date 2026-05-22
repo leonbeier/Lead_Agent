@@ -1,0 +1,62 @@
+{
+  "createdAt": "2026-05-15T20:14:00.306Z",
+  "inputCount": 9,
+  "alreadyInHubSpotCount": 0,
+  "notInHubSpotCount": 9,
+  "crawledCount": 9,
+  "crawlFailedCount": 0,
+  "categorizedCount": 9,
+  "integratorQualifiedCount": 4,
+  "categoryBreakdown": {
+    "irrelevant": 5,
+    "integrator_vision_industrial_ai": 2,
+    "machine_builder_ai_enablement": 1,
+    "integrator_general_ai": 1
+  },
+  "qualifiedCategoryBreakdown": {
+    "integrator_vision_industrial_ai": 2,
+    "integrator_general_ai": 1,
+    "machine_builder_ai_enablement": 1
+  },
+  "researchBriefCount": 4,
+  "companiesNeedingApolloContactsCount": 4,
+  "companySyncedCount": 4,
+  "contactSyncedCount": 7,
+  "syncedCount": 11,
+  "hubspotErrors": [],
+  "newlyCreatedCompanies": [
+    {
+      "companyName": "Industrial Vision & Metrology Systems",
+      "domain": "https://industrialvision.co.uk",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430083518666",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430083518666",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "1 Vision",
+      "domain": "https://1vision.co.il",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 88,
+      "existingBefore": false,
+      "hubspotCompanyId": "430084610274",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430084610274",
+      "publicContactEmails": []
+    },
+    {
+      "companyName": "AI Consultants London",
+      "domain": "https://aiconsultantslondon.com",
+      "category": "integrator_general_ai",
+      "relevanceScore": 79,
+      "existingBefore": false,
+      "hubspotCompanyId": "430087749862",
+      "hubspotRecordUrl": "https://app-eu1.hubspot.com/contacts/146645418/record/0-2/430087749862",
+      "publicContactEmails": [
+        "info@aiconsultantslondon.com"
+      ]
+    }
+  ],
+  "crawlFailures": []
+}

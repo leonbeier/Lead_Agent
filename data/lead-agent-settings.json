@@ -1,9 +1,10 @@
 {
-  "targetLeadCount": 50,
+  "targetLeadCount": 20,
   "market": "DE",
   "mainContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
   "searchStrategyContext": "You are steering the search and qualification loop for ONE WARE, not writing final outreach.\n\nSearch-loop behavior:\n- Start with internet research in 15-company probe batches. Use multiple public discovery paths such as official company websites, trade fair exhibitor lists, expo catalogs, partner pages, technical magazine coverage, and customer case studies to discover candidate firms.\n- Prioritize the strongest search clusters already seen in live runs: Germany Machine Vision System Integrators, Germany Industrial Computer Vision Engineering Services, Germany Automation Software Integrators, and Germany Smart Factory Software Engineering Partners.\n- A probe is acceptable when at least 15% of reviewed companies are relevant.\n- Relevant means: the company fits one of the active target categories and is in Europe-first geography unless there is an unusually strong exception.\n- If a probe falls below 15%, tighten the search strategy instead of widening it. Keep already-found relevant companies for later research.\n- If a probe is above threshold, continue with 50-company expansion batches and stop when relevance drops.\n- Once enough good-fit companies are collected, the later research step should go deep on those companies only. Use Apollo only as a fallback for contact discovery when public contact details are missing.\n\nTargeting priorities:\n- Germany first, then DACH, Benelux, Nordics, and the rest of Europe.\n- Strongest fit is usually software or automation companies with real delivery ownership, industrial end customers with clear operational use cases, machine builders, camera/imaging manufacturers, or software platforms with a credible embedding surface.\n- Prefer delivery and integration ownership over advisory-only positioning.\n- Deprioritize finance, HR, recruiting, generic consulting, investors, pure resellers, direct competing AI-platform vendors, and directory-like aggregator pages.\n\nFilter quality rules:\n- Build practical search prompts, query variants, and company-discovery angles with realistic industries, keywords, employee ranges, and locations.\n- Favor filters that are narrow enough to hit a strong category but broad enough to scale if the probe succeeds.\n- Avoid filters that depend on vague AI buzzwords alone.",
-  "companySearchMode": "internet_research",
+  "searchStrategyPreset": "default",
+  "companySearchMode": "exa_search",
   "creditLessMode": true,
   "prequalification": {
     "mainContext": "Decide relevance conservatively. A company is relevant only when there is evidence for real delivery ownership, industrial applicability, or a credible ONE WARE partner path. Reject weak-fit finance, recruiting, HR, generic non-industrial SaaS, and vague consulting profiles without implementation responsibility.",
@@ -209,17 +210,18 @@
   },
   "targetCategories": [
     "integrator_vision_industrial_ai",
-    "integrator_general_ai",
-    "integrator_relevant_focus",
-    "industrial_end_customer_scaled",
-    "camera_manufacturer_partner",
-    "machine_builder_ai_enablement",
-    "software_platform_embedding"
+    "integrator_vision_ai_consulting",
+    "integrator_vision_ai_freelancer",
+    "integrator_general_ai"
   ],
   "runDeepResearch": true,
   "dryRun": false,
   "syncToHubSpot": true,
-  "earlyStopEnabled": true,
-  "earlyStopReviewCount": 15,
+  "maxRuntimeMs": 600000,
+  "aiPrefilterConcurrency": 20,
+  "outreachPrepConcurrency": 20,
+  "contactSearchConcurrency": 20,
+  "earlyStopEnabled": false,
+  "earlyStopReviewCount": 20,
   "earlyStopThreshold": 0.15
 }

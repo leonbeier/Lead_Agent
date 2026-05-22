@@ -1,0 +1,64 @@
+{
+  "runId": "2026-05-15T13-06-55-854Z",
+  "savedAt": "2026-05-15T13:08:07.425Z",
+  "companySearchMode": "open_crawler_search",
+  "page": 1,
+  "filter": {
+    "name": "DACH Scaled Industrial End Customers",
+    "keywords": [
+      "quality control",
+      "visual inspection",
+      "process automation",
+      "production line",
+      "machine vision"
+    ],
+    "locations": [
+      "Germany",
+      "Austria",
+      "Switzerland"
+    ],
+    "industries": [
+      "Food Production",
+      "Machinery",
+      "Industrial Automation",
+      "Automotive",
+      "Electrical Manufacturing"
+    ],
+    "employeeRanges": [
+      "201,500",
+      "501,1000",
+      "1001,5000",
+      "5001,10000"
+    ]
+  },
+  "count": 4,
+  "companies": [
+    {
+      "name": "PARKVI GmbH",
+      "domain": "https://parkvi.de",
+      "country": "Germany",
+      "shortDescription": "Open-crawler high-fit score 20. Matched signals: machine vision, bildverarbeitung, industrielle bildverarbeitung, sondermaschinenbau, commissioning, inbetriebnahme, integration, mes. PARKVI · Industrielle Bildverarbeitung & KI-Inspektion · Augsburg | PARKVI GmbH aus Augsburg: herstellerunabhängiger Bildverarbeitungsintegrator und Sondermaschinenbauer. KI-gestützte Inspektion, 3D-Schweißnahtprüfung, OCR & Code-Verifikation, Oberflächeninspektion. Über 300 Projekte in mehr als 12 Ländern. | Präzision, die sieht. KI, die entscheidet. | PARKVI · Industrielle Bildverarbeitung & KI-Inspektion · Augsburg Start Home Lösungen Solutions Software Software Branchen Industries Sondermaschinenbau Special-Purpose Machinery Referenzen References Leistungen Services Über uns About Karriere Career DE EN Kontakt Contact KI-basierte industrielle Inspektion AI based industrial inspection Prä || solutions | Lösungen Solutions: Lösungen — 2D, 3D, ID, KI, Hyperspektral & Radar · PARKVI | Herstellerunabhängige Bildverarbeitungslösungen: 2D-Vision, 3D-Inspektion, ID-Lesegeräte, KI-Inspektion, Hyperspektral und Radar. Für Automotive, Pharma, Lebensmittel, Photovoltaik und mehr. | Unsere Lösungen | Lösungen — 2D, 3D, ID, KI, Hyperspektral & Radar · PARKVI Start Home Lösungen Solutions Software Software Branchen Industries Sondermaschinenbau Special-Purpose Machinery Referenzen References Leistungen Servic",
+      "sourceFilter": "DACH Scaled Industrial End Customers (open-crawler: search:machine vision integrator Germany)"
+    },
+    {
+      "name": "Machine Vision",
+      "domain": "https://machine-vision.de",
+      "country": "Germany",
+      "shortDescription": "Open-crawler high-fit score 12. Matched signals: machine vision, bildverarbeitung, industrielle bildverarbeitung, automatisierungstechnik, smart camera, lighting, mes. The Machine Vision Portal - Machine Vision | The global Resource of Machine Vision Technologies, latest News, Products, Solutions, Machine Vision Manufacturer, Integrator and Merchants. | Welcome to the Machine Vision Portal | The Machine Vision Portal - Machine Vision Skip to content Freitag, Mai 15, 2026 News Companies Products Submit Press Release / News Das Neueste: Restpostenverkauf Fujinon HF-SA Series, HF-12M Series, CF-HA Series Vision Components präsentiert kleinstes Embedded-Vision-System NEUER NAME, KONSTANTE INNOVATIONSKRAFT – AUS AVI SYSTEMS WIRD EYYES Compact system for precision positioning of industrial cameras Kompakte TFL-Objektive für hochauflösende Kameras mit 4/3“ Sensor || machine vision products | Products: Products Archives - Machine Vision | Products, e.g. Cameras, lenses, lightning, Software and more for Machine Vision | Products | Products Archives - Machine Vision Skip to content Freitag, Mai 15, 2026 News Companies Products Submit Press Release / News Das Neueste: Restpostenverkauf Fujinon HF-SA Series, HF-12M Series, CF-HA Series Vision Components präsentiert kleinstes Embedded-Vision-System NEUER NAME, KONSTANTE INNOVATIONSKRAFT – AUS AVI SYSTEMS WIRD EYYES Compact system for precis",
+      "sourceFilter": "DACH Scaled Industrial End Customers (open-crawler: search:machine vision integrator Germany)"
+    },
+    {
+      "name": "3D Laser profilers and High",
+      "domain": "https://sincevision.com",
+      "shortDescription": "Open-crawler review-fit score 7. Matched signals: case study, mes, association, machine vision, custom solution, integration. 3D Laser profilers and High-Speed Cameras for Industrial Inspection | SinceVision provides high-speed cameras, 3D laser profilers, sCMOS cameras, color sensors, and displacement sensors. | 3D Laser profilers and High-Speed Cameras for Industrial Inspection info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Series SGI Series SD-C Series SD22 Series SD33 Series Spectral Confocal Displacement Sensor SCI Series Through-Beam Edge Sensor SE1 Series SE2 Series Full Spectrum Sensor SS2 Series Request a Trial Contact Us Scientific Imaging H || customer support.html | Service Network: Global Support & After-Sales Service | SinceVision Machine Vision | Dedicated support for SinceVision customers worldwide. Access professional technical advice, repair services, and on-site support for your industrial sensors & imaging systems. | Global Support & After-Sales Service | SinceVision Machine Vision info@sincevision.com English 繁體中文 English español 日本語 한국어 Deutsch русский язык Français italiano Tiếng Việt คนไทย Malay Türkçe Industrial Sensors 3D Laser Profiler SR Series SRI Series Laser Displacement Sensor SG Se",
+      "sourceFilter": "DACH Scaled Industrial End Customers (open-crawler: source:curated:emva-members)"
+    },
+    {
+      "name": "MIPI MODULES",
+      "domain": "https://mipi-modules.com",
+      "country": "Germany",
+      "shortDescription": "Open-crawler review-fit score 10. Matched signals: bildverarbeitung, custom solution, integration. VC MIPI® Kameras entwickelt und produziert in Deutschland | Entdecken Sie VC MIPI® Kameras für industrielle Anwendungen - Made in Germany, entwickelt und hergestellt von Vision Components! | VC MIPI | VC MIPI® Kameras entwickelt und produziert in Deutschland Zum Inhalt wechseln MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN Zu allen -Produkten MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/Events Kontakt Zu allen VC Produkten EN MIPI Kameras Zubehör MIPI Vision Solutions MIPI Herstellung Doku News/E",
+      "sourceFilter": "DACH Scaled Industrial End Customers (open-crawler: source:curated:emva-members)"
+    }
+  ]
+}

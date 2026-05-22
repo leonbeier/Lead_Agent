@@ -1,4 +1,4 @@
-import { env } from "../config";
+import { env, readiness } from "../config";
 import { ApolloOrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 import { OpenAIWebSearchClient } from "./openai-web-search";
 
@@ -22,31 +22,30 @@ type ExaSearchResponse = {
   };
 };
 
+export type ExaSearchRequestPayload = {
+  query: string;
+  type: "auto";
+  category?: "company";
+  numResults: number;
+  excludeDomains?: string[];
+  contents: {
+    summary: true;
+    highlights: true;
+  };
+};
+
+type ExaSearchPayloadOptions = {
+  includeExcludeDomains?: boolean;
+  includeCompanyCategoryFilter?: boolean;
+};
+
 const EXA_ENDPOINT = "https://api.exa.ai/search";
-const MAX_EXA_RESULTS_PER_QUERY = 10;
+const MAX_EXA_RESULTS_PER_QUERY = 20;
+const MAX_EXA_EXCLUDE_DOMAINS = 1200;
 const EXA_MIN_REQUEST_INTERVAL_MS = 250;
 const EXA_MAX_RETRIES = 3;
 const EXA_QUERY_CONCURRENCY = 3;
 const GENERIC_COMPANY_NAMES = new Set(["home", "homepage", "startseite", "services", "solutions", "products", "company"]);
-const IGNORED_HOST_HINTS = [
-  "linkedin.com",
-  "facebook.com",
-  "instagram.com",
-  "youtube.com",
-  "twitter.com",
-  "xing.com",
-  "crunchbase.com",
-  "zoominfo.com",
-  "bloomberg.com",
-  "wlw.de",
-  "it-in-germany.de",
-  "europages",
-  "kompass",
-  "werliefertwas",
-  "industryarena",
-  "expodatabase"
-];
-
 export class ExaSearchClient {
   private static requestChain: Promise<void> = Promise.resolve();
 
@@ -60,8 +59,34 @@ export class ExaSearchClient {
 
   private acceptedCompanyDomains = new Set<string>();
 
+  private knownExcludedDomainsPromise?: Promise<Set<string>>;
+
+  private additionalExcludedDomains = new Set<string>();
+
+  private includeExcludeDomains = true;
+
+  private includeCompanyCategoryFilter = false;
+
   setApiKey(apiKey: string | undefined): void {
     this.runtimeApiKey = apiKey?.trim() || undefined;
+  }
+
+  setSearchPayloadOptions(options: ExaSearchPayloadOptions): void {
+    if (typeof options.includeExcludeDomains === "boolean") {
+      this.includeExcludeDomains = options.includeExcludeDomains;
+    }
+
+    if (typeof options.includeCompanyCategoryFilter === "boolean") {
+      this.includeCompanyCategoryFilter = options.includeCompanyCategoryFilter;
+    }
+  }
+
+  setAdditionalExcludedDomains(domains: string[]): void {
+    this.additionalExcludedDomains = new Set(
+      domains
+        .map((domain) => this.toExcludeDomain(domain))
+        .filter((domain): domain is string => Boolean(domain))
+    );
   }
 
   isConfigured(): boolean {
@@ -92,11 +117,15 @@ export class ExaSearchClient {
     }
 
     const queries = this.buildQueries(filter, page);
+    const requestedCompanyCount = Math.max(limit, MAX_EXA_RESULTS_PER_QUERY);
     const companies: CompanySample[] = [];
-    const seenDomains = new Set<string>();
+    const excludedDomains = await this.loadKnownExcludedDomains();
+    for (const domain of this.additionalExcludedDomains) {
+      excludedDomains.add(domain);
+    }
 
     for (let start = 0; start < queries.length; start += EXA_QUERY_CONCURRENCY) {
-      if (this.spentUsd >= env.EXA_MAX_BUDGET_USD || companies.length >= limit) {
+      if (this.spentUsd >= env.EXA_MAX_BUDGET_USD || companies.length >= requestedCompanyCount) {
         break;
       }
 
@@ -104,7 +133,7 @@ export class ExaSearchClient {
       const payloads = await Promise.all(
         queryBatch.map(async (query) => ({
           query,
-          payload: await this.runSearch(apiKey, query, Math.min(MAX_EXA_RESULTS_PER_QUERY, Math.max(6, limit - companies.length)))
+          payload: await this.runSearch(apiKey, query, MAX_EXA_RESULTS_PER_QUERY, Array.from(excludedDomains))
         }))
       );
 
@@ -113,38 +142,45 @@ export class ExaSearchClient {
 
         for (const result of payload.results ?? []) {
           const normalizedDomain = this.normalizeUrl(result.url);
-          if (
-            !normalizedDomain ||
-            seenDomains.has(normalizedDomain) ||
-            this.shouldIgnoreDomain(normalizedDomain) ||
-            shouldSkipDomain?.(normalizedDomain)
-          ) {
+          if (!normalizedDomain) {
             continue;
           }
 
-          seenDomains.add(normalizedDomain);
+          if (shouldSkipDomain?.(normalizedDomain)) {
+            const excludeDomain = this.toExcludeDomain(normalizedDomain);
+            if (excludeDomain) {
+              excludedDomains.add(excludeDomain);
+            }
+            continue;
+          }
+
           this.acceptedCompanyDomains.add(normalizedDomain);
+          const excludeDomain = this.toExcludeDomain(normalizedDomain);
+          if (excludeDomain) {
+            excludedDomains.add(excludeDomain);
+          }
 
           companies.push({
             name: this.deriveCompanyName(normalizedDomain, result.title),
             domain: this.toCanonicalCompanyDomain(normalizedDomain),
-            country: this.inferCountryFromDomain(normalizedDomain, filter.locations[0]),
+            country: this.inferCountryFromDomain(normalizedDomain, result, filter.locations[0]),
             shortDescription: this.buildDescription(result, filter),
-            sourceFilter: `${filter.name} (exa-search: ${this.compactQueryLabel(query)})`
+            sourceFilter: `${filter.name} (exa-search: ${this.compactQueryLabel(query)})`,
+            discoveryQuery: query
           });
 
-          if (companies.length >= limit) {
+          if (companies.length >= requestedCompanyCount) {
             break;
           }
         }
 
-        if (this.spentUsd >= env.EXA_MAX_BUDGET_USD || companies.length >= limit) {
+        if (this.spentUsd >= env.EXA_MAX_BUDGET_USD || companies.length >= requestedCompanyCount) {
           break;
         }
       }
     }
 
-    return companies.slice(0, limit);
+    return companies.slice(0, requestedCompanyCount);
   }
 
   async buildResearchContext(company: PreCategorizedCompany): Promise<SearchEvidence | null> {
@@ -159,9 +195,10 @@ export class ExaSearchClient {
     return this.fallbackResearchClient.crawlCompanyWebsite(domain);
   }
 
-  private async runSearch(apiKey: string, query: string, numResults: number): Promise<ExaSearchResponse> {
+  private async runSearch(apiKey: string, query: string, numResults: number, excludeDomains: string[] = []): Promise<ExaSearchResponse> {
     for (let attempt = 1; attempt <= EXA_MAX_RETRIES; attempt += 1) {
       await this.waitForRateLimitSlot();
+      const payload = this.buildSearchPayload(query, numResults, excludeDomains);
 
       const response = await fetch(EXA_ENDPOINT, {
         method: "POST",
@@ -169,15 +206,7 @@ export class ExaSearchClient {
           "Content-Type": "application/json",
           "x-api-key": apiKey
         },
-        body: JSON.stringify({
-          query,
-          type: "auto",
-          category: "company",
-          numResults,
-          contents: {
-            highlights: true
-          }
-        })
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
@@ -193,6 +222,104 @@ export class ExaSearchClient {
     }
 
     throw new Error("Exa search failed after exhausting retries.");
+  }
+
+  private buildSearchPayload(query: string, numResults: number, excludeDomains: string[] = []): ExaSearchRequestPayload {
+    const normalizedExcludeDomains = Array.from(new Set([
+      ...excludeDomains.map((domain) => domain.trim().toLowerCase()).filter(Boolean),
+      ...this.additionalExcludedDomains
+    ]))
+      .slice(-MAX_EXA_EXCLUDE_DOMAINS);
+
+    return {
+      query,
+      type: "auto",
+      ...(this.includeCompanyCategoryFilter ? { category: "company" as const } : {}),
+      numResults: Math.min(MAX_EXA_RESULTS_PER_QUERY, Math.max(1, numResults)),
+      ...(this.includeExcludeDomains ? { excludeDomains: normalizedExcludeDomains } : {}),
+      contents: {
+        summary: true,
+        highlights: true
+      }
+    };
+  }
+
+  private async loadKnownExcludedDomains(): Promise<Set<string>> {
+    if (!this.knownExcludedDomainsPromise) {
+      this.knownExcludedDomainsPromise = (async () => {
+        const excluded = new Set<string>();
+        const hubspotDomains = await this.fetchKnownHubSpotDomains();
+        for (const domain of hubspotDomains) {
+          const normalized = this.toExcludeDomain(domain);
+          if (normalized) {
+            excluded.add(normalized);
+          }
+        }
+        return excluded;
+      })();
+    }
+
+    return new Set(await this.knownExcludedDomainsPromise);
+  }
+
+  private async fetchKnownHubSpotDomains(): Promise<Set<string>> {
+    if (!readiness.hubspotConfigured) {
+      return new Set();
+    }
+
+    const domains = new Set<string>();
+    let after: string | undefined;
+
+    do {
+      const query = new URLSearchParams({
+        limit: "100",
+        properties: "domain"
+      });
+
+      if (after) {
+        query.set("after", after);
+      }
+
+      const response = await fetch(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies?${query.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${env.HUBSPOT_PRIVATE_APP_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        return domains;
+      }
+
+      const payload = await response.json() as {
+        results?: Array<{ properties?: Record<string, string | null> }>;
+        paging?: { next?: { after?: string } };
+      };
+
+      for (const company of payload.results ?? []) {
+        const value = company.properties?.domain?.trim();
+        if (value) {
+          domains.add(value);
+        }
+      }
+
+      after = payload.paging?.next?.after;
+    } while (after);
+
+    return domains;
+  }
+
+  private toExcludeDomain(value: string | undefined): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    try {
+      const parsed = value.includes("://") ? new URL(value) : new URL(`https://${value}`);
+      return parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    } catch {
+      return undefined;
+    }
   }
 
   private async waitForRateLimitSlot(): Promise<void> {
@@ -217,22 +344,28 @@ export class ExaSearchClient {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private buildQueries(filter: ApolloOrganizationFilter, page: number): string[] {
+  buildQueries(filter: ApolloOrganizationFilter, page: number): string[] {
     const locations = Array.from(new Set(filter.locations.map((location) => location.trim()).filter(Boolean))).slice(0, 2);
     const effectiveLocations = locations.length > 0 ? locations : ["Germany"];
-    const keywords = filter.keywords.slice(0, 6).map((keyword) => keyword.trim()).filter(Boolean);
+    const locationVariants = Array.from(new Set(effectiveLocations.flatMap((location) => this.buildLocationVariants(location))));
+    const compactPersona = this.compactSearchPhrase(filter.persona, 6);
+    const keywords = filter.keywords.slice(0, 6).map((keyword) => this.compactSearchPhrase(keyword, 4)).filter(Boolean);
     const primaryKeywords = keywords.slice(0, 3);
-    const secondaryKeywords = keywords.slice(3, 6);
-    const intentTerms = this.buildIntentTerms(filter);
-    const discoveryTerms = this.buildDiscoveryTerms(filter);
-    const quotedPrimaryKeywords = primaryKeywords.map((keyword) => `"${keyword}"`);
-    const quotedSecondaryKeywords = secondaryKeywords.map((keyword) => `"${keyword}"`);
-    const queryPool = effectiveLocations.flatMap((location) => [
-      `${filter.persona} ${location} ${discoveryTerms.join(" ")}`,
-      `${quotedPrimaryKeywords.join(" ")} ${location} ${discoveryTerms.slice(0, 2).join(" ")}`,
-      `${keywords.slice(0, 2).join(" ")} ${location} ${intentTerms.slice(0, 3).join(" ")}`,
-      `${quotedPrimaryKeywords.join(" ")} ${quotedSecondaryKeywords.join(" ")} ${location} official company website ${discoveryTerms[0]}`
-    ]);
+    const semanticFocus = this.buildSemanticSearchFocus(filter, compactPersona, primaryKeywords);
+    const applicationAngles = this.buildApplicationAngles(filter);
+    const queryPool = locationVariants.flatMap((location) => {
+      const primaryQueries = [
+        `${location} companies that provide ${semanticFocus}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
+        `${location} system integrators and solution providers that deliver ${semanticFocus} for customer projects. Prefer official company websites and exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
+        `${location} industrial automation and machine vision companies that deliver turnkey inspection or vision integration projects. Prefer official company websites of integrators or solution providers, not directories, news pages, PDFs, or component vendors.`
+      ];
+
+      const angleQueries = applicationAngles.map((angle) =>
+        `${location} companies that provide ${semanticFocus} for ${angle}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`
+      );
+
+      return [...primaryQueries, ...angleQueries];
+    }).filter(Boolean);
 
     const baseQueries = Array.from(new Set(queryPool));
 
@@ -276,6 +409,95 @@ export class ExaSearchClient {
     return ["system integrator", "customer projects", "engineering services", "implementation partner"];
   }
 
+  private buildSemanticSearchFocus(
+    filter: ApolloOrganizationFilter,
+    compactPersona: string,
+    primaryKeywords: string[]
+  ): string {
+    const normalizedText = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
+
+    if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(normalizedText)) {
+      return "machine vision system integration for industrial automation, industrial image processing, optical inspection systems, camera-based quality control, robot guidance, and turnkey vision inspection solutions";
+    }
+
+    if (/(mes|scada|plc|ot integration|automation software|sondermaschinen)/.test(normalizedText)) {
+      return "industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services";
+    }
+
+    return [compactPersona, ...primaryKeywords]
+      .filter(Boolean)
+      .join(", ") || "industrial AI and automation integration services";
+  }
+
+  private buildApplicationAngles(filter: ApolloOrganizationFilter): string[] {
+    const normalizedText = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
+
+    if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(normalizedText)) {
+      return [
+        "quality control and visual quality inspection",
+        "robot guidance and pick-and-place automation",
+        "inline inspection and defect detection",
+        "optical inspection and camera-based production monitoring",
+        "sorting, verification, and industrial image processing"
+      ];
+    }
+
+    if (/(mes|scada|plc|ot integration|automation software|sondermaschinen)/.test(normalizedText)) {
+      return [
+        "production control and shop-floor automation",
+        "machine connectivity and line integration",
+        "MES, SCADA, and PLC modernization",
+        "quality management and process monitoring"
+      ];
+    }
+
+    return [
+      "quality control",
+      "industrial inspection",
+      "automation projects",
+      "production monitoring"
+    ];
+  }
+
+  private buildLocationVariants(location: string): string[] {
+    const normalized = location.trim();
+    const lowered = normalized.toLowerCase();
+
+    if (["germany", "de", "deutschland"].includes(lowered)) {
+      return ["Germany", "Deutschland"];
+    }
+
+    if (["austria", "at", "oesterreich", "österreich"].includes(lowered)) {
+      return ["Austria", "Oesterreich"];
+    }
+
+    if (["switzerland", "ch", "schweiz"].includes(lowered)) {
+      return ["Switzerland", "Schweiz"];
+    }
+
+    return [normalized];
+  }
+
+  private compactSearchPhrase(text: string | undefined, maxWords: number): string {
+    const cleanedWords = (text ?? "")
+      .replace(/[|,;:()\[\]{}]+/g, " ")
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter(Boolean)
+      .filter((word, index, all) => all.findIndex((candidate) => candidate.toLowerCase() === word.toLowerCase()) === index);
+
+    return cleanedWords.slice(0, maxWords).join(" ");
+  }
+
+  private buildQuery(parts: Array<string | undefined>): string {
+    return parts
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   private buildDescription(result: ExaSearchResult, filter: ApolloOrganizationFilter): string {
     const highlights = result.highlights?.slice(0, 3).join(" | ");
     const title = result.title?.trim();
@@ -317,7 +539,8 @@ export class ExaSearchClient {
       const parsed = new URL(url);
       parsed.hash = "";
       parsed.search = "";
-      return parsed.origin;
+      parsed.pathname = parsed.pathname.replace(/\/$/, "") || "/";
+      return parsed.toString().replace(/\/$/, "");
     } catch {
       return undefined;
     }
@@ -327,11 +550,7 @@ export class ExaSearchClient {
     return domain.replace(/\/$/, "");
   }
 
-  private shouldIgnoreDomain(domain: string): boolean {
-    return IGNORED_HOST_HINTS.some((hostHint) => domain.includes(hostHint));
-  }
-
-  private inferCountryFromDomain(domain: string, fallbackLocation?: string): string | undefined {
+  private inferCountryFromDomain(domain: string, result: ExaSearchResult, fallbackLocation?: string): string | undefined {
     const hostname = new URL(domain).hostname.toLowerCase();
     if (hostname.endsWith(".de") || hostname.includes("gmbh")) {
       return "Germany";
@@ -353,6 +572,58 @@ export class ExaSearchClient {
       return "Belgium";
     }
 
-    return fallbackLocation;
+    const evidence = [
+      result.title,
+      ...(result.highlights ?? []),
+      result.summary,
+      result.text
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    const germanEvidence = [" germany", " deutschland", " german", " berlin", " munich", " muenchen", " münchen", " hamburg", " stuttgart", " cologne", " köln", " koln", " frankfurt"];
+    if (germanEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "Germany";
+    }
+
+    const austrianEvidence = [" austria", " österreich", " oesterreich", " vienna", " wien", " graz", " linz"];
+    if (austrianEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "Austria";
+    }
+
+    const swissEvidence = [" switzerland", " schweiz", " suisse", " zurich", " zürich", " basel", " geneva"];
+    if (swissEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "Switzerland";
+    }
+
+    const dutchEvidence = [" netherlands", " nederland", " amsterdam", " eindhoven", " rotterdam"];
+    if (dutchEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "Netherlands";
+    }
+
+    const belgianEvidence = [" belgium", " belgique", " belgië", " antwerp", " brussels", " gent", " ghent"];
+    if (belgianEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "Belgium";
+    }
+
+    if (fallbackLocation) {
+      const normalizedFallback = fallbackLocation.trim().toLowerCase();
+      if (evidence.includes(normalizedFallback)) {
+        if (["germany", "deutschland", "berlin", "hamburg", "munich", "muenchen", "münchen", "stuttgart", "frankfurt", "cologne", "köln", "koln"].includes(normalizedFallback)) {
+          return "Germany";
+        }
+
+        if (["austria", "österreich", "oesterreich", "vienna", "wien", "graz", "linz"].includes(normalizedFallback)) {
+          return "Austria";
+        }
+
+        if (["switzerland", "schweiz", "suisse", "zurich", "zürich", "basel", "geneva"].includes(normalizedFallback)) {
+          return "Switzerland";
+        }
+      }
+    }
+
+    return undefined;
   }
 }

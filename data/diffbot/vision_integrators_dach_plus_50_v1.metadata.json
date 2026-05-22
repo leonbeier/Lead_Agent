@@ -1,0 +1,8 @@
+{
+  "status_code": 200,
+  "hits": 179,
+  "results": 50,
+  "rowsWritten": 50,
+  "csvPath": "data\\diffbot\\vision_integrators_dach_plus_50_v1.csv",
+  "rawPath": "data\\diffbot\\vision_integrators_dach_plus_50_v1.raw.json"
+}

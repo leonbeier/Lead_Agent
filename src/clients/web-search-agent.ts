@@ -22,6 +22,10 @@ export class WebSearchAgent {
     this.exaSearchClient.setApiKey(apiKey);
   }
 
+  setExaExcludedDomains(domains: string[]): void {
+    this.exaSearchClient.setAdditionalExcludedDomains(domains);
+  }
+
   setDiffbotToken(token: string | undefined): void {
     this.diffbotSearchClient.setToken(token);
   }

@@ -4,6 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 import { env, readiness } from "./config";
 import { ControlPlaneStore } from "./control-plane";
+import { DebugConsoleService } from "./debug/test-console-service";
 import { defaultApolloFilters } from "./filters";
 import { LeadPipelineAgent } from "./agents/lead-pipeline";
 import { CATEGORY_EXECUTION_CONTEXT } from "./prompting/one-ware-playbook";
@@ -19,6 +20,8 @@ type LeadRunStatus = LeadRunProgress & {
   lastError?: string;
 };
 
+const STALE_LEAD_RUN_THRESHOLD_MS = 90_000;
+
 const leadRunStatus: LeadRunStatus = {
   running: false,
   stage: "idle",
@@ -30,9 +33,52 @@ const leadRunStatus: LeadRunStatus = {
 };
 const leadPipelineAgent = new LeadPipelineAgent();
 const controlPlaneStore = new ControlPlaneStore();
+const debugConsoleService = new DebugConsoleService();
 let activeLeadRunAbortController: AbortController | undefined;
 const hubSpotConsolePath = path.join(process.cwd(), "public", "hubspot-ui", "index.html");
 const publicRoutes = new Set(["/health", "/oauth-callback"]);
+
+function resetLeadRunStatus(detail: string, stage: LeadRunStatus["stage"] = "idle", stageLabel = "Bereit"): void {
+  leadRunStatus.running = false;
+  leadRunStatus.stage = stage;
+  leadRunStatus.stageLabel = stageLabel;
+  leadRunStatus.progressValue = 0;
+  leadRunStatus.progressMax = 100;
+  leadRunStatus.progressDescription = "Noch kein aktiver Lead-Run.";
+  leadRunStatus.detail = detail;
+  leadRunStatus.processedFilters = 0;
+  leadRunStatus.totalFilters = undefined;
+  leadRunStatus.foundCandidates = 0;
+  leadRunStatus.targetLeadCount = undefined;
+  leadRunStatus.funnel = undefined;
+  leadRunStatus.timedOut = false;
+  leadRunStatus.lastError = undefined;
+  leadRunStatus.startedAt = undefined;
+  leadRunStatus.finishedAt = new Date().toISOString();
+  leadRunStatus.updatedAt = new Date().toISOString();
+}
+
+function clearStaleLeadRunStatusIfNeeded(): void {
+  if (!leadRunStatus.running) {
+    return;
+  }
+
+  if (activeLeadRunAbortController) {
+    return;
+  }
+
+  const updatedAtMs = Date.parse(leadRunStatus.updatedAt || "");
+  const staleForMs = Number.isFinite(updatedAtMs) ? Date.now() - updatedAtMs : Number.POSITIVE_INFINITY;
+  if (staleForMs < STALE_LEAD_RUN_THRESHOLD_MS) {
+    return;
+  }
+
+  resetLeadRunStatus(
+    "Ein veralteter oder nach einem Deploy unterbrochener Lead-Run wurde automatisch freigegeben.",
+    "failed",
+    "Veralteter Run freigegeben"
+  );
+}
 const selectableCategorySchema = z.enum([
   "integrator_vision_industrial_ai",
   "integrator_vision_ai_consulting",
@@ -108,8 +154,12 @@ const leadJobSchema = z.object({
   runDeepResearch: z.boolean().optional(),
   dryRun: z.boolean().optional(),
   syncToHubSpot: z.boolean().optional(),
+  reuseQualifiedCompanyCache: z.boolean().optional(),
   exaApiKey: z.string().optional(),
   diffbotToken: z.string().optional(),
+  aiPrefilterConcurrency: z.coerce.number().int().min(1).max(32).optional(),
+  outreachPrepConcurrency: z.coerce.number().int().min(1).max(32).optional(),
+  contactSearchConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   disableHubSpotDeduplication: z.boolean().optional(),
   earlyStopEnabled: z.boolean().optional(),
   earlyStopReviewCount: z.coerce.number().int().min(5).max(30).optional(),
@@ -136,6 +186,9 @@ const settingsUpdateSchema = z.object({
   syncToHubSpot: z.boolean().optional(),
   exaApiKey: z.string().optional(),
   diffbotToken: z.string().optional(),
+  aiPrefilterConcurrency: z.coerce.number().int().min(1).max(32).optional(),
+  outreachPrepConcurrency: z.coerce.number().int().min(1).max(32).optional(),
+  contactSearchConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   maxRuntimeMs: z.coerce.number().int().min(60_000).max(10_800_000).optional(),
   earlyStopEnabled: z.boolean().optional(),
   earlyStopReviewCount: z.coerce.number().int().min(5).max(30).optional(),
@@ -159,6 +212,26 @@ const learningFeedbackSchema = z.object({
   domain: z.string().optional(),
   verdict: z.enum(["accept", "reject"]),
   reason: z.string().min(1)
+});
+
+const debugConsoleRequestSchema = z.object({
+  stage: z.enum(["company_search", "ai_prefilter", "outreach_prep", "contact_discovery"]).default("contact_discovery"),
+  targetCategory: selectableCategorySchema.optional(),
+  targetCategories: z.array(selectableCategorySchema).min(1).optional(),
+  region: z.string().max(160).optional(),
+  companySearchMode: z.enum(["exa_search", "diffbot_search"]).default("exa_search"),
+  exaQueryCount: z.coerce.number().int().min(1).max(50).optional(),
+  limit: z.coerce.number().int().min(1).max(20).default(20),
+  useExaExcludeDomains: z.boolean().optional(),
+  useExaCompanyCategory: z.boolean().optional(),
+  aiPrefilterConcurrency: z.coerce.number().int().min(1).max(32).optional(),
+  outreachPrepConcurrency: z.coerce.number().int().min(1).max(32).optional(),
+  contactSearchConcurrency: z.coerce.number().int().min(1).max(32).optional(),
+  websites: z.array(z.string().max(500)).max(50).optional(),
+  exaApiKey: z.string().optional(),
+  diffbotToken: z.string().optional()
+}).refine((value) => Boolean(value.targetCategory) || Boolean(value.targetCategories?.length), {
+  message: "Either targetCategory or targetCategories must be provided."
 });
 
 app.use(express.json());
@@ -211,6 +284,9 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
       : settings.companySearchMode;
   const prequalification = (body.prequalification ?? settings.prequalification) ??
     (legacyPrequalificationContext ? { mainContext: legacyPrequalificationContext } : undefined);
+  const earlyStopEnabled = companySearchMode === "exa_search"
+    ? false
+    : body.earlyStopEnabled ?? settings.earlyStopEnabled;
 
   const searchStrategyPreset = body.searchStrategyPreset === "default" || body.searchStrategyPreset === "optimized_vision_integrators"
     ? body.searchStrategyPreset
@@ -232,10 +308,14 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     runDeepResearch: body.runDeepResearch ?? settings.runDeepResearch,
     dryRun: body.dryRun ?? settings.dryRun,
     syncToHubSpot: body.syncToHubSpot ?? settings.syncToHubSpot ?? true,
+    reuseQualifiedCompanyCache: body.reuseQualifiedCompanyCache,
     exaApiKey: normalizedBodyExaApiKey ?? normalizedSettingsExaApiKey ?? env.EXA_API_KEY,
     diffbotToken: typeof body.diffbotToken === "string" ? body.diffbotToken : settings.diffbotToken,
+    aiPrefilterConcurrency: body.aiPrefilterConcurrency ?? settings.aiPrefilterConcurrency,
+    outreachPrepConcurrency: body.outreachPrepConcurrency ?? settings.outreachPrepConcurrency,
+    contactSearchConcurrency: body.contactSearchConcurrency ?? settings.contactSearchConcurrency,
     disableHubSpotDeduplication: body.disableHubSpotDeduplication,
-    earlyStopEnabled: body.earlyStopEnabled ?? settings.earlyStopEnabled,
+    earlyStopEnabled,
     earlyStopReviewCount: body.earlyStopReviewCount ?? settings.earlyStopReviewCount,
     earlyStopThreshold: body.earlyStopThreshold ?? settings.earlyStopThreshold,
     earlyStopMinRelevantCount: body.earlyStopMinRelevantCount ?? settings.earlyStopMinRelevantCount,
@@ -410,30 +490,85 @@ app.get("/api/control/latest-lead-run", async (_request, response, next) => {
   }
 });
 
+app.get("/api/control/cache/testlab-exa", async (_request, response, next) => {
+  try {
+    response.json({
+      cache: await controlPlaneStore.getTestLabExaCache()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/control/cache/company-screening", async (_request, response, next) => {
+  try {
+    response.json({
+      database: await controlPlaneStore.getCompanyScreeningDatabase()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/control/cache/testlab-exa/reset", async (_request, response, next) => {
+  try {
+    response.json({
+      cache: await controlPlaneStore.clearTestLabExaCache()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/control/cache/exa-search-history/reset", async (_request, response, next) => {
+  try {
+    response.json({
+      learning: await controlPlaneStore.clearSearchHistoryMode("exa_search")
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/control/cache/company-screening/reset", async (_request, response, next) => {
+  try {
+    response.json({
+      database: await controlPlaneStore.clearCompanyScreeningCache("all")
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/control/cache/company-screening/live/reset", async (_request, response, next) => {
+  try {
+    response.json({
+      database: await controlPlaneStore.clearCompanyScreeningCache("live")
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/control/cache/company-screening/debug/reset", async (_request, response, next) => {
+  try {
+    response.json({
+      database: await controlPlaneStore.clearCompanyScreeningCache("debug")
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/control/run-status", (_request, response) => {
+  clearStaleLeadRunStatusIfNeeded();
   response.json({
     runStatus: leadRunStatus
   });
 });
 
 app.post("/api/control/run-status/reset", (_request, response) => {
-  leadRunStatus.running = false;
-  leadRunStatus.stage = "idle";
-  leadRunStatus.stageLabel = "Bereit";
-  leadRunStatus.progressValue = 0;
-  leadRunStatus.progressMax = 100;
-  leadRunStatus.progressDescription = "Noch kein aktiver Lead-Run.";
-  leadRunStatus.detail = "Blockierter oder veralteter Lead-Run wurde manuell freigegeben.";
-  leadRunStatus.processedFilters = 0;
-  leadRunStatus.totalFilters = undefined;
-  leadRunStatus.foundCandidates = 0;
-  leadRunStatus.targetLeadCount = undefined;
-  leadRunStatus.funnel = undefined;
-  leadRunStatus.timedOut = false;
-  leadRunStatus.lastError = undefined;
-  leadRunStatus.startedAt = undefined;
-  leadRunStatus.finishedAt = new Date().toISOString();
-  leadRunStatus.updatedAt = new Date().toISOString();
+  resetLeadRunStatus("Blockierter oder veralteter Lead-Run wurde manuell freigegeben.");
 
   response.json({
     accepted: true,
@@ -494,6 +629,35 @@ app.post("/api/lead-jobs/preview", async (request, response, next) => {
   }
 });
 
+app.post("/api/debug/test-console", async (request, response, next) => {
+  try {
+    const parsedRequest = debugConsoleRequestSchema.parse(request.body);
+    const settings = await controlPlaneStore.getSettings();
+    const normalizedTargetCategories = (parsedRequest.targetCategories && parsedRequest.targetCategories.length > 0
+      ? parsedRequest.targetCategories
+      : parsedRequest.targetCategory
+        ? [parsedRequest.targetCategory]
+        : settings.targetCategories)
+      ?.filter((category): category is z.infer<typeof selectableCategorySchema> => selectableCategorySchema.safeParse(category).success);
+
+    if (!normalizedTargetCategories || normalizedTargetCategories.length === 0) {
+      throw new Error("At least one target category is required for the debug console.");
+    }
+
+    const result = await debugConsoleService.run({
+      ...parsedRequest,
+      targetCategory: parsedRequest.targetCategory ?? normalizedTargetCategories[0],
+      targetCategories: normalizedTargetCategories,
+      exaApiKey: parsedRequest.exaApiKey ?? settings.exaApiKey,
+      diffbotToken: parsedRequest.diffbotToken ?? settings.diffbotToken
+    });
+
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/lead-jobs/run", async (request, response, next) => {
   try {
     const payload = await buildLeadJobPayload(request.body as Record<string, unknown>);
@@ -507,6 +671,8 @@ app.post("/api/lead-jobs/run", async (request, response, next) => {
 
 app.post("/api/hubspot/workflow-trigger", async (request, response, next) => {
   try {
+    clearStaleLeadRunStatusIfNeeded();
+
     if (leadRunStatus.running) {
       response.status(409).json({
         trigger: "hubspot-ui",

@@ -8,6 +8,24 @@
     "linkedInMessage": "Kurze Frage: Wie schnell bekommen Sie aktuell ein Vision-AI-Modell produktionsbereit? Ich sehe bei Integratoren oft, dass Modellwahl und Optimierung unnötig viel Zeit kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?",
     "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE hier. Ich mache es kurz – passt es gerade für 30 Sekunden? Wir sprechen aktuell mit Integratoren, bei denen Modellwahl und Optimierung in Vision-AI-Projekten Wochen oder Monate kosten. Wir automatisieren genau diesen Teil. Wie ist das bei Ihnen aktuell?"
   },
+  "integrator_vision_ai_consulting_template": {
+    "key": "integrator_vision_ai_consulting_template",
+    "audience": "Vision AI / Industrial AI consulting firms and specialist boutiques with hands-on delivery ownership",
+    "goal": "Position ONE WARE as a force multiplier for consulting teams delivering industrial vision and inspection projects.",
+    "subject": "Vision-AI-Beratungsprojekte schneller und planbarer liefern",
+    "emailBody": "Hallo Herr/Frau [Name],\n\nBei spezialisierten Vision-AI- oder Industrial-AI-Beratungen ist oft nicht die Idee der Engpass, sondern die Zeit für Modellwahl, Iterationen und produktionsnahe Optimierung. Gerade wenn mehrere Kundenprojekte parallel laufen, bindet das überproportional viel Delivery-Kapazität.\n\nONE WARE automatisiert genau diesen Teil. Aus Projektdaten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware. So lassen sich mehr Kundenprojekte parallel liefern, mit besser planbaren Timelines und weniger Trial-and-Error.\n\nMich würde interessieren: Wo verlieren Sie heute in Vision-AI-Kundenprojekten am meisten Zeit – bei Modellgenerierung, Optimierung oder produktionsnaher Integration?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+    "linkedInMessage": "Kurze Frage: Wo verlieren Sie in Vision-AI-Kundenprojekten aktuell am meisten Zeit – bei Modellwahl, Tuning oder produktionsnaher Integration? Genau diesen Teil automatisieren wir.",
+    "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit Vision-AI- und Industrial-AI-Beratungen, bei denen Modellwahl und Optimierung in Kundenprojekten unverhältnismäßig viel Delivery-Zeit binden. Genau das automatisieren wir. Ist das bei Ihnen relevant?"
+  },
+  "integrator_vision_ai_freelancer_template": {
+    "key": "integrator_vision_ai_freelancer_template",
+    "audience": "Independent Vision AI / Industrial AI freelancers and solo specialists with hands-on delivery ownership",
+    "goal": "Position ONE WARE as leverage for solo experts who need to deliver more with limited hands-on engineering time.",
+    "subject": "Vision-AI-Freelance-Projekte mit weniger Tuning-Aufwand liefern",
+    "emailBody": "Hallo Herr/Frau [Name],\n\nBei Vision-AI- oder Industrial-AI-Freelancern ist oft nicht das Kundeninteresse der Engpass, sondern die Zeit für Modellwahl, Iterationen und produktionsnahe Optimierung. Gerade solo oder mit sehr kleinem Team kostet das schnell unverhältnismäßig viel Delivery-Zeit.\n\nONE WARE automatisiert genau diesen Teil. Aus Projektdaten entstehen in Minuten produktionsreife Vision-AI-Modelle, optimiert für die Zielhardware. So lassen sich Projekte schneller umsetzen, ohne jedes Mal wieder tief in manuelles Tuning zu gehen.\n\nMich würde interessieren: Wo verlieren Sie heute in Kundenprojekten am meisten Zeit – bei Modellgenerierung, Optimierung oder Hardware-Anpassung?\n\nMit freundlichen Grüßen\n[Ihr Name]",
+    "linkedInMessage": "Kurze Frage: Wo verlieren Sie in Vision-AI-Freelance-Projekten aktuell am meisten Zeit – bei Modellwahl, Tuning oder produktionsnaher Hardware-Anpassung? Genau diesen Teil automatisieren wir.",
+    "phoneScript": "Hallo Herr/Frau [Name], [Ihr Name] von ONE WARE. Wir sprechen mit Vision-AI-Freelancern, bei denen Modellwahl und Optimierung in Kundenprojekten unverhältnismäßig viel Zeit binden. Genau das automatisieren wir. Wäre das für Sie relevant?"
+  },
   "integrator_general_ai_template": {
     "key": "integrator_general_ai_template",
     "audience": "Software/automation integrators with general AI focus and delivery ownership",

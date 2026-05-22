@@ -34,7 +34,7 @@
       }
 
       main {
-        width: min(1180px, calc(100vw - 32px));
+        width: min(1040px, calc(100vw - 24px));
         margin: 28px auto;
         display: grid;
         gap: 18px;
@@ -214,6 +214,12 @@
         padding-top: 28px;
       }
 
+      .checkbox-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
       .checkbox-row input {
         width: 18px;
         height: 18px;
@@ -249,6 +255,69 @@
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       }
 
+      .debug-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .debug-card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.82);
+        padding: 18px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .debug-card details {
+        border: 1px solid rgba(22, 32, 41, 0.1);
+        border-radius: 14px;
+        padding: 10px 12px;
+        background: rgba(247, 250, 252, 0.88);
+      }
+
+      .debug-card summary {
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .debug-stage-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .debug-stage-card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.82);
+        padding: 18px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .debug-stage-card .panel-header {
+        margin-bottom: 0;
+      }
+
+      .stage-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .stage-shell {
+        display: grid;
+        gap: 12px;
+      }
+
+      .result-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
       .template-card {
         border: 1px solid var(--line);
         border-radius: 20px;
@@ -270,12 +339,14 @@
       .history-grid {
         display: grid;
         gap: 16px;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        min-width: 0;
       }
 
       .history-list {
         display: grid;
         gap: 10px;
+        min-width: 0;
       }
 
       .history-pagination {
@@ -331,9 +402,22 @@
         background: #101a22;
         color: #ecf6fb;
         overflow: auto;
+        max-width: 100%;
+        max-height: min(58vh, 440px);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
         font-family: "Cascadia Code", Consolas, monospace;
         font-size: 12px;
         line-height: 1.5;
+      }
+
+      .debug-card,
+      .debug-grid,
+      .panel,
+      .history-item,
+      details {
+        min-width: 0;
       }
 
       .status {
@@ -349,7 +433,7 @@
         color: var(--warn);
       }
 
-      @media (max-width: 960px) {
+      @media (max-width: 1160px) {
         .content-grid {
           grid-template-columns: 1fr;
         }
@@ -432,12 +516,16 @@
               <div class="prequalification-grid" id="prequalification-category-grid"></div>
             </section>
             <label>
-              Erste Stichprobe
-              <input id="earlyStopReviewCount" name="earlyStopReviewCount" type="number" min="5" max="15" required />
+              KI Vorfilter parallel
+              <input id="aiPrefilterConcurrency" name="aiPrefilterConcurrency" type="number" min="1" max="32" required />
             </label>
             <label>
-              Mindestquote relevant
-              <input id="earlyStopThreshold" name="earlyStopThreshold" type="number" min="0" max="1" step="0.01" required />
+              Outreach parallel
+              <input id="outreachPrepConcurrency" name="outreachPrepConcurrency" type="number" min="1" max="32" required />
+            </label>
+            <label>
+              Kontaktsuche parallel
+              <input id="contactSearchConcurrency" name="contactSearchConcurrency" type="number" min="1" max="32" required />
             </label>
             <div class="checkbox-row">
               <input id="runDeepResearch" name="runDeepResearch" type="checkbox" />
@@ -451,16 +539,16 @@
               <input id="syncToHubSpot" name="syncToHubSpot" type="checkbox" />
               <label for="syncToHubSpot">Ergebnisse in HubSpot schreiben</label>
             </div>
-            <div class="checkbox-row">
-              <input id="earlyStopEnabled" name="earlyStopEnabled" type="checkbox" />
-              <label for="earlyStopEnabled">Fruehes Stoppen schwacher Filter</label>
-            </div>
           </form>
           <div class="button-row">
             <button id="save-settings" type="button">Settings speichern</button>
             <button id="run-preview" type="button" class="secondary">Preview starten</button>
             <button id="run-live" type="button">Lead-Run starten</button>
           </div>
+          <div style="height: 18px;"></div>
+          <h3>Live Run-Status</h3>
+          <p style="margin-bottom: 12px;">Die laufende Suche wird hier live aus der Run-Status-API aktualisiert.</p>
+          <pre id="live-run-output">Noch kein aktiver Lead-Run.</pre>
           <div style="height: 18px;"></div>
           <h3>Letzte Antwort</h3>
           <p style="margin-bottom: 12px;">Preview- oder Run-Ergebnisse werden hier komprimiert angezeigt.</p>
@@ -482,9 +570,163 @@
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h2>Suchstrategie und Verlauf</h2>
-            <p>Hier ist sichtbar, welche 15er-Proben und 50er-Expansionen wirklich tragfaehig waren.</p>
+            <h2>Test Lab</h2>
+            <p>Prueft die Pipeline stufenweise: Exa-Firmensuche, Azure-Vorfilter, Outreach-Vorbereitung und Kontaktfindung mit Rohdaten je Schritt.</p>
           </div>
+          <div class="status" id="debug-console-status">Bereit</div>
+        </div>
+        <div class="debug-stage-grid">
+          <article class="debug-stage-card">
+            <div class="panel-header">
+              <div>
+                <h3>1. Exa Search</h3>
+                <p>Generiert Suchanfragen wie im echten Lauf und zeigt Rohresultate, erkannte Websites und Exa-Kontext an.</p>
+              </div>
+              <div class="status" id="debug-search-status">Bereit</div>
+            </div>
+            <form class="settings-grid">
+              <label>
+                Such-Backend
+                <select id="debug-companySearchMode" name="debug-companySearchMode">
+                  <option value="exa_search">Exa Search</option>
+                  <option value="diffbot_search">Diffbot Search</option>
+                </select>
+              </label>
+              <div>
+                <span style="display: block; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--ink);">Zielkategorien</span>
+                <div id="debug-targetCategories" class="checkbox-grid"></div>
+              </div>
+              <label>
+                Region
+                <input id="debug-region" name="debug-region" type="text" placeholder="z. B. Germany oder Berlin, Germany" />
+              </label>
+              <label>
+                Max. Firmen
+                <input id="debug-limit" name="debug-limit" type="number" min="1" max="20" value="20" />
+              </label>
+              <label>
+                Exa Suchversuche
+                <input id="debug-exaQueryCount" name="debug-exaQueryCount" type="number" min="1" max="50" value="3" />
+              </label>
+              <label>
+                KI Vorfilter parallel
+                <input id="debug-aiPrefilterConcurrency" name="debug-aiPrefilterConcurrency" type="number" min="1" max="32" value="2" />
+              </label>
+              <label>
+                Outreach parallel
+                <input id="debug-outreachPrepConcurrency" name="debug-outreachPrepConcurrency" type="number" min="1" max="32" value="6" />
+              </label>
+              <label>
+                Kontaktsuche parallel
+                <input id="debug-contactSearchConcurrency" name="debug-contactSearchConcurrency" type="number" min="1" max="32" value="8" />
+              </label>
+              <label class="checkbox-row">
+                <input id="debug-useExaExcludeDomains" name="debug-useExaExcludeDomains" type="checkbox" checked />
+                <span>Exclude Domains in Exa aktiv</span>
+              </label>
+              <label class="checkbox-row">
+                <input id="debug-useExaCompanyCategory" name="debug-useExaCompanyCategory" type="checkbox" />
+                <span>Exa category = company aktiv</span>
+              </label>
+            </form>
+            <div class="stage-actions">
+              <button id="run-debug-search" type="button">Suche generieren</button>
+              <button id="copy-search-to-ai" type="button" class="secondary">Websites an KI Vorfilter uebergeben</button>
+            </div>
+            <div class="debug-grid" id="debug-search-results">
+              <div class="debug-card">
+                <h3>Noch keine Suche</h3>
+                <p>Hier erscheinen die exakten Suchanfragen, Exa-Rohresultate und die daraus erkannten Firmen-Websites.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="debug-stage-card">
+            <div class="panel-header">
+              <div>
+                <h3>2. KI Vorfilter</h3>
+                <p>Prueft eine Website-Liste gegen Azure und zeigt Kategorie, rohen Input und den exakten Prompt pro Website.</p>
+              </div>
+              <div class="status" id="debug-ai-status">Bereit</div>
+            </div>
+            <div class="stage-shell">
+              <label>
+                Websites fuer KI Vorfilter, eine pro Zeile
+                <textarea id="debug-ai-websites" style="min-height: 120px;" placeholder="https://example.com&#10;https://example.org"></textarea>
+              </label>
+              <div class="stage-actions">
+                <button id="run-debug-ai" type="button">Kategorien pruefen</button>
+                <button id="copy-ai-to-outreach" type="button" class="secondary">Alle mit passender Kategorie weitergeben</button>
+              </div>
+            </div>
+            <div class="debug-grid" id="debug-ai-results">
+              <div class="debug-card">
+                <h3>Noch kein KI Lauf</h3>
+                <p>Fuege Websites ein oder uebernimm sie aus der Exa-Suche.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="debug-stage-card">
+            <div class="panel-header">
+              <div>
+                <h3>3. Outreach Vorbereitung</h3>
+                <p>Erstellt Firmenkontext, Outreach-Vorschlaege und die HubSpot-Feldvorschau fuer die gewaehlten Websites.</p>
+              </div>
+              <div class="status" id="debug-outreach-status">Bereit</div>
+            </div>
+            <div class="stage-shell">
+              <label>
+                Websites fuer Outreach Vorbereitung, eine pro Zeile
+                <textarea id="debug-outreach-websites" style="min-height: 120px;" placeholder="https://example.com&#10;https://example.org"></textarea>
+              </label>
+              <div class="stage-actions">
+                <button id="run-debug-outreach" type="button">Outreach vorbereiten</button>
+                <button id="copy-outreach-to-contacts" type="button" class="secondary">An Kontakt-Check weitergeben</button>
+              </div>
+            </div>
+            <div class="debug-grid" id="debug-outreach-results">
+              <div class="debug-card">
+                <h3>Noch keine Outreach Vorbereitung</h3>
+                <p>Hier erscheinen Firmeninfos, Research-Brief und HubSpot-Preview.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="debug-stage-card">
+            <div class="panel-header">
+              <div>
+                <h3>4. Kontakt-Check</h3>
+                <p>Findet Kontakte und zeigt sowohl Website-Rohdaten fuer Mail/Telefon als auch LinkedIn-Websearch-Rohdaten.</p>
+              </div>
+              <div class="status" id="debug-contacts-status">Bereit</div>
+            </div>
+            <div class="stage-shell">
+              <label>
+                Websites fuer Kontakt-Check, eine pro Zeile
+                <textarea id="debug-contacts-websites" style="min-height: 120px;" placeholder="https://example.com&#10;https://example.org"></textarea>
+              </label>
+              <div class="stage-actions">
+                <button id="run-debug-contacts" type="button">Kontakte finden</button>
+              </div>
+            </div>
+            <div class="debug-grid" id="debug-contacts-results">
+              <div class="debug-card">
+                <h3>Noch kein Kontakt-Check</h3>
+                <p>Hier erscheinen alle gefundenen Personen, Rohquellen von der Website und Rohdaten aus der LinkedIn-Websuche.</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Live Exa Verlauf</h2>
+            <p>Hier ist sichtbar, welche echten 15er-Proben und 50er-Expansionen wirklich tragfaehig waren.</p>
+          </div>
+          <button id="clear-live-exa-history" type="button" class="secondary">Live Exa Suchverlauf loeschen</button>
         </div>
         <div class="history-grid">
           <div>
@@ -507,6 +749,57 @@
       <section class="panel">
         <div class="panel-header">
           <div>
+            <h2>Test-Lab Exa Verlauf</h2>
+            <p>Getrennt vom Live-Run: bereits probierte Suchanfragen aus dem Test-Lab.</p>
+          </div>
+          <button id="clear-debug-exa-history" type="button" class="secondary">Test-Lab Suchverlauf loeschen</button>
+        </div>
+        <div class="history-grid">
+          <div>
+            <h3>Suchanfragen</h3>
+            <div class="history-list" id="testlab-query-history-list"></div>
+            <div class="history-pagination" id="testlab-query-history-pagination"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Test-Lab Aussortierte Websites</h2>
+            <p>Im Test-Lab manuell gepruefte Websites, die nach der Kategorie-Pruefung nicht in die Zielkategorien fallen.</p>
+          </div>
+          <button id="clear-debug-screening-cache" type="button" class="secondary">Test-Lab Aussortierte Websites loeschen</button>
+        </div>
+        <div class="history-grid">
+          <div>
+            <h3>Nicht passende Firmen</h3>
+            <div class="history-list" id="debug-screening-rejected-list"></div>
+            <div class="history-pagination" id="debug-screening-rejected-pagination"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Live Aussortierte Websites</h2>
+            <p>Schon kategorisierte, aber fuer die aktuell aktiven Zielkategorien nicht passende Websites aus dem Produktions-Cache.</p>
+          </div>
+          <button id="clear-live-screening-cache" type="button" class="secondary">Live Aussortierte Websites loeschen</button>
+        </div>
+        <div class="history-grid">
+          <div>
+            <h3>Nicht passende Firmen</h3>
+            <div class="history-list" id="live-screening-rejected-list"></div>
+            <div class="history-pagination" id="live-screening-rejected-pagination"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
             <h2>Kategorie-Kontexte</h2>
             <p>Diese Guidance-Bloecke steuern, wie Research und Outreach je Kategorie erstellt und angepasst werden.</p>
           </div>
@@ -520,6 +813,7 @@
       const sharedKey = new URLSearchParams(window.location.search).get("key") || injectedSharedKey;
       const settingsStatus = document.getElementById("settings-status");
       const templatesStatus = document.getElementById("templates-status");
+      const liveRunOutput = document.getElementById("live-run-output");
       const resultOutput = document.getElementById("result-output");
       const summaryCards = document.getElementById("summary-cards");
       const templateList = document.getElementById("template-list");
@@ -528,16 +822,44 @@
       const latestRunList = document.getElementById("latest-run-list");
       const searchHistoryList = document.getElementById("search-history-list");
       const searchHistoryPagination = document.getElementById("search-history-pagination");
+      const testLabQueryHistoryList = document.getElementById("testlab-query-history-list");
+      const testLabQueryHistoryPagination = document.getElementById("testlab-query-history-pagination");
+      const debugScreeningRejectedList = document.getElementById("debug-screening-rejected-list");
+      const debugScreeningRejectedPagination = document.getElementById("debug-screening-rejected-pagination");
+      const liveScreeningRejectedList = document.getElementById("live-screening-rejected-list");
+      const liveScreeningRejectedPagination = document.getElementById("live-screening-rejected-pagination");
       const filterPerformanceList = document.getElementById("filter-performance-list");
       const filterPerformancePagination = document.getElementById("filter-performance-pagination");
+      const debugConsoleStatus = document.getElementById("debug-console-status");
+      const debugSearchStatus = document.getElementById("debug-search-status");
+      const debugAiStatus = document.getElementById("debug-ai-status");
+      const debugOutreachStatus = document.getElementById("debug-outreach-status");
+      const debugContactsStatus = document.getElementById("debug-contacts-status");
+      const debugSearchResults = document.getElementById("debug-search-results");
+      const debugAiResults = document.getElementById("debug-ai-results");
+      const debugOutreachResults = document.getElementById("debug-outreach-results");
+      const debugContactsResults = document.getElementById("debug-contacts-results");
       let bootstrapData = null;
+      let liveRunPollHandle;
+      const debugTransferState = {
+        companySearch: null,
+        aiPrefilter: null,
+        outreachPrep: null,
+        contactDiscovery: null
+      };
       const HISTORY_PAGE_SIZE = 5;
       const paginationState = {
         searchHistory: 1,
+        testLabQueryHistory: 1,
+        debugScreeningRejected: 1,
+        liveScreeningRejected: 1,
         filterPerformance: 1
       };
       const paginationData = {
         searchHistory: [],
+        testLabQueryHistory: [],
+        debugScreeningRejected: [],
+        liveScreeningRejected: [],
         filterPerformance: []
       };
 
@@ -574,7 +896,17 @@
         element.className = warn ? "status warn" : "status";
       }
 
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       function fillSettingsForm(settings) {
+        const debugAiPrefilterConcurrency = Math.max(1, Math.min(settings.aiPrefilterConcurrency || 2, 2));
         const normalizedSearchMode = settings.companySearchMode === "diffbot_search"
           ? "diffbot_search"
           : "exa_search";
@@ -586,7 +918,16 @@
         document.getElementById("diffbotToken").value = settings.diffbotToken || "";
         document.getElementById("mainContext").value = settings.mainContext || "";
         document.getElementById("prequalification-mainContext").value = settings.prequalification?.mainContext || settings.prequalificationContext || "";
+        document.getElementById("aiPrefilterConcurrency").value = settings.aiPrefilterConcurrency || 20;
+        document.getElementById("outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
+        document.getElementById("contactSearchConcurrency").value = settings.contactSearchConcurrency || 20;
+        document.getElementById("debug-aiPrefilterConcurrency").value = debugAiPrefilterConcurrency;
+        document.getElementById("debug-outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
+        document.getElementById("debug-contactSearchConcurrency").value = settings.contactSearchConcurrency || 20;
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
+          checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
+        });
+        document.querySelectorAll("input[name='debug-targetCategories']").forEach((checkbox) => {
           checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
         });
         document.querySelectorAll("textarea[data-prequalification-category]").forEach((field) => {
@@ -595,9 +936,6 @@
         document.getElementById("runDeepResearch").checked = Boolean(settings.runDeepResearch);
         document.getElementById("dryRun").checked = Boolean(settings.dryRun);
         document.getElementById("syncToHubSpot").checked = settings.syncToHubSpot !== false;
-        document.getElementById("earlyStopEnabled").checked = Boolean(settings.earlyStopEnabled);
-        document.getElementById("earlyStopReviewCount").value = settings.earlyStopReviewCount;
-        document.getElementById("earlyStopThreshold").value = settings.earlyStopThreshold;
         syncSearchModeState();
         syncPrequalificationCardState();
       }
@@ -631,6 +969,9 @@
           exaApiKey: document.getElementById("exaApiKey").value.trim() || undefined,
           diffbotToken: document.getElementById("diffbotToken").value.trim() || undefined,
           maxRuntimeMs: Math.max(60000, Math.round(Math.max(1, maxRuntimeMinutes || 180) * 60 * 1000)),
+          aiPrefilterConcurrency: Number(document.getElementById("aiPrefilterConcurrency").value) || 20,
+          outreachPrepConcurrency: Number(document.getElementById("outreachPrepConcurrency").value) || 20,
+          contactSearchConcurrency: Number(document.getElementById("contactSearchConcurrency").value) || 20,
           prequalification: {
             mainContext: document.getElementById("prequalification-mainContext").value.trim(),
             categoryContexts
@@ -639,9 +980,8 @@
           runDeepResearch: document.getElementById("runDeepResearch").checked,
           dryRun: document.getElementById("dryRun").checked,
           syncToHubSpot: document.getElementById("syncToHubSpot").checked,
-          earlyStopEnabled: document.getElementById("earlyStopEnabled").checked,
-          earlyStopReviewCount: Number(document.getElementById("earlyStopReviewCount").value),
-          earlyStopThreshold: Number(document.getElementById("earlyStopThreshold").value)
+          reuseQualifiedCompanyCache: false,
+          earlyStopEnabled: false
         };
       }
 
@@ -654,6 +994,9 @@
           { label: "Lead-Ziel", value: String(settings.targetLeadCount) },
           { label: "Backend", value: settings.companySearchMode === "diffbot_search" ? "Diffbot Search" : "Exa Search" },
           { label: "Zeitlimit", value: `${Math.max(1, Math.round((settings.maxRuntimeMs || 10800000) / 60000))} min` },
+          { label: "KI Vorfilter", value: `${settings.aiPrefilterConcurrency || 8}x` },
+          { label: "Outreach", value: `${settings.outreachPrepConcurrency || 6}x` },
+          { label: "Kontakte", value: `${settings.contactSearchConcurrency || 8}x` },
           { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
           { label: "Templates", value: String(Object.keys(templates).length) },
           { label: "Main-Kontext", value: settings.mainContext ? "gesetzt" : "leer" },
@@ -687,6 +1030,20 @@
           .join("");
 
         syncPrequalificationCardState();
+      }
+
+      function renderDebugCategoryOptions(options) {
+        const target = document.getElementById("debug-targetCategories");
+        target.innerHTML = options
+          .map(
+            (option) => `
+              <div class="checkbox-row" style="padding-top: 0; margin: 0;">
+                <input id="debug-cat-${option.value}" name="debug-targetCategories" type="checkbox" value="${option.value}" />
+                <label for="debug-cat-${option.value}">${option.label}</label>
+              </div>
+            `
+          )
+          .join("");
       }
 
       function renderPrequalificationEditors(options, contexts) {
@@ -780,6 +1137,46 @@
         return data?.learning?.searchHistoryByMode?.[activeMode]?.filterPerformance || {};
       }
 
+      function getTestLabQueryHistory(data = bootstrapData) {
+        return data?.testLabExaCache?.queryHistory || [];
+      }
+
+      function isDebugScreeningRecord(record) {
+        const normalized = (record?.sourceFilter || "").trim().toLowerCase();
+        return normalized.includes("manual-debug-input") || normalized.includes("debug-stage=") || normalized.includes("[debug");
+      }
+
+      function getRejectedScreeningRecords(scope, data = bootstrapData) {
+        const activeCategories = new Set(data?.settings?.targetCategories || []);
+        const records = data?.companyScreeningDatabase?.records || [];
+
+        return records.filter((record) => {
+          if (record.existsInHubSpot) {
+            return false;
+          }
+
+          const isDebug = isDebugScreeningRecord(record);
+          if (scope === "debug" && !isDebug) {
+            return false;
+          }
+
+          if (scope === "live" && isDebug) {
+            return false;
+          }
+
+          const category = record.category || "other";
+          if (category === "other" || category === "irrelevant") {
+            return true;
+          }
+
+          if (activeCategories.size === 0) {
+            return false;
+          }
+
+          return !activeCategories.has(category);
+        });
+      }
+
       function formatFilterSnapshot(snapshot) {
         if (!snapshot) {
           return '<span class="mini-meta">Filterdetails fehlen bei aelteren Laeufen. Ab diesem Deploy werden Persona, Keywords, Branchen und Regionen mitgespeichert.</span>';
@@ -836,6 +1233,60 @@
         `).join("");
 
         renderPagination(searchHistoryPagination, "searchHistory", page, totalPages);
+      }
+
+      function renderTestLabQueryHistory(entries) {
+        paginationData.testLabQueryHistory = entries || [];
+
+        if (!entries || entries.length === 0) {
+          testLabQueryHistoryList.innerHTML = '<div class="history-item"><strong>Noch keine Test-Lab Suchhistorie</strong><span class="mini-meta">Sobald im Test-Lab Exa-Suchen gelaufen sind, erscheinen hier die exakten Query-Texte.</span></div>';
+          testLabQueryHistoryPagination.innerHTML = "";
+          return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
+        const page = Math.min(paginationState.testLabQueryHistory, totalPages);
+        paginationState.testLabQueryHistory = page;
+        const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+
+        testLabQueryHistoryList.innerHTML = pageEntries.map((query, index) => `
+          <div class="history-item">
+            <strong>Test-Lab Query ${escapeHtml((page - 1) * HISTORY_PAGE_SIZE + index + 1)}</strong>
+            <span class="mini-meta">${escapeHtml(query)}</span>
+          </div>
+        `).join("");
+
+        renderPagination(testLabQueryHistoryPagination, "testLabQueryHistory", page, totalPages);
+      }
+
+      function renderRejectedScreeningHistory(scope, entries) {
+        const listElement = scope === "debug" ? debugScreeningRejectedList : liveScreeningRejectedList;
+        const paginationElement = scope === "debug" ? debugScreeningRejectedPagination : liveScreeningRejectedPagination;
+        const paginationKey = scope === "debug" ? "debugScreeningRejected" : "liveScreeningRejected";
+        paginationData[paginationKey] = entries || [];
+
+        if (!entries || entries.length === 0) {
+          listElement.innerHTML = '<div class="history-item"><strong>Keine getrennt gespeicherten Ausschluesse</strong><span class="mini-meta">Sobald Websites kategorisiert und fuer die aktiven Zielkategorien verworfen wurden, erscheinen sie hier.</span></div>';
+          paginationElement.innerHTML = "";
+          return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
+        const page = Math.min(paginationState[paginationKey], totalPages);
+        paginationState[paginationKey] = page;
+        const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+
+        listElement.innerHTML = pageEntries.map((record) => `
+          <div class="history-item">
+            <strong>${escapeHtml(record.companyName || record.domain || "Unbekannte Website")}</strong>
+            <span class="mini-meta">${escapeHtml(record.domain || "keine Domain")} · KI-Check Kategorie: ${escapeHtml(record.category || "other")} · Score: ${escapeHtml(typeof record.relevanceScore === "number" ? String(record.relevanceScore) : "n/a")}</span>
+            ${record.sourceFilter ? `<span class="mini-meta">Entdeckt ueber Suchlauf: ${escapeHtml(record.sourceFilter)}</span>` : ""}
+            ${record.checkedAt ? `<span class="mini-meta">Geprueft: ${escapeHtml(new Date(record.checkedAt).toLocaleString("de-DE"))}</span>` : ""}
+            ${record.rationale ? `<span class="mini-meta">${escapeHtml(record.rationale)}</span>` : ""}
+          </div>
+        `).join("");
+
+        renderPagination(paginationElement, paginationKey, page, totalPages);
       }
 
       function renderFilterPerformance(filterPerformance, searchHistory) {
@@ -941,6 +1392,316 @@
           .join("");
       }
 
+      function collectSharedDebugSettings() {
+        const targetCategories = Array.from(document.querySelectorAll("input[name='debug-targetCategories']:checked")).map((checkbox) => checkbox.value);
+
+        return {
+          targetCategory: targetCategories[0],
+          targetCategories,
+          region: document.getElementById("debug-region").value.trim() || undefined,
+          companySearchMode: document.getElementById("debug-companySearchMode").value,
+          exaQueryCount: Number(document.getElementById("debug-exaQueryCount").value) || 3,
+          limit: Number(document.getElementById("debug-limit").value) || 4,
+          useExaExcludeDomains: document.getElementById("debug-useExaExcludeDomains").checked,
+          useExaCompanyCategory: document.getElementById("debug-useExaCompanyCategory").checked,
+          aiPrefilterConcurrency: Number(document.getElementById("debug-aiPrefilterConcurrency").value) || 8,
+          outreachPrepConcurrency: Number(document.getElementById("debug-outreachPrepConcurrency").value) || 6,
+          contactSearchConcurrency: Number(document.getElementById("debug-contactSearchConcurrency").value) || 8,
+          exaApiKey: document.getElementById("exaApiKey").value.trim() || undefined,
+          diffbotToken: document.getElementById("diffbotToken").value.trim() || undefined
+        };
+      }
+
+      function parseWebsiteTextarea(id) {
+        return document.getElementById(id).value
+          .split(/\r?\n/)
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+      }
+
+      function setWebsiteTextarea(id, websites) {
+        document.getElementById(id).value = Array.from(new Set((websites || []).filter(Boolean))).join("\n");
+      }
+
+      function collectStageRequest(stage) {
+        const base = collectSharedDebugSettings();
+        if (!base.targetCategories || base.targetCategories.length === 0) {
+          throw new Error("Waehle mindestens eine Zielkategorie fuer das Test Lab aus.");
+        }
+
+        const websites = stage === "ai_prefilter"
+          ? parseWebsiteTextarea("debug-ai-websites")
+          : stage === "outreach_prep"
+            ? parseWebsiteTextarea("debug-outreach-websites")
+            : stage === "contact_discovery"
+              ? parseWebsiteTextarea("debug-contacts-websites")
+              : [];
+
+        return {
+          ...base,
+          aiPrefilterConcurrency: Math.max(1, Math.min(base.aiPrefilterConcurrency || 2, 2)),
+          stage,
+          websites
+        };
+      }
+
+      function renderEmptyState(target, title, body) {
+        target.innerHTML = `
+          <div class="debug-card">
+            <h3>${escapeHtml(title)}</h3>
+            <p>${escapeHtml(body)}</p>
+          </div>
+        `;
+      }
+
+      function renderSearchStage(result) {
+        const searches = result.companySearch?.generatedSearches || [];
+        const discoveredCompanies = result.companySearch?.discoveredCompanies || [];
+        const requestedCategories = result.requested.targetCategories || (result.requested.targetCategory ? [result.requested.targetCategory] : []);
+        debugSearchResults.innerHTML = [
+          `
+            <article class="debug-card">
+              <h3>Exa Suchlauf</h3>
+              <div class="result-meta">
+                <span>Backend: ${escapeHtml(result.requested.companySearchMode)}</span>
+                <span>Kategorien: ${escapeHtml(requestedCategories.join(", ") || "n/a")}</span>
+                <span>Region: ${escapeHtml(result.requested.region || "n/a")}</span>
+                <span>Gefundene Firmen: ${escapeHtml(discoveredCompanies.length)}</span>
+              </div>
+            </article>
+          `,
+          ...searches.map((search, index) => `
+            <article class="debug-card">
+              <h3>Suchanfrage ${index + 1}</h3>
+              <details open>
+                <summary>Exakte Suchanfrage</summary>
+                <pre>${escapeHtml(search.query)}</pre>
+              </details>
+              <details open>
+                <summary>Voller Exa Prompt</summary>
+                <pre>${escapeHtml(JSON.stringify(search.exaRequestPayload || {}, null, 2))}</pre>
+              </details>
+              <details open>
+                <summary>Rohresultate (${search.rawResults.length})</summary>
+                <pre>${escapeHtml(JSON.stringify(search.rawResults, null, 2))}</pre>
+              </details>
+              <details>
+                <summary>Akzeptierte Firmen aus dieser Suche (${search.acceptedCompanies.length})</summary>
+                <pre>${escapeHtml(JSON.stringify(search.acceptedCompanies, null, 2))}</pre>
+              </details>
+              <details>
+                <summary>Technisch uebersprungene Resultate (${(search.rejectedResults || []).length})</summary>
+                <pre>${escapeHtml(JSON.stringify(search.rejectedResults || [], null, 2))}</pre>
+              </details>
+            </article>
+          `),
+          `
+            <article class="debug-card">
+              <h3>Alle erkannten Firmen-Websites</h3>
+              <pre>${escapeHtml(JSON.stringify(discoveredCompanies, null, 2))}</pre>
+            </article>
+          `
+        ].join("");
+      }
+
+      function renderAiStage(result) {
+        const analyses = result.aiPrefilter?.analyzedWebsites || [];
+        debugAiResults.innerHTML = analyses.length === 0
+          ? `
+              <div class="debug-card">
+                <h3>Keine Websites uebergeben</h3>
+                <p>Fuege Websites manuell ein oder uebernimm sie aus der Exa-Suche.</p>
+              </div>
+            `
+          : analyses.map((analysis) => `
+              <article class="debug-card">
+                <div>
+                  <h3>${escapeHtml(analysis.company?.name || "Unbekannte Firma")}</h3>
+                  <div class="result-meta">
+                    <span>${escapeHtml(analysis.company?.domain || "keine Domain")}</span>
+                    <span>Kategorie: ${escapeHtml(analysis.azureEvaluation?.category || "n/a")}</span>
+                    <span>Score: ${escapeHtml(analysis.azureEvaluation?.relevanceScore ?? "0")}</span>
+                  </div>
+                  ${analysis.error ? `<p style="color: var(--warn);">${escapeHtml(analysis.error)}</p>` : ""}
+                </div>
+                <details open>
+                  <summary>Website Parser</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.websiteParser, null, 2))}</pre>
+                </details>
+                <details open>
+                  <summary>Kategorie-Entscheidung</summary>
+                  <pre>${escapeHtml(JSON.stringify({
+                    category: analysis.azureEvaluation.category,
+                    relevanceScore: analysis.azureEvaluation.relevanceScore,
+                    rationale: analysis.azureEvaluation.rationale,
+                    compactRetryUsed: analysis.azureEvaluation.compactRetryUsed
+                  }, null, 2))}</pre>
+                </details>
+                <details>
+                  <summary>Roher Azure Input</summary>
+                  <pre>${escapeHtml(analysis.azureEvaluation.rawInput)}</pre>
+                </details>
+                <details>
+                  <summary>Azure Prompt-Nachrichten</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.azureEvaluation.promptMessages, null, 2))}</pre>
+                </details>
+              </article>
+            `).join("");
+      }
+
+      function renderOutreachStage(result) {
+        const analyses = result.outreachPrep?.analyzedWebsites || [];
+        debugOutreachResults.innerHTML = analyses.length === 0
+          ? `
+              <div class="debug-card">
+                <h3>Keine Websites uebergeben</h3>
+                <p>Fuege Websites manuell ein oder uebernimm sie aus dem KI Vorfilter.</p>
+              </div>
+            `
+          : analyses.map((analysis) => `
+              <article class="debug-card">
+                <div>
+                  <h3>${escapeHtml(analysis.company?.name || "Unbekannte Firma")}</h3>
+                  <div class="result-meta">
+                    <span>${escapeHtml(analysis.company?.domain || "keine Domain")}</span>
+                    <span>Kategorie: ${escapeHtml(analysis.azureEvaluation?.category || "n/a")}</span>
+                    <span>Target Industry: ${escapeHtml(analysis.researchBrief?.targetIndustry || "n/a")}</span>
+                  </div>
+                  ${analysis.error ? `<p style="color: var(--warn);">${escapeHtml(analysis.error)}</p>` : ""}
+                </div>
+                <details open>
+                  <summary>Website Parser</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.websiteParser, null, 2))}</pre>
+                </details>
+                <details open>
+                  <summary>Outreach Vorbereitung</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.researchBrief, null, 2))}</pre>
+                </details>
+                <details>
+                  <summary>HubSpot Company Preview</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.hubspotPreview || {}, null, 2))}</pre>
+                </details>
+              </article>
+            `).join("");
+      }
+
+      function renderContactsStage(result) {
+        const analyses = result.contactDiscovery?.analyzedWebsites || [];
+        debugContactsResults.innerHTML = analyses.length === 0
+          ? `
+              <div class="debug-card">
+                <h3>Keine Websites uebergeben</h3>
+                <p>Fuege Websites manuell ein oder uebernimm sie aus der Outreach Vorbereitung.</p>
+              </div>
+            `
+          : analyses.map((analysis) => `
+              <article class="debug-card">
+                <div>
+                  <h3>${escapeHtml(analysis.company?.name || "Unbekannte Firma")}</h3>
+                  <div class="result-meta">
+                    <span>${escapeHtml(analysis.company?.domain || "keine Domain")}</span>
+                    <span>Kategorie: ${escapeHtml(analysis.azureEvaluation?.category || "n/a")}</span>
+                    <span>Finale Kontakte: ${escapeHtml((analysis.publicContactDebug?.selectedContacts || []).length)}</span>
+                  </div>
+                  ${analysis.error ? `<p style="color: var(--warn);">${escapeHtml(analysis.error)}</p>` : ""}
+                </div>
+                <details open>
+                  <summary>Alle finalen Kontakte</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.publicContactDebug?.selectedContacts || [], null, 2))}</pre>
+                </details>
+                <details>
+                  <summary>Heuristische Rohkontakte</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.publicContactDebug?.heuristicContacts || [], null, 2))}</pre>
+                </details>
+                <details>
+                  <summary>Rohdaten von Website fuer Mail und Telefon</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.publicContactDebug?.websitePages || [], null, 2))}</pre>
+                </details>
+                <details>
+                  <summary>Rohdaten von LinkedIn Web Search</summary>
+                  <pre>${escapeHtml(JSON.stringify({
+                    aliases: analysis.publicContactDebug?.aliases || [],
+                    queries: analysis.publicContactDebug?.queries || [],
+                    hitGroups: analysis.publicContactDebug?.hitGroups || []
+                  }, null, 2))}</pre>
+                </details>
+                <details>
+                  <summary>HubSpot Contact Preview</summary>
+                  <pre>${escapeHtml(JSON.stringify(analysis.hubspotPreview?.contacts || [], null, 2))}</pre>
+                </details>
+              </article>
+            `).join("");
+      }
+
+      async function runDebugStage(stage, statusElement, resultsElement, pendingTitle, pendingBody) {
+        try {
+          const requestPayload = collectStageRequest(stage);
+          setStatus(debugConsoleStatus, `Test Lab laeuft: ${stage}`);
+          setStatus(statusElement, "Lauf startet...");
+          resultsElement.innerHTML = `
+            <div class="debug-card">
+              <h3>${escapeHtml(pendingTitle)}</h3>
+              <p>${escapeHtml(pendingBody)}</p>
+            </div>
+          `;
+          const result = await requestJson("/api/debug/test-console", {
+            method: "POST",
+            body: JSON.stringify(requestPayload)
+          });
+
+          if (stage === "company_search") {
+            debugTransferState.companySearch = result;
+            renderSearchStage(result);
+          } else if (stage === "ai_prefilter") {
+            debugTransferState.aiPrefilter = result;
+            renderAiStage(result);
+          } else if (stage === "outreach_prep") {
+            debugTransferState.outreachPrep = result;
+            renderOutreachStage(result);
+          } else {
+            debugTransferState.contactDiscovery = result;
+            renderContactsStage(result);
+          }
+
+          setStatus(statusElement, "Fertig");
+          setStatus(debugConsoleStatus, `Test Lab fertig: ${stage}`);
+        } catch (error) {
+          setStatus(statusElement, "Fehlgeschlagen", true);
+          setStatus(debugConsoleStatus, "Test Lab fehlgeschlagen", true);
+          resultsElement.innerHTML = `
+            <div class="debug-card">
+              <h3>Fehler</h3>
+              <pre>${escapeHtml(String(error))}</pre>
+            </div>
+          `;
+        }
+      }
+
+      function copySearchToAi() {
+        const companies = debugTransferState.companySearch?.companySearch?.discoveredCompanies || [];
+        setWebsiteTextarea("debug-ai-websites", companies.map((company) => company.domain).filter(Boolean));
+      }
+
+      function copyAiToOutreach() {
+        const analyses = debugTransferState.aiPrefilter?.aiPrefilter?.analyzedWebsites || [];
+        const activeTargetCategories = new Set(Array.from(document.querySelectorAll("input[name='debug-targetCategories']:checked")).map((checkbox) => checkbox.value));
+        setWebsiteTextarea(
+          "debug-outreach-websites",
+          analyses
+            .filter((analysis) => activeTargetCategories.has(analysis.azureEvaluation?.category))
+            .map((analysis) => analysis.company?.domain)
+            .filter(Boolean)
+        );
+      }
+
+      function copyOutreachToContacts() {
+        const analyses = debugTransferState.outreachPrep?.outreachPrep?.analyzedWebsites || [];
+        setWebsiteTextarea(
+          "debug-contacts-websites",
+          analyses.map((analysis) => analysis.company?.domain).filter(Boolean)
+        );
+      }
+
       async function loadBootstrap() {
         try {
           if (!sharedKey || sharedKey.startsWith("__")) {
@@ -949,13 +1710,19 @@
           const data = await requestJson("/api/control-plane/bootstrap");
           bootstrapData = data;
           renderTargetCategories(data.selectableCategories || []);
+          renderDebugCategoryOptions(data.selectableCategories || []);
           renderPrequalificationEditors(data.selectableCategories || [], data.prequalificationCategoryContexts || {});
           fillSettingsForm(data.settings);
+          document.getElementById("debug-companySearchMode").value = data.settings?.companySearchMode === "diffbot_search" ? "diffbot_search" : "exa_search";
+          document.getElementById("debug-region").value = data.settings?.market || "Germany";
           renderSummary(data.settings, data.templates, data.latestLeadRun);
           renderTemplates(data.templates);
           renderContexts(data.categoryContexts);
           renderLatestRun(data.latestLeadRun);
           renderSearchHistory(getSearchHistoryForMode(data));
+          renderTestLabQueryHistory(getTestLabQueryHistory(data));
+          renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", data));
+          renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", data));
           renderFilterPerformance(getFilterPerformanceForMode(data), getSearchHistoryForMode(data));
           setStatus(settingsStatus, "Settings geladen");
           setStatus(templatesStatus, "Templates geladen");
@@ -993,13 +1760,72 @@
 
         const latestRunPayload = await requestJson("/api/control/latest-lead-run");
         const learningPayload = await requestJson("/api/control/learning");
+        const testLabCachePayload = await requestJson("/api/control/cache/testlab-exa");
+        const screeningPayload = await requestJson("/api/control/cache/company-screening");
         const latestLeadRun = latestRunPayload.latestLeadRun;
         bootstrapData.latestLeadRun = latestLeadRun;
         bootstrapData.learning = learningPayload.learning;
+        bootstrapData.testLabExaCache = testLabCachePayload.cache;
+        bootstrapData.companyScreeningDatabase = screeningPayload.database;
         renderSummary(collectSettings(), bootstrapData.templates, latestLeadRun);
         renderLatestRun(latestLeadRun);
         renderSearchHistory(getSearchHistoryForMode(bootstrapData));
+        renderTestLabQueryHistory(getTestLabQueryHistory(bootstrapData));
+        renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", bootstrapData));
+        renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", bootstrapData));
         renderFilterPerformance(getFilterPerformanceForMode(bootstrapData), getSearchHistoryForMode(bootstrapData));
+      }
+
+      function renderLiveRunStatus(runStatus) {
+        if (!runStatus) {
+          liveRunOutput.textContent = "Noch kein aktiver Lead-Run.";
+          return;
+        }
+
+        liveRunOutput.textContent = JSON.stringify({
+          running: Boolean(runStatus.running),
+          stageLabel: runStatus.stageLabel,
+          progressValue: runStatus.progressValue,
+          progressDescription: runStatus.progressDescription,
+          detail: runStatus.detail,
+          exaRawCompanies: runStatus.funnel?.afterCrawlerPrefilter ?? 0,
+          afterDeduplication: runStatus.funnel?.afterHubSpotDedup ?? 0,
+          afterAiCheck: runStatus.funnel?.afterAzureAICheck ?? runStatus.foundCandidates ?? 0,
+          syncedToHubSpot: runStatus.funnel?.syncedToHubSpot ?? 0,
+          targetLeadCount: runStatus.targetLeadCount,
+          updatedAt: runStatus.updatedAt
+        }, null, 2);
+      }
+
+      async function refreshLiveRunStatus() {
+        const payload = await requestJson("/api/control/run-status");
+        renderLiveRunStatus(payload.runStatus);
+        return payload.runStatus;
+      }
+
+      async function restartLiveRunPolling() {
+        if (liveRunPollHandle) {
+          clearInterval(liveRunPollHandle);
+          liveRunPollHandle = undefined;
+        }
+
+        const runStatus = await refreshLiveRunStatus();
+        if (!runStatus?.running) {
+          return;
+        }
+
+        liveRunPollHandle = setInterval(async () => {
+          try {
+            const nextStatus = await refreshLiveRunStatus();
+            if (!nextStatus?.running) {
+              clearInterval(liveRunPollHandle);
+              liveRunPollHandle = undefined;
+              await refreshRunSurfaces();
+            }
+          } catch (error) {
+            liveRunOutput.textContent = String(error);
+          }
+        }, 5000);
       }
 
       async function triggerRun(endpoint) {
@@ -1011,13 +1837,27 @@
           });
 
           await refreshRunSurfaces();
+          await restartLiveRunPolling();
           resultOutput.textContent = endpoint === "/api/hubspot/workflow-trigger" && result.accepted
             ? JSON.stringify({
                 accepted: true,
-                message: "Lead-Run gestartet. Die Konsole und der Run-Status aktualisieren sich separat.",
+                message: "Lead-Run gestartet. Der Live Run-Status pollt jetzt die echten Zwischenstaende.",
                 runStatus: result.runStatus
               }, null, 2)
             : JSON.stringify(result, null, 2);
+        } catch (error) {
+          resultOutput.textContent = String(error);
+        }
+      }
+
+      async function clearCache(endpoint, message) {
+        try {
+          resultOutput.textContent = `${message}...`;
+          const result = await requestJson(endpoint, {
+            method: "POST"
+          });
+          await refreshRunSurfaces();
+          resultOutput.textContent = JSON.stringify(result, null, 2);
         } catch (error) {
           resultOutput.textContent = String(error);
         }
@@ -1046,8 +1886,22 @@
       }
 
       document.getElementById("save-settings").addEventListener("click", saveSettings);
+      document.getElementById("run-debug-search").addEventListener("click", () => runDebugStage("company_search", debugSearchStatus, debugSearchResults, "Suche laeuft", "Exa- oder Diffbot-Suchanfragen werden generiert und Rohresultate geladen."));
+      document.getElementById("run-debug-ai").addEventListener("click", () => runDebugStage("ai_prefilter", debugAiStatus, debugAiResults, "KI Vorfilter laeuft", "Website Parser, roher Azure Input und Prompt werden fuer jede Website erzeugt."));
+      document.getElementById("run-debug-outreach").addEventListener("click", () => runDebugStage("outreach_prep", debugOutreachStatus, debugOutreachResults, "Outreach Vorbereitung laeuft", "Firmeninfos, Research Brief und HubSpot Preview werden erstellt."));
+      document.getElementById("run-debug-contacts").addEventListener("click", () => runDebugStage("contact_discovery", debugContactsStatus, debugContactsResults, "Kontakt-Check laeuft", "Website-Rohdaten und LinkedIn-Websearch werden fuer Kontakte ausgewertet."));
+      document.getElementById("copy-search-to-ai").addEventListener("click", copySearchToAi);
+      document.getElementById("copy-ai-to-outreach").addEventListener("click", copyAiToOutreach);
+      document.getElementById("copy-outreach-to-contacts").addEventListener("click", copyOutreachToContacts);
       document.getElementById("run-preview").addEventListener("click", () => triggerRun("/api/lead-jobs/preview"));
       document.getElementById("run-live").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger"));
+      restartLiveRunPolling().catch((error) => {
+        liveRunOutput.textContent = String(error);
+      });
+      document.getElementById("clear-live-exa-history").addEventListener("click", () => clearCache("/api/control/cache/exa-search-history/reset", "Exa Suchverlauf wird geloescht"));
+      document.getElementById("clear-live-screening-cache").addEventListener("click", () => clearCache("/api/control/cache/company-screening/live/reset", "Live Screening-Cache wird geloescht"));
+      document.getElementById("clear-debug-screening-cache").addEventListener("click", () => clearCache("/api/control/cache/company-screening/debug/reset", "Test-Lab Screening-Cache wird geloescht"));
+      document.getElementById("clear-debug-exa-history").addEventListener("click", () => clearCache("/api/control/cache/testlab-exa/reset", "Test-Lab Exa Cache wird geloescht"));
       document.getElementById("companySearchMode").addEventListener("change", syncSearchModeState);
 
       templateList.addEventListener("click", (event) => {
@@ -1061,7 +1915,7 @@
 
       document.getElementById("target-categories").addEventListener("change", syncPrequalificationCardState);
 
-      [searchHistoryPagination, filterPerformancePagination].forEach((element) => {
+      [searchHistoryPagination, testLabQueryHistoryPagination, debugScreeningRejectedPagination, liveScreeningRejectedPagination, filterPerformancePagination].forEach((element) => {
         element.addEventListener("click", (event) => {
           const button = event.target.closest("button[data-page-target]");
           if (!button) {
@@ -1075,6 +1929,21 @@
 
           if (target === "searchHistory") {
             renderSearchHistory(paginationData.searchHistory);
+            return;
+          }
+
+          if (target === "testLabQueryHistory") {
+            renderTestLabQueryHistory(paginationData.testLabQueryHistory);
+            return;
+          }
+
+          if (target === "debugScreeningRejected") {
+            renderRejectedScreeningHistory("debug", paginationData.debugScreeningRejected);
+            return;
+          }
+
+          if (target === "liveScreeningRejected") {
+            renderRejectedScreeningHistory("live", paginationData.liveScreeningRejected);
             return;
           }
 

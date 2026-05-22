@@ -1,0 +1,441 @@
+{
+  "generatedAt": "2026-05-16T17:33:18.161Z",
+  "perTestRuntimeMs": 900000,
+  "benchmarkTestCount": 10,
+  "leaderboard": [
+    {
+      "testId": 4,
+      "profileName": "h04_german_systemhaus",
+      "hypothesis": "German systemhaus and automation-house vocabulary unlocks more DACH integrator websites than generic software wording.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.08,
+      "attempts": 1,
+      "startedAt": "2026-05-16T15:41:38.951Z",
+      "finishedAt": "2026-05-16T15:57:58.822Z",
+      "durationMinutes": 16.331183333333332,
+      "stage": "completed",
+      "foundCandidates": 2,
+      "crawledPages": 8054,
+      "afterCrawlerPrefilter": 29,
+      "afterHubSpotDedup": 2,
+      "afterAzureAICheck": 2,
+      "syncedToHubSpot": 2
+    },
+    {
+      "testId": 3,
+      "profileName": "h03_wider_software_platform",
+      "hypothesis": "Allowing adjacent industrial platforms captures additional software-led firms that still qualify later.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.06,
+      "attempts": 9,
+      "startedAt": "2026-05-16T15:25:28.422Z",
+      "finishedAt": "2026-05-16T15:41:38.944Z",
+      "durationMinutes": 16.175366666666665,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 8961,
+      "afterCrawlerPrefilter": 43,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 1,
+      "profileName": "h01_balanced_dach_software",
+      "hypothesis": "Balanced DACH industrial software context yields the highest raw relevant-domain volume.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.12,
+      "attempts": 13,
+      "startedAt": "2026-05-16T14:53:58.415Z",
+      "finishedAt": "2026-05-16T15:09:42.657Z",
+      "durationMinutes": 15.737366666666667,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 7309,
+      "afterCrawlerPrefilter": 19,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 2,
+      "profileName": "h02_delivery_heavy",
+      "hypothesis": "Heavier delivery-language bias improves conversion from crawler prefilter to Azure relevance.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.08,
+      "attempts": 14,
+      "startedAt": "2026-05-16T15:09:42.669Z",
+      "finishedAt": "2026-05-16T15:25:28.411Z",
+      "durationMinutes": 15.762366666666667,
+      "stage": "completed",
+      "foundCandidates": 0,
+      "crawledPages": 7837,
+      "afterCrawlerPrefilter": 14,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 5,
+      "profileName": "h05_scada_mes_ot",
+      "hypothesis": "A narrower MES, SCADA, OT, and process-control angle yields fewer crawls but more industrial-fit candidates.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.1,
+      "attempts": 11,
+      "startedAt": "2026-05-16T15:57:58.828Z",
+      "finishedAt": "2026-05-16T16:13:40.740Z",
+      "durationMinutes": 15.698533333333334,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 13757,
+      "afterCrawlerPrefilter": 11,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 6,
+      "profileName": "h06_commissioning_retrofit",
+      "hypothesis": "Commissioning, retrofit, and brownfield-modernization language is a stronger proxy for delivery-led integrators than generic AI wording.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.07,
+      "attempts": 8,
+      "startedAt": "2026-05-16T16:13:40.744Z",
+      "finishedAt": "2026-05-16T16:30:03.936Z",
+      "durationMinutes": 16.386533333333333,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 12182,
+      "afterCrawlerPrefilter": 9,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 7,
+      "profileName": "h07_reference_case_study",
+      "hypothesis": "Reference-project and case-study-heavy contexts produce the best downstream Azure acceptance.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.06,
+      "attempts": 8,
+      "startedAt": "2026-05-16T16:30:03.939Z",
+      "finishedAt": "2026-05-16T16:45:39.833Z",
+      "durationMinutes": 15.598233333333333,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 12149,
+      "afterCrawlerPrefilter": 8,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 9,
+      "profileName": "h09_embedded_edge_ot",
+      "hypothesis": "Embedded, edge, and machine-level software engineering firms are undercounted and can add qualified adjacent targets.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "software_platform_embedding",
+        "machine_builder_ai_enablement"
+      ],
+      "earlyStopThreshold": 0.05,
+      "attempts": 8,
+      "startedAt": "2026-05-16T17:00:44.115Z",
+      "finishedAt": "2026-05-16T17:16:37.962Z",
+      "durationMinutes": 15.89745,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 11946,
+      "afterCrawlerPrefilter": 8,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 10,
+      "profileName": "h10_iiot_industrie40",
+      "hypothesis": "Industrie 4.0 and IIoT wording surfaces a separate pool of qualified software-led implementation partners.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.05,
+      "attempts": 8,
+      "startedAt": "2026-05-16T17:16:37.967Z",
+      "finishedAt": "2026-05-16T17:33:18.158Z",
+      "durationMinutes": 16.66985,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 13877,
+      "afterCrawlerPrefilter": 8,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 8,
+      "profileName": "h08_europe_service_exporters",
+      "hypothesis": "Europe-wide industrial software exporters yield more total candidates than DACH-only profiles even if relevance is noisier.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.05,
+      "attempts": 7,
+      "startedAt": "2026-05-16T16:45:39.839Z",
+      "finishedAt": "2026-05-16T17:00:44.109Z",
+      "durationMinutes": 15.071166666666667,
+      "stage": "completed",
+      "foundCandidates": 0,
+      "crawledPages": 12469,
+      "afterCrawlerPrefilter": 7,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    }
+  ],
+  "results": [
+    {
+      "testId": 1,
+      "profileName": "h01_balanced_dach_software",
+      "hypothesis": "Balanced DACH industrial software context yields the highest raw relevant-domain volume.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.12,
+      "attempts": 13,
+      "startedAt": "2026-05-16T14:53:58.415Z",
+      "finishedAt": "2026-05-16T15:09:42.657Z",
+      "durationMinutes": 15.737366666666667,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 7309,
+      "afterCrawlerPrefilter": 19,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 2,
+      "profileName": "h02_delivery_heavy",
+      "hypothesis": "Heavier delivery-language bias improves conversion from crawler prefilter to Azure relevance.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.08,
+      "attempts": 14,
+      "startedAt": "2026-05-16T15:09:42.669Z",
+      "finishedAt": "2026-05-16T15:25:28.411Z",
+      "durationMinutes": 15.762366666666667,
+      "stage": "completed",
+      "foundCandidates": 0,
+      "crawledPages": 7837,
+      "afterCrawlerPrefilter": 14,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 3,
+      "profileName": "h03_wider_software_platform",
+      "hypothesis": "Allowing adjacent industrial platforms captures additional software-led firms that still qualify later.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.06,
+      "attempts": 9,
+      "startedAt": "2026-05-16T15:25:28.422Z",
+      "finishedAt": "2026-05-16T15:41:38.944Z",
+      "durationMinutes": 16.175366666666665,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 8961,
+      "afterCrawlerPrefilter": 43,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 4,
+      "profileName": "h04_german_systemhaus",
+      "hypothesis": "German systemhaus and automation-house vocabulary unlocks more DACH integrator websites than generic software wording.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.08,
+      "attempts": 1,
+      "startedAt": "2026-05-16T15:41:38.951Z",
+      "finishedAt": "2026-05-16T15:57:58.822Z",
+      "durationMinutes": 16.331183333333332,
+      "stage": "completed",
+      "foundCandidates": 2,
+      "crawledPages": 8054,
+      "afterCrawlerPrefilter": 29,
+      "afterHubSpotDedup": 2,
+      "afterAzureAICheck": 2,
+      "syncedToHubSpot": 2
+    },
+    {
+      "testId": 5,
+      "profileName": "h05_scada_mes_ot",
+      "hypothesis": "A narrower MES, SCADA, OT, and process-control angle yields fewer crawls but more industrial-fit candidates.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.1,
+      "attempts": 11,
+      "startedAt": "2026-05-16T15:57:58.828Z",
+      "finishedAt": "2026-05-16T16:13:40.740Z",
+      "durationMinutes": 15.698533333333334,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 13757,
+      "afterCrawlerPrefilter": 11,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 6,
+      "profileName": "h06_commissioning_retrofit",
+      "hypothesis": "Commissioning, retrofit, and brownfield-modernization language is a stronger proxy for delivery-led integrators than generic AI wording.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus"
+      ],
+      "earlyStopThreshold": 0.07,
+      "attempts": 8,
+      "startedAt": "2026-05-16T16:13:40.744Z",
+      "finishedAt": "2026-05-16T16:30:03.936Z",
+      "durationMinutes": 16.386533333333333,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 12182,
+      "afterCrawlerPrefilter": 9,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 7,
+      "profileName": "h07_reference_case_study",
+      "hypothesis": "Reference-project and case-study-heavy contexts produce the best downstream Azure acceptance.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.06,
+      "attempts": 8,
+      "startedAt": "2026-05-16T16:30:03.939Z",
+      "finishedAt": "2026-05-16T16:45:39.833Z",
+      "durationMinutes": 15.598233333333333,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 12149,
+      "afterCrawlerPrefilter": 8,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 8,
+      "profileName": "h08_europe_service_exporters",
+      "hypothesis": "Europe-wide industrial software exporters yield more total candidates than DACH-only profiles even if relevance is noisier.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.05,
+      "attempts": 7,
+      "startedAt": "2026-05-16T16:45:39.839Z",
+      "finishedAt": "2026-05-16T17:00:44.109Z",
+      "durationMinutes": 15.071166666666667,
+      "stage": "completed",
+      "foundCandidates": 0,
+      "crawledPages": 12469,
+      "afterCrawlerPrefilter": 7,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 9,
+      "profileName": "h09_embedded_edge_ot",
+      "hypothesis": "Embedded, edge, and machine-level software engineering firms are undercounted and can add qualified adjacent targets.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "software_platform_embedding",
+        "machine_builder_ai_enablement"
+      ],
+      "earlyStopThreshold": 0.05,
+      "attempts": 8,
+      "startedAt": "2026-05-16T17:00:44.115Z",
+      "finishedAt": "2026-05-16T17:16:37.962Z",
+      "durationMinutes": 15.89745,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 11946,
+      "afterCrawlerPrefilter": 8,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    },
+    {
+      "testId": 10,
+      "profileName": "h10_iiot_industrie40",
+      "hypothesis": "Industrie 4.0 and IIoT wording surfaces a separate pool of qualified software-led implementation partners.",
+      "targetCategories": [
+        "integrator_general_ai",
+        "integrator_relevant_focus",
+        "software_platform_embedding"
+      ],
+      "earlyStopThreshold": 0.05,
+      "attempts": 8,
+      "startedAt": "2026-05-16T17:16:37.967Z",
+      "finishedAt": "2026-05-16T17:33:18.158Z",
+      "durationMinutes": 16.66985,
+      "stage": "timed_out",
+      "foundCandidates": 0,
+      "crawledPages": 13877,
+      "afterCrawlerPrefilter": 8,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
+      "syncedToHubSpot": 0
+    }
+  ]
+}

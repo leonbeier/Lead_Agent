@@ -1,0 +1,36 @@
+{
+  "runId": "2026-05-20T10-35-02-856Z",
+  "savedAt": "2026-05-20T10:35:35.711Z",
+  "companySearchMode": "exa_search",
+  "page": 2,
+  "filter": {
+    "name": "Germany Machine Vision System Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "industrielle bildverarbeitung",
+      "bildverarbeitungssysteme",
+      "industrial image processing",
+      "inspection systems",
+      "quality inspection",
+      "system integrator",
+      "machbarkeitsanalyse bildverarbeitung"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 0,
+  "companies": []
+}

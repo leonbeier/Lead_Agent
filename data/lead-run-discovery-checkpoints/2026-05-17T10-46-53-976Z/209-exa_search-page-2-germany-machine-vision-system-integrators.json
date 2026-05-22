@@ -1,0 +1,44 @@
+{
+  "runId": "2026-05-17T10-46-53-976Z",
+  "savedAt": "2026-05-17T10:56:31.028Z",
+  "companySearchMode": "exa_search",
+  "page": 2,
+  "filter": {
+    "name": "Germany Machine Vision System Integrators",
+    "keywords": [
+      "machine vision integrator",
+      "industrielle bildverarbeitung",
+      "bildverarbeitungssysteme",
+      "industrial image processing",
+      "inspection systems",
+      "quality inspection",
+      "system integrator",
+      "machbarkeitsanalyse bildverarbeitung"
+    ],
+    "locations": [
+      "Germany"
+    ],
+    "industries": [
+      "Industrial Automation",
+      "System Integration",
+      "Industrial Software",
+      "Machinery"
+    ],
+    "employeeRanges": [
+      "11,50",
+      "51,200",
+      "201,500",
+      "501,1000"
+    ]
+  },
+  "count": 1,
+  "companies": [
+    {
+      "name": "EyeSpec",
+      "domain": "https://eyespec-faw-group.de",
+      "country": "Germany",
+      "shortDescription": "EyeSpec-FAW Group. EyeSpec-FAW Group is a Automation Machinery Manufacturing company. The eyespec-faw group is a pioneer in the industrial and automated image processing industry, providing customized, schlüsselfertige solutions. They are a technology partner for renowned customers worldwide, understanding the complexity associated with automation and offering innovative solutions tailored to the individual needs of their clients. EyeSpec-FAW Group employs 6 people (+18.2% YoY, +2 people), founded in 2012. Headquartered in Hemmingstedt, Schleswig-Holstein, Germany.\n[...]\nEyeSpec-FAW Group is based as EyeSpec GmbH in Hemmingstedt/ Heide, Schleswig-Holstein and as FAW Industrial Automation in Leonberg/ Stuttgart in Germany.\n[...]\nWe deliver turnkey machine vision systems for Automotive, Pharma, Medical and many more industries. \nOur customers chose us because of the top notch technologies combined with the best service.\n[...]\n- Industry: Automation Machinery Manufacturing\n- Type: Public Company\n- Headquarters: Hemmingstedt, Germany\n- Founded Year: 2012\n- Homepage: eyespec-faw-group.de\n- Status: active\n- Aliases: eyespec-faw group, eyespec, eyespec gmbh\n- LinkedIn: linkedin.com/company/eyespec-gmbh\n- Linkedin Followers: 1,096 (Monthly: +6.3%, Yearly: +19.0%)\n- Emails: info@eyespec-faw.de, kontakt@eyespec.de\n- Phone: +49 481 126101-00, +49 481 126101-26, +49 481 126 10 100\n[...]\n- ",
+      "sourceFilter": "Germany Machine Vision System Integrators (exa-search: machine vision integrator industrielle bildverarbeitung industrial autom)"
+    }
+  ]
+}
