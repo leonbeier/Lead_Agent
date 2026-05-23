@@ -18,8 +18,8 @@ COPY README.md ./README.md
 COPY AGENTS.md ./AGENTS.md
 COPY tests ./tests
 
-ARG LEAD_AGENT_SHARED_KEY=build-test-shared-key-1234567890
-RUN LEAD_AGENT_SHARED_KEY=$LEAD_AGENT_SHARED_KEY npm test && npx tsc -p tsconfig.json
+ARG BUILD_TEST_SHARED_KEY=build-test-shared-key-1234567890
+RUN LEAD_AGENT_SHARED_KEY=$BUILD_TEST_SHARED_KEY npm test && npx tsc -p tsconfig.json
 
 EXPOSE 3000
 
