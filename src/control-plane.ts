@@ -19,9 +19,11 @@ import {
   EditableExecutionContext,
   EditablePrequalificationCategoryContext,
   FilterEvaluation,
+  LiveExaCache,
   LatestLeadRunRecord,
   LeadAgentSettings,
   LeadLearningData,
+  RawExaHistoryEntry,
   SearchHistoryEntry,
   SelectableLeadCategory
 } from "./types";
@@ -47,6 +49,7 @@ const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-revie
 const apolloSearchCursorPath = path.join(dataDirectory, "apollo-search-cursors.json");
 const companyScreeningDatabasePath = path.join(dataDirectory, "company-screening-database.json");
 const testLabExaCachePath = path.join(dataDirectory, "testlab-exa-cache.json");
+const liveExaCachePath = path.join(dataDirectory, "live-exa-cache.json");
 
 const openCrawlerTuningSchema = z.object({
   probeCount: z.number().int().min(1).max(200).optional(),
@@ -179,6 +182,7 @@ const settingsSchema = z.object({
   diffbotToken: z.string().optional(),
   exaQueryCount: z.number().int().min(1).max(50).optional(),
   useExaExcludeDomains: z.boolean().optional(),
+  excludePreviouslyFoundExaDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
   maxRuntimeMs: z.number().int().min(60_000).max(10_800_000).optional(),
   aiPrefilterConcurrency: z.number().int().min(1).max(32).optional(),
@@ -379,6 +383,19 @@ const testLabExaCacheSchema = z.object({
   discoveredDomains: z.array(z.string().min(1))
 });
 
+const rawExaHistoryEntrySchema = z.object({
+  timestamp: z.string().min(1),
+  domain: z.string().min(1),
+  companyName: z.string().min(1).optional(),
+  discoveryQuery: z.string().min(1).optional(),
+  sourceFilter: z.string().min(1).optional()
+});
+
+const liveExaCacheSchema = z.object({
+  entries: z.array(rawExaHistoryEntrySchema),
+  discoveredDomains: z.array(z.string().min(1))
+});
+
 type ScreeningCacheScope = "all" | "live" | "debug";
 
 const defaultSettings: LeadAgentSettings = {
@@ -415,6 +432,7 @@ const defaultSettings: LeadAgentSettings = {
   syncToHubSpot: true,
   exaQueryCount: 1,
   useExaExcludeDomains: true,
+  excludePreviouslyFoundExaDomains: true,
   useExaCompanyCategory: false,
   maxRuntimeMs: 600_000,
   aiPrefilterConcurrency: 20,
@@ -465,6 +483,11 @@ const defaultTestLabExaCache = {
   discoveredDomains: []
 };
 
+const defaultLiveExaCache: LiveExaCache = {
+  entries: [],
+  discoveredDomains: []
+};
+
 const suggestedControls = [
   "targetLeadCount",
   "market",
@@ -483,6 +506,7 @@ const suggestedControls = [
   "diffbotToken",
   "exaQueryCount",
   "useExaExcludeDomains",
+  "excludePreviouslyFoundExaDomains",
   "useExaCompanyCategory",
   "maxRuntimeMs",
   "earlyStopEnabled",
@@ -569,6 +593,7 @@ export class ControlPlaneStore {
     await ensureFile(apolloSearchCursorPath, {});
     await ensureFile(companyScreeningDatabasePath, defaultCompanyScreeningDatabase);
     await ensureFile(testLabExaCachePath, defaultTestLabExaCache);
+    await ensureFile(liveExaCachePath, defaultLiveExaCache);
   }
 
   private getApolloSearchCursorKey(filter: ApolloOrganizationFilter): string {
@@ -753,6 +778,54 @@ export class ControlPlaneStore {
   async clearTestLabExaCache(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
     await this.writeTestLabExaCache(defaultTestLabExaCache);
     return defaultTestLabExaCache;
+  }
+
+  async getLiveExaCache(): Promise<LiveExaCache> {
+    await this.ensureSeedData();
+    const cache = await readJsonFile<Partial<LiveExaCache>>(liveExaCachePath);
+    return liveExaCacheSchema.parse({
+      ...defaultLiveExaCache,
+      ...cache
+    });
+  }
+
+  async writeLiveExaCache(cache: LiveExaCache): Promise<void> {
+    await this.ensureSeedData();
+    const entriesByDomain = new Map<string, RawExaHistoryEntry>();
+    for (const entry of cache.entries) {
+      const normalizedDomain = entry.domain.trim().toLowerCase();
+      if (!normalizedDomain) {
+        continue;
+      }
+
+      if (!entriesByDomain.has(normalizedDomain)) {
+        entriesByDomain.set(normalizedDomain, {
+          ...entry,
+          domain: normalizedDomain
+        });
+      }
+    }
+
+    const entries = Array.from(entriesByDomain.values()).slice(0, 5000);
+    await writeJsonFile(liveExaCachePath, liveExaCacheSchema.parse({
+      entries,
+      discoveredDomains: entries.map((entry) => entry.domain)
+    }));
+  }
+
+  async recordLiveExaRawResults(entries: RawExaHistoryEntry[]): Promise<LiveExaCache> {
+    const current = await this.getLiveExaCache();
+    await this.writeLiveExaCache({
+      entries: [...entries, ...current.entries],
+      discoveredDomains: []
+    });
+
+    return this.getLiveExaCache();
+  }
+
+  async clearLiveExaCache(): Promise<LiveExaCache> {
+    await this.writeLiveExaCache(defaultLiveExaCache);
+    return defaultLiveExaCache;
   }
 
   async getApolloSearchCursor(filter: ApolloOrganizationFilter): Promise<number> {
@@ -983,6 +1056,7 @@ export class ControlPlaneStore {
     learning: LeadLearningData;
     latestLeadRun: LatestLeadRunRecord;
     testLabExaCache: { queryHistory: string[]; discoveredDomains: string[] };
+    liveExaCache: LiveExaCache;
     companyScreeningDatabase: CompanyScreeningDatabase;
   }> {
     return {
@@ -1005,6 +1079,7 @@ export class ControlPlaneStore {
       learning: await this.getLearning(),
       latestLeadRun: await this.getLatestLeadRun(),
       testLabExaCache: await this.getTestLabExaCache(),
+      liveExaCache: await this.getLiveExaCache(),
       companyScreeningDatabase: await this.getCompanyScreeningDatabase()
     };
   }

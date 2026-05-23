@@ -94,6 +94,7 @@ type RunStatusPayload = {
     startedAt?: string;
     finishedAt?: string;
     lastError?: string;
+    runVariant?: "legacy" | "worker_v2";
     stage?: string;
     stageLabel?: string;
     progressValue?: number;
@@ -104,6 +105,34 @@ type RunStatusPayload = {
     totalFilters?: number;
     foundCandidates?: number;
     targetLeadCount?: number;
+    funnel?: {
+      afterCrawlerPrefilter?: number;
+      afterHubSpotDedup?: number;
+      afterAzureAICheck?: number;
+      syncedToHubSpot?: number;
+    };
+    workerMetrics?: {
+      exaRequests?: number;
+      exaRawFound?: number;
+      aiAccepted?: number;
+      aiRejectedDifferentCategory?: number;
+      aiRejectedOther?: number;
+      outreachCompleted?: number;
+      contactCompleted?: number;
+      hubspotWritten?: number;
+      queueSizes?: {
+        aiWaiting?: number;
+        aiInFlight?: number;
+        waitingAfterAi?: number;
+        outreachWaiting?: number;
+        outreachInFlight?: number;
+        contactWaiting?: number;
+        contactInFlight?: number;
+        hubspotWaiting?: number;
+        hubspotInFlight?: number;
+      };
+    };
+    debugMessages?: string[];
     updatedAt?: string;
   };
 };
@@ -404,7 +433,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
     }
   };
 
-  const startLeadRun = async () => {
+  const startLeadRun = async (variant: "legacy" | "worker_v2") => {
     if (!canStart) {
       return;
     }
@@ -414,7 +443,10 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       setErrorMessage("");
       setSuccessMessage("");
 
-      const response = await hubspot.fetch(`${normalizedBaseUrl}/api/hubspot/workflow-trigger?key=${encodeURIComponent(sharedKey)}`, {
+      const endpoint = variant === "worker_v2"
+        ? "/api/hubspot/workflow-trigger-new"
+        : "/api/hubspot/workflow-trigger-legacy";
+      const response = await hubspot.fetch(`${normalizedBaseUrl}${endpoint}?key=${encodeURIComponent(sharedKey)}`, {
         method: "POST",
         timeout: 120000,
         body: {
@@ -447,7 +479,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       }
 
       setRunStatus(payload.runStatus ?? { running: true });
-      setSuccessMessage("Lead-Run wurde gestartet.");
+      setSuccessMessage(variant === "worker_v2" ? "Neuer Worker-Lead-Run wurde gestartet." : "Legacy Lead-Run wurde gestartet.");
       await refreshRuntimeData();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Lead-Run konnte nicht gestartet werden.");
@@ -498,6 +530,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         />
         {runStatus?.progressDescription && <Text>{compactSidebarStatus(runStatus.progressDescription, 96)}</Text>}
         {runStatus?.detail && <Text>{compactSidebarStatus(runStatus.detail, 96)}</Text>}
+        {runStatus?.runVariant && <Text>Run-Variante: {runStatus.runVariant === "worker_v2" ? "Neuer Worker-Run" : "Legacy"}.</Text>}
         {(typeof runStatus?.funnel?.afterCrawlerPrefilter === "number" || typeof runStatus?.foundCandidates === "number") && (
           <Text>
             {typeof runStatus?.funnel?.afterCrawlerPrefilter === "number"
@@ -515,6 +548,17 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
                 ? `Nach KI geprueft passend: ${runStatus.foundCandidates}${typeof runStatus?.targetLeadCount === "number" ? `/${runStatus.targetLeadCount}` : ""}.`
                 : ""}
           </Text>
+        )}
+        {runStatus?.workerMetrics && (
+          <Text>
+            Exa Requests: {runStatus.workerMetrics.exaRequests ?? 0}. Roh gefunden: {runStatus.workerMetrics.exaRawFound ?? 0}. KI passend: {runStatus.workerMetrics.aiAccepted ?? 0}. 
+            Wartend nach KI: {runStatus.workerMetrics.queueSizes?.waitingAfterAi ?? 0}. KI in Arbeit: {runStatus.workerMetrics.queueSizes?.aiInFlight ?? 0}. 
+            Outreach in Arbeit: {runStatus.workerMetrics.queueSizes?.outreachInFlight ?? 0}. Kontakte in Arbeit: {runStatus.workerMetrics.queueSizes?.contactInFlight ?? 0}. 
+            HubSpot geschrieben: {runStatus.workerMetrics.hubspotWritten ?? 0}.
+          </Text>
+        )}
+        {Array.isArray(runStatus?.debugMessages) && runStatus.debugMessages.length > 0 && (
+          <Text>{compactSidebarStatus(runStatus.debugMessages[0], 120)}</Text>
         )}
         <Text>HubSpot-Sync fuer Starts aus dieser Karte: {syncToHubSpot ? "aktiv" : "deaktiviert"}. Suchmodus: {getSearchModeLabel(companySearchMode)}. Markt: {market}.</Text>
         <Text>Aktive Kundentypen: {selectedCategories.length || 0}.</Text>
@@ -666,14 +710,24 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           </Checkbox>
         ))}
       </Flex>
-      <LoadingButton
-        variant="primary"
-        loading={isStarting}
-        disabled={!canStart || isLoading}
-        onClick={startLeadRun}
-      >
-        Lead-Run starten
-      </LoadingButton>
+      <ButtonRow disableDropdown={true}>
+        <LoadingButton
+          variant="secondary"
+          loading={isStarting}
+          disabled={!canStart || isLoading}
+          onClick={() => startLeadRun("legacy")}
+        >
+          Legacy Lead Run starten
+        </LoadingButton>
+        <LoadingButton
+          variant="primary"
+          loading={isStarting}
+          disabled={!canStart || isLoading}
+          onClick={() => startLeadRun("worker_v2")}
+        >
+          Neuen Lead Run starten
+        </LoadingButton>
+      </ButtonRow>
     </Flex>
   );
 }

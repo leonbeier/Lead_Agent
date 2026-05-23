@@ -136,6 +136,174 @@ test("runAiPrefilterStage honors high requested concurrency in test lab", async 
   assert.equal(capturedConcurrency, 20);
 });
 
+test("buildContactAnalysis runs research and contact debug together and keeps preview contacts", async () => {
+  const service = new DebugConsoleService() as any;
+  const company = {
+    name: "Senswork",
+    domain: "https://senswork.com/en",
+    country: "Germany",
+    shortDescription: "Manual debug website input.",
+    sourceFilter: "debug"
+  };
+  const categorizedCompany = {
+    ...company,
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 90,
+    rationale: "Strong fit"
+  };
+
+  service.classifyWebsite = async () => ({
+    company,
+    websiteParser: null,
+    azureEvaluation: {
+      rawInput: "",
+      promptMessages: [],
+      compactRetryUsed: false,
+      category: "integrator_vision_industrial_ai",
+      relevanceScore: 90,
+      rationale: "Strong fit"
+    },
+    categorizedCompany
+  });
+  service.azureOpenAIClient.buildResearchBrief = async () => ({
+    companyName: categorizedCompany.name,
+    overview: "Overview",
+    qualificationSummary: "Strong fit.",
+    qualifyingSignals: [],
+    riskFlags: [],
+    likelyGermanSpeaking: true,
+    outreachLanguage: "de",
+    rankings: { customer: 1, serviceProvider: 2, partner: 3 },
+    businessPotentialEUR: 10000,
+    businessPotentialReasoning: "fit",
+    targetIndustry: "Automation",
+    productsOffered: "Vision systems",
+    recommendedTemplateKey: "integrator_vision_industrial_ai",
+    personalizationRule: "Mention fit",
+    linkedInAngle: "Angle",
+    emailAngle: "Angle",
+    phoneAngle: "Angle",
+    linkedInMessage: "Message",
+    emailSubject: "Subject",
+    emailBody: "Body",
+    phoneScript: "Phone"
+  });
+  service.hubspotClient.resolveCompanyAddress = async () => ({
+    city: "Burghausen"
+  });
+  service.hubspotClient.debugPublicContactDiscovery = async (_company: unknown, options: { selectedContactsTimeoutMs?: number }) => {
+    assert.equal(options.selectedContactsTimeoutMs, 90_000);
+    return {
+      aliases: ["Senswork"],
+      queries: [],
+      websitePages: [],
+      hitGroups: [],
+      heuristicContacts: [],
+      selectedContacts: [{
+        email: "info@senswork.com",
+        phone: "+49 123",
+        sourceUrl: "https://senswork.com/kontakt/",
+        label: "public_generic_mailbox",
+        jobTitle: "General contact"
+      }]
+    };
+  };
+  service.hubspotClient.previewHubSpotSync = async (
+    _company: unknown,
+    _brief: unknown,
+    contacts: Array<{ email?: string }>,
+    options: { extractedAddress?: { city?: string } | null }
+  ) => {
+    assert.equal(options.extractedAddress?.city, "Burghausen");
+    return {
+    companyProperties: {},
+    contacts: contacts.map((contact) => ({ skipped: false, normalizedContact: contact, properties: { email: contact.email } }))
+    };
+  };
+
+  const result = await service.buildContactAnalysis(company);
+
+  assert.equal(result.error, undefined);
+  assert.ok(result.researchBrief);
+  assert.equal(result.publicContactDebug?.selectedContacts.length, 1);
+  assert.equal(result.hubspotPreview?.contacts.length, 1);
+});
+
+test("buildOutreachAnalysis preloads address lookup for preview", async () => {
+  const service = new DebugConsoleService() as any;
+  const company = {
+    name: "Senswork",
+    domain: "https://senswork.com/en",
+    country: "Germany",
+    shortDescription: "Manual debug website input.",
+    sourceFilter: "debug"
+  };
+  const categorizedCompany = {
+    ...company,
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 90,
+    rationale: "Strong fit"
+  };
+
+  service.classifyWebsite = async () => ({
+    company,
+    websiteParser: null,
+    azureEvaluation: {
+      rawInput: "",
+      promptMessages: [],
+      compactRetryUsed: false,
+      category: "integrator_vision_industrial_ai",
+      relevanceScore: 90,
+      rationale: "Strong fit"
+    },
+    categorizedCompany
+  });
+  service.azureOpenAIClient.buildResearchBrief = async () => ({
+    companyName: categorizedCompany.name,
+    overview: "Overview",
+    qualificationSummary: "Strong fit.",
+    qualifyingSignals: [],
+    riskFlags: [],
+    likelyGermanSpeaking: true,
+    outreachLanguage: "de",
+    rankings: { customer: 1, serviceProvider: 2, partner: 3 },
+    businessPotentialEUR: 10000,
+    businessPotentialReasoning: "fit",
+    targetIndustry: "Automation",
+    productsOffered: "Vision systems",
+    recommendedTemplateKey: "integrator_vision_industrial_ai",
+    personalizationRule: "Mention fit",
+    linkedInAngle: "Angle",
+    emailAngle: "Angle",
+    phoneAngle: "Angle",
+    linkedInMessage: "Message",
+    emailSubject: "Subject",
+    emailBody: "Body",
+    phoneScript: "Phone"
+  });
+  service.hubspotClient.resolveCompanyAddress = async () => ({
+    city: "Burghausen"
+  });
+  service.hubspotClient.previewHubSpotSync = async (
+    _company: unknown,
+    _brief: unknown,
+    _contacts: unknown[],
+    options: { extractedAddress?: { city?: string } | null }
+  ) => {
+    assert.equal(options.extractedAddress?.city, "Burghausen");
+    return {
+      companyProperties: {},
+      contacts: []
+    };
+  };
+
+  const result = await service.buildOutreachAnalysis(company);
+
+  assert.equal(result.error, undefined);
+  assert.ok(result.researchBrief);
+  assert.equal(result.hubspotPreview?.contacts.length, 0);
+});
+
 test("clearCompanyScreeningCache removes only debug exclusions for debug scope", async () => {
   const store = new ControlPlaneStore() as any;
   let writtenDatabase: { records: Array<{ domain: string }> } | undefined;

@@ -1,6 +1,70 @@
 {
   "records": [
     {
+      "companyName": "Peak",
+      "normalizedName": "peak",
+      "domain": "https://peak.vision/start/leistungen",
+      "normalizedDomain": "peak.vision/start/leistungen",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 95,
+      "rationale": "Explicit independent integrator delivering custom industrial machine vision inspection solutions.",
+      "sourceFilter": "Raw Exa Search - integrator_vision_industrial_ai (manual-debug-input)",
+      "shortDescription": "Manual debug website input.",
+      "checkedAt": "2026-05-23T07:50:16.378Z"
+    },
+    {
+      "companyName": "Kaiser Vision",
+      "normalizedName": "kaiser vision",
+      "domain": "https://www.kaiser-vision.de/en",
+      "normalizedDomain": "kaiser-vision.de/en",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Explicitly delivers industrial machine vision solutions with 25+ years experience and custom software development.",
+      "sourceFilter": "Raw Exa Search - integrator_vision_industrial_ai (manual-debug-input)",
+      "shortDescription": "Manual debug website input.",
+      "checkedAt": "2026-05-23T07:50:16.378Z"
+    },
+    {
+      "companyName": "Senswork",
+      "normalizedName": "senswork",
+      "domain": "https://senswork.com/en",
+      "normalizedDomain": "senswork.com/en",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Provides turnkey machine vision and optical inspection systems with custom integration and deployment services.",
+      "sourceFilter": "Raw Exa Search - integrator_vision_industrial_ai (manual-debug-input)",
+      "shortDescription": "Manual debug website input.",
+      "checkedAt": "2026-05-23T07:50:16.378Z"
+    },
+    {
+      "companyName": "Visotect",
+      "normalizedName": "visotect",
+      "domain": "https://visotect.de",
+      "normalizedDomain": "visotect.de",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 90,
+      "rationale": "Delivers industrial machine vision systems for production monitoring and quality control with custom integration.",
+      "sourceFilter": "Raw Exa Search - integrator_vision_industrial_ai (manual-debug-input)",
+      "shortDescription": "Manual debug website input.",
+      "checkedAt": "2026-05-23T07:50:16.378Z",
+      "existsInHubSpot": true,
+      "hubspotCheckedAt": "2026-05-20T10:40:23.535Z"
+    },
+    {
+      "companyName": "Visuelle Technik",
+      "normalizedName": "visuelle technik",
+      "domain": "https://www.visuelle-technik.de",
+      "normalizedDomain": "visuelle-technik.de",
+      "category": "integrator_vision_industrial_ai",
+      "relevanceScore": 85,
+      "rationale": "Delivers and integrates 2D/3D machine vision systems for industrial quality control and optimization.",
+      "sourceFilter": "Raw Exa Search - integrator_vision_industrial_ai (manual-debug-input)",
+      "shortDescription": "Manual debug website input.",
+      "checkedAt": "2026-05-23T07:50:16.378Z",
+      "existsInHubSpot": true,
+      "hubspotCheckedAt": "2026-05-20T10:40:23.534Z"
+    },
+    {
       "companyName": "Australian Machine Vision",
       "normalizedName": "australian machine vision",
       "domain": "https://amvco.com.au",
@@ -6417,16 +6481,6 @@
       "hubspotCheckedAt": "2026-05-20T10:40:23.535Z"
     },
     {
-      "companyName": "visotect.de",
-      "normalizedName": "visotect.de",
-      "domain": "visotect.de",
-      "normalizedDomain": "visotect.de",
-      "sourceFilter": "hubspot-domain-cache",
-      "shortDescription": "",
-      "existsInHubSpot": true,
-      "hubspotCheckedAt": "2026-05-20T10:40:23.535Z"
-    },
-    {
       "companyName": "mvtec.com",
       "normalizedName": "mvtec.com",
       "domain": "mvtec.com",
@@ -6811,16 +6865,6 @@
       "normalizedName": "robotechvision.com",
       "domain": "robotechvision.com",
       "normalizedDomain": "robotechvision.com",
-      "sourceFilter": "hubspot-domain-cache",
-      "shortDescription": "",
-      "existsInHubSpot": true,
-      "hubspotCheckedAt": "2026-05-20T10:40:23.534Z"
-    },
-    {
-      "companyName": "visuelle-technik.de",
-      "normalizedName": "visuelle-technik.de",
-      "domain": "visuelle-technik.de",
-      "normalizedDomain": "visuelle-technik.de",
       "sourceFilter": "hubspot-domain-cache",
       "shortDescription": "",
       "existsInHubSpot": true,

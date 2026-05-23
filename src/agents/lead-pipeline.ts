@@ -26,6 +26,7 @@ import {
   PrequalificationConfig,
   PublicContactCandidate,
   ResearchBrief,
+  RawExaHistoryEntry,
   SearchHistoryDecisionSample,
   SearchHistoryEntry,
   SelectableLeadCategory
@@ -69,6 +70,9 @@ const CONTACT_DISCOVERY_CONCURRENCY = env.CONTACT_DISCOVERY_CONCURRENCY;
 const PUBLIC_CONTACT_DISCOVERY_TIMEOUT_MS = 90_000;
 const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
+const DIRECT_EXA_FILTER_CONCURRENCY = 3;
+const DIRECT_EXA_QUERY_CONCURRENCY = 3;
+const APOLLO_EMAIL_ENRICH_CONCURRENCY = 4;
 const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
 const FALLBACK_REPLENISHMENT_LOCATIONS = ["Berlin", "Munich", "Hamburg", "Cologne", "Stuttgart", "DACH", "Austria", "Switzerland"];
 const FALLBACK_REPLENISHMENT_KEYWORDS = ["computer vision", "machine vision", "bildverarbeitung", "industrial ai", "inspection automation", "vision systems"];
@@ -267,13 +271,19 @@ export class LeadPipelineAgent {
         );
     const prequalification = request.prequalification ?? (request.prequalificationContext ? { mainContext: request.prequalificationContext } : undefined);
     this.companyScreeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
+    const liveExaCache = companySearchMode === "exa_search"
+      ? await this.controlPlaneStore.getLiveExaCache()
+      : { entries: [], discoveredDomains: [] };
+    const rawExaExcludedDomains = request.excludePreviouslyFoundExaDomains === false
+      ? []
+      : liveExaCache.discoveredDomains;
     const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false || companySearchMode === "exa_search"
       ? []
       : this.getCachedQualifiedCompanies(targetCategories, request.market, request.targetLeadCount);
     await this.preloadKnownHubSpotDomains(disableHubSpotDeduplication);
     this.apolloClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
     let suggestedFilters = companySearchMode === "exa_search"
-      ? [this.buildDirectExaSearchFilter(targetCategories, request.market)]
+      ? this.buildDirectExaSearchFilters(targetCategories, request.market)
       : this.orderFiltersByLearning(
           await this.getSuggestedFilters(
             request.market,
@@ -427,24 +437,21 @@ export class LeadPipelineAgent {
       );
 
       if (companySearchMode === "exa_search") {
-        emitSyncPreparationProgress(40, `Research-Briefs und Website-Kontakte werden parallel fuer ${pendingCompanies.length} neue Firmen im aktuellen Sync-Block vorbereitet. Insgesamt aktuell ${shortlistCount} qualifiziert.`);
+        emitSyncPreparationProgress(40, `Research-Briefs werden fuer ${pendingCompanies.length} neue Firmen parallel vorbereitet. Insgesamt aktuell ${shortlistCount} qualifiziert.`);
       } else {
-        emitSyncPreparationProgress(40, `Research-Briefs und Website-Kontakte werden parallel fuer ${pendingCompanies.length} Firmen vorbereitet.`);
+        emitSyncPreparationProgress(40, `Research-Briefs werden fuer ${pendingCompanies.length} Firmen parallel vorbereitet.`);
       }
-      const [preparedResearchEntries, publicContacts] = await Promise.all([
-        dryRun
-          ? Promise.resolve([])
-          : this.mapWithConcurrency(
-              pendingCompanies.map((company) => async () => ({
-                companyKey: this.getCompanyKey(company),
-                brief: await this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
-                  includeWebResearch: request.runDeepResearch !== false
-                })
-              })),
-              this.outreachPrepConcurrency
-            ),
-        this.collectPublicContacts(pendingCompanies, dryRun)
-      ]);
+      const preparedResearchEntries = dryRun
+        ? []
+        : await this.mapWithConcurrency(
+            pendingCompanies.map((company) => async () => ({
+              companyKey: this.getCompanyKey(company),
+              brief: await this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
+                includeWebResearch: request.runDeepResearch !== false
+              })
+            })),
+            this.outreachPrepConcurrency
+          );
 
       for (const entry of preparedResearchEntries) {
         researchBriefsByCompany.set(entry.companyKey, entry.brief);
@@ -455,23 +462,25 @@ export class LeadPipelineAgent {
       const pendingResearchBriefs = syncEligibleCompanies
         .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
         .filter((brief): brief is ResearchBrief => Boolean(brief));
-      const companiesNeedingApolloContacts = syncEligibleCompanies.filter((company) => {
-        const existingContacts = publicContacts.get(this.getCompanyKey(company)) ?? [];
-        return !this.hasNonGenericReachableContact(existingContacts);
-      });
+      emitSyncPreparationProgress(56, `Website-Kontakte und Apollo-Kontakte werden jetzt parallel fuer ${syncEligibleCompanies.length} Firmen vorbereitet.`);
 
-      emitSyncPreparationProgress(56, `Zusatzrecherche fuer ${companiesNeedingApolloContacts.length} Firmen ohne brauchbare Direktkontakte wird vorbereitet.`);
+      const [publicContacts, apolloContactsRaw] = await Promise.all([
+        this.collectPublicContacts(syncEligibleCompanies, dryRun),
+        this.collectApolloContacts(syncEligibleCompanies, pendingResearchBriefs, dryRun, mainContext)
+      ]);
 
-      const apolloContacts = await this.collectApolloContacts(
-        companiesNeedingApolloContacts,
-        pendingResearchBriefs,
-        dryRun,
-        mainContext
+      const apolloContacts = new Map(
+        syncEligibleCompanies.map((company) => {
+          const companyKey = this.getCompanyKey(company);
+          const existingContacts = publicContacts.get(companyKey) ?? [];
+          return [
+            companyKey,
+            this.hasNonGenericReachableContact(existingContacts)
+              ? []
+              : (apolloContactsRaw.get(companyKey) ?? [])
+          ] as const;
+        })
       );
-
-      if (shouldFinishEarly()) {
-        return;
-      }
 
       const mergedContacts = this.mergeContactCandidates(apolloContacts, publicContacts);
 
@@ -516,9 +525,17 @@ export class LeadPipelineAgent {
     };
 
     if (companySearchMode === "exa_search") {
-      const exaFilter = suggestedFilters[0] ?? this.buildDirectExaSearchFilter(targetCategories, request.market);
+      const exaFilters = suggestedFilters.length > 0
+        ? suggestedFilters
+        : this.buildDirectExaSearchFilters(targetCategories, request.market);
       const maxQueryCount = Math.max(1, request.exaQueryCount ?? 3);
-      const emitDirectExaProgress = (progressValue: number, detail: string, foundCandidates = shortlistedCompanies.length) => {
+      const emitDirectExaProgress = (
+        progressValue: number,
+        detail: string,
+        foundCandidates = shortlistedCompanies.length,
+        processedFilters = 0,
+        totalFilters = exaFilters.length
+      ) => {
         emitProgress({
           stage: "screening_filters",
           stageLabel: "Exa -> KI Vorfilter",
@@ -526,8 +543,8 @@ export class LeadPipelineAgent {
           progressMax: 100,
           progressDescription: `${foundCandidates}/${request.targetLeadCount} qualifiziert nach direktem Exa->KI Lauf`,
           detail,
-          processedFilters: 1,
-          totalFilters: 1,
+          processedFilters,
+          totalFilters,
           foundCandidates,
           targetLeadCount: request.targetLeadCount,
           funnel: this.buildFunnel(
@@ -539,90 +556,145 @@ export class LeadPipelineAgent {
         });
       };
 
-      emitDirectExaProgress(
-        14,
-        `Direkter Test-Lab-Pfad aktiv. Exa sammelt jetzt bis zu ${maxQueryCount} Query-Batches fuer ${this.describeLeadCategory(exaFilter.targetCategories?.[0] ?? targetCategories[0] ?? "machine_builder_ai_enablement")}.`
-      );
-
-      const rawCompanies = await this.runDirectExaCompanySearch(exaFilter, targetCategories, maxQueryCount, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
-        emitDirectExaProgress(
-          Math.min(42, 14 + executedQueries * 8),
-          `Exa Query ${executedQueries}/${totalQueries}: "${query}". Bisher ${rawCompaniesFound} Rohfirmen gesammelt.`
-        );
-      });
-
-      emitDirectExaProgress(
-        48,
-        `${rawCompanies.length} Rohfirmen aus Exa gefunden. KI-Vorfilter prueft jetzt die Websites parallel.`,
-        0
-      );
-
-      const categorizedCompanies = await this.categorizeCompanies(
-        rawCompanies,
-        dryRun,
-        mainContext,
-        prequalification,
-        targetCategories,
-        learning,
-        ({ completed, total, matched, companyName, category }) => {
-          emitDirectExaProgress(
-            Math.min(66, 48 + Math.round((completed / Math.max(total, 1)) * 18)),
-            `KI-Vorfilter ${completed}/${total}: ${companyName} -> ${category}. Bisher ${matched} passend.`,
-            matched
-          );
-        }
-      );
-      const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, exaFilter, targetCategories, request.market);
-      const shortlistLengthBeforeDirectPath = shortlistedCompanies.length;
-      const addedDirectCompanies = this.addUniqueCompanies(shortlistedCompanies, relevantCompanies, shortlistedKeys);
-      shortlistedCompanies.slice(shortlistLengthBeforeDirectPath).forEach((company) => {
-        categoryCounts.set(company.category, (categoryCounts.get(company.category) ?? 0) + 1);
-      });
-
-      searchHistory.push(
-        this.buildSearchHistoryEntry(
-          request.companySearchMode ?? "exa_search",
-          exaFilter.name,
-          exaFilter.targetCategories?.[0] ?? targetCategories[0] ?? "machine_builder_ai_enablement",
-          "expand_50",
-          1,
-          rawCompanies.length,
-          categorizedCompanies,
-          exaFilter,
-          targetCategories,
-          request.market,
-          0,
-          {
-            fetchedSampleCount: rawCompanies.length,
-            eligibleSampleCount: rawCompanies.length,
-            filteredByPriorFeedbackCount: 0,
-            filteredByCacheCount: 0,
-            filteredByHubSpotCount: 0,
-            discoveryQueries: rawCompanies
-              .map((company) => company.discoveryQuery?.trim())
-              .filter((query): query is string => Boolean(query))
+      const directExaBatches = (await this.mapWithConcurrency(
+        exaFilters.map((exaFilter, filterIndex) => async () => {
+          const primaryCategory = exaFilter?.targetCategories?.[0] ?? targetCategories[0] ?? "machine_builder_ai_enablement";
+          if (!exaFilter || shouldFinishEarly()) {
+            return null;
           }
-        )
-      );
 
-      emitDirectExaProgress(
-        66,
-        `KI-Vorfilter abgeschlossen: ${relevantCompanies.length}/${categorizedCompanies.length} Firmen passen zur Zielkategorie.`,
-        shortlistedCompanies.length
-      );
+          emitDirectExaProgress(
+            14,
+            `Exa sammelt jetzt bis zu ${maxQueryCount} Query-Batches parallel fuer ${this.describeLeadCategory(primaryCategory)}. KI-Vorfilter und Kontaktanreicherung laufen danach parallel mit den konfigurierten Workern.`,
+            shortlistedCompanies.length,
+            filterIndex,
+            exaFilters.length
+          );
 
-      if (addedDirectCompanies > 0) {
-        await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeDirectPath), shortlistedCompanies.length);
+          const rawCompanies = await this.runDirectExaCompanySearch(exaFilter, targetCategories, maxQueryCount, rawExaExcludedDomains, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
+            emitDirectExaProgress(
+              Math.min(42, 14 + executedQueries * 8),
+              `Kategorie ${filterIndex + 1}/${exaFilters.length}: Exa Query ${executedQueries}/${totalQueries}: "${query}". Bisher ${rawCompaniesFound} Rohfirmen gesammelt.`,
+              shortlistedCompanies.length,
+              filterIndex,
+              exaFilters.length
+            );
+          });
+
+          return {
+            filterIndex,
+            exaFilter,
+            primaryCategory,
+            rawCompanies
+          };
+        }),
+        Math.min(DIRECT_EXA_FILTER_CONCURRENCY, Math.max(1, exaFilters.length))
+      ))
+        .filter((entry): entry is { filterIndex: number; exaFilter: ApolloOrganizationFilter; primaryCategory: LeadCategory; rawCompanies: CompanySample[] } => Boolean(entry))
+        .sort((left, right) => left.filterIndex - right.filterIndex);
+
+      for (const { filterIndex, exaFilter, primaryCategory, rawCompanies } of directExaBatches) {
+        if (shouldFinishEarly()) {
+          break;
+        }
+
+        await this.controlPlaneStore.recordLiveExaRawResults(
+          rawCompanies
+            .map<RawExaHistoryEntry | null>((company) => {
+              const domain = this.normalizeDomain(company.domain);
+              if (!domain) {
+                return null;
+              }
+
+              return {
+                timestamp: new Date().toISOString(),
+                domain,
+                companyName: company.name,
+                discoveryQuery: company.discoveryQuery,
+                sourceFilter: company.sourceFilter
+              };
+            })
+            .filter((entry): entry is RawExaHistoryEntry => Boolean(entry))
+        );
+
+        emitDirectExaProgress(
+          48,
+          `${rawCompanies.length} Rohfirmen aus Exa gefunden. KI-Vorfilter prueft jetzt die Websites parallel.`,
+          shortlistedCompanies.length,
+          filterIndex,
+          exaFilters.length
+        );
+
+        const categorizedCompanies = await this.categorizeCompanies(
+          rawCompanies,
+          dryRun,
+          mainContext,
+          prequalification,
+          targetCategories,
+          learning,
+          ({ completed, total, matched, companyName, category }) => {
+            emitDirectExaProgress(
+              Math.min(66, 48 + Math.round((completed / Math.max(total, 1)) * 18)),
+              `Kategorie ${filterIndex + 1}/${exaFilters.length}: KI-Vorfilter ${completed}/${total}: ${companyName} -> ${category}. Bisher ${matched} passend.`,
+              shortlistedCompanies.length + matched,
+              filterIndex,
+              exaFilters.length
+            );
+          }
+        );
+        const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, exaFilter, targetCategories, request.market);
+        const shortlistLengthBeforeDirectPath = shortlistedCompanies.length;
+        const addedDirectCompanies = this.addUniqueCompanies(shortlistedCompanies, relevantCompanies, shortlistedKeys);
+        shortlistedCompanies.slice(shortlistLengthBeforeDirectPath).forEach((company) => {
+          categoryCounts.set(company.category, (categoryCounts.get(company.category) ?? 0) + 1);
+          hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company));
+        });
+
+        searchHistory.push(
+          this.buildSearchHistoryEntry(
+            request.companySearchMode ?? "exa_search",
+            exaFilter.name,
+            primaryCategory,
+            "expand_50",
+            1,
+            rawCompanies.length,
+            categorizedCompanies,
+            exaFilter,
+            targetCategories,
+            request.market,
+            0,
+            {
+              fetchedSampleCount: rawCompanies.length,
+              eligibleSampleCount: rawCompanies.length,
+              filteredByPriorFeedbackCount: 0,
+              filteredByCacheCount: 0,
+              filteredByHubSpotCount: 0,
+              discoveryQueries: rawCompanies
+                .map((company) => company.discoveryQuery?.trim())
+                .filter((query): query is string => Boolean(query))
+            }
+          )
+        );
+
+        emitDirectExaProgress(
+          66,
+          `Kategorie ${filterIndex + 1}/${exaFilters.length} abgeschlossen: ${relevantCompanies.length}/${categorizedCompanies.length} Firmen passen zur Zielkategorie.`,
+          shortlistedCompanies.length,
+          filterIndex + 1,
+          exaFilters.length
+        );
+
+        if (addedDirectCompanies > 0) {
+          await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeDirectPath), shortlistedCompanies.length);
+        }
       }
 
       if (shortlistedCompanies.length === 0) {
         return finalizeInterruptedRun(
           shortlistedCompanies,
-          "Direct Exa + AI prefilter completed, but no qualified companies matched the selected category."
+          "Direct Exa + AI prefilter completed, but no qualified companies matched the selected categories."
         );
       }
-
-      shortlistedCompanies.forEach((company) => hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company)));
 
       return this.finalizeLeadRun(
         request,
@@ -3541,18 +3613,27 @@ export class LeadPipelineAgent {
     };
   }
 
-  private buildDirectExaSearchFilter(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter {
-    const primaryCategory = (targetCategories.includes("machine_builder_ai_enablement")
-      ? "machine_builder_ai_enablement"
-      : targetCategories[0] ?? "machine_builder_ai_enablement") as SelectableLeadCategory;
+  private buildDirectExaSearchFilters(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter[] {
+    const requestedCategories = Array.from(new Set(targetCategories.length > 0
+      ? targetCategories
+      : ["machine_builder_ai_enablement" as LeadCategory])) as SelectableLeadCategory[];
 
-    return buildDebugSearchFilter(primaryCategory, market);
+    return requestedCategories.map((category) => buildDebugSearchFilter(category, market));
+  }
+
+  buildDirectExaFiltersForExecution(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter[] {
+    return this.buildDirectExaSearchFilters(targetCategories, market);
+  }
+
+  private buildDirectExaSearchFilter(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter {
+    return this.buildDirectExaSearchFilters(targetCategories, market)[0];
   }
 
   private async runDirectExaCompanySearch(
     filter: ApolloOrganizationFilter,
     targetCategories: LeadCategory[],
     maxQueryCount: number,
+    additionalExcludedDomains: string[] = [],
     onQueryProgress?: (update: { executedQueries: number; totalQueries: number; query: string; rawCompaniesFound: number }) => void
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
@@ -3585,43 +3666,62 @@ export class LeadPipelineAgent {
       }
     }
 
-    const discoveredCompanies: CompanySample[] = [];
-    const queries = exaClient.buildQueries(filter, 1).slice(0, Math.max(1, maxQueryCount));
-
-    for (let index = 0; index < queries.length; index += 1) {
-      const query = queries[index] ?? "";
-      const payload = await exaClient.runSearch(apiKey, query, 20, Array.from(excludedDomains));
-
-      for (const result of payload.results ?? []) {
-        const normalizedDomain = exaClient.normalizeUrl(result.url);
-        if (!normalizedDomain) {
-          continue;
-        }
-
-        const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
-        if (excludeDomain) {
-          excludedDomains.add(excludeDomain);
-        }
-
-        discoveredCompanies.push({
-          name: exaClient.deriveCompanyName(normalizedDomain, result.title),
-          domain: exaClient.toCanonicalCompanyDomain(normalizedDomain),
-          country: exaClient.inferCountryFromDomain(normalizedDomain, result, filter.locations[0]),
-          shortDescription: exaClient.buildDescription(result, filter),
-          sourceFilter: `${filter.name} (exa-search: ${query.slice(0, 72)})`,
-          discoveryQuery: query
-        });
+    for (const domain of additionalExcludedDomains) {
+      const normalizedDomain = exaClient.toExcludeDomain(domain);
+      if (normalizedDomain) {
+        excludedDomains.add(normalizedDomain);
       }
-
-      onQueryProgress?.({
-        executedQueries: index + 1,
-        totalQueries: queries.length,
-        query,
-        rawCompaniesFound: discoveredCompanies.length
-      });
     }
 
-    return discoveredCompanies;
+    const queries = exaClient.buildQueries(filter, 1).slice(0, Math.max(1, maxQueryCount));
+    let completedQueries = 0;
+    let discoveredCompanyCount = 0;
+    const queryResults = await this.mapWithConcurrency(
+      queries.map((query) => async () => {
+        const payload = await exaClient.runSearch(apiKey, query, 20, Array.from(excludedDomains));
+        const discoveredCompanies: CompanySample[] = [];
+
+        for (const result of payload.results ?? []) {
+          const normalizedDomain = exaClient.normalizeUrl(result.url);
+          if (!normalizedDomain) {
+            continue;
+          }
+
+          discoveredCompanies.push({
+            name: exaClient.deriveCompanyName(normalizedDomain, result.title),
+            domain: exaClient.toCanonicalCompanyDomain(normalizedDomain),
+            country: exaClient.inferCountryFromDomain(normalizedDomain, result, filter.locations[0]),
+            shortDescription: exaClient.buildDescription(result, filter),
+            sourceFilter: `${filter.name} (exa-search: ${query.slice(0, 72)})`,
+            discoveryQuery: query
+          });
+        }
+
+        completedQueries += 1;
+        discoveredCompanyCount += discoveredCompanies.length;
+        onQueryProgress?.({
+          executedQueries: completedQueries,
+          totalQueries: queries.length,
+          query,
+          rawCompaniesFound: discoveredCompanyCount
+        });
+
+        return discoveredCompanies;
+      }),
+      Math.min(DIRECT_EXA_QUERY_CONCURRENCY, Math.max(1, queries.length))
+    );
+
+    return queryResults.flat();
+  }
+
+  async discoverDirectExaCompaniesForExecution(
+    filter: ApolloOrganizationFilter,
+    targetCategories: LeadCategory[],
+    maxQueryCount: number,
+    additionalExcludedDomains: string[] = [],
+    onQueryProgress?: (update: { executedQueries: number; totalQueries: number; query: string; rawCompaniesFound: number }) => void
+  ): Promise<CompanySample[]> {
+    return this.runDirectExaCompanySearch(filter, targetCategories, maxQueryCount, additionalExcludedDomains, onQueryProgress);
   }
 
   private buildSearchHistoryEntry(
@@ -4364,20 +4464,12 @@ export class LeadPipelineAgent {
         const brief = researchBriefs.find((entry) => entry.companyName === company.name);
         const apolloCandidates = await this.apolloClient.searchContactsForCompany(company, 20);
         const selectedCandidates = await this.azureClient.chooseApolloContacts(company, apolloCandidates, dryRun, mainContext, brief);
-        const enrichedContacts: PublicContactCandidate[] = [];
-
-        for (const candidate of selectedCandidates) {
-          const enrichedContact = await this.apolloClient.enrichContactEmail(candidate, company);
-          if (!enrichedContact) {
-            continue;
-          }
-
-          if (enrichedContacts.some((existing) => existing.email === enrichedContact.email)) {
-            continue;
-          }
-
-          enrichedContacts.push(enrichedContact);
-        }
+        const enrichedContacts = (await this.mapWithConcurrency(
+          selectedCandidates.map((candidate) => async () => this.apolloClient.enrichContactEmail(candidate, company)),
+          Math.min(APOLLO_EMAIL_ENRICH_CONCURRENCY, Math.max(1, selectedCandidates.length))
+        ))
+          .filter((contact): contact is PublicContactCandidate => Boolean(contact))
+          .filter((contact, index, allContacts) => allContacts.findIndex((existing) => existing.email === contact.email) === index);
 
         return [this.getCompanyKey(company), enrichedContacts] as const;
       }),

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { LeadPipelineAgent } from "../../src/agents/lead-pipeline";
-import { CompanySample, PreCategorizedCompany } from "../../src/types";
+import { CompanySample, PreCategorizedCompany, ResearchBrief } from "../../src/types";
 
 function applyIndustrialFit(
   company: CompanySample,
@@ -76,4 +76,125 @@ test("direct exa path prefers the machine-builder debug filter for machine_build
   assert.deepEqual(filter.locations, ["Germany"]);
   assert.match(filter.name, /Machine Builders For AI Options/i);
   assert.match(filter.name, /\[debug Germany\]$/);
+});
+
+test("stopped direct exa runs still sync already qualified companies", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  let stopRequested = false;
+  let syncCalls = 0;
+
+  const qualifiedCompany = {
+    name: "Robofunktion Vision GmbH",
+    domain: "https://robofunktion.example",
+    country: "Germany",
+    shortDescription: "Machine vision integration for industrial customers.",
+    sourceFilter: "Direct Exa filter",
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 91,
+    rationale: "Strong delivery ownership for machine vision projects."
+  } satisfies PreCategorizedCompany;
+
+  const researchBrief: ResearchBrief = {
+    companyName: qualifiedCompany.name,
+    overview: "Overview",
+    qualificationSummary: "Strong fit.",
+    qualifyingSignals: ["Machine vision"],
+    riskFlags: [],
+    likelyGermanSpeaking: true,
+    outreachLanguage: "de",
+    rankings: {
+      customer: 3,
+      serviceProvider: 9,
+      partner: 7
+    },
+    businessPotentialEUR: 18000,
+    businessPotentialReasoning: "Good fit.",
+    targetIndustry: "INDUSTRIAL_AUTOMATION",
+    productsOffered: "Machine vision integration",
+    recommendedTemplateKey: "integrator_vision_industrial_ai",
+    personalizationRule: "Mention machine vision delivery.",
+    linkedInAngle: "Partner fit",
+    emailAngle: "Machine vision delivery",
+    phoneAngle: "Partnership",
+    linkedInMessage: "Hallo [Name], kurze Frage zu Ihren Vision-Projekten.",
+    emailSubject: "Vision AI fuer Integratoren",
+    emailBody: "Hallo [Name], wir helfen Integratoren Vision-AI schneller produktiv zu machen.",
+    phoneScript: "Hallo [Name], ich wollte kurz zu Vision-AI-Projekten sprechen."
+  };
+
+  agent.preloadKnownHubSpotDomains = async () => {};
+  agent.buildDirectExaSearchFilters = () => [{
+    name: "Germany Vision Integrators [debug Germany]",
+    persona: "Integrator",
+    industries: ["Industrial Automation"],
+    keywords: ["machine vision integrator"],
+    locations: ["Germany"],
+    employeeRanges: ["11,50"],
+    targetCategories: ["integrator_vision_industrial_ai"],
+    notes: "debug"
+  }];
+  agent.runDirectExaCompanySearch = async () => [{
+    name: qualifiedCompany.name,
+    domain: qualifiedCompany.domain,
+    country: qualifiedCompany.country,
+    shortDescription: qualifiedCompany.shortDescription,
+    sourceFilter: qualifiedCompany.sourceFilter,
+    discoveryQuery: "robofunktion vision"
+  }];
+  agent.categorizeCompanies = async () => [qualifiedCompany];
+  agent.controlPlaneStore.getLearning = async () => ({ filterPerformance: {}, searchHistory: [], modes: {} });
+  agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
+  agent.controlPlaneStore.getLiveExaCache = async () => ({ entries: [], discoveredDomains: [] });
+  agent.controlPlaneStore.recordLiveExaRawResults = async () => ({ entries: [], discoveredDomains: [] });
+  agent.controlPlaneStore.writeCompanyScreeningDatabase = async () => {};
+  agent.controlPlaneStore.recordFilterEvaluations = async () => {};
+  agent.controlPlaneStore.recordSearchHistory = async () => {};
+  agent.controlPlaneStore.writeLatestLeadRun = async () => {};
+  agent.azureClient.buildResearchBrief = async () => researchBrief;
+  agent.collectPublicContacts = async () => new Map([["robofunktion.example", [{
+    email: "info@robofunktion.example",
+    phone: "+49 30 123456",
+    sourceUrl: qualifiedCompany.domain,
+    label: "public_generic_mailbox",
+    jobTitle: "General contact"
+  }]]]);
+  agent.collectApolloContacts = async () => {
+    stopRequested = true;
+    return new Map();
+  };
+  agent.hubspotClient.syncQualifiedCompanies = async (companies: PreCategorizedCompany[]) => {
+    syncCalls += 1;
+    assert.equal(companies.length, 1);
+    assert.equal(companies[0]?.name, qualifiedCompany.name);
+
+    return {
+      attempted: true,
+      mode: "live",
+      candidateCount: 1,
+      syncedCount: 2,
+      companySyncedCount: 1,
+      contactSyncedCount: 1,
+      successfulCompanyKeys: ["robofunktion.example"],
+      failedCompanyKeys: [],
+      errors: []
+    };
+  };
+
+  const result = await agent.run({
+    targetLeadCount: 1,
+    market: "Germany",
+    companySearchMode: "exa_search",
+    targetCategories: ["integrator_vision_industrial_ai"],
+    dryRun: false,
+    syncToHubSpot: true,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60000
+  }, {
+    shouldStop: () => stopRequested
+  });
+
+  assert.equal(syncCalls, 1);
+  assert.equal(result.stopped, true);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });

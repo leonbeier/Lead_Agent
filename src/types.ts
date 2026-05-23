@@ -159,6 +159,7 @@ export interface LeadAgentSettings {
   diffbotToken?: string;
   exaQueryCount?: number;
   useExaExcludeDomains?: boolean;
+  excludePreviouslyFoundExaDomains?: boolean;
   useExaCompanyCategory?: boolean;
   maxRuntimeMs?: number;
   aiPrefilterConcurrency?: number;
@@ -206,6 +207,19 @@ export interface FilterLearningStat {
 export interface SearchModeLearning {
   filterPerformance: Record<string, FilterLearningStat>;
   searchHistory: SearchHistoryEntry[];
+}
+
+export interface RawExaHistoryEntry {
+  timestamp: string;
+  domain: string;
+  companyName?: string;
+  discoveryQuery?: string;
+  sourceFilter?: string;
+}
+
+export interface LiveExaCache {
+  entries: RawExaHistoryEntry[];
+  discoveredDomains: string[];
 }
 
 export interface StoredFilterSnapshot {
@@ -376,6 +390,7 @@ export interface LeadJobRequest {
   diffbotToken?: string;
   exaQueryCount?: number;
   useExaExcludeDomains?: boolean;
+  excludePreviouslyFoundExaDomains?: boolean;
   useExaCompanyCategory?: boolean;
   aiPrefilterConcurrency?: number;
   outreachPrepConcurrency?: number;

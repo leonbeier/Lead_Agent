@@ -7,6 +7,7 @@ import { ControlPlaneStore } from "./control-plane";
 import { DebugConsoleService } from "./debug/test-console-service";
 import { defaultApolloFilters } from "./filters";
 import { LeadPipelineAgent } from "./agents/lead-pipeline";
+import { LeadWorkerRunService } from "./agents/lead-worker-run";
 import { CATEGORY_EXECUTION_CONTEXT } from "./prompting/one-ware-playbook";
 import { resolveSearchStrategyPresetContext } from "./search-presets";
 import { LeadRunProgress } from "./types";
@@ -18,6 +19,9 @@ type LeadRunStatus = LeadRunProgress & {
   startedAt?: string;
   finishedAt?: string;
   lastError?: string;
+  runVariant?: "legacy" | "worker_v2";
+  workerMetrics?: unknown;
+  debugMessages?: string[];
 };
 
 const STALE_LEAD_RUN_THRESHOLD_MS = 90_000;
@@ -32,6 +36,7 @@ const leadRunStatus: LeadRunStatus = {
   updatedAt: new Date(0).toISOString()
 };
 const leadPipelineAgent = new LeadPipelineAgent();
+const leadWorkerRunService = new LeadWorkerRunService();
 const controlPlaneStore = new ControlPlaneStore();
 const debugConsoleService = new DebugConsoleService();
 let activeLeadRunAbortController: AbortController | undefined;
@@ -53,9 +58,169 @@ function resetLeadRunStatus(detail: string, stage: LeadRunStatus["stage"] = "idl
   leadRunStatus.funnel = undefined;
   leadRunStatus.timedOut = false;
   leadRunStatus.lastError = undefined;
+  leadRunStatus.runVariant = undefined;
+  leadRunStatus.workerMetrics = undefined;
+  leadRunStatus.debugMessages = undefined;
   leadRunStatus.startedAt = undefined;
   leadRunStatus.finishedAt = new Date().toISOString();
   leadRunStatus.updatedAt = new Date().toISOString();
+}
+
+function applyLeadRunProgress(progress: LeadRunProgress & { runVariant?: "legacy" | "worker_v2"; workerMetrics?: unknown; debugMessages?: string[] }, stopRequested: boolean): void {
+  if (stopRequested) {
+    leadRunStatus.stage = "stopping";
+    leadRunStatus.stageLabel = "Wird gestoppt";
+    leadRunStatus.progressValue = Math.max(leadRunStatus.progressValue ?? 0, progress.progressValue);
+    leadRunStatus.progressMax = progress.progressMax;
+    leadRunStatus.progressDescription = "Der aktuelle Lead-Run wird gestoppt.";
+    leadRunStatus.detail = "Der laufende Suchschritt wird beendet und der Run danach sauber abgeschlossen.";
+  } else {
+    leadRunStatus.stage = progress.stage;
+    leadRunStatus.stageLabel = progress.stageLabel;
+    leadRunStatus.progressValue = progress.progressValue;
+    leadRunStatus.progressMax = progress.progressMax;
+    leadRunStatus.progressDescription = progress.progressDescription;
+    leadRunStatus.detail = progress.detail;
+  }
+
+  leadRunStatus.processedFilters = progress.processedFilters;
+  leadRunStatus.totalFilters = progress.totalFilters;
+  leadRunStatus.foundCandidates = progress.foundCandidates;
+  leadRunStatus.targetLeadCount = progress.targetLeadCount;
+  leadRunStatus.funnel = progress.funnel;
+  leadRunStatus.timedOut = progress.timedOut;
+  leadRunStatus.updatedAt = progress.updatedAt;
+  leadRunStatus.runVariant = progress.runVariant ?? leadRunStatus.runVariant;
+  leadRunStatus.workerMetrics = progress.workerMetrics;
+  leadRunStatus.debugMessages = progress.debugMessages;
+}
+
+async function startManagedLeadRun(
+  body: Record<string, unknown>,
+  variant: "legacy" | "worker_v2",
+  response: express.Response
+): Promise<void> {
+  clearStaleLeadRunStatusIfNeeded();
+
+  if (leadRunStatus.running) {
+    response.status(409).json({
+      trigger: "hubspot-ui",
+      accepted: false,
+      runStatus: leadRunStatus,
+      error: "A lead run is already in progress."
+    });
+    return;
+  }
+
+  const payload = await buildLeadJobPayload(body);
+  const runAbortController = new AbortController();
+  activeLeadRunAbortController = runAbortController;
+
+  leadRunStatus.running = true;
+  leadRunStatus.startedAt = new Date().toISOString();
+  leadRunStatus.finishedAt = undefined;
+  leadRunStatus.lastError = undefined;
+  leadRunStatus.runVariant = variant;
+  leadRunStatus.workerMetrics = undefined;
+  leadRunStatus.debugMessages = undefined;
+  leadRunStatus.stage = "starting";
+  leadRunStatus.stageLabel = variant === "worker_v2" ? "Neuer Worker-Run startet" : "Lead-Run startet";
+  leadRunStatus.progressValue = 2;
+  leadRunStatus.progressMax = 100;
+  leadRunStatus.progressDescription = variant === "worker_v2"
+    ? "Der neue Worker-Run initialisiert Exa-, KI-, Outreach-, Kontakt- und HubSpot-Queues."
+    : "Der Lead Agent initialisiert die Suche.";
+  leadRunStatus.detail = variant === "worker_v2"
+    ? "Die Zielparameter wurden uebernommen und der Worker-Run wird vorbereitet."
+    : "Die Zielparameter wurden uebernommen und der Lauf wird vorbereitet.";
+  leadRunStatus.processedFilters = 0;
+  leadRunStatus.totalFilters = undefined;
+  leadRunStatus.foundCandidates = 0;
+  leadRunStatus.targetLeadCount = payload.targetLeadCount;
+  leadRunStatus.funnel = undefined;
+  leadRunStatus.timedOut = false;
+  leadRunStatus.updatedAt = new Date().toISOString();
+
+  const runPromise = variant === "worker_v2"
+    ? leadWorkerRunService.run(payload, {
+        signal: runAbortController.signal,
+        onProgress: (progress) => applyLeadRunProgress(progress, runAbortController.signal.aborted)
+      })
+    : leadPipelineAgent.run(payload, {
+        shouldStop: () => runAbortController.signal.aborted,
+        onProgress: (progress) => applyLeadRunProgress(progress, runAbortController.signal.aborted)
+      });
+
+  void runPromise
+    .then((result) => {
+      if (activeLeadRunAbortController === runAbortController) {
+        activeLeadRunAbortController = undefined;
+      }
+
+      leadRunStatus.running = false;
+      leadRunStatus.stage = result.stopped ? "stopped" : result.timedOut ? "timed_out" : "completed";
+      leadRunStatus.stageLabel = result.stopped ? "Gestoppt" : result.timedOut ? "Zeitlimit erreicht" : "Abgeschlossen";
+      leadRunStatus.progressValue = 100;
+      leadRunStatus.progressMax = 100;
+      const targetSynchronizedCompanies = result.hubspotSync.mode === "live";
+      const completionCount = targetSynchronizedCompanies ? result.hubspotSync.companySyncedCount : result.shortlistedCompanies.length;
+      const completionReason = result.completionReason?.trim();
+      leadRunStatus.progressDescription = result.stopped
+        ? targetSynchronizedCompanies
+          ? `Lead-Run manuell gestoppt bei ${completionCount}/${payload.targetLeadCount} nach HubSpot synchronisierten Firmen`
+          : `Lead-Run manuell gestoppt bei ${completionCount} qualifizierten Firmen`
+        : result.timedOut
+        ? targetSynchronizedCompanies
+          ? `Zeitlimit erreicht bei ${completionCount}/${payload.targetLeadCount} nach HubSpot synchronisierten Firmen`
+          : `Zeitlimit erreicht bei ${completionCount} qualifizierten Firmen`
+        : completionCount < payload.targetLeadCount
+          ? targetSynchronizedCompanies
+            ? completionReason
+              ? `${completionCount}/${payload.targetLeadCount} Firmen nach HubSpot synchronisiert, ${completionReason}`
+              : `${completionCount}/${payload.targetLeadCount} Firmen nach HubSpot synchronisiert, Suche vor Zeitlimit ausgeschoepft`
+            : `${completionCount}/${payload.targetLeadCount} qualifizierte Firmen vor Zeitlimit gefunden`
+          : targetSynchronizedCompanies
+            ? `${completionCount}/${payload.targetLeadCount} Firmen nach HubSpot synchronisiert`
+            : `${completionCount} qualifizierte Firmen abgeschlossen`;
+      leadRunStatus.detail = result.stopped
+        ? `Bis zum Stopp: ${result.funnel.crawledPages} Seiten gecrawlt, ${result.funnel.afterCrawlerPrefilter} nach Vorfilter, ${result.funnel.afterHubSpotDedup} nach HubSpot-Deduplizierung, ${result.funnel.afterAzureAICheck} nach Azure AI Check, ${result.funnel.syncedToHubSpot} nach HubSpot synchronisiert.`
+        : result.timedOut
+        ? `Funnel bis Abbruch: ${result.funnel.crawledPages} Seiten gecrawlt, ${result.funnel.afterCrawlerPrefilter} nach Vorfilter, ${result.funnel.afterHubSpotDedup} nach HubSpot-Deduplizierung, ${result.funnel.afterAzureAICheck} nach Azure AI Check, ${result.funnel.syncedToHubSpot} nach HubSpot synchronisiert.`
+        : completionCount < payload.targetLeadCount
+          ? `${completionReason ?? "Suche vor Zeitlimit ausgeschoepft."} ${result.funnel.crawledPages} Seiten gecrawlt, ${result.funnel.afterCrawlerPrefilter} nach Vorfilter, ${result.funnel.afterHubSpotDedup} nach HubSpot-Deduplizierung, ${result.funnel.afterAzureAICheck} nach Azure AI Check, ${result.funnel.syncedToHubSpot} nach HubSpot synchronisiert.`
+          : targetSynchronizedCompanies
+            ? `${result.hubspotSync.companySyncedCount} Firmen nach HubSpot synchronisiert.`
+            : "Dry-Run abgeschlossen. Es wurde nichts nach HubSpot geschrieben.";
+      leadRunStatus.processedFilters = result.evaluations.length;
+      leadRunStatus.totalFilters = result.suggestedFilters.length;
+      leadRunStatus.foundCandidates = result.shortlistedCompanies.length;
+      leadRunStatus.targetLeadCount = payload.targetLeadCount;
+      leadRunStatus.funnel = result.funnel;
+      leadRunStatus.timedOut = result.timedOut;
+      leadRunStatus.updatedAt = new Date().toISOString();
+      leadRunStatus.finishedAt = new Date().toISOString();
+    })
+    .catch((error) => {
+      if (activeLeadRunAbortController === runAbortController) {
+        activeLeadRunAbortController = undefined;
+      }
+
+      leadRunStatus.running = false;
+      leadRunStatus.stage = "failed";
+      leadRunStatus.stageLabel = "Fehlgeschlagen";
+      leadRunStatus.progressDescription = "Der Lead-Run ist mit einem Fehler abgebrochen.";
+      leadRunStatus.detail = error instanceof Error ? error.message : "Unknown error";
+      leadRunStatus.updatedAt = new Date().toISOString();
+      leadRunStatus.finishedAt = new Date().toISOString();
+      leadRunStatus.lastError = error instanceof Error ? error.message : "Unknown error";
+      console.error("Lead run failed", error);
+    });
+
+  response.status(202).json({
+    trigger: "hubspot-ui",
+    accepted: true,
+    runStatus: leadRunStatus
+  });
 }
 
 function clearStaleLeadRunStatusIfNeeded(): void {
@@ -160,6 +325,7 @@ const leadJobSchema = z.object({
   exaQueryCount: z.coerce.number().int().min(1).max(50).optional(),
   useExaExcludeDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
+  excludePreviouslyFoundExaDomains: z.boolean().optional(),
   aiPrefilterConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   outreachPrepConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   contactSearchConcurrency: z.coerce.number().int().min(1).max(32).optional(),
@@ -192,6 +358,7 @@ const settingsUpdateSchema = z.object({
   exaQueryCount: z.coerce.number().int().min(1).max(50).optional(),
   useExaExcludeDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
+  excludePreviouslyFoundExaDomains: z.boolean().optional(),
   aiPrefilterConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   outreachPrepConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   contactSearchConcurrency: z.coerce.number().int().min(1).max(32).optional(),
@@ -230,6 +397,7 @@ const debugConsoleRequestSchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(20),
   useExaExcludeDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
+  excludePreviouslyFoundExaDomains: z.boolean().optional(),
   aiPrefilterConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   outreachPrepConcurrency: z.coerce.number().int().min(1).max(32).optional(),
   contactSearchConcurrency: z.coerce.number().int().min(1).max(32).optional(),
@@ -320,6 +488,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     exaQueryCount: body.exaQueryCount ?? settings.exaQueryCount,
     useExaExcludeDomains: body.useExaExcludeDomains ?? settings.useExaExcludeDomains,
     useExaCompanyCategory: body.useExaCompanyCategory ?? settings.useExaCompanyCategory,
+    excludePreviouslyFoundExaDomains: body.excludePreviouslyFoundExaDomains ?? settings.excludePreviouslyFoundExaDomains,
     aiPrefilterConcurrency: body.aiPrefilterConcurrency ?? settings.aiPrefilterConcurrency,
     outreachPrepConcurrency: body.outreachPrepConcurrency ?? settings.outreachPrepConcurrency,
     contactSearchConcurrency: body.contactSearchConcurrency ?? settings.contactSearchConcurrency,
@@ -383,6 +552,15 @@ app.get("/health", (_request, response) => {
   });
 });
 
+app.get("/api/control/cache/live-exa", async (_request, response, next) => {
+  try {
+    response.json({
+      cache: await controlPlaneStore.getLiveExaCache()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 app.get("/api/config/readiness", (_request, response) => {
   response.json({
     port: env.PORT,
@@ -390,6 +568,28 @@ app.get("/api/config/readiness", (_request, response) => {
   });
 });
 
+app.post("/api/control/cache/live-exa/reset", async (_request, response, next) => {
+  try {
+    response.json({
+      cache: await controlPlaneStore.clearLiveExaCache()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/control/cache/live-exa-history/reset", async (_request, response, next) => {
+  try {
+    const [learning, cache] = await Promise.all([
+      controlPlaneStore.clearSearchHistoryMode("exa_search"),
+      controlPlaneStore.clearLiveExaCache()
+    ]);
+
+    response.json({ learning, cache });
+  } catch (error) {
+    next(error);
+  }
+});
 app.get("/hubspot", (_request, response) => {
   response.redirect("/hubspot/ui");
 });
@@ -680,127 +880,23 @@ app.post("/api/lead-jobs/run", async (request, response, next) => {
 
 app.post("/api/hubspot/workflow-trigger", async (request, response, next) => {
   try {
-    clearStaleLeadRunStatusIfNeeded();
+    await startManagedLeadRun(request.body as Record<string, unknown>, "legacy", response);
+  } catch (error) {
+    next(error);
+  }
+});
 
-    if (leadRunStatus.running) {
-      response.status(409).json({
-        trigger: "hubspot-ui",
-        accepted: false,
-        runStatus: leadRunStatus,
-        error: "A lead run is already in progress."
-      });
-      return;
-    }
+app.post("/api/hubspot/workflow-trigger-legacy", async (request, response, next) => {
+  try {
+    await startManagedLeadRun(request.body as Record<string, unknown>, "legacy", response);
+  } catch (error) {
+    next(error);
+  }
+});
 
-    const payload = await buildLeadJobPayload(request.body as Record<string, unknown>);
-    const runAbortController = new AbortController();
-    activeLeadRunAbortController = runAbortController;
-
-    leadRunStatus.running = true;
-    leadRunStatus.startedAt = new Date().toISOString();
-    leadRunStatus.finishedAt = undefined;
-    leadRunStatus.lastError = undefined;
-    leadRunStatus.stage = "starting";
-    leadRunStatus.stageLabel = "Lead-Run startet";
-    leadRunStatus.progressValue = 2;
-    leadRunStatus.progressMax = 100;
-    leadRunStatus.progressDescription = "Der Lead Agent initialisiert die Suche.";
-    leadRunStatus.detail = "Die Zielparameter wurden uebernommen und der Lauf wird vorbereitet.";
-    leadRunStatus.processedFilters = 0;
-    leadRunStatus.totalFilters = undefined;
-    leadRunStatus.foundCandidates = 0;
-    leadRunStatus.targetLeadCount = payload.targetLeadCount;
-    leadRunStatus.funnel = undefined;
-    leadRunStatus.timedOut = false;
-    leadRunStatus.updatedAt = new Date().toISOString();
-
-    void leadPipelineAgent.run(payload, {
-      shouldStop: () => runAbortController.signal.aborted,
-      onProgress: (progress) => {
-        leadRunStatus.stage = progress.stage;
-        leadRunStatus.stageLabel = progress.stageLabel;
-        leadRunStatus.progressValue = progress.progressValue;
-        leadRunStatus.progressMax = progress.progressMax;
-        leadRunStatus.progressDescription = progress.progressDescription;
-        leadRunStatus.detail = progress.detail;
-        leadRunStatus.processedFilters = progress.processedFilters;
-        leadRunStatus.totalFilters = progress.totalFilters;
-        leadRunStatus.foundCandidates = progress.foundCandidates;
-        leadRunStatus.targetLeadCount = progress.targetLeadCount;
-        leadRunStatus.funnel = progress.funnel;
-        leadRunStatus.timedOut = progress.timedOut;
-        leadRunStatus.updatedAt = progress.updatedAt;
-      }
-    })
-      .then((result) => {
-        if (activeLeadRunAbortController === runAbortController) {
-          activeLeadRunAbortController = undefined;
-        }
-
-        leadRunStatus.running = false;
-        leadRunStatus.stage = result.stopped ? "stopped" : result.timedOut ? "timed_out" : "completed";
-        leadRunStatus.stageLabel = result.stopped ? "Gestoppt" : result.timedOut ? "Zeitlimit erreicht" : "Abgeschlossen";
-        leadRunStatus.progressValue = 100;
-        leadRunStatus.progressMax = 100;
-        const targetSynchronizedCompanies = result.hubspotSync.mode === "live";
-        const completionCount = targetSynchronizedCompanies ? result.hubspotSync.companySyncedCount : result.shortlistedCompanies.length;
-        const completionReason = result.completionReason?.trim();
-        leadRunStatus.progressDescription = result.stopped
-          ? targetSynchronizedCompanies
-            ? `Lead-Run manuell gestoppt bei ${completionCount}/${payload.targetLeadCount} nach HubSpot synchronisierten Firmen`
-            : `Lead-Run manuell gestoppt bei ${completionCount} qualifizierten Firmen`
-          : result.timedOut
-          ? targetSynchronizedCompanies
-            ? `Zeitlimit erreicht bei ${completionCount}/${payload.targetLeadCount} nach HubSpot synchronisierten Firmen`
-            : `Zeitlimit erreicht bei ${completionCount} qualifizierten Firmen`
-          : completionCount < payload.targetLeadCount
-            ? targetSynchronizedCompanies
-              ? completionReason
-                ? `${completionCount}/${payload.targetLeadCount} Firmen nach HubSpot synchronisiert, ${completionReason}`
-                : `${completionCount}/${payload.targetLeadCount} Firmen nach HubSpot synchronisiert, Suche vor Zeitlimit ausgeschoepft`
-              : `${completionCount}/${payload.targetLeadCount} qualifizierte Firmen vor Zeitlimit gefunden`
-            : targetSynchronizedCompanies
-              ? `${completionCount}/${payload.targetLeadCount} Firmen nach HubSpot synchronisiert`
-              : `${completionCount} qualifizierte Firmen abgeschlossen`;
-        leadRunStatus.detail = result.stopped
-          ? `Bis zum Stopp: ${result.funnel.crawledPages} Seiten gecrawlt, ${result.funnel.afterCrawlerPrefilter} nach Vorfilter, ${result.funnel.afterHubSpotDedup} nach HubSpot-Deduplizierung, ${result.funnel.afterAzureAICheck} nach Azure AI Check, ${result.funnel.syncedToHubSpot} nach HubSpot synchronisiert.`
-          : result.timedOut
-          ? `Funnel bis Abbruch: ${result.funnel.crawledPages} Seiten gecrawlt, ${result.funnel.afterCrawlerPrefilter} nach Vorfilter, ${result.funnel.afterHubSpotDedup} nach HubSpot-Deduplizierung, ${result.funnel.afterAzureAICheck} nach Azure AI Check, ${result.funnel.syncedToHubSpot} nach HubSpot synchronisiert.`
-          : completionCount < payload.targetLeadCount
-            ? `${completionReason ?? "Suche vor Zeitlimit ausgeschoepft."} ${result.funnel.crawledPages} Seiten gecrawlt, ${result.funnel.afterCrawlerPrefilter} nach Vorfilter, ${result.funnel.afterHubSpotDedup} nach HubSpot-Deduplizierung, ${result.funnel.afterAzureAICheck} nach Azure AI Check, ${result.funnel.syncedToHubSpot} nach HubSpot synchronisiert.`
-          : targetSynchronizedCompanies
-            ? `${result.hubspotSync.companySyncedCount} Firmen nach HubSpot synchronisiert.`
-            : "Dry-Run abgeschlossen. Es wurde nichts nach HubSpot geschrieben.";
-        leadRunStatus.processedFilters = result.evaluations.length;
-        leadRunStatus.totalFilters = result.suggestedFilters.length;
-        leadRunStatus.foundCandidates = result.shortlistedCompanies.length;
-        leadRunStatus.targetLeadCount = payload.targetLeadCount;
-        leadRunStatus.funnel = result.funnel;
-        leadRunStatus.timedOut = result.timedOut;
-        leadRunStatus.updatedAt = new Date().toISOString();
-        leadRunStatus.finishedAt = new Date().toISOString();
-      })
-      .catch((error) => {
-        if (activeLeadRunAbortController === runAbortController) {
-          activeLeadRunAbortController = undefined;
-        }
-
-        leadRunStatus.running = false;
-        leadRunStatus.stage = "failed";
-        leadRunStatus.stageLabel = "Fehlgeschlagen";
-        leadRunStatus.progressDescription = "Der Lead-Run ist mit einem Fehler abgebrochen.";
-        leadRunStatus.detail = error instanceof Error ? error.message : "Unknown error";
-        leadRunStatus.updatedAt = new Date().toISOString();
-        leadRunStatus.finishedAt = new Date().toISOString();
-        leadRunStatus.lastError = error instanceof Error ? error.message : "Unknown error";
-        console.error("Lead run failed", error);
-      });
-
-    response.status(202).json({
-      trigger: "hubspot-ui",
-      accepted: true,
-      runStatus: leadRunStatus
-    });
+app.post("/api/hubspot/workflow-trigger-new", async (request, response, next) => {
+  try {
+    await startManagedLeadRun(request.body as Record<string, unknown>, "worker_v2", response);
   } catch (error) {
     next(error);
   }

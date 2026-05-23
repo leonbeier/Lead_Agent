@@ -871,6 +871,43 @@ export class OpenAIWebSearchClient {
     }
   }
 
+  async findCompanyContactInfo(company: Pick<PreCategorizedCompany, "name" | "domain" | "country">): Promise<{
+    emails: string[];
+    phones: string[];
+    urls: string[];
+  } | null> {
+    if (!readiness.openAIWebSearchConfigured) {
+      return null;
+    }
+
+    const prompt = [
+      "Find the official public company contact details for this organization using only organization-level web sources.",
+      "Use only the official company website, official contact page, legal notice/impressum, or reputable company directory pages that cite the official contact details.",
+      "Do not include personal data such as employee names, personal emails, direct personal phone numbers, or personal social profiles.",
+      "Prefer shared company inboxes and main office or switchboard phone numbers.",
+      `Company name: ${company.name}`,
+      company.domain ? `Known website: ${company.domain}` : undefined,
+      company.country ? `Known country: ${company.country}` : undefined,
+      "Return strict JSON with {\"emails\":[\"info@example.com\"],\"phones\":[\"+49 ...\"],\"urls\":[\"https://example.com/kontakt\"]}. Use empty arrays when unknown."
+    ].filter(Boolean).join("\n\n");
+
+    try {
+      const response = await this.runWebSearch(prompt, 320, "preResearch");
+      const parsed = this.parseJson<{ emails?: string[]; phones?: string[]; urls?: string[] }>(response.text);
+      const result = {
+        emails: Array.from(new Set((parsed.emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))),
+        phones: Array.from(new Set((parsed.phones ?? []).map((value) => value.trim()).filter(Boolean))),
+        urls: Array.from(new Set((parsed.urls ?? []).map((value) => value.trim()).filter(Boolean)))
+      };
+
+      return result.emails.length > 0 || result.phones.length > 0 || result.urls.length > 0
+        ? result
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
   async summarizeCompany(company: CompanySample): Promise<Partial<CompanySample> | null> {
     if (!readiness.openAIWebSearchConfigured) {
       return this.summarizeFromOfficialWebsite(company);
@@ -909,6 +946,19 @@ export class OpenAIWebSearchClient {
 
   async crawlCompanyWebsite(domain: string | undefined): Promise<CrawledWebsiteProfile | null> {
     return this.fetchWebsiteCrawlProfile(domain);
+  }
+
+  async fetchOfficialWebsitePageHtml(url: string, timeoutMs = INTERNAL_PAGE_CRAWL_TIMEOUT_MS): Promise<string | null> {
+    try {
+      const response = await this.fetchWebsitePage(url, timeoutMs);
+      if (!response.ok) {
+        return null;
+      }
+
+      return response.text();
+    } catch {
+      return null;
+    }
   }
 
   private async summarizeOfficialSiteViaWebSearch(domain: string): Promise<CrawledWebsiteProfile | null> {

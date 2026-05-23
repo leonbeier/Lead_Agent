@@ -124,6 +124,10 @@ export interface DebugConsoleContactDiscoveryResult {
   analyzedWebsites: DebugConsoleContactAnalysis[];
 }
 
+const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 150_000;
+
+const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 90_000;
+
 export class DebugConsoleService {
   private readonly exaSearchClient = new ExaSearchClient();
 
@@ -144,6 +148,27 @@ export class DebugConsoleService {
   private readonly defaultOutreachPrepConcurrency = 6;
 
   private readonly defaultContactSearchConcurrency = 8;
+
+  createManualCompanyForWebsite(website: string, filter: ApolloOrganizationFilter): CompanySample {
+    return this.buildManualCompany(website, filter);
+  }
+
+  async classifyCompanyForExecution(company: CompanySample): Promise<DebugConsoleWebsiteAnalysis> {
+    return this.classifyWebsite(company);
+  }
+
+  async buildResearchBriefForExecution(company: PreCategorizedCompany): Promise<ResearchBrief> {
+    return this.azureOpenAIClient.buildResearchBrief(company, false, undefined, undefined, {
+      includeWebResearch: true
+    });
+  }
+
+  async discoverContactsForExecution(
+    company: PreCategorizedCompany,
+    options: { selectedContactsTimeoutMs?: number } = {}
+  ): Promise<Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>>> {
+    return this.buildDetailedContactDebug(company, options);
+  }
 
   async run(request: DebugConsoleRunRequest): Promise<DebugConsoleRunResult> {
     const filters = await this.resolveSearchFilters(request);
@@ -341,11 +366,15 @@ export class DebugConsoleService {
       };
     }
 
-    const researchBrief = await this.azureOpenAIClient.buildResearchBrief(baseAnalysis.categorizedCompany, false, undefined, undefined, {
-      includeWebResearch: true
-    });
+    const [researchBrief, extractedAddress] = await Promise.all([
+      this.azureOpenAIClient.buildResearchBrief(baseAnalysis.categorizedCompany, false, undefined, undefined, {
+        includeWebResearch: true
+      }),
+      this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany)
+    ]);
     const hubspotPreview = await this.hubspotClient.previewHubSpotSync(baseAnalysis.categorizedCompany, researchBrief, [], {
-      includeAddressLookup: true
+      includeAddressLookup: true,
+      extractedAddress
     });
 
     return {
@@ -356,28 +385,57 @@ export class DebugConsoleService {
   }
 
   private async buildContactAnalysis(company: CompanySample): Promise<DebugConsoleContactAnalysis> {
-    const baseAnalysis = await this.buildOutreachAnalysis(company);
+    const baseAnalysis = await this.classifyWebsite(company);
 
     if (baseAnalysis.error) {
       return {
         ...baseAnalysis,
+        researchBrief: null,
+        hubspotPreview: null,
         publicContactDebug: null
       };
     }
 
-    const publicContactDebug = await this.buildDetailedContactDebug(baseAnalysis.categorizedCompany);
-    const hubspotPreview = await this.hubspotClient.previewHubSpotSync(
-      baseAnalysis.categorizedCompany,
-      await this.ensureResearchBrief(baseAnalysis.categorizedCompany, baseAnalysis.researchBrief),
-      publicContactDebug.selectedContacts,
-      { includeAddressLookup: true }
-    );
+    try {
+      const [researchBrief, publicContactDebug, extractedAddress] = await this.withTimeout(
+        Promise.all([
+          this.azureOpenAIClient.buildResearchBrief(baseAnalysis.categorizedCompany, false, undefined, undefined, {
+            includeWebResearch: true
+          }),
+          this.buildDetailedContactDebug(baseAnalysis.categorizedCompany, {
+            selectedContactsTimeoutMs: DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS
+          }),
+          this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany)
+        ]),
+        DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS,
+        `Kontakt-Check hat nach ${Math.round(DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS / 1000)}s das Zeitlimit erreicht.`
+      );
 
-    return {
-      ...baseAnalysis,
-      publicContactDebug,
-      hubspotPreview
-    };
+      const hubspotPreview = await this.hubspotClient.previewHubSpotSync(
+        baseAnalysis.categorizedCompany,
+        researchBrief,
+        publicContactDebug.selectedContacts,
+        {
+          includeAddressLookup: true,
+          extractedAddress
+        }
+      );
+
+      return {
+        ...baseAnalysis,
+        researchBrief: this.toResearchBriefPreview(researchBrief),
+        publicContactDebug,
+        hubspotPreview
+      };
+    } catch (error) {
+      return {
+        ...baseAnalysis,
+        researchBrief: null,
+        hubspotPreview: null,
+        publicContactDebug: null,
+        error: error instanceof Error ? error.message : "Kontakt-Check ist fehlgeschlagen."
+      };
+    }
   }
 
   private buildManualCompany(website: string, filter: ApolloOrganizationFilter): CompanySample {
@@ -662,43 +720,12 @@ export class DebugConsoleService {
     }
   }
 
-  private async buildDetailedContactDebug(company: PreCategorizedCompany): Promise<Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>>> {
-    const hubspotClient = this.hubspotClient as unknown as {
-      normalizeCompanyUrl: (value: string) => string;
-      collectCandidatePages: (rootUrl: string) => Promise<Array<{ url: string; html: string }>>;
-      buildAllowedEmailDomains: (rootUrl: string) => Set<string>;
-      extractEmails: (html: string, allowedDomains: Set<string>) => string[];
-      extractPhones: (html: string) => string[];
-      extractNamedContactsFromPage: (url: string, html: string, primaryPhone?: string, pageEmails?: string[]) => unknown[];
-      extractLinkedInProfileUrlFromPage: (html: string) => string | undefined;
-      buildWebsiteEvidenceSnippet: (url: string, html: string) => string;
-    };
-
-    const baseDebug = await this.hubspotClient.debugPublicContactDiscovery(company);
-    if (!company.domain) {
-      return baseDebug;
-    }
-
-    const rootUrl = hubspotClient.normalizeCompanyUrl(company.domain);
-    const pages = await hubspotClient.collectCandidatePages(rootUrl);
-    const allowedDomains = hubspotClient.buildAllowedEmailDomains(rootUrl);
-
-    return {
-      ...baseDebug,
-      websitePages: pages.map((page) => {
-        const emails = hubspotClient.extractEmails(page.html, allowedDomains);
-        const phones = hubspotClient.extractPhones(page.html);
-        const primaryPhone = phones[0];
-        return {
-          url: page.url,
-          evidenceSnippet: hubspotClient.buildWebsiteEvidenceSnippet(page.url, page.html),
-          emails,
-          phones,
-          linkedInProfileUrl: hubspotClient.extractLinkedInProfileUrlFromPage(page.html),
-          namedContacts: hubspotClient.extractNamedContactsFromPage(page.url, page.html, primaryPhone, emails)
-        };
-      })
-    };
+  private async buildDetailedContactDebug(
+    company: PreCategorizedCompany,
+    options: { selectedContactsTimeoutMs?: number } = {}
+  ): Promise<Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>>> {
+    const baseDebug = await this.hubspotClient.debugPublicContactDiscovery(company, options);
+    return baseDebug;
   }
 
   private toResearchBriefPreview(researchBrief: ResearchBrief) {
@@ -773,5 +800,24 @@ export class DebugConsoleService {
     );
 
     return results;
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+    let timeoutHandle: NodeJS.Timeout | undefined;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_resolve, reject) => {
+          timeoutHandle = setTimeout(() => {
+            reject(new Error(timeoutMessage));
+          }, timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 }

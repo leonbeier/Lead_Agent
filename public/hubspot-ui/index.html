@@ -536,6 +536,10 @@
               <label for="useExaExcludeDomains">Exclude Domains in Exa aktiv</label>
             </div>
             <div class="checkbox-row">
+              <input id="excludePreviouslyFoundExaDomains" name="excludePreviouslyFoundExaDomains" type="checkbox" />
+              <label for="excludePreviouslyFoundExaDomains">Zuvor gefundene rohe Exa-Websites automatisch ausschliessen</label>
+            </div>
+            <div class="checkbox-row">
               <input id="useExaCompanyCategory" name="useExaCompanyCategory" type="checkbox" />
               <label for="useExaCompanyCategory">Exa category = company aktiv</label>
             </div>
@@ -555,7 +559,8 @@
           <div class="button-row">
             <button id="save-settings" type="button">Settings speichern</button>
             <button id="run-preview" type="button" class="secondary">Preview starten</button>
-            <button id="run-live" type="button">Lead-Run starten</button>
+            <button id="run-live-legacy" type="button" class="secondary">Legacy Lead Run starten</button>
+            <button id="run-live-new" type="button">Neuen Lead Run starten</button>
           </div>
           <div style="height: 18px;"></div>
           <h3>Live Run-Status</h3>
@@ -751,9 +756,9 @@
             <div class="history-pagination" id="search-history-pagination"></div>
           </div>
           <div>
-            <h3>Gelernte Filter</h3>
-            <div class="history-list" id="filter-performance-list"></div>
-            <div class="history-pagination" id="filter-performance-pagination"></div>
+            <h3>Rohe Exa-Websites vor KI</h3>
+            <div class="history-list" id="live-exa-history-list"></div>
+            <div class="history-pagination" id="live-exa-history-pagination"></div>
           </div>
         </div>
       </section>
@@ -840,8 +845,8 @@
       const debugScreeningRejectedPagination = document.getElementById("debug-screening-rejected-pagination");
       const liveScreeningRejectedList = document.getElementById("live-screening-rejected-list");
       const liveScreeningRejectedPagination = document.getElementById("live-screening-rejected-pagination");
-      const filterPerformanceList = document.getElementById("filter-performance-list");
-      const filterPerformancePagination = document.getElementById("filter-performance-pagination");
+      const liveExaHistoryList = document.getElementById("live-exa-history-list");
+      const liveExaHistoryPagination = document.getElementById("live-exa-history-pagination");
       const debugConsoleStatus = document.getElementById("debug-console-status");
       const debugSearchStatus = document.getElementById("debug-search-status");
       const debugAiStatus = document.getElementById("debug-ai-status");
@@ -851,6 +856,17 @@
       const debugAiResults = document.getElementById("debug-ai-results");
       const debugOutreachResults = document.getElementById("debug-outreach-results");
       const debugContactsResults = document.getElementById("debug-contacts-results");
+      const FALLBACK_SELECTABLE_CATEGORIES = [
+        { value: "integrator_vision_industrial_ai", label: "Software Integratoren mit Vision/Industrial AI Fokus" },
+        { value: "integrator_vision_ai_consulting", label: "Vision AI/Industrial AI Consulting" },
+        { value: "integrator_vision_ai_freelancer", label: "Vision AI/Industrial AI Freelancer" },
+        { value: "integrator_general_ai", label: "Software Integratoren mit allgemeinem AI Fokus" },
+        { value: "integrator_relevant_focus", label: "Integratoren in relevanten Industriezweigen" },
+        { value: "industrial_end_customer_scaled", label: "Industrie-Endkunden mit ausreichender Projektgroesse" },
+        { value: "camera_manufacturer_partner", label: "Kamera-/Imaging-Hersteller als Partner" },
+        { value: "machine_builder_ai_enablement", label: "Maschinenbauer mit AI-Option Potenzial" },
+        { value: "software_platform_embedding", label: "Softwareplattformen fuer Embedding-Partnerschaften" }
+      ];
       let bootstrapData = null;
       let liveRunPollHandle;
       const debugTransferState = {
@@ -865,15 +881,164 @@
         testLabQueryHistory: 1,
         debugScreeningRejected: 1,
         liveScreeningRejected: 1,
-        filterPerformance: 1
+        liveExaHistory: 1
       };
       const paginationData = {
         searchHistory: [],
         testLabQueryHistory: [],
         debugScreeningRejected: [],
         liveScreeningRejected: [],
-        filterPerformance: []
+        liveExaHistory: []
       };
+
+      function createFallbackBootstrapData() {
+        return {
+          settings: {
+            targetLeadCount: 20,
+            market: "Europe",
+            companySearchMode: "exa_search",
+            targetCategories: FALLBACK_SELECTABLE_CATEGORIES.slice(0, 4).map((option) => option.value),
+            runDeepResearch: false,
+            dryRun: false,
+            syncToHubSpot: true,
+            exaQueryCount: 1,
+            aiPrefilterConcurrency: 8,
+            outreachPrepConcurrency: 6,
+            contactSearchConcurrency: 8,
+            maxRuntimeMs: 10800000,
+            useExaExcludeDomains: true,
+            excludePreviouslyFoundExaDomains: true,
+            useExaCompanyCategory: false,
+            prequalification: {
+              mainContext: "",
+              categoryContexts: {}
+            }
+          },
+          templates: {},
+          categoryContexts: {},
+          prequalificationCategoryContexts: {},
+          selectableCategories: FALLBACK_SELECTABLE_CATEGORIES,
+          latestLeadRun: null,
+          learning: {
+            companyFeedback: [],
+            filterPerformance: {},
+            searchHistory: [],
+            searchHistoryByMode: {}
+          },
+          testLabExaCache: {
+            queryHistory: [],
+            discoveredDomains: []
+          },
+          liveExaCache: {
+            entries: [],
+            discoveredDomains: []
+          },
+          companyScreeningDatabase: {
+            records: []
+          }
+        };
+      }
+
+      async function loadBootstrapFallback(initialError) {
+        const data = createFallbackBootstrapData();
+        const errors = [];
+        const requests = await Promise.allSettled([
+          requestJson("/api/control/settings"),
+          requestJson("/api/outreach/templates"),
+          requestJson("/api/outreach/contexts"),
+          requestJson("/api/control/latest-lead-run"),
+          requestJson("/api/control/learning"),
+          requestJson("/api/control/cache/testlab-exa"),
+          requestJson("/api/control/cache/live-exa"),
+          requestJson("/api/control/cache/company-screening")
+        ]);
+
+        const [
+          settingsResult,
+          templatesResult,
+          contextsResult,
+          latestLeadRunResult,
+          learningResult,
+          testLabCacheResult,
+          liveExaCacheResult,
+          screeningResult
+        ] = requests;
+
+        if (settingsResult.status === "fulfilled" && settingsResult.value?.settings) {
+          data.settings = settingsResult.value.settings;
+        } else {
+          errors.push(`Settings: ${settingsResult.reason || "unknown error"}`);
+        }
+
+        if (templatesResult.status === "fulfilled" && templatesResult.value?.templates) {
+          data.templates = Object.fromEntries((templatesResult.value.templates || []).map((template) => [template.key, template]));
+        } else if (templatesResult.status === "rejected") {
+          errors.push(`Templates: ${templatesResult.reason || "unknown error"}`);
+        }
+
+        if (contextsResult.status === "fulfilled" && contextsResult.value?.categoryContexts) {
+          data.categoryContexts = Object.fromEntries((contextsResult.value.categoryContexts || []).map((context) => [context.category, context]));
+        } else if (contextsResult.status === "rejected") {
+          errors.push(`Kontexte: ${contextsResult.reason || "unknown error"}`);
+        }
+
+        if (latestLeadRunResult.status === "fulfilled") {
+          data.latestLeadRun = latestLeadRunResult.value?.latestLeadRun || null;
+        } else {
+          errors.push(`Latest Run: ${latestLeadRunResult.reason || "unknown error"}`);
+        }
+
+        if (learningResult.status === "fulfilled") {
+          data.learning = learningResult.value?.learning || data.learning;
+        } else {
+          errors.push(`Learning: ${learningResult.reason || "unknown error"}`);
+        }
+
+        if (testLabCacheResult.status === "fulfilled") {
+          data.testLabExaCache = testLabCacheResult.value?.cache || data.testLabExaCache;
+        } else {
+          errors.push(`Test-Lab Cache: ${testLabCacheResult.reason || "unknown error"}`);
+        }
+
+        if (liveExaCacheResult.status === "fulfilled") {
+          data.liveExaCache = liveExaCacheResult.value?.cache || data.liveExaCache;
+        } else {
+          errors.push(`Live Exa Cache: ${liveExaCacheResult.reason || "unknown error"}`);
+        }
+
+        if (screeningResult.status === "fulfilled") {
+          data.companyScreeningDatabase = screeningResult.value?.database || data.companyScreeningDatabase;
+        } else {
+          errors.push(`Screening: ${screeningResult.reason || "unknown error"}`);
+        }
+
+        bootstrapData = data;
+        renderTargetCategories(data.selectableCategories || FALLBACK_SELECTABLE_CATEGORIES);
+        renderDebugCategoryOptions(data.selectableCategories || FALLBACK_SELECTABLE_CATEGORIES);
+        renderPrequalificationEditors(data.selectableCategories || FALLBACK_SELECTABLE_CATEGORIES, data.prequalificationCategoryContexts || {});
+        fillSettingsForm(data.settings);
+        document.getElementById("debug-companySearchMode").value = data.settings?.companySearchMode === "diffbot_search" ? "diffbot_search" : "exa_search";
+        document.getElementById("debug-region").value = data.settings?.market || "Germany";
+        renderSummary(data.settings, data.templates, data.latestLeadRun);
+        renderTemplates(data.templates);
+        renderContexts(data.categoryContexts || {});
+        renderLatestRun(data.latestLeadRun);
+        renderSearchHistory(getSearchHistoryForMode(data));
+        renderTestLabQueryHistory(getTestLabQueryHistory(data));
+        renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", data));
+        renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", data));
+        renderLiveExaHistory(getLiveExaHistory(data));
+
+        const fallbackWarnings = [
+          initialError instanceof Error ? initialError.message : String(initialError),
+          ...errors
+        ].filter(Boolean);
+        setStatus(settingsStatus, fallbackWarnings.length > 0 ? "Settings geladen (Fallback)" : "Settings geladen");
+        setStatus(templatesStatus, fallbackWarnings.length > 0 ? "Templates teilweise geladen" : "Templates geladen", fallbackWarnings.length > 0);
+        resultOutput.textContent = fallbackWarnings.length > 0
+          ? `Bootstrap-Fallback aktiv:\n\n${fallbackWarnings.join("\n")}`
+          : resultOutput.textContent;
+      }
 
       function getPrequalificationAddOnValue(value) {
         if (!value) {
@@ -935,6 +1100,7 @@
         document.getElementById("outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
         document.getElementById("contactSearchConcurrency").value = settings.contactSearchConcurrency || 20;
         document.getElementById("useExaExcludeDomains").checked = settings.useExaExcludeDomains !== false;
+        document.getElementById("excludePreviouslyFoundExaDomains").checked = settings.excludePreviouslyFoundExaDomains !== false;
         document.getElementById("useExaCompanyCategory").checked = Boolean(settings.useExaCompanyCategory);
         document.getElementById("debug-exaQueryCount").value = settings.exaQueryCount || 1;
         document.getElementById("debug-aiPrefilterConcurrency").value = debugAiPrefilterConcurrency;
@@ -988,6 +1154,7 @@
           diffbotToken: document.getElementById("diffbotToken").value.trim() || undefined,
           exaQueryCount: Number(document.getElementById("exaQueryCount").value) || 1,
           useExaExcludeDomains: document.getElementById("useExaExcludeDomains").checked,
+          excludePreviouslyFoundExaDomains: document.getElementById("excludePreviouslyFoundExaDomains").checked,
           useExaCompanyCategory: document.getElementById("useExaCompanyCategory").checked,
           maxRuntimeMs: Math.max(60000, Math.round(Math.max(1, maxRuntimeMinutes || 180) * 60 * 1000)),
           aiPrefilterConcurrency: Number(document.getElementById("aiPrefilterConcurrency").value) || 20,
@@ -1153,13 +1320,12 @@
           || (data?.learning?.searchHistory || []).filter((entry) => entry.companySearchMode === activeMode);
       }
 
-      function getFilterPerformanceForMode(data = bootstrapData) {
-        const activeMode = getActiveSearchMode(data);
-        return data?.learning?.searchHistoryByMode?.[activeMode]?.filterPerformance || {};
-      }
-
       function getTestLabQueryHistory(data = bootstrapData) {
         return data?.testLabExaCache?.queryHistory || [];
+      }
+
+      function getLiveExaHistory(data = bootstrapData) {
+        return data?.liveExaCache?.entries || [];
       }
 
       function isDebugScreeningRecord(record) {
@@ -1310,40 +1476,30 @@
         renderPagination(paginationElement, paginationKey, page, totalPages);
       }
 
-      function renderFilterPerformance(filterPerformance, searchHistory) {
-        const latestHistoryByName = new Map((searchHistory || []).filter((entry) => entry.filterSnapshot).map((entry) => [entry.filterName, entry]));
-        const entries = Object.entries(filterPerformance || {}).sort((left, right) => {
-          const leftHasSnapshot = latestHistoryByName.has(left[0]) ? 1 : 0;
-          const rightHasSnapshot = latestHistoryByName.has(right[0]) ? 1 : 0;
-          if (rightHasSnapshot !== leftHasSnapshot) {
-            return rightHasSnapshot - leftHasSnapshot;
-          }
+      function renderLiveExaHistory(entries) {
+        paginationData.liveExaHistory = entries || [];
 
-          return right[1].averageRelevanceRatio - left[1].averageRelevanceRatio;
-        });
-        paginationData.filterPerformance = entries;
-
-        if (entries.length === 0) {
-          filterPerformanceList.innerHTML = '<div class="history-item"><strong>Noch keine Lernhistorie</strong><span class="mini-meta">Nach den ersten echten Suchlaeufen erscheinen hier die staerksten und schwaechsten Filter.</span></div>';
-          filterPerformancePagination.innerHTML = "";
+        if (!entries || entries.length === 0) {
+          liveExaHistoryList.innerHTML = '<div class="history-item"><strong>Noch keine rohe Exa-Historie</strong><span class="mini-meta">Hier erscheinen gefundene Websites direkt aus Exa, bevor der KI-Vorfilter sie prueft.</span></div>';
+          liveExaHistoryPagination.innerHTML = "";
           return;
         }
 
         const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
-        const page = Math.min(paginationState.filterPerformance, totalPages);
-        paginationState.filterPerformance = page;
+        const page = Math.min(paginationState.liveExaHistory, totalPages);
+        paginationState.liveExaHistory = page;
         const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
 
-        filterPerformanceList.innerHTML = pageEntries.map(([name, stats]) => `
+        liveExaHistoryList.innerHTML = pageEntries.map((entry) => `
           <div class="history-item">
-            <strong>${name}</strong>
-            <span class="mini-meta">Durchschnitt relevant: ${Math.round(stats.averageRelevanceRatio * 100)}%</span>
-            <span class="mini-meta">Laeufe: ${stats.runs} · Early stops: ${stats.earlyStopCount}</span>
-            ${formatFilterSnapshot(latestHistoryByName.get(name)?.filterSnapshot)}
+            <strong>${escapeHtml(entry.companyName || entry.domain || "Unbekannte Website")}</strong>
+            <span class="mini-meta">${escapeHtml(entry.domain || "keine Domain")}</span>
+            ${entry.discoveryQuery ? `<span class="mini-meta">Query: ${escapeHtml(entry.discoveryQuery)}</span>` : ""}
+            ${entry.timestamp ? `<span class="mini-meta">Gefunden: ${escapeHtml(new Date(entry.timestamp).toLocaleString("de-DE"))}</span>` : ""}
           </div>
         `).join("");
 
-        renderPagination(filterPerformancePagination, "filterPerformance", page, totalPages);
+        renderPagination(liveExaHistoryPagination, "liveExaHistory", page, totalPages);
       }
 
       function renderTemplates(templates) {
@@ -1744,13 +1900,11 @@
           renderTestLabQueryHistory(getTestLabQueryHistory(data));
           renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", data));
           renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", data));
-          renderFilterPerformance(getFilterPerformanceForMode(data), getSearchHistoryForMode(data));
+          renderLiveExaHistory(getLiveExaHistory(data));
           setStatus(settingsStatus, "Settings geladen");
           setStatus(templatesStatus, "Templates geladen");
         } catch (error) {
-          setStatus(settingsStatus, "Settings konnten nicht geladen werden", true);
-          setStatus(templatesStatus, "Templates konnten nicht geladen werden", true);
-          resultOutput.textContent = String(error);
+          await loadBootstrapFallback(error);
         }
       }
 
@@ -1787,14 +1941,15 @@
         bootstrapData.latestLeadRun = latestLeadRun;
         bootstrapData.learning = learningPayload.learning;
         bootstrapData.testLabExaCache = testLabCachePayload.cache;
+        bootstrapData.liveExaCache = (await requestJson("/api/control/cache/live-exa")).cache;
         bootstrapData.companyScreeningDatabase = screeningPayload.database;
         renderSummary(collectSettings(), bootstrapData.templates, latestLeadRun);
         renderLatestRun(latestLeadRun);
         renderSearchHistory(getSearchHistoryForMode(bootstrapData));
         renderTestLabQueryHistory(getTestLabQueryHistory(bootstrapData));
+        renderLiveExaHistory(getLiveExaHistory(bootstrapData));
         renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", bootstrapData));
         renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", bootstrapData));
-        renderFilterPerformance(getFilterPerformanceForMode(bootstrapData), getSearchHistoryForMode(bootstrapData));
       }
 
       function renderLiveRunStatus(runStatus) {
@@ -1803,16 +1958,62 @@
           return;
         }
 
+        const settings = bootstrapData?.settings || {};
+        const totalCategories = runStatus.totalFilters ?? 0;
+        const processedCategories = runStatus.processedFilters ?? 0;
+        const queueSizes = runStatus.workerMetrics?.queueSizes;
+        const parallelExecutionNote = runStatus.running
+          ? "Innerhalb des aktiven Schritts laufen die Worker parallel; angezeigt wird hier immer nur das neueste Einzel-Update aus diesem Block."
+          : undefined;
+
         liveRunOutput.textContent = JSON.stringify({
           running: Boolean(runStatus.running),
+          runVariant: runStatus.runVariant || "legacy",
           stageLabel: runStatus.stageLabel,
+          processedCategories,
+          totalCategories,
           progressValue: runStatus.progressValue,
           progressDescription: runStatus.progressDescription,
           detail: runStatus.detail,
+          currentQualifiedCompanies: runStatus.foundCandidates ?? 0,
           exaRawCompanies: runStatus.funnel?.afterCrawlerPrefilter ?? 0,
           qualifiedAfterHubSpotCheck: runStatus.funnel?.afterHubSpotDedup ?? 0,
           qualifiedAfterAiCheck: runStatus.funnel?.afterAzureAICheck ?? runStatus.foundCandidates ?? 0,
           syncedToHubSpot: runStatus.funnel?.syncedToHubSpot ?? 0,
+          aiPrefilterWorkers: settings.aiPrefilterConcurrency,
+          outreachWorkers: settings.outreachPrepConcurrency,
+          contactWorkers: settings.contactSearchConcurrency,
+          workerMetrics: runStatus.workerMetrics
+            ? {
+                exaRequests: runStatus.workerMetrics.exaRequests ?? 0,
+                exaRawFound: runStatus.workerMetrics.exaRawFound ?? 0,
+                aiAccepted: runStatus.workerMetrics.aiAccepted ?? 0,
+                aiRejectedDifferentCategory: runStatus.workerMetrics.aiRejectedDifferentCategory ?? 0,
+                aiRejectedOther: runStatus.workerMetrics.aiRejectedOther ?? 0,
+                outreachCompleted: runStatus.workerMetrics.outreachCompleted ?? 0,
+                outreachFailed: runStatus.workerMetrics.outreachFailed ?? 0,
+                contactCompleted: runStatus.workerMetrics.contactCompleted ?? 0,
+                contactFailed: runStatus.workerMetrics.contactFailed ?? 0,
+                hubspotWritten: runStatus.workerMetrics.hubspotWritten ?? 0,
+                queueSizes: queueSizes
+                  ? {
+                      aiWaiting: queueSizes.aiWaiting ?? 0,
+                      aiInFlight: queueSizes.aiInFlight ?? 0,
+                      waitingAfterAi: queueSizes.waitingAfterAi ?? 0,
+                      outreachWaiting: queueSizes.outreachWaiting ?? 0,
+                      outreachInFlight: queueSizes.outreachInFlight ?? 0,
+                      contactWaiting: queueSizes.contactWaiting ?? 0,
+                      contactInFlight: queueSizes.contactInFlight ?? 0,
+                      hubspotWaiting: queueSizes.hubspotWaiting ?? 0,
+                      hubspotInFlight: queueSizes.hubspotInFlight ?? 0
+                    }
+                  : undefined
+              }
+            : undefined,
+          recentDebugMessages: Array.isArray(runStatus.debugMessages)
+            ? runStatus.debugMessages.slice(0, 8)
+            : undefined,
+          parallelExecutionNote,
           targetLeadCount: runStatus.targetLeadCount,
           updatedAt: runStatus.updatedAt
         }, null, 2);
@@ -1859,10 +2060,12 @@
 
           await refreshRunSurfaces();
           await restartLiveRunPolling();
-          resultOutput.textContent = endpoint === "/api/hubspot/workflow-trigger" && result.accepted
+          resultOutput.textContent = (endpoint === "/api/hubspot/workflow-trigger" || endpoint === "/api/hubspot/workflow-trigger-legacy" || endpoint === "/api/hubspot/workflow-trigger-new") && result.accepted
             ? JSON.stringify({
                 accepted: true,
-                message: "Lead-Run gestartet. Der Live Run-Status pollt jetzt die echten Zwischenstaende.",
+                message: endpoint === "/api/hubspot/workflow-trigger-new"
+                  ? "Neuer Worker-Lead-Run gestartet. Der Live Run-Status pollt jetzt die echten Zwischenstaende."
+                  : "Legacy Lead-Run gestartet. Der Live Run-Status pollt jetzt die echten Zwischenstaende.",
                 runStatus: result.runStatus
               }, null, 2)
             : JSON.stringify(result, null, 2);
@@ -1915,11 +2118,12 @@
       document.getElementById("copy-ai-to-outreach").addEventListener("click", copyAiToOutreach);
       document.getElementById("copy-outreach-to-contacts").addEventListener("click", copyOutreachToContacts);
       document.getElementById("run-preview").addEventListener("click", () => triggerRun("/api/lead-jobs/preview"));
-      document.getElementById("run-live").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger"));
+      document.getElementById("run-live-legacy").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger-legacy"));
+      document.getElementById("run-live-new").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger-new"));
       restartLiveRunPolling().catch((error) => {
         liveRunOutput.textContent = String(error);
       });
-      document.getElementById("clear-live-exa-history").addEventListener("click", () => clearCache("/api/control/cache/exa-search-history/reset", "Exa Suchverlauf wird geloescht"));
+      document.getElementById("clear-live-exa-history").addEventListener("click", () => clearCache("/api/control/cache/live-exa-history/reset", "Exa Suchverlauf wird geloescht"));
       document.getElementById("clear-live-screening-cache").addEventListener("click", () => clearCache("/api/control/cache/company-screening/live/reset", "Live Screening-Cache wird geloescht"));
       document.getElementById("clear-debug-screening-cache").addEventListener("click", () => clearCache("/api/control/cache/company-screening/debug/reset", "Test-Lab Screening-Cache wird geloescht"));
       document.getElementById("clear-debug-exa-history").addEventListener("click", () => clearCache("/api/control/cache/testlab-exa/reset", "Test-Lab Exa Cache wird geloescht"));
@@ -1936,7 +2140,7 @@
 
       document.getElementById("target-categories").addEventListener("change", syncPrequalificationCardState);
 
-      [searchHistoryPagination, testLabQueryHistoryPagination, debugScreeningRejectedPagination, liveScreeningRejectedPagination, filterPerformancePagination].forEach((element) => {
+      [searchHistoryPagination, testLabQueryHistoryPagination, debugScreeningRejectedPagination, liveScreeningRejectedPagination, liveExaHistoryPagination].forEach((element) => {
         element.addEventListener("click", (event) => {
           const button = event.target.closest("button[data-page-target]");
           if (!button) {
@@ -1968,10 +2172,7 @@
             return;
           }
 
-          renderFilterPerformance(
-            Object.fromEntries(paginationData.filterPerformance),
-            getSearchHistoryForMode(bootstrapData)
-          );
+          renderLiveExaHistory(paginationData.liveExaHistory);
         });
       });
 

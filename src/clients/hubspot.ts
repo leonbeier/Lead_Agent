@@ -96,7 +96,9 @@ const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 90000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
+const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
 const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
+const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -209,6 +211,7 @@ const COMMON_COMPOUND_TLDS = new Set([
 
 export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
+  private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();
 
   private readonly apolloClient = new ApolloClient();
 
@@ -288,9 +291,20 @@ export class HubSpotClient {
     company: PreCategorizedCompany,
     brief: ResearchBrief | undefined,
     contacts: PublicContactCandidate[],
-    options: { includeAddressLookup?: boolean } = {}
+    options: {
+      includeAddressLookup?: boolean;
+      extractedAddress?: {
+        address?: string;
+        city?: string;
+        zip?: string;
+        state?: string;
+        country?: string;
+      } | null;
+    } = {}
   ): Promise<HubSpotSyncPreview> {
-    const extractedAddress = options.includeAddressLookup ? await this.extractCompanyAddress(company) : null;
+    const extractedAddress = options.includeAddressLookup
+      ? (options.extractedAddress ?? await this.extractCompanyAddress(company))
+      : null;
     const companyProperties = this.stripUndefinedProperties(this.buildRawCompanyProperties(company, brief, extractedAddress));
 
     const contactPreviews = contacts.map((contact) => {
@@ -305,15 +319,11 @@ export class HubSpotClient {
       }
 
       if (
-        normalizedContact.email &&
-        this.isGenericMailbox(normalizedContact.email) &&
-        !normalizedContact.firstName &&
-        !normalizedContact.lastName &&
-        !normalizedContact.linkedinUrl
+        this.shouldSkipHubSpotContact(normalizedContact)
       ) {
         return {
           skipped: true,
-          skipReason: "Generic mailbox without person identity is skipped.",
+          skipReason: "Generic mailbox without person identity or phone is skipped.",
           normalizedContact,
           properties: {}
         } satisfies HubSpotContactPreview;
@@ -333,7 +343,14 @@ export class HubSpotClient {
     };
   }
 
-  async debugPublicContactDiscovery(company: PreCategorizedCompany): Promise<PublicContactDebugResult> {
+  async resolveCompanyAddress(company: PreCategorizedCompany): Promise<ExtractedCompanyAddress | null> {
+    return this.extractCompanyAddress(company);
+  }
+
+  async debugPublicContactDiscovery(
+    company: PreCategorizedCompany,
+    options: { selectedContactsTimeoutMs?: number } = {}
+  ): Promise<PublicContactDebugResult> {
     const pages = company.domain
       ? await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain))
       : [];
@@ -346,17 +363,30 @@ export class HubSpotClient {
         query,
         hits: await this.searchBingResults(query, 5)
       })),
-      1
+      PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
     );
     const relevantHits = hitGroups.flatMap((group) =>
       group.hits.filter((hit) =>
         this.isRelevantCompanyHit(company, aliases, [hit.title, hit.snippet].filter(Boolean).join(" | "))
       )
     );
+    const heuristicContacts = this.extractContactsFromSearchHits(company, relevantHits, aliases);
+    const websiteContacts = await this.extractWebsiteContactsFromPages(company, pages);
+    const fallbackSelectedContacts = this.buildTimeoutFallbackPublicContacts(
+      this.mergeDiscoveredContacts(websiteContacts, heuristicContacts)
+    );
+    const selectedContacts = options.selectedContactsTimeoutMs
+      ? await this.withTimeout(
+          this.findPublicContactsFromPages(company, pages, websiteContacts),
+          options.selectedContactsTimeoutMs,
+          fallbackSelectedContacts
+        )
+      : await this.findPublicContactsFromPages(company, pages, websiteContacts);
 
     return {
       aliases,
       queries,
+      websitePages: this.buildWebsitePageDebugEntries(company, pages),
       hitGroups: hitGroups.map((group) => ({
         query: group.query,
         hits: group.hits.map((hit) => ({
@@ -365,8 +395,8 @@ export class HubSpotClient {
           snippet: hit.snippet
         }))
       })),
-      heuristicContacts: this.extractContactsFromSearchHits(company, relevantHits, aliases),
-      selectedContacts: await this.findPublicContacts(company)
+      heuristicContacts,
+      selectedContacts
     };
   }
 
@@ -542,11 +572,7 @@ export class HubSpotClient {
     }
 
     if (
-      normalizedContact.email &&
-      this.isGenericMailbox(normalizedContact.email) &&
-      !normalizedContact.firstName &&
-      !normalizedContact.lastName &&
-      !normalizedContact.linkedinUrl
+      this.shouldSkipHubSpotContact(normalizedContact)
     ) {
       return null;
     }
@@ -594,6 +620,17 @@ export class HubSpotClient {
       firstName,
       lastName
     };
+  }
+
+  private shouldSkipHubSpotContact(contact: PublicContactCandidate): boolean {
+    return Boolean(
+      contact.email
+      && this.isGenericMailbox(contact.email)
+      && !contact.firstName
+      && !contact.lastName
+      && !contact.linkedinUrl
+      && !contact.phone
+    );
   }
 
   private async associateContactToCompany(contactId: string, companyId: string): Promise<void> {
@@ -920,9 +957,68 @@ export class HubSpotClient {
       return this.discoverWebSearchContacts(company, []);
     }
 
+    const pages = await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain));
+    return this.findPublicContactsFromPages(company, pages);
+  }
+
+  private async findPublicContactsFromPages(
+    company: PreCategorizedCompany,
+    pages: Array<{ url: string; html: string }>,
+    seedWebsiteContacts?: PublicContactCandidate[]
+  ): Promise<PublicContactCandidate[]> {
+    if (!company.domain) {
+      return this.discoverWebSearchContacts(company, pages);
+    }
+
+    const websiteContacts = seedWebsiteContacts ?? await this.extractWebsiteContactsFromPages(company, pages);
+    const webSearchContacts = await this.withTimeout(
+      this.discoverWebSearchContacts(company, pages, websiteContacts),
+      PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
+      [] as PublicContactCandidate[]
+    );
+    const mergedContacts = this.mergeDiscoveredContacts(websiteContacts, webSearchContacts);
+    const enrichedContacts = await this.withTimeout(
+      this.mapWithSearchInterval(
+        mergedContacts.map((contact) => async () => this.enrichContactWithLinkedInUrl(company, contact)),
+        1
+      ),
+      PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS,
+      mergedContacts
+    );
+
+    const dedupedContacts = this.collapseDuplicateMailboxContacts(enrichedContacts)
+      .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""))
+      .filter((candidate) => !this.isLowConfidenceWebsiteNamedContact(candidate));
+    const contactsForSelection = dedupedContacts;
+
+    const selectedEmployees = await this.selectRelevantEmployeeContacts(company, contactsForSelection);
+    if (selectedEmployees.length > 0) {
+      return this.composeFinalPublicContacts(selectedEmployees, contactsForSelection);
+    }
+
+    const namedFallbackContacts = contactsForSelection
+      .filter((contact) => this.isNamedFallbackContact(contact))
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
+      .slice(0, 4);
+    if (namedFallbackContacts.length > 0) {
+      return namedFallbackContacts;
+    }
+
+    return contactsForSelection
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
+      .slice(0, 4);
+  }
+
+  private async extractWebsiteContactsFromPages(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
+    pages: Array<{ url: string; html: string }>
+  ): Promise<PublicContactCandidate[]> {
+    if (!company.domain) {
+      return [];
+    }
+
     const rootUrl = this.normalizeCompanyUrl(company.domain);
     const allowedEmailDomains = this.buildAllowedEmailDomains(rootUrl);
-    const pages = await this.collectCandidatePages(rootUrl);
     const candidates = new Map<string, PublicContactCandidate>();
     const namedWebsiteContacts: PublicContactCandidate[] = [];
 
@@ -956,40 +1052,122 @@ export class HubSpotClient {
       [...candidates.values()].filter((candidate) => !this.isLowValueMailbox(candidate.email ?? "")),
       namedWebsiteContacts
     );
-    const webSearchContacts = await this.withTimeout(
-      this.discoverWebSearchContacts(company, pages, websiteContacts),
-      PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
-      [] as PublicContactCandidate[]
-    );
-    const mergedContacts = this.mergeDiscoveredContacts(websiteContacts, webSearchContacts);
-    const enrichedContacts = await this.withTimeout(
-      this.mapWithSearchInterval(
-        mergedContacts.map((contact) => async () => this.enrichContactWithLinkedInUrl(company, contact)),
-        1
-      ),
-      PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS,
-      mergedContacts
-    );
+    const officialWebsiteSearchContacts = websiteContacts.some((contact) => Boolean(contact.email || contact.phone))
+      ? []
+      : await this.discoverOfficialWebsiteSearchContacts(company);
 
-    const dedupedContacts = this.collapseDuplicateMailboxContacts(enrichedContacts)
+    return this.mergeDiscoveredContacts(websiteContacts, officialWebsiteSearchContacts);
+  }
+
+  private buildTimeoutFallbackPublicContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
+    const dedupedContacts = this.collapseDuplicateMailboxContacts(contacts)
       .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""))
       .filter((candidate) => !this.isLowConfidenceWebsiteNamedContact(candidate));
-
-    const selectedEmployees = await this.selectRelevantEmployeeContacts(company, dedupedContacts);
-    if (selectedEmployees.length > 0) {
-      return selectedEmployees;
-    }
-
+    const websiteFallbackContacts = this.selectReachableWebsiteFallbackContacts(dedupedContacts);
     const namedFallbackContacts = dedupedContacts
       .filter((contact) => this.isNamedFallbackContact(contact))
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
-      .slice(0, 4);
-    if (namedFallbackContacts.length > 0) {
-      return namedFallbackContacts;
+      .slice(0, Math.max(0, 4 - websiteFallbackContacts.length));
+
+    if (namedFallbackContacts.length > 0 || websiteFallbackContacts.length > 0) {
+      return this.mergeDiscoveredContacts(namedFallbackContacts, websiteFallbackContacts).slice(0, 4);
     }
 
     return dedupedContacts
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
+      .slice(0, 4);
+  }
+
+  private buildWebsitePageDebugEntries(
+    company: Pick<PreCategorizedCompany, "domain">,
+    pages: Array<{ url: string; html: string }>
+  ): PublicContactDebugResult["websitePages"] {
+    if (!company.domain) {
+      return [];
+    }
+
+    const allowedDomains = this.buildAllowedEmailDomains(this.normalizeCompanyUrl(company.domain));
+    return pages.map((page) => {
+      const emails = this.extractEmails(page.html, allowedDomains);
+      const phones = this.extractPhones(page.html);
+      const primaryPhone = phones[0];
+
+      return {
+        url: page.url,
+        evidenceSnippet: this.buildWebsiteEvidenceSnippet(page.url, page.html),
+        emails,
+        phones,
+        linkedInProfileUrl: this.extractLinkedInProfileUrlFromPage(page.html),
+        namedContacts: this.extractNamedContactsFromPage(page.url, page.html, primaryPhone, emails)
+      };
+    });
+  }
+
+  private selectReachableWebsiteFallbackContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
+    const genericWebsiteMailbox = contacts
+      .filter((contact) => contact.label === "public_generic_mailbox" && Boolean(contact.email) && Boolean(contact.phone || contact.sourceUrl))
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))[0];
+    if (genericWebsiteMailbox) {
+      return [genericWebsiteMailbox];
+    }
+
+    const directWebsiteContact = contacts
+      .filter((contact) => ["public_named_mailbox", "website_named_contact"].includes(contact.label))
+      .filter((contact) => Boolean(contact.email || contact.phone))
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))[0];
+    return directWebsiteContact ? [directWebsiteContact] : [];
+  }
+
+  private async discoverOfficialWebsiteSearchContacts(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">
+  ): Promise<PublicContactCandidate[]> {
+    const contactInfo = await this.openAIWebSearchClient.findCompanyContactInfo(company);
+    if (!contactInfo) {
+      return [];
+    }
+
+    const sourceUrl = contactInfo.urls[0] || company.domain || company.name;
+    const primaryPhone = contactInfo.phones[0];
+    const emailContacts = contactInfo.emails.map<PublicContactCandidate>((email) => ({
+      email,
+      phone: primaryPhone,
+      sourceUrl,
+      label: this.isGenericMailbox(email) ? "public_generic_mailbox" : "public_named_mailbox",
+      jobTitle: this.isGenericMailbox(email) ? "General contact" : "Public contact",
+      ...(!this.isGenericMailbox(email) ? this.inferNameFromEmail(email) : {})
+    }));
+
+    if (emailContacts.length > 0) {
+      return emailContacts;
+    }
+
+    return primaryPhone
+      ? [{
+          phone: primaryPhone,
+          sourceUrl,
+          label: "public_generic_mailbox",
+          jobTitle: "General contact"
+        }]
+      : [];
+  }
+
+  private composeFinalPublicContacts(
+    selectedEmployees: PublicContactCandidate[],
+    allContacts: PublicContactCandidate[]
+  ): PublicContactCandidate[] {
+    const websiteFallbackContacts = this.selectReachableWebsiteFallbackContacts(allContacts)
+      .filter((contact) => !selectedEmployees.some((existing) => this.getPublicContactIdentity(existing) === this.getPublicContactIdentity(contact)))
+      .slice(0, 1);
+    const supplementalLinkedInContacts = this.dedupeNamedEmployeeContacts(allContacts)
+      .filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl))
+      .filter((contact) => !selectedEmployees.some((existing) => this.getPublicContactIdentity(existing) === this.getPublicContactIdentity(contact)))
+      .filter((contact) => !this.isExcludedContact(contact))
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left));
+    const prioritizedEmployees = this.mergeDiscoveredContacts(selectedEmployees, supplementalLinkedInContacts)
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
+      .slice(0, Math.max(0, 4 - websiteFallbackContacts.length));
+
+    return this.mergeDiscoveredContacts(prioritizedEmployees, websiteFallbackContacts)
       .slice(0, 4);
   }
 
@@ -1042,7 +1220,7 @@ export class HubSpotClient {
     const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 4);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => this.searchBingResults(query, 5)),
-      1
+      PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
     );
     const hits = hitGroups.flat();
     const relevantHits = hits.filter((hit) =>
@@ -1062,7 +1240,8 @@ export class HubSpotClient {
       searchEvidence ? `Web search evidence:\n${searchEvidence}` : undefined
     ].filter(Boolean).join("\n\n");
     const strongHeuristicContacts = heuristicContacts.filter((contact) => this.isNamedEmployeeContact(contact));
-    const foundryContacts = evidence.trim() && strongHeuristicContacts.length < 4
+    const hasKnownWebsiteReachableContact = knownContacts.some((contact) => Boolean(contact.email || contact.phone));
+    const foundryContacts = evidence.trim() && (strongHeuristicContacts.length < 4 || !hasKnownWebsiteReachableContact)
       ? await this.foundryAgentsClient.discoverPublicContacts(company, evidence, false)
       : [];
     const mergedContacts = this.mergeDiscoveredContacts(foundryContacts, heuristicContacts);
@@ -1328,6 +1507,23 @@ export class HubSpotClient {
   }
 
   private async searchBingResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
+    const cacheKey = `${query.trim().toLowerCase()}::${maxResults}`;
+    const cachedResult = this.searchResultCache.get(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
+    const searchPromise = this.executeSearchBingResults(query, maxResults);
+    this.searchResultCache.set(cacheKey, searchPromise);
+    if (this.searchResultCache.size > 128) {
+      this.searchResultCache.clear();
+      this.searchResultCache.set(cacheKey, searchPromise);
+    }
+
+    return searchPromise;
+  }
+
+  private async executeSearchBingResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
     const normalizedHits = (hits: WebSearchHit[]): WebSearchHit[] => {
       const seenUrls = new Set<string>();
       const normalizedResults: WebSearchHit[] = [];
@@ -1420,11 +1616,7 @@ export class HubSpotClient {
 
   private async searchDuckDuckGoBrowserResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
     try {
-      const { chromium } = await import("playwright");
-      const browser = await chromium.launch({
-        headless: true,
-        channel: "chromium"
-      });
+      const browser = await this.launchBrowserForWebTasks();
 
       try {
         const page = await browser.newPage({
@@ -1811,6 +2003,30 @@ export class HubSpotClient {
 
     const hasName = Boolean(contact.firstName && contact.lastName);
     if (!hasName) {
+      return true;
+    }
+
+    const normalizedName = `${contact.firstName ?? ""} ${contact.lastName ?? ""}`
+      .toLowerCase()
+      .replace(/[^a-z\s]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (
+      this.isClearlyNonPersonLine(normalizedName)
+      || normalizedName.split(" ").some((token) => [
+        "ai",
+        "cloud",
+        "data",
+        "analytics",
+        "semantic",
+        "model",
+        "document",
+        "intelligence",
+        "computer",
+        "vision",
+        "consulting"
+      ].includes(token))
+    ) {
       return true;
     }
 
@@ -2240,7 +2456,14 @@ export class HubSpotClient {
 
   private async collectCandidatePages(rootUrl: string): Promise<Array<{ url: string; html: string }>> {
     const visited = new Set<string>();
-    const queue = [rootUrl];
+    const crawlProfile = await this.openAIWebSearchClient.crawlCompanyWebsite(rootUrl);
+    const allowedEmailDomains = this.buildAllowedEmailDomains(rootUrl);
+    const queue = Array.from(new Set([
+      rootUrl,
+      crawlProfile?.landingUrl,
+      ...this.buildLikelyContactPageUrls(rootUrl),
+      ...(crawlProfile?.relevantUrls ?? [])
+    ].filter((value): value is string => Boolean(value))));
     const pages: Array<{ url: string; html: string }> = [];
 
     while (queue.length > 0 && pages.length < 10) {
@@ -2250,7 +2473,17 @@ export class HubSpotClient {
       }
 
       visited.add(url);
-      const html = await this.fetchHtml(url);
+      let html = await this.fetchHtml(url);
+      if (
+        this.isLikelyContactPageUrl(rootUrl, url)
+        && (!html || (this.extractEmails(html, allowedEmailDomains).length === 0 && this.extractPhones(html).length === 0))
+      ) {
+        const officialHtml = await this.openAIWebSearchClient.fetchOfficialWebsitePageHtml(url);
+        if (officialHtml) {
+          html = officialHtml;
+        }
+      }
+
       if (!html) {
         continue;
       }
@@ -2265,6 +2498,34 @@ export class HubSpotClient {
     }
 
     return pages;
+  }
+
+  private isLikelyContactPageUrl(rootUrl: string, candidateUrl: string): boolean {
+    try {
+      const root = new URL(rootUrl);
+      const candidate = new URL(candidateUrl, root);
+      const haystack = `${candidate.pathname} ${candidate.search}`.toLowerCase();
+      return HIGH_PRIORITY_PAGE_PATTERNS.some((pattern) => haystack.includes(pattern));
+    } catch {
+      return false;
+    }
+  }
+
+  private buildLikelyContactPageUrls(rootUrl: string): string[] {
+    try {
+      const root = new URL(rootUrl);
+      const candidates = [
+        "kontakt/",
+        "impressum/",
+        "ansprechpartner/",
+        "team/",
+        "ueber-uns/"
+      ];
+
+      return candidates.map((path) => new URL(path, root).toString());
+    } catch {
+      return [];
+    }
   }
 
   private extractRelevantLinks(rootUrl: string, html: string): string[] {
@@ -2611,16 +2872,116 @@ export class HubSpotClient {
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; LeadAgent/1.0; +https://leadagent-production-4555.up.railway.app)"
         },
-        redirect: "follow"
+        redirect: "follow",
+        signal: AbortSignal.timeout(10000)
       });
 
-      if (!response.ok) {
-        return null;
+      const html = await response.text();
+      if (!this.shouldRetryHtmlFetchInBrowser(response.status, html)) {
+        return response.ok ? html : null;
       }
 
-      return response.text();
+      console.warn("HubSpotClient.fetchHtml retrying in browser", {
+        url,
+        status: response.status,
+        responseLength: html.trim().length
+      });
     } catch {
+      // Fall through to browser fetch below.
+    }
+
+    return this.fetchHtmlWithBrowser(url);
+  }
+
+  private shouldRetryHtmlFetchInBrowser(status: number, html: string): boolean {
+    if (status === 401 || status === 403 || status === 408 || status === 429 || status >= 500) {
+      return true;
+    }
+
+    if (status >= 400) {
+      return false;
+    }
+
+    const normalizedHtml = html.trim();
+    if (/(mailto:|tel:)/i.test(normalizedHtml)) {
+      return false;
+    }
+
+    if (normalizedHtml.length < 250) {
+      return true;
+    }
+
+    const challengeSignals = [
+      /403\s*-\s*forbidden/i,
+      /access to this page is forbidden/i,
+      /please verify you are human/i,
+      /verify you are human/i,
+      /checking if the site connection is secure/i,
+      /enable javascript and cookies to continue/i,
+      /cf-chl|__cf_chl/i,
+      /cloudflare/i,
+      /turnstile/i,
+      /attention required/i,
+      /one more step/i
+    ];
+
+    const embeddedCaptchaSignal = /g-recaptcha|hcaptcha/i;
+
+    if (challengeSignals.some((signal) => signal.test(normalizedHtml))) {
+      return true;
+    }
+
+    if (embeddedCaptchaSignal.test(normalizedHtml) && normalizedHtml.length < 5000) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private async fetchHtmlWithBrowser(url: string): Promise<string | null> {
+    try {
+      const browser = await this.launchBrowserForWebTasks();
+
+      try {
+        const page = await browser.newPage({
+          locale: "de-DE",
+          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
+        });
+
+        await page.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: WEBSITE_BROWSER_FETCH_TIMEOUT_MS
+        });
+        await page.waitForLoadState("networkidle", {
+          timeout: 5000
+        }).catch(() => undefined);
+
+        const html = await page.content();
+        return html.trim().length > 0 ? html : null;
+      } finally {
+        await browser.close().catch(() => undefined);
+      }
+    } catch (error) {
+      console.warn("HubSpotClient.fetchHtmlWithBrowser failed", {
+        url,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return null;
+    }
+  }
+
+  private async launchBrowserForWebTasks() {
+    const { chromium } = await import("playwright");
+
+    try {
+      return await chromium.launch({
+        headless: true,
+        channel: "chromium"
+      });
+    } catch {
+      return chromium.launch({
+        headless: true
+      });
     }
   }
 
