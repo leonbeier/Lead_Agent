@@ -18,7 +18,7 @@ COPY README.md ./README.md
 COPY AGENTS.md ./AGENTS.md
 COPY tests ./tests
 
-RUN npx tsc -p tsconfig.json
+RUN npm test && npx tsc -p tsconfig.json
 
 EXPOSE 3000
 
