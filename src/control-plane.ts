@@ -528,8 +528,30 @@ async function ensureFile<T>(filePath: string, defaultValue: T): Promise<void> {
   }
 }
 
+async function recoverCorruptedJsonFile<T>(filePath: string, defaultValue: T): Promise<T> {
+  const corruptedContent = await fs.readFile(filePath, "utf8");
+  const backupPath = `${filePath}.corrupt-${Date.now()}`;
+
+  await fs.writeFile(backupPath, corruptedContent, "utf8");
+  await writeJsonFile(filePath, defaultValue);
+
+  return defaultValue;
+}
+
 async function readJsonFile<T>(filePath: string): Promise<T> {
   return JSON.parse(await fs.readFile(filePath, "utf8")) as T;
+}
+
+export async function readJsonFileWithRecovery<T>(filePath: string, defaultValue: T): Promise<T> {
+  try {
+    return await readJsonFile<T>(filePath);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return recoverCorruptedJsonFile(filePath, defaultValue);
+    }
+
+    throw error;
+  }
 }
 
 async function writeJsonFile<T>(filePath: string, value: T): Promise<void> {
@@ -743,7 +765,10 @@ export class ControlPlaneStore {
 
   async getCompanyScreeningDatabase(): Promise<CompanyScreeningDatabase> {
     await this.ensureSeedData();
-    const database = await readJsonFile<Partial<CompanyScreeningDatabase>>(companyScreeningDatabasePath);
+    const database = await readJsonFileWithRecovery<Partial<CompanyScreeningDatabase>>(
+      companyScreeningDatabasePath,
+      defaultCompanyScreeningDatabase
+    );
     return companyScreeningDatabaseSchema.parse({
       ...defaultCompanyScreeningDatabase,
       ...database,
@@ -760,7 +785,10 @@ export class ControlPlaneStore {
 
   async getTestLabExaCache(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
     await this.ensureSeedData();
-    const cache = await readJsonFile<{ queryHistory?: string[]; discoveredDomains?: string[] }>(testLabExaCachePath);
+    const cache = await readJsonFileWithRecovery<{ queryHistory?: string[]; discoveredDomains?: string[] }>(
+      testLabExaCachePath,
+      defaultTestLabExaCache
+    );
     return testLabExaCacheSchema.parse({
       ...defaultTestLabExaCache,
       ...cache
@@ -782,7 +810,7 @@ export class ControlPlaneStore {
 
   async getLiveExaCache(): Promise<LiveExaCache> {
     await this.ensureSeedData();
-    const cache = await readJsonFile<Partial<LiveExaCache>>(liveExaCachePath);
+    const cache = await readJsonFileWithRecovery<Partial<LiveExaCache>>(liveExaCachePath, defaultLiveExaCache);
     return liveExaCacheSchema.parse({
       ...defaultLiveExaCache,
       ...cache
