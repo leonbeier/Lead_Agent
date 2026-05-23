@@ -731,10 +731,11 @@ export class LeadWorkerRunService {
         state.hubspotStatus = "running";
         emitProgress();
         try {
+          const companySyncKey = new URL(state.company.domain?.startsWith("http") ? state.company.domain : `https://${state.company.domain ?? state.company.name}`).hostname.replace(/^www\./i, "").toLowerCase();
           const syncResult = await this.hubSpotClient.syncQualifiedCompanies(
             [state.company],
             state.researchBrief ? [state.researchBrief] : [],
-            new Map<string, PublicContactCandidate[]>([[state.company.domain ?? state.company.name, state.contacts]]),
+            new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
             Boolean(request.dryRun || request.syncToHubSpot === false)
           );
           state.hubspotStatus = "done";

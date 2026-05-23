@@ -143,6 +143,16 @@ test("discoverCompanies preserves individual Exa website paths for downstream Az
   assert.equal(companies[1]?.domain, "https://example-integrator.de/contact");
 });
 
+test("deriveCompanyName falls back to the domain when Exa returns a marketing headline", () => {
+  const client = new ExaSearchClient();
+  const deriveCompanyName = client["deriveCompanyName"].bind(client) as (domain: string, title?: string) => string;
+
+  assert.equal(
+    deriveCompanyName("https://geott.de", "Intelligent Machine Vision for Industrial Marking ▶️ Vision / AI"),
+    "Geott"
+  );
+});
+
 test("inferCountryFromDomain does not inherit Germany from the filter for foreign evidence", () => {
   const client = new ExaSearchClient();
   const inferCountryFromDomain = client["inferCountryFromDomain"].bind(client) as (

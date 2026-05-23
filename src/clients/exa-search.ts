@@ -48,6 +48,7 @@ const EXA_MAX_RETRIES = 3;
 const EXA_QUERY_CONCURRENCY = 3;
 const EXA_REQUEST_TIMEOUT_MS = 30_000;
 const GENERIC_COMPANY_NAMES = new Set(["home", "homepage", "startseite", "services", "solutions", "products", "company"]);
+const COMPANY_NAME_STOP_WORDS = new Set(["ai", "the", "and", "for", "with", "vision", "industrial", "automation", "machine", "marking", "robotics", "solutions", "systems", "services"]);
 export class ExaSearchClient {
   private static requestChain: Promise<void> = Promise.resolve();
 
@@ -541,22 +542,48 @@ export class ExaSearchClient {
   }
 
   private deriveCompanyName(domain: string, title?: string): string {
+    const hostname = new URL(domain).hostname.replace(/^www\./i, "");
+    const base = hostname.split(".")[0] ?? hostname;
     const titleCandidate = title
       ?.replace(/\s*[|\-].*$/, "")
       .replace(/\b(home|homepage|startseite)\b/gi, "")
       .trim();
 
-    if (titleCandidate && !GENERIC_COMPANY_NAMES.has(titleCandidate.toLowerCase())) {
+    if (titleCandidate && !GENERIC_COMPANY_NAMES.has(titleCandidate.toLowerCase()) && this.looksLikeCompanyName(titleCandidate, base)) {
       return titleCandidate;
     }
 
-    const hostname = new URL(domain).hostname.replace(/^www\./i, "");
-    const base = hostname.split(".")[0] ?? hostname;
     return base
       .split(/[-_]+/)
       .filter(Boolean)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
+  }
+
+  private looksLikeCompanyName(titleCandidate: string, domainBase: string): boolean {
+    const normalizedTitle = titleCandidate.toLowerCase();
+    if (titleCandidate.length > 60 || titleCandidate.split(/\s+/).length > 6) {
+      return false;
+    }
+
+    if (/[\/]|[▶►]|\b(?:learn more|contact us|case study|our services|our solutions)\b/i.test(titleCandidate)) {
+      return false;
+    }
+
+    const titleTokens = normalizedTitle
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3)
+      .filter((token) => !COMPANY_NAME_STOP_WORDS.has(token));
+    const domainTokens = domainBase
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3);
+
+    if (domainTokens.length > 0 && titleTokens.some((token) => domainTokens.includes(token))) {
+      return true;
+    }
+
+    return /\b(gmbh|ag|ug|kg|llc|ltd|inc|corp|company|group)\b/i.test(titleCandidate);
   }
 
   private normalizeUrl(url: string | undefined): string | undefined {

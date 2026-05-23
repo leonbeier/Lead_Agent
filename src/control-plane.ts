@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { CacheDatabaseStore } from "./cache-database";
 import {
   CATEGORY_EXECUTION_CONTEXT,
   CATEGORY_PREQUALIFICATION_CONTEXT,
@@ -50,6 +51,11 @@ const apolloSearchCursorPath = path.join(dataDirectory, "apollo-search-cursors.j
 const companyScreeningDatabasePath = path.join(dataDirectory, "company-screening-database.json");
 const testLabExaCachePath = path.join(dataDirectory, "testlab-exa-cache.json");
 const liveExaCachePath = path.join(dataDirectory, "live-exa-cache.json");
+const cacheDatabaseDirectory = process.env.LEAD_AGENT_CACHE_DIR?.trim()
+  ? path.resolve(process.env.LEAD_AGENT_CACHE_DIR.trim())
+  : path.join(dataDirectory, "cache-db");
+const liveCacheDatabasePath = path.join(cacheDatabaseDirectory, "live-run-cache.sqlite");
+const debugCacheDatabasePath = path.join(cacheDatabaseDirectory, "testlab-cache.sqlite");
 
 const openCrawlerTuningSchema = z.object({
   probeCount: z.number().int().min(1).max(200).optional(),
@@ -397,6 +403,7 @@ const liveExaCacheSchema = z.object({
 });
 
 type ScreeningCacheScope = "all" | "live" | "debug";
+type CacheDatabaseScope = "live" | "debug";
 
 const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 20,
@@ -559,6 +566,9 @@ async function writeJsonFile<T>(filePath: string, value: T): Promise<void> {
 }
 
 export class ControlPlaneStore {
+  private readonly liveCacheDatabase = new CacheDatabaseStore(liveCacheDatabasePath);
+  private readonly debugCacheDatabase = new CacheDatabaseStore(debugCacheDatabasePath);
+
   private normalizeLegacyCategory(category: string | undefined): string | undefined {
     if (category === "integrator_vision_ai_consulting_freelancer") {
       return "integrator_vision_ai_consulting";
@@ -764,11 +774,15 @@ export class ControlPlaneStore {
   }
 
   async getCompanyScreeningDatabase(): Promise<CompanyScreeningDatabase> {
-    await this.ensureSeedData();
-    const database = await readJsonFileWithRecovery<Partial<CompanyScreeningDatabase>>(
-      companyScreeningDatabasePath,
-      defaultCompanyScreeningDatabase
-    );
+    const [liveDatabase, debugDatabase] = await Promise.all([
+      this.readScreeningDatabaseForScope("live"),
+      this.readScreeningDatabaseForScope("debug")
+    ]);
+
+    const database = {
+      records: [...liveDatabase.records, ...debugDatabase.records]
+    };
+
     return companyScreeningDatabaseSchema.parse({
       ...defaultCompanyScreeningDatabase,
       ...database,
@@ -777,18 +791,18 @@ export class ControlPlaneStore {
   }
 
   async writeCompanyScreeningDatabase(database: CompanyScreeningDatabase): Promise<void> {
-    await this.ensureSeedData();
-    await writeJsonFile(companyScreeningDatabasePath, {
-      records: this.normalizeCompanyScreeningRecords(database.records)
-    });
+    const normalizedRecords = this.normalizeCompanyScreeningRecords(database.records);
+    const liveRecords = normalizedRecords.filter((record) => !this.isDebugScreeningRecord(record.sourceFilter));
+    const debugRecords = normalizedRecords.filter((record) => this.isDebugScreeningRecord(record.sourceFilter));
+
+    await Promise.all([
+      this.writeScreeningDatabaseForScope("live", { records: liveRecords }),
+      this.writeScreeningDatabaseForScope("debug", { records: debugRecords })
+    ]);
   }
 
   async getTestLabExaCache(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
-    await this.ensureSeedData();
-    const cache = await readJsonFileWithRecovery<{ queryHistory?: string[]; discoveredDomains?: string[] }>(
-      testLabExaCachePath,
-      defaultTestLabExaCache
-    );
+    const cache = await this.readTestLabExaCacheFromDatabase();
     return testLabExaCacheSchema.parse({
       ...defaultTestLabExaCache,
       ...cache
@@ -796,8 +810,7 @@ export class ControlPlaneStore {
   }
 
   async writeTestLabExaCache(cache: { queryHistory: string[]; discoveredDomains: string[] }): Promise<void> {
-    await this.ensureSeedData();
-    await writeJsonFile(testLabExaCachePath, testLabExaCacheSchema.parse({
+    this.debugCacheDatabase.writeTestLabExaCache(testLabExaCacheSchema.parse({
       queryHistory: Array.from(new Set(cache.queryHistory)).slice(0, 500),
       discoveredDomains: Array.from(new Set(cache.discoveredDomains)).slice(0, 5000)
     }));
@@ -809,8 +822,7 @@ export class ControlPlaneStore {
   }
 
   async getLiveExaCache(): Promise<LiveExaCache> {
-    await this.ensureSeedData();
-    const cache = await readJsonFileWithRecovery<Partial<LiveExaCache>>(liveExaCachePath, defaultLiveExaCache);
+    const cache = await this.readLiveExaCacheFromDatabase();
     return liveExaCacheSchema.parse({
       ...defaultLiveExaCache,
       ...cache
@@ -818,7 +830,6 @@ export class ControlPlaneStore {
   }
 
   async writeLiveExaCache(cache: LiveExaCache): Promise<void> {
-    await this.ensureSeedData();
     const entriesByDomain = new Map<string, RawExaHistoryEntry>();
     for (const entry of cache.entries) {
       const normalizedDomain = entry.domain.trim().toLowerCase();
@@ -835,7 +846,7 @@ export class ControlPlaneStore {
     }
 
     const entries = Array.from(entriesByDomain.values()).slice(0, 5000);
-    await writeJsonFile(liveExaCachePath, liveExaCacheSchema.parse({
+    this.liveCacheDatabase.writeLiveExaCache(liveExaCacheSchema.parse({
       entries,
       discoveredDomains: entries.map((entry) => entry.domain)
     }));
@@ -1019,6 +1030,84 @@ export class ControlPlaneStore {
   private isDebugScreeningRecord(sourceFilter?: string): boolean {
     const normalized = sourceFilter?.trim().toLowerCase() ?? "";
     return normalized.includes("manual-debug-input") || normalized.includes("debug-stage=") || normalized.includes("[debug");
+  }
+
+  private getCacheDatabase(scope: CacheDatabaseScope): CacheDatabaseStore {
+    return scope === "live" ? this.liveCacheDatabase : this.debugCacheDatabase;
+  }
+
+  private async ensureScreeningMigration(scope: CacheDatabaseScope): Promise<void> {
+    const cacheDatabase = this.getCacheDatabase(scope);
+    if (cacheDatabase.getMetadata("screeningMigrated") === "1") {
+      return;
+    }
+
+    await this.ensureSeedData();
+    const database = await readJsonFileWithRecovery<Partial<CompanyScreeningDatabase>>(
+      companyScreeningDatabasePath,
+      defaultCompanyScreeningDatabase
+    );
+    const records = (database.records ?? [])
+      .map((record) => this.normalizeCompanyScreeningRecord(record))
+      .filter((record) => scope === "debug"
+        ? this.isDebugScreeningRecord(record.sourceFilter)
+        : !this.isDebugScreeningRecord(record.sourceFilter));
+
+    cacheDatabase.writeScreeningDatabase({
+      records: this.normalizeCompanyScreeningRecords(records)
+    });
+    cacheDatabase.setMetadata("screeningMigrated", "1");
+  }
+
+  private async ensureExaMigration(scope: CacheDatabaseScope): Promise<void> {
+    const cacheDatabase = this.getCacheDatabase(scope);
+    const metadataKey = scope === "live" ? "liveExaMigrated" : "testLabExaMigrated";
+    if (cacheDatabase.getMetadata(metadataKey) === "1") {
+      return;
+    }
+
+    await this.ensureSeedData();
+
+    if (scope === "live") {
+      const cache = await readJsonFileWithRecovery<Partial<LiveExaCache>>(liveExaCachePath, defaultLiveExaCache);
+      cacheDatabase.writeLiveExaCache(liveExaCacheSchema.parse({
+        ...defaultLiveExaCache,
+        ...cache
+      }));
+    } else {
+      const cache = await readJsonFileWithRecovery<{ queryHistory?: string[]; discoveredDomains?: string[] }>(
+        testLabExaCachePath,
+        defaultTestLabExaCache
+      );
+      cacheDatabase.writeTestLabExaCache(testLabExaCacheSchema.parse({
+        ...defaultTestLabExaCache,
+        ...cache
+      }));
+    }
+
+    cacheDatabase.setMetadata(metadataKey, "1");
+  }
+
+  private async readScreeningDatabaseForScope(scope: CacheDatabaseScope): Promise<CompanyScreeningDatabase> {
+    await this.ensureScreeningMigration(scope);
+    return this.getCacheDatabase(scope).readScreeningDatabase();
+  }
+
+  private async writeScreeningDatabaseForScope(scope: CacheDatabaseScope, database: CompanyScreeningDatabase): Promise<void> {
+    await this.ensureScreeningMigration(scope);
+    this.getCacheDatabase(scope).writeScreeningDatabase({
+      records: this.normalizeCompanyScreeningRecords(database.records)
+    });
+  }
+
+  private async readLiveExaCacheFromDatabase(): Promise<LiveExaCache> {
+    await this.ensureExaMigration("live");
+    return this.liveCacheDatabase.readLiveExaCache();
+  }
+
+  private async readTestLabExaCacheFromDatabase(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
+    await this.ensureExaMigration("debug");
+    return this.debugCacheDatabase.readTestLabExaCache();
   }
 
   async writeLatestLeadRun(record: LatestLeadRunRecord): Promise<void> {

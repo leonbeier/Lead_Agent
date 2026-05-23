@@ -280,3 +280,79 @@ test("worker run times out a stuck contact task and still finishes the run", asy
   assert.deepEqual(syncedCompanies, ["Timeout Vision"]);
   assert.equal(result.hubspotSync.companySyncedCount, 1);
 });
+
+test("worker run passes selected contacts to HubSpot sync under the normalized company key", async () => {
+  let syncedContactCount = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getCompanyScreeningDatabase: async () => ({
+        records: [{
+          companyName: "GeoTT",
+          normalizedName: "geott",
+          domain: "https://geott.de",
+          normalizedDomain: "geott.de",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.95,
+          rationale: "Already screened live",
+          sourceFilter: "live-filter"
+        }]
+      }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      createManualCompanyForWebsite: (website: string, filter: ApolloOrganizationFilter) => ({
+        name: "GeoTT",
+        domain: website,
+        shortDescription: "GeoTT company",
+        sourceFilter: filter.name
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async () => ({
+        selectedContacts: [{
+          firstName: "Nicolas",
+          lastName: "March",
+          linkedinUrl: "https://de.linkedin.com/in/nicolas-march-ai4robotics",
+          sourceUrl: "https://de.linkedin.com/in/nicolas-march-ai4robotics",
+          label: "linkedin_profile"
+        }]
+      })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async (_companies: Array<{ name: string }>, _briefs: unknown[], contactsByCompany: Map<string, PublicContactCandidate[]>) => {
+        syncedContactCount = contactsByCompany.get("geott.de")?.length ?? 0;
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 2,
+          companySyncedCount: 1,
+          contactSyncedCount: syncedContactCount
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async () => []
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.equal(syncedContactCount, 1);
+  assert.equal(result.hubspotSync.contactSyncedCount, 1);
+});
