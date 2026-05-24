@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LeadWorkerRunService } from "../../src/agents/lead-worker-run";
+import { AsyncQueue, LeadWorkerRunService } from "../../src/agents/lead-worker-run";
 import type { ApolloOrganizationFilter, CompanyScreeningDatabase, LeadCategory, PublicContactCandidate, ResearchBrief } from "../../src/types";
 
 function createFilter(category: LeadCategory): ApolloOrganizationFilter {
@@ -114,7 +114,7 @@ test("worker run consumes matching live screening seeds before starting Exa", as
     companySearchMode: "exa_search",
     syncToHubSpot: true,
     dryRun: false,
-    maxRuntimeMs: 60_000,
+    maxRuntimeMs: 200,
     aiPrefilterConcurrency: 1,
     outreachPrepConcurrency: 1,
     contactSearchConcurrency: 1
@@ -212,11 +212,111 @@ test("worker run promotes standby AI matches when the active company fails downs
   assert.equal(result.shortlistedCompanies.at(-1)?.name, "Second Vision");
 });
 
-test("worker run times out a stuck contact task and still finishes the run", async () => {
+test("worker run does not promote standby companies after target is reached", async () => {
+  const researchedCompanies: string[] = [];
   const syncedCompanies: string[] = [];
+  const progressSnapshots: Array<{ foundCandidates?: number; funnel?: { afterHubSpotDedup?: number; syncedToHubSpot?: number } }> = [];
+  let exaCalls = 0;
 
   const service = new LeadWorkerRunService({
-    contactTaskTimeoutMs: 25,
+    controlPlaneStore: {
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      buildResearchBriefForExecution: async (company: { name: string }) => {
+        researchedCompanies.push(company.name);
+        return createResearchBrief(company.name);
+      },
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncedCompanies.push(companies[0].name);
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: 1,
+          contactSyncedCount: 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        return exaCalls > 1
+          ? []
+          : [
+              {
+                name: "First Vision",
+                domain: "first-vision.example.com",
+                shortDescription: "first",
+                sourceFilter: "exa-filter"
+              },
+              {
+                name: "Second Vision",
+                domain: "second-vision.example.com",
+                shortDescription: "second",
+                sourceFilter: "exa-filter"
+              }
+            ];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  }, {
+    onProgress: (progress) => {
+      progressSnapshots.push({
+        foundCandidates: progress.foundCandidates,
+        funnel: progress.funnel
+          ? {
+              afterHubSpotDedup: progress.funnel.afterHubSpotDedup,
+              syncedToHubSpot: progress.funnel.syncedToHubSpot
+            }
+          : undefined
+      });
+    }
+  });
+
+  assert.deepEqual(syncedCompanies, ["First Vision"]);
+  assert.deepEqual(researchedCompanies, ["First Vision"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  assert.equal(result.shortlistedCompanies.length, 1);
+  assert.equal(result.shortlistedCompanies[0]?.name, "First Vision");
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.foundCandidates === 2));
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.funnel?.afterHubSpotDedup === 2 && snapshot.funnel?.syncedToHubSpot === 1));
+});
+
+test("worker run drops contact-failed companies instead of syncing them to HubSpot", async () => {
+  const syncedCompanies: string[] = [];
+  const abortController = new AbortController();
+
+  const service = new LeadWorkerRunService({
     controlPlaneStore: {
       getCompanyScreeningDatabase: async () => ({
         records: [{
@@ -244,7 +344,9 @@ test("worker run times out a stuck contact task and still finishes the run", asy
         sourceFilter: filter.name
       }),
       buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
-      discoverContactsForExecution: async () => new Promise(() => undefined)
+      discoverContactsForExecution: async () => {
+        throw new Error("Contact worker timed out after 150000ms");
+      }
     } as any,
     hubSpotClient: {
       syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
@@ -265,20 +367,41 @@ test("worker run times out a stuck contact task and still finishes the run", asy
     } as any
   });
 
+  const abortTimer = setTimeout(() => abortController.abort(), 50);
+
   const result = await service.run({
     targetLeadCount: 1,
     targetCategories: ["integrator_vision_industrial_ai"],
     companySearchMode: "exa_search",
     syncToHubSpot: true,
     dryRun: false,
-    maxRuntimeMs: 60_000,
+    maxRuntimeMs: 1_000,
     aiPrefilterConcurrency: 1,
     outreachPrepConcurrency: 1,
     contactSearchConcurrency: 1
+  }, {
+    signal: abortController.signal
   });
 
-  assert.deepEqual(syncedCompanies, ["Timeout Vision"]);
-  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  clearTimeout(abortTimer);
+
+  assert.deepEqual(syncedCompanies, []);
+  assert.equal(result.hubspotSync.companySyncedCount, 0);
+  assert.equal(result.shortlistedCompanies.length, 0);
+});
+
+test("AsyncQueue clear removes queued items before close", async () => {
+  const queue = new AsyncQueue<number>();
+
+  queue.enqueue(1);
+  queue.enqueue(2);
+  assert.equal(queue.size, 2);
+
+  queue.clear();
+  queue.close();
+
+  assert.equal(queue.size, 0);
+  assert.equal(await queue.dequeue(), undefined);
 });
 
 test("worker run passes selected contacts to HubSpot sync under the normalized company key", async () => {

@@ -104,7 +104,7 @@ interface LeadWorkerRunDependencies {
   contactTaskTimeoutMs?: number;
 }
 
-class AsyncQueue<T> {
+export class AsyncQueue<T> {
   private readonly items: T[] = [];
   private readonly waiters: Array<(item: T | undefined) => void> = [];
   private closed = false;
@@ -144,6 +144,10 @@ class AsyncQueue<T> {
     }
   }
 
+  clear(): void {
+    this.items.length = 0;
+  }
+
   get size(): number {
     return this.items.length;
   }
@@ -155,6 +159,9 @@ const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 150_000;
+const MAX_WORKER_AI_CONCURRENCY = 4;
+const MAX_WORKER_OUTREACH_CONCURRENCY = 4;
+const MAX_WORKER_CONTACT_CONCURRENCY = 4;
 
 function createEmptyCategoryBreakdown(): Record<LeadCategory, number> {
   return {
@@ -282,9 +289,9 @@ export class LeadWorkerRunService {
 
     const targetLeadCount = Math.max(1, request.targetLeadCount ?? 1);
     const deadlineMs = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? 10 * 60_000);
-    const aiConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? 2);
-    const outreachConcurrency = Math.max(1, request.outreachPrepConcurrency ?? 6);
-    const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 8);
+    const aiConcurrency = Math.min(MAX_WORKER_AI_CONCURRENCY, Math.max(1, request.aiPrefilterConcurrency ?? 2));
+    const outreachConcurrency = Math.min(MAX_WORKER_OUTREACH_CONCURRENCY, Math.max(1, request.outreachPrepConcurrency ?? 6));
+    const contactConcurrency = Math.min(MAX_WORKER_CONTACT_CONCURRENCY, Math.max(1, request.contactSearchConcurrency ?? 8));
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 1);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const filters = this.leadPipelineAgent.buildDirectExaFiltersForExecution(targetCategories, request.market);
@@ -302,7 +309,8 @@ export class LeadWorkerRunService {
     const searchAggregates = new Map<string, SearchAggregate>();
     const recentDebugMessages: string[] = [];
     const seenCompanyKeys = new Set<string>();
-    const excludedDomains = new Set<string>((liveExaCache?.discoveredDomains ?? []).map((domain) => normalizeDomain(domain)).filter((value): value is string => Boolean(value)));
+    const historicalExaExcludedDomains = new Set<string>((liveExaCache?.discoveredDomains ?? []).map((domain) => normalizeDomain(domain)).filter((value): value is string => Boolean(value)));
+    const currentRunExcludedDomains = new Set<string>();
     const metrics: WorkerRunMetrics = {
       exaRequests: 0,
       exaRawFound: 0,
@@ -352,12 +360,20 @@ export class LeadWorkerRunService {
       emitProgress();
     };
 
+    const countTotalQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed).length;
     const countHeldQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed && state.hubspotStatus !== "done").length;
     const countAssignedQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed && state.pipelineAssigned && state.hubspotStatus !== "done").length;
     const countDownstreamInFlight = () =>
       metrics.queueSizes.outreachInFlight + metrics.queueSizes.contactInFlight + metrics.queueSizes.hubspotInFlight + outreachQueue.size + contactQueue.size + hubspotQueue.size;
     const countAiPending = () => metrics.queueSizes.aiInFlight + aiQueue.size;
     const neededCompanies = () => Math.max(0, targetLeadCount - metrics.hubspotWritten - countHeldQualifiedStates() - countAiPending());
+    const hasReachedTarget = () => metrics.hubspotWritten >= targetLeadCount;
+    const shouldStopNewPipelineWork = () => stopping || hasReachedTarget();
+
+    const stopAiQueue = () => {
+      aiQueue.clear();
+      aiQueue.close();
+    };
 
     const emitProgress = () => {
       markQueueSizes();
@@ -377,12 +393,12 @@ export class LeadWorkerRunService {
         detail: recentDebugMessages[0] ?? "Worker-Run initialisiert.",
         processedFilters: metrics.exaRequests,
         totalFilters: undefined,
-        foundCandidates: countHeldQualifiedStates(),
+        foundCandidates: countTotalQualifiedStates(),
         targetLeadCount,
         funnel: {
           crawledPages: 0,
           afterCrawlerPrefilter: metrics.exaRawFound,
-          afterHubSpotDedup: countHeldQualifiedStates(),
+          afterHubSpotDedup: countTotalQualifiedStates(),
           afterAzureAICheck: metrics.aiAccepted,
           syncedToHubSpot: metrics.hubspotWritten
         },
@@ -453,6 +469,16 @@ export class LeadWorkerRunService {
 
         updateScreeningState(task);
         screeningFlushDue = true;
+
+        while (screeningQueue.size > 0) {
+          const pendingTask = await screeningQueue.dequeue();
+          if (!pendingTask) {
+            break;
+          }
+
+          updateScreeningState(pendingTask);
+        }
+
         await this.controlPlaneStore.writeCompanyScreeningDatabase(screeningState);
         screeningFlushDue = false;
       }
@@ -467,6 +493,17 @@ export class LeadWorkerRunService {
 
         if (task.type === "upsert-search") {
           searchAggregates.set(task.aggregate.id, task.aggregate);
+        }
+
+        while (historyQueue.size > 0) {
+          const pendingTask = await historyQueue.dequeue();
+          if (!pendingTask) {
+            break;
+          }
+
+          if (pendingTask.type === "upsert-search") {
+            searchAggregates.set(pendingTask.aggregate.id, pendingTask.aggregate);
+          }
         }
 
         const entries = Array.from(searchAggregates.values())
@@ -508,7 +545,7 @@ export class LeadWorkerRunService {
     };
 
     const maybePromoteStandby = () => {
-      while (standbyQualifiedStates.length > 0 && countAssignedQualifiedStates() < targetLeadCount && !stopping) {
+      while (standbyQualifiedStates.length > 0 && countAssignedQualifiedStates() < targetLeadCount && !shouldStopNewPipelineWork()) {
         const nextState = standbyQualifiedStates.shift();
         if (!nextState) {
           return;
@@ -529,6 +566,10 @@ export class LeadWorkerRunService {
     const queueQualifiedCompany = (company: PreCategorizedCompany, source: "seed" | "exa", searchId?: string) => {
       const key = buildCompanyKey(company);
       if (qualifiedStates.has(key) || standbyQualifiedStates.some((state) => state.key === key)) {
+        return;
+      }
+
+      if (shouldStopNewPipelineWork()) {
         return;
       }
 
@@ -573,7 +614,7 @@ export class LeadWorkerRunService {
         return;
       }
 
-      if (state.contactStatus !== "done" && state.contactStatus !== "failed") {
+      if (state.contactStatus !== "done") {
         return;
       }
 
@@ -705,10 +746,16 @@ export class LeadWorkerRunService {
           maybeQueueHubSpot(state);
         } catch (error) {
           state.contactStatus = "failed";
+          state.removed = true;
+          state.pipelineAssigned = false;
           metrics.contactFailed += 1;
           state.contacts = [];
-          log(`Kontakt-Worker Fehler fuer ${state.company.name}: ${error instanceof Error ? error.message : String(error)}`);
-          maybeQueueHubSpot(state);
+          log(`Kontakt-Worker Fehler, Firma entfernt: ${state.company.name}: ${error instanceof Error ? error.message : String(error)}`);
+          maybePromoteStandby();
+          screeningQueue.enqueue({
+            type: "upsert",
+            record: buildScreeningRecord(state.company)
+          });
         } finally {
           metrics.queueSizes.contactInFlight = Math.max(0, metrics.queueSizes.contactInFlight - 1);
           emitProgress();
@@ -742,6 +789,9 @@ export class LeadWorkerRunService {
           state.pipelineAssigned = false;
           state.completedAt = new Date().toISOString();
           metrics.hubspotWritten += syncResult.companySyncedCount;
+          if (hasReachedTarget()) {
+            stopping = true;
+          }
           screeningQueue.enqueue({
             type: "mark-hubspot",
             key: state.key,
@@ -822,12 +872,14 @@ export class LeadWorkerRunService {
         searchCounter += 1;
         log(`Exa-Worker startet Batch ${searchId} fuer ${filter.name}`);
 
-        const additionalExcludedDomains = Array.from(excludedDomains);
         const rawCompanies = await this.leadPipelineAgent.discoverDirectExaCompaniesForExecution(
           filter,
           targetCategories,
           exaQueryCount,
-          additionalExcludedDomains,
+          {
+            currentRunExcludedDomains: Array.from(currentRunExcludedDomains),
+            historicalExaExcludedDomains: Array.from(historicalExaExcludedDomains)
+          },
           (update) => {
             aggregate.executedQueries = update.executedQueries;
             aggregate.rawFound = update.rawCompaniesFound;
@@ -846,7 +898,7 @@ export class LeadWorkerRunService {
           uniqueRawCompanies.push(company);
           const normalizedDomain = normalizeDomain(company.domain);
           if (normalizedDomain) {
-            excludedDomains.add(normalizedDomain);
+            currentRunExcludedDomains.add(normalizedDomain);
           }
         }
 
@@ -880,7 +932,7 @@ export class LeadWorkerRunService {
       stopping = true;
       stopReason = stopReason || "manually_stopped";
       log("Stop angefordert. Neue Exa- und KI-Aufgaben werden nicht mehr gestartet.");
-      aiQueue.close();
+      stopAiQueue();
     };
     options.signal?.addEventListener("abort", abortHandler);
 
@@ -896,13 +948,13 @@ export class LeadWorkerRunService {
           stopping = true;
           stopReason = "runtime_limit_reached";
           log("Zeitlimit erreicht. Lauf schliesst nur noch bereits freigegebene Firmen sauber ab.");
-          aiQueue.close();
+          stopAiQueue();
         }
 
         if (metrics.hubspotWritten >= targetLeadCount) {
           stopReason = stopReason || "target_reached";
           stopping = true;
-          aiQueue.close();
+          stopAiQueue();
         }
 
         if (stopping && countAiPending() === 0 && countDownstreamInFlight() === 0) {
@@ -983,7 +1035,7 @@ export class LeadWorkerRunService {
       });
 
     const completedStates = Array.from(qualifiedStates.values())
-      .filter((state) => state.researchBrief)
+      .filter((state) => !state.removed && state.researchBrief)
       .sort((left, right) => (right.completedAt ?? "").localeCompare(left.completedAt ?? ""));
 
     const shortlistedCompanies = completedStates.map((state) => state.company);

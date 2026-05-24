@@ -198,3 +198,56 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.hubspotSync.companySyncedCount, 1);
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
+
+test("direct exa exclude prioritization keeps same-run and relevant exclusions inside the 1200-domain limit", () => {
+  const agent = new LeadPipelineAgent() as any;
+  const hubSpotDomains = Array.from({ length: 1300 }, (_, index) => `hubspot-${index}.example${index}.com`);
+  hubSpotDomains.push("relevant-hubspot.test", "other-hubspot.test");
+
+  const prioritized = agent.buildPrioritizedDirectExaExcludedDomains(
+    {
+      records: [
+        {
+          companyName: "Relevant HubSpot",
+          normalizedName: "relevant hubspot",
+          normalizedDomain: "relevant-hubspot.test",
+          existsInHubSpot: true,
+          category: "integrator_vision_industrial_ai"
+        },
+        {
+          companyName: "Other HubSpot",
+          normalizedName: "other hubspot",
+          normalizedDomain: "other-hubspot.test",
+          existsInHubSpot: true,
+          category: "integrator_general_ai"
+        },
+        {
+          companyName: "Screened Out",
+          normalizedName: "screened out",
+          normalizedDomain: "screened-out.test",
+          existsInHubSpot: false,
+          category: "other"
+        }
+      ]
+    },
+    ["integrator_vision_industrial_ai"],
+    hubSpotDomains,
+    {
+      currentRunExcludedDomains: ["same-run-1.test", "same-run-2.test"],
+      historicalExaExcludedDomains: ["prior-run-exa.test"]
+    }
+  );
+
+  const requestPayloadDomains = prioritized.requestExcludedDomains.slice(-1200);
+
+  assert.equal(prioritized.localExcludedDomains.has("same-run-1.test"), true);
+  assert.equal(prioritized.localExcludedDomains.has("relevant-hubspot.test"), true);
+  assert.equal(prioritized.localExcludedDomains.has("screened-out.test"), true);
+  assert.equal(requestPayloadDomains.includes("same-run-1.test"), true);
+  assert.equal(requestPayloadDomains.includes("same-run-2.test"), true);
+  assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);
+  assert.equal(requestPayloadDomains.includes("prior-run-exa.test"), true);
+  assert.equal(requestPayloadDomains.includes("screened-out.test"), true);
+  assert.equal(requestPayloadDomains.includes("other-hubspot.test"), true);
+  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
+});

@@ -120,6 +120,11 @@ type LeadPipelineRunOptions = {
   shouldStop?: () => boolean;
 };
 
+type DirectExaExcludeDomainSources = {
+  currentRunExcludedDomains?: string[];
+  historicalExaExcludedDomains?: string[];
+};
+
 const EUROPEAN_COUNTRIES = new Set([
   "germany",
   "austria",
@@ -571,7 +576,9 @@ export class LeadPipelineAgent {
             exaFilters.length
           );
 
-          const rawCompanies = await this.runDirectExaCompanySearch(exaFilter, targetCategories, maxQueryCount, rawExaExcludedDomains, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
+          const rawCompanies = await this.runDirectExaCompanySearch(exaFilter, targetCategories, maxQueryCount, {
+            historicalExaExcludedDomains: rawExaExcludedDomains
+          }, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
             emitDirectExaProgress(
               Math.min(42, 14 + executedQueries * 8),
               `Kategorie ${filterIndex + 1}/${exaFilters.length}: Exa Query ${executedQueries}/${totalQueries}: "${query}". Bisher ${rawCompaniesFound} Rohfirmen gesammelt.`,
@@ -3633,7 +3640,7 @@ export class LeadPipelineAgent {
     filter: ApolloOrganizationFilter,
     targetCategories: LeadCategory[],
     maxQueryCount: number,
-    additionalExcludedDomains: string[] = [],
+    excludeDomainSources: DirectExaExcludeDomainSources = {},
     onQueryProgress?: (update: { executedQueries: number; totalQueries: number; query: string; rawCompaniesFound: number }) => void
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
@@ -3654,36 +3661,30 @@ export class LeadPipelineAgent {
     }
 
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
-    const excludedDomains = await exaClient.loadKnownExcludedDomains();
-
-    for (const record of screeningDatabase.records) {
-      if (!record.normalizedDomain) {
-        continue;
-      }
-
-      if (record.existsInHubSpot || (record.category && !targetCategories.includes(record.category))) {
-        excludedDomains.add(record.normalizedDomain);
-      }
-    }
-
-    for (const domain of additionalExcludedDomains) {
-      const normalizedDomain = exaClient.toExcludeDomain(domain);
-      if (normalizedDomain) {
-        excludedDomains.add(normalizedDomain);
-      }
-    }
+    const prioritizedExcludedDomains = this.buildPrioritizedDirectExaExcludedDomains(
+      screeningDatabase,
+      targetCategories,
+      await exaClient.loadKnownExcludedDomains(),
+      excludeDomainSources
+    );
+    const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
 
     const queries = exaClient.buildQueries(filter, 1).slice(0, Math.max(1, maxQueryCount));
     let completedQueries = 0;
     let discoveredCompanyCount = 0;
     const queryResults = await this.mapWithConcurrency(
       queries.map((query) => async () => {
-        const payload = await exaClient.runSearch(apiKey, query, 20, Array.from(excludedDomains));
+        const payload = await exaClient.runSearch(apiKey, query, 20, prioritizedExcludedDomains.requestExcludedDomains);
         const discoveredCompanies: CompanySample[] = [];
 
         for (const result of payload.results ?? []) {
           const normalizedDomain = exaClient.normalizeUrl(result.url);
           if (!normalizedDomain) {
+            continue;
+          }
+
+          const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
+          if (excludeDomain && excludedDomains.has(excludeDomain)) {
             continue;
           }
 
@@ -3695,6 +3696,10 @@ export class LeadPipelineAgent {
             sourceFilter: `${filter.name} (exa-search: ${query.slice(0, 72)})`,
             discoveryQuery: query
           });
+
+          if (excludeDomain) {
+            excludedDomains.add(excludeDomain);
+          }
         }
 
         completedQueries += 1;
@@ -3718,10 +3723,72 @@ export class LeadPipelineAgent {
     filter: ApolloOrganizationFilter,
     targetCategories: LeadCategory[],
     maxQueryCount: number,
-    additionalExcludedDomains: string[] = [],
+    excludeDomainSources: DirectExaExcludeDomainSources = {},
     onQueryProgress?: (update: { executedQueries: number; totalQueries: number; query: string; rawCompaniesFound: number }) => void
   ): Promise<CompanySample[]> {
-    return this.runDirectExaCompanySearch(filter, targetCategories, maxQueryCount, additionalExcludedDomains, onQueryProgress);
+    return this.runDirectExaCompanySearch(filter, targetCategories, maxQueryCount, excludeDomainSources, onQueryProgress);
+  }
+
+  private buildPrioritizedDirectExaExcludedDomains(
+    screeningDatabase: CompanyScreeningDatabase,
+    targetCategories: LeadCategory[],
+    hubSpotExcludedDomains: Iterable<string>,
+    excludeDomainSources: DirectExaExcludeDomainSources = {}
+  ): { requestExcludedDomains: string[]; localExcludedDomains: Set<string> } {
+    const seenDomains = new Set<string>();
+    const currentRunExcludedDomains: string[] = [];
+    const relevantHubSpotDomains: string[] = [];
+    const historicalExaExcludedDomains: string[] = [];
+    const screeningHistoryDomains: string[] = [];
+    const remainingHubSpotDomains: string[] = [];
+    const requestedCategorySet = new Set(targetCategories);
+
+    const pushDomain = (collection: string[], domain: string | undefined) => {
+      const normalizedDomain = this.normalizeDomain(domain);
+      if (!normalizedDomain || seenDomains.has(normalizedDomain)) {
+        return;
+      }
+
+      seenDomains.add(normalizedDomain);
+      collection.push(normalizedDomain);
+    };
+
+    for (const domain of excludeDomainSources.currentRunExcludedDomains ?? []) {
+      pushDomain(currentRunExcludedDomains, domain);
+    }
+
+    for (const record of screeningDatabase.records) {
+      const normalizedDomain = this.normalizeDomain(record.normalizedDomain ?? record.domain);
+      if (!normalizedDomain) {
+        continue;
+      }
+
+      if (record.existsInHubSpot && record.category && requestedCategorySet.has(record.category)) {
+        pushDomain(relevantHubSpotDomains, normalizedDomain);
+        continue;
+      }
+
+      pushDomain(screeningHistoryDomains, normalizedDomain);
+    }
+
+    for (const domain of excludeDomainSources.historicalExaExcludedDomains ?? []) {
+      pushDomain(historicalExaExcludedDomains, domain);
+    }
+
+    for (const domain of hubSpotExcludedDomains) {
+      pushDomain(remainingHubSpotDomains, domain);
+    }
+
+    return {
+      requestExcludedDomains: [
+        ...remainingHubSpotDomains,
+        ...screeningHistoryDomains,
+        ...historicalExaExcludedDomains,
+        ...relevantHubSpotDomains,
+        ...currentRunExcludedDomains
+      ],
+      localExcludedDomains: new Set(seenDomains)
+    };
   }
 
   private buildSearchHistoryEntry(
