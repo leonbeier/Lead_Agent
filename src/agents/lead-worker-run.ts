@@ -159,9 +159,6 @@ const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
-const MAX_WORKER_AI_CONCURRENCY = 4;
-const MAX_WORKER_OUTREACH_CONCURRENCY = 4;
-const MAX_WORKER_CONTACT_CONCURRENCY = 4;
 
 function createEmptyCategoryBreakdown(): Record<LeadCategory, number> {
   return {
@@ -289,9 +286,9 @@ export class LeadWorkerRunService {
 
     const targetLeadCount = Math.max(1, request.targetLeadCount ?? 1);
     const deadlineMs = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? 10 * 60_000);
-    const aiConcurrency = Math.min(MAX_WORKER_AI_CONCURRENCY, Math.max(1, request.aiPrefilterConcurrency ?? 2));
-    const outreachConcurrency = Math.min(MAX_WORKER_OUTREACH_CONCURRENCY, Math.max(1, request.outreachPrepConcurrency ?? 6));
-    const contactConcurrency = Math.min(MAX_WORKER_CONTACT_CONCURRENCY, Math.max(1, request.contactSearchConcurrency ?? 8));
+    const aiConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? 2);
+    const outreachConcurrency = Math.max(1, request.outreachPrepConcurrency ?? 6);
+    const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 8);
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 1);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const filters = this.leadPipelineAgent.buildDirectExaFiltersForExecution(targetCategories, request.market);

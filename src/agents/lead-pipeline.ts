@@ -84,7 +84,6 @@ const WEB_SEARCH_TOP_UP_SAMPLE_MULTIPLIER = 8;
 const WEB_SEARCH_TOP_UP_MIN_SAMPLE_SIZE = 12;
 const WEB_SEARCH_TOP_UP_MAX_PAGES = 3;
 const MIN_USER_CONCURRENCY = 1;
-const MAX_USER_CONCURRENCY = 32;
 
 type ProbedFilterCandidate = {
   filter: ApolloOrganizationFilter;
@@ -2102,10 +2101,10 @@ export class LeadPipelineAgent {
 
   private resolveConcurrency(requested: number | undefined, fallback: number): number {
     if (typeof requested !== "number" || !Number.isFinite(requested)) {
-      return Math.min(MAX_USER_CONCURRENCY, Math.max(MIN_USER_CONCURRENCY, fallback));
+      return Math.max(MIN_USER_CONCURRENCY, fallback);
     }
 
-    return Math.min(MAX_USER_CONCURRENCY, Math.max(MIN_USER_CONCURRENCY, Math.round(requested)));
+    return Math.max(MIN_USER_CONCURRENCY, Math.round(requested));
   }
 
   private prequalifyLocally(

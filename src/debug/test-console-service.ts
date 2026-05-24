@@ -224,10 +224,7 @@ export class DebugConsoleService {
     filter: ApolloOrganizationFilter
   ): Promise<DebugConsoleAiPrefilterResult> {
     const companies = this.buildWebsiteCompanies(request, filter);
-    const aiPrefilterConcurrency = Math.max(
-      1,
-      Math.min(request.aiPrefilterConcurrency ?? this.defaultAiPrefilterConcurrency, this.defaultAiPrefilterConcurrency)
-    );
+    const aiPrefilterConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? this.defaultAiPrefilterConcurrency);
     const analyzedWebsites = await this.mapWithConcurrency(
       companies.map((company) => async () => this.classifyWebsite(company)),
       aiPrefilterConcurrency
@@ -539,6 +536,10 @@ export class DebugConsoleService {
             continue;
           }
           const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
+          if (excludeDomain && excludedDomains.has(excludeDomain)) {
+            rejectedResults.push({ title: result.title, url: result.url, reason: "excluded_domain" });
+            continue;
+          }
           if (excludeDomain) {
             excludedDomains.add(excludeDomain);
           }
