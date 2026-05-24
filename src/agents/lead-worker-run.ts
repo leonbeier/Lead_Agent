@@ -158,7 +158,7 @@ const SEARCH_RESULT_HEADROOM = 4;
 const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
-const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 150_000;
+const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
 const MAX_WORKER_AI_CONCURRENCY = 4;
 const MAX_WORKER_OUTREACH_CONCURRENCY = 4;
 const MAX_WORKER_CONTACT_CONCURRENCY = 4;
@@ -733,7 +733,7 @@ export class LeadWorkerRunService {
         try {
           const contactDebug = await Promise.race<ContactDebugResult>([
             this.debugConsoleService.discoverContactsForExecution(state.company, {
-              selectedContactsTimeoutMs: 90_000
+              selectedContactsTimeoutMs: 120_000
             }),
             delay(this.contactTaskTimeoutMs).then(() => {
               throw new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`);
