@@ -207,6 +207,33 @@ test("previewHubSpotSync includes resolved address fields when address lookup is
   assert.equal(preview.companyProperties.country, "Germany");
 });
 
+test("extractPostalAddress rejects sentence-like false positives", () => {
+  const client = new HubSpotClient() as unknown as {
+    extractPostalAddress: typeof HubSpotClient.prototype["extractPostalAddress"];
+  };
+
+  const extracted = client.extractPostalAddress(
+    "<div>2015 wurde das Unternehmen mit dem Managementqualitaetszertifikat ISO 9001: 2008,</div><div>12000 Menschen</div>",
+    "Germany"
+  );
+
+  assert.equal(extracted, null);
+});
+
+test("extractCompanyAddressWithWebSearch rejects descriptive non-address results", async () => {
+  const client = new HubSpotClient();
+  client["openAIWebSearchClient"]["findCompanyAddress"] = async () => ({
+    address: "Backed by 14+ years at Salt Technologies with a proven track record in digital transformation.",
+    city: "Ahmedabad",
+    zip: "380015",
+    country: "India"
+  });
+
+  const extracted = await client["extractCompanyAddressWithWebSearch"](buildSampleCompany());
+
+  assert.equal(extracted, null);
+});
+
 test("findExistingCompany reuses HubSpot companies whose stored domain still includes protocol and www", async () => {
   const client = new HubSpotClient();
   const searchCalls: Array<{ objectType: string; propertyName: string; value: string }> = [];

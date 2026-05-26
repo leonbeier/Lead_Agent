@@ -2675,7 +2675,7 @@ export class HubSpotClient {
 
     for (const page of pages) {
       const extractedAddress = this.extractPostalAddress(page.html, company.country);
-      if (extractedAddress) {
+      if (extractedAddress && this.isPlausibleCompanyAddress(extractedAddress)) {
         return extractedAddress;
       }
     }
@@ -2700,13 +2700,15 @@ export class HubSpotClient {
       return null;
     }
 
-    return {
+    const normalizedAddress = {
       address: extractedAddress.address,
       city: extractedAddress.city,
       zip: extractedAddress.zip,
       state: extractedAddress.state,
       country: this.normalizeCountryName(extractedAddress.country) ?? company.country
     };
+
+    return this.isPlausibleCompanyAddress(normalizedAddress) ? normalizedAddress : null;
   }
 
   private async collectCandidatePages(rootUrl: string): Promise<Array<{ url: string; html: string }>> {
@@ -2989,15 +2991,60 @@ export class HubSpotClient {
       }
 
       const countryLine = lines[index + 1] ?? "";
-      return {
+      const extractedAddress = {
         address: addressLine,
         zip: postalMatch[1].replace(/\s+/g, " ").trim(),
         city: postalMatch[2].trim(),
         country: this.normalizeCountryName(countryLine) ?? fallbackCountry
       };
+
+      if (this.isPlausibleCompanyAddress(extractedAddress)) {
+        return extractedAddress;
+      }
     }
 
     return null;
+  }
+
+  private isPlausibleCompanyAddress(address: ExtractedCompanyAddress | null): address is ExtractedCompanyAddress {
+    const streetAddress = address?.address?.trim();
+    const city = address?.city?.trim();
+    const zip = address?.zip?.trim();
+    if (!streetAddress || !city || !zip) {
+      return false;
+    }
+
+    const normalizedStreetAddress = streetAddress.toLowerCase();
+    if (
+      streetAddress.length > 120
+      || /^20\d{2}\b/.test(streetAddress)
+      || /[.!?]/.test(streetAddress)
+      || /^(news|blog|press|latest)\b/i.test(normalizedStreetAddress)
+      || /(backed by|founded|seit|since|years|managementqualit|zertifikat|certificate|certified|unternehmen|company|solutions|inspection|software|\biso\b|global 100|may \d{1,2},? \d{4})/i.test(normalizedStreetAddress)
+    ) {
+      return false;
+    }
+
+    const hasStreetKeyword = /(straße|strasse|street|\bst\.?\b|road|\brd\.?\b|avenue|\bave\.?\b|platz|allee|gasse|lane|\bln\.?\b|boulevard|\bblvd\.?\b|drive|\bdr\.?\b|ring|weg|damm|ufer|rue|calle|carrer|plaza|laan|straat|via|viale|quai|court|terrace|chauss[ée]e)/i.test(streetAddress);
+    const hasSimpleHouseNumberPattern = /^\d{1,4}[a-zA-Z]?\s+[A-Za-zÄÖÜäöüß'’\-.]+(?:\s+[A-Za-zÄÖÜäöüß'’\-.]+){0,4}$/.test(streetAddress)
+      || /^[A-Za-zÄÖÜäöüß'’\-.]+(?:\s+[A-Za-zÄÖÜäöüß'’\-.]+){0,4}\s+\d{1,4}[a-zA-Z]?$/.test(streetAddress);
+    if (!hasStreetKeyword && !hasSimpleHouseNumberPattern) {
+      return false;
+    }
+
+    if (!hasStreetKeyword && (streetAddress.match(/\d+/g)?.length ?? 0) > 1) {
+      return false;
+    }
+
+    if (/\d/.test(city) || city.split(/\s+/).length > 4) {
+      return false;
+    }
+
+    if (/\b(menschen|people|years|software|inspection|solutions|company|unternehmen|jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)\b/i.test(city)) {
+      return false;
+    }
+
+    return /^[A-Z]{0,2}[\- ]?\d{4,5}$/i.test(zip.replace(/\s+/g, " "));
   }
 
   private normalizeCountryName(value: string | undefined): string | undefined {
