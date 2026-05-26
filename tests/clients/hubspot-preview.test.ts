@@ -57,6 +57,47 @@ test("previewHubSpotSync builds company field previews from the same mapping as 
   assert.match(preview.companyProperties.description, /Industrial automation/i);
 });
 
+test("syncQualifiedCompanies reports missing required company properties before live sync", async () => {
+  const client = new HubSpotClient();
+
+  client["requestJson"] = async (url: string, init?: RequestInit) => {
+    if (url.endsWith("/crm/v3/properties/companies") && !init?.method) {
+      return {
+        results: [
+          { name: "ai_cc_cold_call_email" },
+          { name: "ai_cc_cold_call_linkedin" },
+          { name: "ai_cc_category" }
+        ]
+      };
+    }
+
+    if (url.endsWith("/crm/v3/properties/contacts") && !init?.method) {
+      return {
+        results: [
+          { name: "email" },
+          { name: "firstname" },
+          { name: "lastname" }
+        ]
+      };
+    }
+
+    throw new Error(`Unexpected request: ${url} ${init?.method ?? "GET"}`);
+  };
+
+  client["upsertCompany"] = async () => ({ id: "company-1", properties: {} });
+
+  const result = await client.syncQualifiedCompanies(
+    [buildSampleCompany()],
+    [buildSampleBrief()],
+    new Map(),
+    false
+  );
+
+  assert.equal(result.companySyncedCount, 1);
+  assert.match(result.errors[0] ?? "", /Missing required HubSpot company properties/i);
+  assert.match(result.errors[0] ?? "", /ai_cc_email_subject/i);
+});
+
 test("previewHubSpotSync skips generic mailbox contacts without person identity", async () => {
   const client = new HubSpotClient();
   const contacts: PublicContactCandidate[] = [

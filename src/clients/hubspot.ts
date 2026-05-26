@@ -104,6 +104,7 @@ const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 12000;
 const DEBUG_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 45000;
 const DEBUG_CONTACT_AZURE_MATCH_TIMEOUT_MS = 30000;
 const DEBUG_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 30000;
+const REQUIRED_HUBSPOT_COMPANY_PROPERTIES = ["ai_cc_linkedin_message", "ai_cc_email_subject", "ai_cc_phone_script"];
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -432,6 +433,12 @@ export class HubSpotClient {
 
     const companyProperties = await this.getAvailableProperties("companies");
     const contactProperties = await this.getAvailableProperties("contacts");
+    const missingRequiredCompanyProperties = this.getMissingRequiredCompanyProperties(companyProperties);
+    if (missingRequiredCompanyProperties.length > 0) {
+      console.warn("HubSpotClient.syncQualifiedCompanies missing required company properties", {
+        missingProperties: missingRequiredCompanyProperties
+      });
+    }
     let completedCompanies = 0;
     const companyResults = await this.mapWithConcurrency(
       companies.map((company) => async () => {
@@ -497,7 +504,14 @@ export class HubSpotClient {
     const failedCompanyKeys = companyResults
       .filter((result) => !result.companyWriteSucceeded)
       .map((result) => result.companyKey);
-    const errors = companyResults.flatMap((result) => result.errors);
+    const errors = [
+      ...(missingRequiredCompanyProperties.length > 0
+        ? [
+            `Missing required HubSpot company properties: ${missingRequiredCompanyProperties.join(", ")}. Company outreach fields will be omitted until the HubSpot schema is updated.`
+          ]
+        : []),
+      ...companyResults.flatMap((result) => result.errors)
+    ];
 
     return {
       mode: "live",
@@ -899,6 +913,10 @@ export class HubSpotClient {
 
     this.availableProperties.set(objectType, propertiesPromise);
     return propertiesPromise;
+  }
+
+  private getMissingRequiredCompanyProperties(availableProperties: Set<string>): string[] {
+    return REQUIRED_HUBSPOT_COMPANY_PROPERTIES.filter((propertyName) => !availableProperties.has(propertyName));
   }
 
   private normalizeHubSpotIndustryValue(targetIndustry: string | undefined, companyDescription: string): string | undefined {
