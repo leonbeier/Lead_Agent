@@ -652,7 +652,8 @@ export class HubSpotClient {
 
   private normalizeContactForHubSpot(contact: PublicContactCandidate): PublicContactCandidate | null {
     const email = contact.email?.trim().toLowerCase();
-    const linkedinUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
+    const normalizedLinkedInUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
+    const linkedinUrl = this.isPersonalLinkedInUrl(normalizedLinkedInUrl) ? normalizedLinkedInUrl : undefined;
     const firstName = this.normalizeNamePart(contact.firstName);
     const lastName = this.normalizeNamePart(contact.lastName);
     const hasReachableIdentity = Boolean(email || linkedinUrl || firstName || lastName);

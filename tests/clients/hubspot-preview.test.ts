@@ -146,6 +146,29 @@ test("previewHubSpotSync still skips low-value noreply mailboxes without person 
   assert.match(preview.contacts[0]?.skipReason ?? "", /Low-value mailbox/i);
 });
 
+test("previewHubSpotSync drops company LinkedIn URLs from contact properties", async () => {
+  const client = new HubSpotClient();
+  const preview = await client.previewHubSpotSync(
+    buildSampleCompany(),
+    buildSampleBrief(),
+    [
+      {
+        email: "martin@sample-automation.de",
+        firstName: "Martin",
+        lastName: "Minsel",
+        linkedinUrl: "https://www.linkedin.com/company/sample-automation/",
+        sourceUrl: "https://sample-automation.de/team",
+        label: "website_named_contact"
+      }
+    ],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.contacts[0]?.skipped, false);
+  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, undefined);
+  assert.equal(preview.contacts[0]?.properties.email, "martin@sample-automation.de");
+});
+
 test("previewHubSpotSync keeps generic mailbox contacts when a phone number is present", async () => {
   const client = new HubSpotClient();
   const contacts: PublicContactCandidate[] = [
