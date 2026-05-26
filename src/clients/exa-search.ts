@@ -494,7 +494,16 @@ export class ExaSearchClient {
     const lowered = normalized.toLowerCase();
 
     if (["germany", "de", "deutschland"].includes(lowered)) {
-      return ["Germany", "Deutschland"];
+      return [
+        "Germany",
+        "Deutschland",
+        "Berlin Germany",
+        "Munich Germany",
+        "Stuttgart Germany",
+        "Hamburg Germany",
+        "Cologne Germany",
+        "Ruhr area Germany"
+      ];
     }
 
     if (["austria", "at", "oesterreich", "österreich"].includes(lowered)) {

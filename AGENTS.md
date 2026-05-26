@@ -10,4 +10,5 @@ Repository rules for future agent runs:
 - OpenAI web search is a company-information retrieval layer, not the main evaluation agent.
 - For non-dry-run company qualification, do not bypass Azure AI classification with manual heuristics or cached categorizations when a company domain is available. The required path is: website scraping/crawl first, then Azure AI / Foundry evaluation on the website evidence.
 - For Exa Search and Diffbot Search results specifically, every candidate company with a domain must go through the website-scraping + Azure AI check path before qualification decisions are trusted.
+- When live Exa quality is poor, tune the Exa query-generation step and feed prior Exa query/history outcomes into the AI query planner; do not relax or retune the downstream AI screening/category logic just to improve hit rates.
 - When running `hs project upload` in this repo and the CLI shows the profile picker with `leon [146645418]` preselected, do not wait at the interactive prompt; press Enter immediately to accept the default profile.

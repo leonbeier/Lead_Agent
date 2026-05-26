@@ -124,6 +124,117 @@ test("previewHubSpotSync includes resolved address fields when address lookup is
   assert.equal(preview.companyProperties.country, "Germany");
 });
 
+test("findExistingCompany reuses HubSpot companies whose stored domain still includes protocol and www", async () => {
+  const client = new HubSpotClient();
+  const searchCalls: Array<{ objectType: string; propertyName: string; value: string }> = [];
+
+  client["searchObject"] = async (objectType: "companies" | "contacts", propertyName: string, value: string) => {
+    searchCalls.push({ objectType, propertyName, value });
+    if (objectType === "companies" && propertyName === "domain" && value === "https://www.sample-automation.de") {
+      return {
+        id: "existing-company-id",
+        properties: {
+          domain: "https://www.sample-automation.de",
+          name: "Sample Automation GmbH"
+        }
+      } as never;
+    }
+
+    return null;
+  };
+
+  const existingCompany = await client["findExistingCompany"]({
+    ...buildSampleCompany(),
+    domain: "sample-automation.de"
+  });
+
+  assert.equal(existingCompany?.id, "existing-company-id");
+  assert.deepEqual(
+    searchCalls
+      .filter((call) => call.objectType === "companies" && call.propertyName === "domain")
+      .map((call) => call.value),
+    [
+      "sample-automation.de",
+      "www.sample-automation.de",
+      "https://sample-automation.de",
+      "https://www.sample-automation.de"
+    ]
+  );
+});
+
+test("upsertContact creates new contacts with the intended primary company association", async () => {
+  const client = new HubSpotClient();
+  const originalFetch = globalThis.fetch;
+  let capturedBody: Record<string, unknown> | null = null;
+
+  client["findExistingContact"] = async () => null;
+
+  globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+    capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    return new Response(JSON.stringify({ id: "contact-123", properties: {} }), {
+      status: 201,
+      headers: {
+        "content-type": "application/json"
+      }
+    }) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
+  };
+
+  try {
+    const created = await client["upsertContact"]({
+      email: "martin@sample-automation.de",
+      firstName: "Martin",
+      lastName: "Minsel",
+      sourceUrl: "https://sample-automation.de/kontakt",
+      label: "public_named_mailbox"
+    }, new Set(["email", "firstname", "lastname"]), "company-456");
+
+    assert.equal(created?.id, "contact-123");
+    assert.deepEqual(capturedBody, {
+      properties: {
+        email: "martin@sample-automation.de",
+        firstname: "Martin",
+        lastname: "Minsel"
+      },
+      associations: [
+        {
+          to: {
+            id: "company-456"
+          },
+          types: [
+            {
+              associationCategory: "HUBSPOT_DEFINED",
+              associationTypeId: 1
+            },
+            {
+              associationCategory: "HUBSPOT_DEFINED",
+              associationTypeId: 279
+            }
+          ]
+        }
+      ]
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("previewHubSpotSync tolerates non-string research brief fields", async () => {
+  const client = new HubSpotClient();
+  const malformedBrief = {
+    ...buildSampleBrief(),
+    targetIndustry: ["Industrial automation", "Machine vision"],
+    productsOffered: ["PLC integration", "Inspection AI"],
+    overview: ["Overview part 1", "Overview part 2"],
+    qualificationSummary: ["Qualified", "Relevant"]
+  } as unknown as ResearchBrief;
+
+  const preview = await client.previewHubSpotSync(buildSampleCompany(), malformedBrief, [], { includeAddressLookup: false });
+
+  assert.match(preview.companyProperties.description, /Overview part 1/);
+  assert.equal(preview.companyProperties.ai_cc_customer_products_offered, "PLC integration, Inspection AI");
+  assert.equal(preview.companyProperties.ai_cc_customer_target_industry, "Industrial automation, Machine vision");
+});
+
 test("low-confidence website named contacts are excluded from employee selection", async () => {
   const client = new HubSpotClient();
   const selectedContacts = await client["selectRelevantEmployeeContacts"](buildSampleCompany(), [
@@ -171,6 +282,81 @@ test("name extraction rejects CTA-style phrases", () => {
 
   assert.equal(client["extractNameFromLine"]("Learn More"), null);
   assert.equal(client["extractNameFromLine"]("What To Expect"), null);
+  assert.equal(client["extractNameFromLine"]("Aislab Technology"), null);
+  assert.equal(client["extractNameFromLine"]("Wie MES"), null);
+});
+
+test("email extraction decodes HTML entity obfuscation", () => {
+  const client = new HubSpotClient();
+  const emails = client["extractEmails"](
+    "<a href=\"mailto:&#105&#110&#102&#111&#64&#103&#101&#111&#116&#116&#46&#100&#101\">Kontakt</a>",
+    new Set(["geott.de"])
+  );
+
+  assert.deepEqual(emails, ["info@geott.de"]);
+});
+
+test("descriptive company labels still produce domain-token aliases for LinkedIn search", () => {
+  const client = new HubSpotClient();
+  const aliases = client["extractCompanySearchAliases"]({
+    name: "Intelligent Machine Vision for Industrial Marking Vision AI",
+    domain: "https://geott.de"
+  }, []);
+
+  assert.ok(aliases.includes("Geott"));
+});
+
+test("company alias extraction ignores contact CTA phrases from page text", () => {
+  const client = new HubSpotClient();
+  const aliases = client["extractCompanySearchAliases"](
+    {
+      name: "Aislab",
+      domain: "https://aislab.de"
+    },
+    [{
+      url: "https://aislab.de/kontakt",
+      html: "<body>Kontaktieren Sie AISLab GmbH</body>"
+    }]
+  );
+
+  assert.ok(!aliases.includes("Kontaktieren Sie AISLab GmbH"));
+});
+
+test("descriptive company labels reject LinkedIn hits that do not mention the domain token", () => {
+  const client = new HubSpotClient();
+  const relevant = client["isRelevantCompanyHit"](
+    {
+      name: "Intelligent Machine Vision for Industrial Marking Vision AI",
+      domain: "https://geott.de"
+    },
+    ["Geott"],
+    "Nicolas March | LinkedIn | AI4Robotics machine vision founder"
+  );
+
+  const domainMatched = client["isRelevantCompanyHit"](
+    {
+      name: "Intelligent Machine Vision for Industrial Marking Vision AI",
+      domain: "https://geott.de"
+    },
+    ["Geott"],
+    "Marcus Lessmann | LinkedIn | GEOTT Deutschland machine vision"
+  );
+
+  assert.equal(relevant, false);
+  assert.equal(domainMatched, true);
+});
+
+test("LinkedIn search queries prioritize exact legal aliases before generic short names", () => {
+  const client = new HubSpotClient();
+  const queries = client["buildPublicContactSearchQueries"](
+    {
+      name: "Aislab",
+      domain: "https://aislab.de"
+    },
+    ["Aislab", "AISLAB GmbH"]
+  ).filter((query: string) => /site:linkedin\.com\/in/i.test(query)).slice(0, 4);
+
+  assert.ok(queries.every((query: string) => /AISLAB GmbH/i.test(query)));
 });
 
 test("browser fallback is used when direct website fetch is blocked", async () => {
@@ -366,29 +552,27 @@ test("debug contact discovery reuses cached LinkedIn search results for final se
   const client = new HubSpotClient();
   const company = buildSampleCompany();
   const originalFetch = globalThis.fetch;
-  const perQueryCalls = new Map<string, number>();
 
   client["collectCandidatePages"] = async () => [];
-  client["azureOpenAIClient"]["choosePublicContacts"] = async (_company: unknown, contacts: PublicContactCandidate[]) => contacts.slice(0, 4);
-  client["searchDuckDuckGoBrowserResults"] = async (query: string) => {
-    const callCount = (perQueryCalls.get(query) ?? 0) + 1;
-    perQueryCalls.set(query, callCount);
-
-    if (callCount > 1) {
-      return [];
-    }
-
-    return [
-      {
+  client["extractAzureMatchedContacts"] = async () => ({
+    queries: ["Sample Automation site:linkedin.com/in"],
+    hitGroups: [{
+      query: "Sample Automation site:linkedin.com/in",
+      hits: [{
         url: "https://de.linkedin.com/in/martin-minsel",
         title: "Martin Minsel - Sample Automation GmbH | LinkedIn",
         snippet: "Berufserfahrung: Sample Automation GmbH · Ort: Berlin · 500+ Kontakte auf LinkedIn.",
-        query
-      }
-    ];
-  };
-  client["searchDuckDuckGoResults"] = async () => [];
-  client["searchBingRssResults"] = async () => [];
+        query: "Sample Automation site:linkedin.com/in"
+      }]
+    }],
+    contacts: [{
+      firstName: "Martin",
+      lastName: "Minsel",
+      linkedinUrl: "https://de.linkedin.com/in/martin-minsel",
+      sourceUrl: "https://de.linkedin.com/in/martin-minsel",
+      label: "linkedin_profile"
+    }]
+  });
   globalThis.fetch = async () => new Response("", { status: 200 }) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
 
   try {
@@ -405,6 +589,7 @@ test("debug contact discovery reuses cached LinkedIn search results for final se
 test("findPublicContacts seeds official contact pages from website crawl results", async () => {
   const client = new HubSpotClient();
   const company = buildSampleCompany();
+  client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
 
   client["openAIWebSearchClient"]["crawlCompanyWebsite"] = async () => ({
     summary: "Official site summary",
@@ -427,9 +612,88 @@ test("findPublicContacts seeds official contact pages from website crawl results
   assert.ok(contacts.some((contact) => contact.phone === "+4930123456"));
 });
 
+test("findPublicContactsFromPages prefers Azure-structured contacts over heuristic fallback", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  client["azureOpenAIClient"]["extractPublicContactsFromEvidence"] = async () => ([
+    {
+      firstName: "Martin",
+      lastName: "Minsel",
+      jobTitle: "Managing Director",
+      email: "martin.minsel@sample-automation.de",
+      phone: "+49 30 123456",
+      linkedinUrl: "https://www.linkedin.com/in/martin-minsel/",
+      sourceUrl: "https://www.linkedin.com/in/martin-minsel/",
+      label: "linkedin_profile"
+    }
+  ]);
+  client["searchBingResults"] = async () => [];
+  client["discoverWebSearchContacts"] = async () => {
+    throw new Error("heuristic fallback should not run when Azure already returned contacts");
+  };
+
+  const contacts = await client["findPublicContactsFromPages"](
+    company,
+    [{
+      url: "https://sample-automation.de/kontakt",
+      html: '<html><body><a href="mailto:info@sample-automation.de">info@sample-automation.de</a><a href="tel:+4930123456">+49 30 123456</a></body></html>'
+    }]
+  );
+
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0]?.firstName, "Martin");
+  assert.equal(contacts[0]?.email, "martin.minsel@sample-automation.de");
+  assert.equal(contacts[0]?.linkedinUrl, "https://www.linkedin.com/in/martin-minsel");
+});
+
+test("debugPublicContactDiscovery falls back to website contacts when Azure contact extraction fails", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  client["collectCandidatePages"] = async () => ([{
+    url: "https://sample-automation.de/kontakt",
+    html: '<html><body><a href="mailto:info@sample-automation.de">info@sample-automation.de</a><a href="tel:+4930123456">+49 30 123456</a></body></html>'
+  }]);
+  client["extractAzureMatchedContacts"] = async () => {
+    throw new Error("Azure public-contact extraction failed");
+  };
+  client["discoverWebSearchContacts"] = async () => {
+    throw new Error("web search failed");
+  };
+
+  const result = await client.debugPublicContactDiscovery(company, { selectedContactsTimeoutMs: 1000 });
+
+  assert.equal(result.heuristicContacts.length, 0);
+  assert.ok(result.selectedContacts.some((contact) => contact.email === "info@sample-automation.de"));
+  assert.ok(result.selectedContacts.some((contact) => contact.phone === "+4930123456"));
+});
+
+test("findPublicContactsFromPages falls back to website contacts when heuristic web search fails", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
+  client["discoverWebSearchContacts"] = async () => {
+    throw new Error("bing failed");
+  };
+
+  const contacts = await client["findPublicContactsFromPages"](
+    company,
+    [{
+      url: "https://sample-automation.de/kontakt",
+      html: '<html><body><a href="mailto:info@sample-automation.de">info@sample-automation.de</a><a href="tel:+4930123456">+49 30 123456</a></body></html>'
+    }]
+  );
+
+  assert.ok(contacts.some((contact) => contact.email === "info@sample-automation.de"));
+  assert.ok(contacts.some((contact) => contact.phone === "+4930123456"));
+});
+
 test("findPublicContacts probes default contact paths when crawl results only expose the blocked homepage", async () => {
   const client = new HubSpotClient();
   const company = buildSampleCompany();
+  client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
 
   client["openAIWebSearchClient"]["crawlCompanyWebsite"] = async () => ({
     summary: "Official site summary",
@@ -458,6 +722,7 @@ test("findPublicContacts probes default contact paths when crawl results only ex
 test("findPublicContacts retries likely contact pages through the official crawl fetch path when the normal HTML fetch has no contact data", async () => {
   const client = new HubSpotClient();
   const company = buildSampleCompany();
+  client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
 
   client["openAIWebSearchClient"]["crawlCompanyWebsite"] = async () => ({
     summary: "Official site summary",
@@ -515,9 +780,10 @@ test("findPublicContacts adds official website email and phone from web search w
   assert.ok(contacts.some((contact) => contact.linkedinUrl === "https://www.linkedin.com/in/max-muster"));
 });
 
-test("discoverWebSearchContacts still invokes foundry when LinkedIn heuristics are full but website contact data is missing", async () => {
+test("discoverWebSearchContacts skips foundry when LinkedIn heuristics already provide enough contacts", async () => {
   const client = new HubSpotClient();
   const company = buildSampleCompany();
+  let foundryCalled = false;
 
   client["foundryAgentsClient"]["suggestPublicContactQueries"] = async () => [];
   client["searchBingResults"] = async () => ([
@@ -546,18 +812,22 @@ test("discoverWebSearchContacts still invokes foundry when LinkedIn heuristics a
       snippet: "Experience: Sample Automation GmbH"
     }
   ]);
-  client["foundryAgentsClient"]["discoverPublicContacts"] = async () => ([
+  client["foundryAgentsClient"]["discoverPublicContacts"] = async () => {
+    foundryCalled = true;
+    return [
     {
       email: "info@sample-automation.de",
       phone: "+49 30 123456",
       sourceUrl: "https://sample-automation.de/kontakt",
       label: "public_generic_mailbox"
     }
-  ]);
+    ];
+  };
 
   const contacts = await client["discoverWebSearchContacts"](company, [], []);
 
-  assert.ok(contacts.some((contact) => contact.email === "info@sample-automation.de"));
+  assert.equal(foundryCalled, false);
+  assert.equal(contacts.filter((contact) => contact.label === "linkedin_profile").length, 4);
 });
 
 test("contact page extraction includes ansprechpartner-style menu links", () => {

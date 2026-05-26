@@ -14,6 +14,7 @@ import {
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
   CompanySample,
+  ExaQueryHistoryInsight,
   FilterEvaluation,
   GeneratedLeadRecord,
   LeadCategory,
@@ -120,8 +121,18 @@ type LeadPipelineRunOptions = {
 };
 
 type DirectExaExcludeDomainSources = {
+  screeningScope?: "live" | "debug";
   currentRunExcludedDomains?: string[];
-  historicalExaExcludedDomains?: string[];
+};
+
+type DirectExaQueryPlanningContext = {
+  dryRun?: boolean;
+  learning?: LeadLearningData;
+  mainContext?: string;
+  searchStrategyContext?: string;
+  recentQueryHistory?: ExaQueryHistoryInsight[];
+  prequalification?: PrequalificationConfig;
+  debugCapture?: (details: { promptMessages: Array<{ role: string; content: string }> }) => void;
 };
 
 const EUROPEAN_COUNTRIES = new Set([
@@ -275,12 +286,6 @@ export class LeadPipelineAgent {
         );
     const prequalification = request.prequalification ?? (request.prequalificationContext ? { mainContext: request.prequalificationContext } : undefined);
     this.companyScreeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
-    const liveExaCache = companySearchMode === "exa_search"
-      ? await this.controlPlaneStore.getLiveExaCache()
-      : { entries: [], discoveredDomains: [] };
-    const rawExaExcludedDomains = request.excludePreviouslyFoundExaDomains === false
-      ? []
-      : liveExaCache.discoveredDomains;
     const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false || companySearchMode === "exa_search"
       ? []
       : this.getCachedQualifiedCompanies(targetCategories, request.market, request.targetLeadCount);
@@ -576,7 +581,12 @@ export class LeadPipelineAgent {
           );
 
           const rawCompanies = await this.runDirectExaCompanySearch(exaFilter, targetCategories, maxQueryCount, {
-            historicalExaExcludedDomains: rawExaExcludedDomains
+            screeningScope: "live"
+          }, {
+            dryRun,
+            learning,
+            mainContext: request.mainContext,
+            searchStrategyContext: request.searchStrategyContext
           }, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
             emitDirectExaProgress(
               Math.min(42, 14 + executedQueries * 8),
@@ -3624,7 +3634,14 @@ export class LeadPipelineAgent {
       ? targetCategories
       : ["machine_builder_ai_enablement" as LeadCategory])) as SelectableLeadCategory[];
 
-    return requestedCategories.map((category) => buildDebugSearchFilter(category, market));
+    return requestedCategories.map((category) => {
+      const debugFilter = buildDebugSearchFilter(category, market);
+      return {
+        ...debugFilter,
+        name: debugFilter.name.replace(/\s*\[debug(?: [^\]]+)?\]\s*$/i, "").trim(),
+        notes: debugFilter.notes.replace(/\s*Debug console request for .*$/i, "").trim()
+      } satisfies ApolloOrganizationFilter;
+    });
   }
 
   buildDirectExaFiltersForExecution(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter[] {
@@ -3640,7 +3657,18 @@ export class LeadPipelineAgent {
     targetCategories: LeadCategory[],
     maxQueryCount: number,
     excludeDomainSources: DirectExaExcludeDomainSources = {},
-    onQueryProgress?: (update: { executedQueries: number; totalQueries: number; query: string; rawCompaniesFound: number }) => void
+    queryPlanningContext: DirectExaQueryPlanningContext = {},
+    onQueryProgress?: (update: {
+      executedQueries: number;
+      totalQueries: number;
+      query: string;
+      rawCompaniesFound: number;
+      filterName: string;
+      defaultQueries: string[];
+      plannedQueries: string[];
+      promptMessages?: Array<{ role: string; content: string }>;
+      excludedDomains: string[];
+    }) => void
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
       runtimeApiKey?: string;
@@ -3668,7 +3696,41 @@ export class LeadPipelineAgent {
     );
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
 
-    const queries = exaClient.buildQueries(filter, 1).slice(0, Math.max(1, maxQueryCount));
+    const defaultQueries = exaClient.buildQueries(filter, 1);
+    const plannerQueryCount = Math.min(defaultQueries.length, Math.max(1, maxQueryCount, 6));
+    let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;
+    const queries = (await this.azureClient.planExaSearchQueries(
+      filter,
+      defaultQueries.slice(0, plannerQueryCount),
+      queryPlanningContext.learning,
+      Boolean(queryPlanningContext.dryRun),
+      queryPlanningContext.mainContext,
+      queryPlanningContext.searchStrategyContext,
+      plannerQueryCount,
+      {
+        recentQueryHistory: queryPlanningContext.recentQueryHistory,
+        prequalification: queryPlanningContext.prequalification,
+        requestedTargetCategories: targetCategories,
+        debugCapture: (details) => {
+          queryGenerationPromptMessages = details.promptMessages;
+          queryPlanningContext.debugCapture?.(details);
+        }
+      }
+    )).slice(0, Math.max(1, maxQueryCount));
+    const debugUpdateBase = {
+      filterName: filter.name,
+      defaultQueries: defaultQueries.slice(0, plannerQueryCount),
+      plannedQueries: queries,
+      promptMessages: queryGenerationPromptMessages,
+      excludedDomains: prioritizedExcludedDomains.requestExcludedDomains
+    };
+    onQueryProgress?.({
+      executedQueries: 0,
+      totalQueries: queries.length,
+      query: queries[0] ?? "",
+      rawCompaniesFound: 0,
+      ...debugUpdateBase
+    });
     let completedQueries = 0;
     let discoveredCompanyCount = 0;
     const queryResults = await this.mapWithConcurrency(
@@ -3707,7 +3769,8 @@ export class LeadPipelineAgent {
           executedQueries: completedQueries,
           totalQueries: queries.length,
           query,
-          rawCompaniesFound: discoveredCompanyCount
+          rawCompaniesFound: discoveredCompanyCount,
+          ...debugUpdateBase
         });
 
         return discoveredCompanies;
@@ -3723,27 +3786,36 @@ export class LeadPipelineAgent {
     targetCategories: LeadCategory[],
     maxQueryCount: number,
     excludeDomainSources: DirectExaExcludeDomainSources = {},
-    onQueryProgress?: (update: { executedQueries: number; totalQueries: number; query: string; rawCompaniesFound: number }) => void
+    queryPlanningContext: DirectExaQueryPlanningContext = {},
+    onQueryProgress?: (update: {
+      executedQueries: number;
+      totalQueries: number;
+      query: string;
+      rawCompaniesFound: number;
+      filterName: string;
+      defaultQueries: string[];
+      plannedQueries: string[];
+      promptMessages?: Array<{ role: string; content: string }>;
+      excludedDomains: string[];
+    }) => void
   ): Promise<CompanySample[]> {
-    return this.runDirectExaCompanySearch(filter, targetCategories, maxQueryCount, excludeDomainSources, onQueryProgress);
+    return this.runDirectExaCompanySearch(filter, targetCategories, maxQueryCount, excludeDomainSources, queryPlanningContext, onQueryProgress);
   }
 
-  private buildPrioritizedDirectExaExcludedDomains(
+  buildPrioritizedDirectExaExcludedDomains(
     screeningDatabase: CompanyScreeningDatabase,
     targetCategories: LeadCategory[],
     hubSpotExcludedDomains: Iterable<string>,
     excludeDomainSources: DirectExaExcludeDomainSources = {}
   ): { requestExcludedDomains: string[]; localExcludedDomains: Set<string> } {
     const seenDomains = new Set<string>();
+    const hubSpotDomains: string[] = [];
+    const rejectedWebsiteDomains: string[] = [];
     const currentRunExcludedDomains: string[] = [];
-    const relevantHubSpotDomains: string[] = [];
-    const historicalExaExcludedDomains: string[] = [];
-    const screeningHistoryDomains: string[] = [];
-    const remainingHubSpotDomains: string[] = [];
     const requestedCategorySet = new Set(targetCategories);
 
     const pushDomain = (collection: string[], domain: string | undefined) => {
-      const normalizedDomain = this.normalizeDomain(domain);
+      const normalizedDomain = this.normalizeExcludeDomain(domain);
       if (!normalizedDomain || seenDomains.has(normalizedDomain)) {
         return;
       }
@@ -3752,42 +3824,71 @@ export class LeadPipelineAgent {
       collection.push(normalizedDomain);
     };
 
-    for (const domain of excludeDomainSources.currentRunExcludedDomains ?? []) {
-      pushDomain(currentRunExcludedDomains, domain);
-    }
-
     for (const record of screeningDatabase.records) {
+      if (!this.matchesDirectExaExcludeScope(record, excludeDomainSources.screeningScope)) {
+        continue;
+      }
+
       const normalizedDomain = this.normalizeDomain(record.normalizedDomain ?? record.domain);
       if (!normalizedDomain) {
         continue;
       }
 
-      if (record.existsInHubSpot && record.category && requestedCategorySet.has(record.category)) {
-        pushDomain(relevantHubSpotDomains, normalizedDomain);
+      if (!record.category || record.existsInHubSpot || requestedCategorySet.has(record.category)) {
         continue;
       }
 
-      pushDomain(screeningHistoryDomains, normalizedDomain);
-    }
-
-    for (const domain of excludeDomainSources.historicalExaExcludedDomains ?? []) {
-      pushDomain(historicalExaExcludedDomains, domain);
+      pushDomain(rejectedWebsiteDomains, normalizedDomain);
     }
 
     for (const domain of hubSpotExcludedDomains) {
-      pushDomain(remainingHubSpotDomains, domain);
+      pushDomain(hubSpotDomains, domain);
+    }
+
+    for (const domain of excludeDomainSources.currentRunExcludedDomains ?? []) {
+      pushDomain(currentRunExcludedDomains, domain);
     }
 
     return {
       requestExcludedDomains: [
-        ...remainingHubSpotDomains,
-        ...screeningHistoryDomains,
-        ...historicalExaExcludedDomains,
-        ...relevantHubSpotDomains,
+        ...hubSpotDomains,
+        ...rejectedWebsiteDomains,
         ...currentRunExcludedDomains
       ],
       localExcludedDomains: new Set(seenDomains)
     };
+  }
+
+  private matchesDirectExaExcludeScope(record: CompanyScreeningRecord, screeningScope?: "live" | "debug"): boolean {
+    if (!screeningScope) {
+      return true;
+    }
+
+    const isDebugRecord = this.isDebugScreeningRecord(record.sourceFilter);
+    return screeningScope === "debug" ? isDebugRecord : !isDebugRecord;
+  }
+
+  private isDebugScreeningRecord(sourceFilter?: string): boolean {
+    const normalized = sourceFilter?.trim().toLowerCase() ?? "";
+    return normalized.includes("manual-debug-input") || normalized.includes("debug-stage=") || normalized.includes("[debug");
+  }
+
+  private normalizeExcludeDomain(domain: string | undefined): string | undefined {
+    if (!domain) {
+      return undefined;
+    }
+
+    try {
+      const parsed = domain.includes("://") ? new URL(domain) : new URL(`https://${domain}`);
+      return parsed.hostname.toLowerCase().replace(/^www\./, "");
+    } catch {
+      return domain
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .replace(/\/$/, "");
+    }
   }
 
   private buildSearchHistoryEntry(

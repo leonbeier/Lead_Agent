@@ -17,8 +17,10 @@ import {
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
   CompanyFeedbackEntry,
+  CompanySearchMode,
   EditableExecutionContext,
   EditablePrequalificationCategoryContext,
+  ExaQueryHistoryInsight,
   FilterEvaluation,
   LiveExaCache,
   LatestLeadRunRecord,
@@ -270,6 +272,21 @@ const searchHistoryEntrySchema = z.object({
   fetchedSampleCount: z.number().int().nonnegative().optional(),
   eligibleSampleCount: z.number().int().nonnegative().optional(),
   discoveryQueries: z.array(z.string().min(1)).optional(),
+  plannedQueries: z.array(z.string().min(1)).optional(),
+  promptMessages: z.array(z.object({
+    role: z.string().min(1),
+    content: z.string()
+  })).optional(),
+  excludedDomains: z.array(z.string().min(1)).optional(),
+  queryStats: z.array(z.object({
+    query: z.string().min(1),
+    rawFound: z.number().int().nonnegative(),
+    duplicates: z.number().int().nonnegative(),
+    accepted: z.number().int().nonnegative(),
+    rejectedDifferentCategory: z.number().int().nonnegative(),
+    rejectedOther: z.number().int().nonnegative(),
+    categoryBreakdown: z.record(leadCategorySchema, z.number().int().nonnegative())
+  })).optional(),
   dropOffSummary: z.object({
     filteredByPriorFeedback: z.number().int().nonnegative(),
     filteredByCache: z.number().int().nonnegative(),
@@ -384,8 +401,17 @@ const companyScreeningDatabaseSchema = z.object({
   records: z.array(companyScreeningRecordSchema)
 });
 
+const exaQueryHistoryInsightSchema = z.object({
+  query: z.string().min(1),
+  timestamp: z.string().optional(),
+  detectedCategories: z.array(leadCategorySchema).optional(),
+  foundCategoryBreakdown: z.record(leadCategorySchema, z.number().int().nonnegative()).optional(),
+  note: z.string().optional()
+});
+
 const testLabExaCacheSchema = z.object({
   queryHistory: z.array(z.string().min(1)),
+  queryInsights: z.array(exaQueryHistoryInsightSchema).optional(),
   discoveredDomains: z.array(z.string().min(1))
 });
 
@@ -397,9 +423,22 @@ const rawExaHistoryEntrySchema = z.object({
   sourceFilter: z.string().min(1).optional()
 });
 
+const liveExaQueryRunSchema = z.object({
+  timestamp: z.string().min(1),
+  filterName: z.string().min(1),
+  query: z.string().min(1),
+  plannedQueries: z.array(z.string().min(1)).optional(),
+  promptMessages: z.array(z.object({
+    role: z.string().min(1),
+    content: z.string()
+  })).optional(),
+  excludedDomains: z.array(z.string().min(1)).optional()
+});
+
 const liveExaCacheSchema = z.object({
   entries: z.array(rawExaHistoryEntrySchema),
-  discoveredDomains: z.array(z.string().min(1))
+  discoveredDomains: z.array(z.string().min(1)),
+  queryRuns: z.array(liveExaQueryRunSchema).optional()
 });
 
 type ScreeningCacheScope = "all" | "live" | "debug";
@@ -487,12 +526,14 @@ const defaultCompanyScreeningDatabase: CompanyScreeningDatabase = {
 
 const defaultTestLabExaCache = {
   queryHistory: [],
+  queryInsights: [],
   discoveredDomains: []
 };
 
 const defaultLiveExaCache: LiveExaCache = {
   entries: [],
-  discoveredDomains: []
+  discoveredDomains: [],
+  queryRuns: []
 };
 
 const suggestedControls = [
@@ -602,6 +643,24 @@ export class ControlPlaneStore {
       ...entry,
       companySearchMode: entry.companySearchMode ?? "open_crawler_search",
       targetCategory: this.normalizeLegacyCategory(entry.targetCategory) as SearchHistoryEntry["targetCategory"],
+      plannedQueries: entry.plannedQueries?.map((query) => query.trim()).filter(Boolean),
+      promptMessages: entry.promptMessages?.map((message) => ({
+        role: message.role,
+        content: message.content
+      })),
+      excludedDomains: entry.excludedDomains?.map((domain) => domain.trim().toLowerCase()).filter(Boolean),
+      queryStats: (entry.queryStats ?? []).map((queryStat) => ({
+        query: queryStat.query,
+        rawFound: queryStat.rawFound ?? 0,
+        duplicates: queryStat.duplicates ?? 0,
+        accepted: queryStat.accepted ?? 0,
+        rejectedDifferentCategory: queryStat.rejectedDifferentCategory ?? 0,
+        rejectedOther: queryStat.rejectedOther ?? 0,
+        categoryBreakdown: {
+          ...emptyCategoryBreakdown,
+          ...(queryStat.categoryBreakdown ?? {})
+        }
+      })),
       categoryBreakdown: {
         ...emptyCategoryBreakdown,
         ...(entry.categoryBreakdown ?? {})
@@ -773,6 +832,21 @@ export class ControlPlaneStore {
     }) as LatestLeadRunRecord;
   }
 
+  async clearLatestLeadRunSearchHistory(companySearchMode?: CompanySearchMode): Promise<LatestLeadRunRecord> {
+    const latestLeadRun = await this.getLatestLeadRun();
+    if (companySearchMode && latestLeadRun.requested?.companySearchMode && latestLeadRun.requested.companySearchMode !== companySearchMode) {
+      return latestLeadRun;
+    }
+
+    const nextLatestLeadRun: LatestLeadRunRecord = {
+      ...latestLeadRun,
+      searchHistory: []
+    };
+
+    await this.writeLatestLeadRun(nextLatestLeadRun);
+    return nextLatestLeadRun;
+  }
+
   async getCompanyScreeningDatabase(): Promise<CompanyScreeningDatabase> {
     const [liveDatabase, debugDatabase] = await Promise.all([
       this.readScreeningDatabaseForScope("live"),
@@ -801,22 +875,40 @@ export class ControlPlaneStore {
     ]);
   }
 
-  async getTestLabExaCache(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
+  async getTestLabExaCache(): Promise<{ queryHistory: string[]; queryInsights: ExaQueryHistoryInsight[]; discoveredDomains: string[] }> {
     const cache = await this.readTestLabExaCacheFromDatabase();
-    return testLabExaCacheSchema.parse({
+    const parsed = testLabExaCacheSchema.parse({
       ...defaultTestLabExaCache,
       ...cache
     });
+
+    return {
+      ...parsed,
+      queryInsights: parsed.queryInsights ?? parsed.queryHistory.map((query) => ({ query }))
+    };
   }
 
-  async writeTestLabExaCache(cache: { queryHistory: string[]; discoveredDomains: string[] }): Promise<void> {
+  async writeTestLabExaCache(cache: { queryHistory: string[]; queryInsights?: ExaQueryHistoryInsight[]; discoveredDomains: string[] }): Promise<void> {
+    const queryHistory = Array.from(new Set(cache.queryHistory)).slice(0, 500);
+    const queryInsights = (cache.queryInsights ?? [])
+      .filter((entry) => queryHistory.includes(entry.query))
+      .reduce<ExaQueryHistoryInsight[]>((entries, entry) => {
+        if (!entries.some((candidate) => candidate.query === entry.query)) {
+          entries.push(entry);
+        }
+
+        return entries;
+      }, [])
+      .slice(0, 500);
+
     this.debugCacheDatabase.writeTestLabExaCache(testLabExaCacheSchema.parse({
-      queryHistory: Array.from(new Set(cache.queryHistory)).slice(0, 500),
+      queryHistory,
+      queryInsights,
       discoveredDomains: Array.from(new Set(cache.discoveredDomains)).slice(0, 5000)
     }));
   }
 
-  async clearTestLabExaCache(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
+  async clearTestLabExaCache(): Promise<{ queryHistory: string[]; queryInsights: ExaQueryHistoryInsight[]; discoveredDomains: string[] }> {
     await this.writeTestLabExaCache(defaultTestLabExaCache);
     return defaultTestLabExaCache;
   }
@@ -846,9 +938,34 @@ export class ControlPlaneStore {
     }
 
     const entries = Array.from(entriesByDomain.values()).slice(0, 5000);
+    const queryRuns = (cache.queryRuns ?? [])
+      .reduce<NonNullable<LiveExaCache["queryRuns"]>>((runs, queryRun) => {
+        const timestamp = queryRun.timestamp?.trim();
+        const filterName = queryRun.filterName?.trim();
+        const query = queryRun.query?.trim();
+        if (!timestamp || !filterName || !query) {
+          return runs;
+        }
+
+        const key = `${filterName}__${query}`;
+        if (!runs.some((candidate) => `${candidate.filterName}__${candidate.query}` === key)) {
+          runs.push({
+            timestamp,
+            filterName,
+            query,
+            plannedQueries: queryRun.plannedQueries?.map((value) => value.trim()).filter(Boolean),
+            promptMessages: queryRun.promptMessages?.map((message) => ({ role: message.role, content: message.content })),
+            excludedDomains: queryRun.excludedDomains?.map((domain) => domain.trim().toLowerCase()).filter(Boolean)
+          });
+        }
+
+        return runs;
+      }, [])
+      .slice(0, 1000);
     this.liveCacheDatabase.writeLiveExaCache(liveExaCacheSchema.parse({
       entries,
-      discoveredDomains: entries.map((entry) => entry.domain)
+      discoveredDomains: entries.map((entry) => entry.domain),
+      queryRuns
     }));
   }
 
@@ -856,7 +973,19 @@ export class ControlPlaneStore {
     const current = await this.getLiveExaCache();
     await this.writeLiveExaCache({
       entries: [...entries, ...current.entries],
-      discoveredDomains: []
+      discoveredDomains: [],
+      queryRuns: current.queryRuns ?? []
+    });
+
+    return this.getLiveExaCache();
+  }
+
+  async recordLiveExaQueryRuns(queryRuns: NonNullable<LiveExaCache["queryRuns"]>): Promise<LiveExaCache> {
+    const current = await this.getLiveExaCache();
+    await this.writeLiveExaCache({
+      entries: current.entries,
+      discoveredDomains: [],
+      queryRuns: [...queryRuns, ...(current.queryRuns ?? [])]
     });
 
     return this.getLiveExaCache();
@@ -1075,7 +1204,7 @@ export class ControlPlaneStore {
         ...cache
       }));
     } else {
-      const cache = await readJsonFileWithRecovery<{ queryHistory?: string[]; discoveredDomains?: string[] }>(
+      const cache = await readJsonFileWithRecovery<{ queryHistory?: string[]; queryInsights?: ExaQueryHistoryInsight[]; discoveredDomains?: string[] }>(
         testLabExaCachePath,
         defaultTestLabExaCache
       );
@@ -1105,7 +1234,7 @@ export class ControlPlaneStore {
     return this.liveCacheDatabase.readLiveExaCache();
   }
 
-  private async readTestLabExaCacheFromDatabase(): Promise<{ queryHistory: string[]; discoveredDomains: string[] }> {
+  private async readTestLabExaCacheFromDatabase(): Promise<{ queryHistory: string[]; queryInsights: ExaQueryHistoryInsight[]; discoveredDomains: string[] }> {
     await this.ensureExaMigration("debug");
     return this.debugCacheDatabase.readTestLabExaCache();
   }
@@ -1172,7 +1301,7 @@ export class ControlPlaneStore {
     suggestedControls: string[];
     learning: LeadLearningData;
     latestLeadRun: LatestLeadRunRecord;
-    testLabExaCache: { queryHistory: string[]; discoveredDomains: string[] };
+    testLabExaCache: { queryHistory: string[]; queryInsights: ExaQueryHistoryInsight[]; discoveredDomains: string[] };
     liveExaCache: LiveExaCache;
     companyScreeningDatabase: CompanyScreeningDatabase;
   }> {

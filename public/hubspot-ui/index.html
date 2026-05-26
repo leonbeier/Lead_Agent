@@ -645,6 +645,10 @@
                 <input id="debug-useExaCompanyCategory" name="debug-useExaCompanyCategory" type="checkbox" />
                 <span>Exa category = company aktiv</span>
               </label>
+              <label class="checkbox-row">
+                <input id="debug-useAzureQueryPlanner" name="debug-useAzureQueryPlanner" type="checkbox" />
+                <span>Exa Query mit Azure neu planen</span>
+              </label>
             </form>
             <div class="stage-actions">
               <button id="run-debug-search" type="button">Suche generieren</button>
@@ -741,24 +745,20 @@
         <div class="panel-header">
           <div>
             <h2>Live Exa Verlauf</h2>
-            <p>Hier ist sichtbar, welche echten 15er-Proben und 50er-Expansionen wirklich tragfaehig waren.</p>
+            <p>Hier ist sichtbar, welche Exa-Queries wirklich gelaufen sind, fuer welche Zielkategorien gesucht wurde und welche Kategorien dabei tatsaechlich herauskamen.</p>
           </div>
           <button id="clear-live-exa-history" type="button" class="secondary">Live Exa Suchverlauf loeschen</button>
         </div>
+        <div id="live-search-debug-panel" class="debug-grid" style="margin-bottom: 18px;"></div>
         <div class="history-grid">
           <div>
-            <h3>Letzter Lauf</h3>
-            <div class="history-list" id="latest-run-list"></div>
+            <h3>Live Exa Ueberblick</h3>
+            <div class="history-list" id="live-exa-overview-list"></div>
           </div>
           <div>
-            <h3>Letzte Suchschritte</h3>
+            <h3>Queries und Ergebnisse</h3>
             <div class="history-list" id="search-history-list"></div>
             <div class="history-pagination" id="search-history-pagination"></div>
-          </div>
-          <div>
-            <h3>Rohe Exa-Websites vor KI</h3>
-            <div class="history-list" id="live-exa-history-list"></div>
-            <div class="history-pagination" id="live-exa-history-pagination"></div>
           </div>
         </div>
       </section>
@@ -836,7 +836,8 @@
       const templateList = document.getElementById("template-list");
       const contextList = document.getElementById("context-list");
       const prequalificationCategoryGrid = document.getElementById("prequalification-category-grid");
-      const latestRunList = document.getElementById("latest-run-list");
+      const liveExaOverviewList = document.getElementById("live-exa-overview-list");
+      const liveSearchDebugPanel = document.getElementById("live-search-debug-panel");
       const searchHistoryList = document.getElementById("search-history-list");
       const searchHistoryPagination = document.getElementById("search-history-pagination");
       const testLabQueryHistoryList = document.getElementById("testlab-query-history-list");
@@ -845,8 +846,6 @@
       const debugScreeningRejectedPagination = document.getElementById("debug-screening-rejected-pagination");
       const liveScreeningRejectedList = document.getElementById("live-screening-rejected-list");
       const liveScreeningRejectedPagination = document.getElementById("live-screening-rejected-pagination");
-      const liveExaHistoryList = document.getElementById("live-exa-history-list");
-      const liveExaHistoryPagination = document.getElementById("live-exa-history-pagination");
       const debugConsoleStatus = document.getElementById("debug-console-status");
       const debugSearchStatus = document.getElementById("debug-search-status");
       const debugAiStatus = document.getElementById("debug-ai-status");
@@ -880,15 +879,13 @@
         searchHistory: 1,
         testLabQueryHistory: 1,
         debugScreeningRejected: 1,
-        liveScreeningRejected: 1,
-        liveExaHistory: 1
+        liveScreeningRejected: 1
       };
       const paginationData = {
         searchHistory: [],
         testLabQueryHistory: [],
         debugScreeningRejected: [],
-        liveScreeningRejected: [],
-        liveExaHistory: []
+        liveScreeningRejected: []
       };
 
       function createFallbackBootstrapData() {
@@ -1022,12 +1019,11 @@
         renderSummary(data.settings, data.templates, data.latestLeadRun);
         renderTemplates(data.templates);
         renderContexts(data.categoryContexts || {});
-        renderLatestRun(data.latestLeadRun);
+        renderLiveExaOverview(data.latestLeadRun, getSearchHistoryForMode(data), data.settings);
         renderSearchHistory(getSearchHistoryForMode(data));
         renderTestLabQueryHistory(getTestLabQueryHistory(data));
         renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", data));
         renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", data));
-        renderLiveExaHistory(getLiveExaHistory(data));
 
         const fallbackWarnings = [
           initialError instanceof Error ? initialError.message : String(initialError),
@@ -1053,13 +1049,34 @@
       }
 
       async function requestJson(url, options = {}) {
-        const response = await fetch(url, {
+        const { timeoutMs, headers: optionHeaders, ...fetchOptions } = options || {};
+        const abortController = typeof AbortController === "function" ? new AbortController() : null;
+        const timeoutHandle = abortController && Number.isFinite(timeoutMs) && timeoutMs > 0
+          ? setTimeout(() => abortController.abort(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs)
+          : null;
+
+        let response;
+
+        try {
+          response = await fetch(url, {
           headers: {
             "Content-Type": "application/json",
-            "x-lead-agent-key": sharedKey
+            "x-lead-agent-key": sharedKey,
+            ...(optionHeaders || {})
           },
-          ...options
-        });
+            ...(abortController ? { signal: abortController.signal } : {}),
+            ...fetchOptions
+          });
+        } catch (error) {
+          if ((error && error.name) === "AbortError") {
+            throw new Error(`Request timed out for ${url}`);
+          }
+          throw error;
+        } finally {
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+        }
 
         if (!response.ok) {
           throw new Error(await response.text());
@@ -1108,6 +1125,7 @@
         document.getElementById("debug-contactSearchConcurrency").value = settings.contactSearchConcurrency || 20;
         document.getElementById("debug-useExaExcludeDomains").checked = settings.useExaExcludeDomains !== false;
         document.getElementById("debug-useExaCompanyCategory").checked = Boolean(settings.useExaCompanyCategory);
+        document.getElementById("debug-useAzureQueryPlanner").checked = false;
         document.querySelectorAll("input[name='targetCategories']").forEach((checkbox) => {
           checkbox.checked = (settings.targetCategories || []).includes(checkbox.value);
         });
@@ -1134,7 +1152,7 @@
 
       function collectSettings() {
         const companySearchMode = document.getElementById("companySearchMode").value;
-        const maxRuntimeMinutes = Number(document.getElementById("maxRuntimeMinutes").value);
+        const maxRuntimeMinutes = Math.min(180, Math.max(1, Number(document.getElementById("maxRuntimeMinutes").value) || 180));
         const categoryContexts = Object.fromEntries(
           Array.from(document.querySelectorAll("textarea[data-prequalification-category]")).map((field) => [
             field.dataset.prequalificationCategory,
@@ -1156,7 +1174,7 @@
           useExaExcludeDomains: document.getElementById("useExaExcludeDomains").checked,
           excludePreviouslyFoundExaDomains: document.getElementById("excludePreviouslyFoundExaDomains").checked,
           useExaCompanyCategory: document.getElementById("useExaCompanyCategory").checked,
-          maxRuntimeMs: Math.max(60000, Math.round(Math.max(1, maxRuntimeMinutes || 180) * 60 * 1000)),
+          maxRuntimeMs: Math.round(maxRuntimeMinutes * 60 * 1000),
           aiPrefilterConcurrency: Number(document.getElementById("aiPrefilterConcurrency").value) || 20,
           outreachPrepConcurrency: Number(document.getElementById("outreachPrepConcurrency").value) || 20,
           contactSearchConcurrency: Number(document.getElementById("contactSearchConcurrency").value) || 20,
@@ -1279,28 +1297,352 @@
         });
       }
 
-      function renderLatestRun(latestLeadRun) {
-        if (!latestLeadRun || !latestLeadRun.createdAt) {
-          latestRunList.innerHTML = '<div class="history-item"><strong>Noch kein verwertbarer Lauf</strong><span class="mini-meta">Sobald ein echter Lauf durch ist, erscheinen hier Trefferzahl, getestete Filter und Exportstatus.</span></div>';
+      function getCategoryLabel(category) {
+        if (!category) {
+          return "n/a";
+        }
+
+        const selectable = bootstrapData?.selectableCategories || FALLBACK_SELECTABLE_CATEGORIES;
+        const match = selectable.find((option) => option.value === category);
+        if (match) {
+          return match.label;
+        }
+
+        if (category === "irrelevant") {
+          return "Irrelevant";
+        }
+
+        if (category === "other") {
+          return "Other";
+        }
+
+        return category;
+      }
+
+      function summarizeCategoryBreakdown(entries) {
+        const totals = {};
+
+        (entries || []).forEach((entry) => {
+          Object.entries(entry.categoryBreakdown || {}).forEach(([category, count]) => {
+            if (!count) {
+              return;
+            }
+
+            totals[category] = (totals[category] || 0) + count;
+          });
+        });
+
+        return Object.entries(totals)
+          .sort((left, right) => right[1] - left[1])
+          .map(([category, count]) => `${getCategoryLabel(category)}: ${count}`);
+      }
+
+      function summarizeQueryCategoryBreakdown(categoryBreakdown) {
+        return Object.entries(categoryBreakdown || {})
+          .filter(([, count]) => count > 0)
+          .sort((left, right) => right[1] - left[1])
+          .map(([category, count]) => `${getCategoryLabel(category)} ${count}`)
+          .join(" · ");
+      }
+
+      function toHistoryTimestamp(value) {
+        const timestamp = new Date(value || 0).getTime();
+        return Number.isFinite(timestamp) ? timestamp : 0;
+      }
+
+      function sortSearchHistoryByTimestamp(entries) {
+        return [...(entries || [])].sort((left, right) => toHistoryTimestamp(right?.timestamp) - toHistoryTimestamp(left?.timestamp));
+      }
+
+      function dedupeLiveSearchHistory(entries) {
+        const seen = new Set();
+        const dedupedEntries = [];
+
+        for (const entry of sortSearchHistoryByTimestamp(entries)) {
+          const key = JSON.stringify([
+            entry?.companySearchMode || "",
+            entry?.filterName || "",
+            entry?.batchType || "",
+            entry?.page || 0,
+            entry?.targetCategory || "",
+            (entry?.discoveryQueries || []).filter(Boolean)
+          ]);
+
+          if (seen.has(key)) {
+            continue;
+          }
+
+          seen.add(key);
+          dedupedEntries.push(entry);
+        }
+
+        return dedupedEntries;
+      }
+
+      function getLiveExaFallbackFilterName(sourceFilter) {
+        const normalized = (sourceFilter || "Live Exa Query").trim();
+        return normalized.split(" (exa-search:")[0] || normalized;
+      }
+
+      function getLiveExaQueryKey(filterName, query) {
+        return `${String(filterName || "").trim().toLowerCase()}::${String(query || "").trim().toLowerCase()}`;
+      }
+
+      function buildLiveExaSearchHistoryFromCache(data = bootstrapData) {
+        const queryRuns = sortSearchHistoryByTimestamp(data?.liveExaCache?.queryRuns || []);
+        if (queryRuns.length > 0) {
+          return queryRuns.map((queryRun) => ({
+            timestamp: queryRun.timestamp,
+            companySearchMode: "exa_search",
+            filterName: queryRun.filterName,
+            batchType: "expand_50",
+            page: 1,
+            requestedCount: 1,
+            returnedCount: 0,
+            relevantCount: 0,
+            relevanceRatio: 0,
+            categoryBreakdown: {},
+            passedThreshold: false,
+            recommendation: "live-exa-cache",
+            fetchedSampleCount: 0,
+            eligibleSampleCount: 0,
+            discoveryQueries: [queryRun.query],
+            plannedQueries: queryRun.plannedQueries || [queryRun.query],
+            promptMessages: queryRun.promptMessages,
+            excludedDomains: queryRun.excludedDomains,
+            queryStats: [{
+              query: queryRun.query,
+              rawFound: 0,
+              duplicates: 0,
+              accepted: 0,
+              rejectedDifferentCategory: 0,
+              rejectedOther: 0,
+              categoryBreakdown: {}
+            }],
+            decisionSamples: []
+          }));
+        }
+
+        const groupedEntries = new Map();
+
+        for (const entry of sortSearchHistoryByTimestamp(data?.liveExaCache?.entries || [])) {
+          const query = entry?.discoveryQuery?.trim();
+          if (!query) {
+            continue;
+          }
+
+          const filterName = getLiveExaFallbackFilterName(entry?.sourceFilter);
+          const key = getLiveExaQueryKey(filterName, query);
+          const current = groupedEntries.get(key);
+
+          if (current) {
+            current.returnedCount += 1;
+            current.fetchedSampleCount += 1;
+            current.queryStats[0].rawFound += 1;
+            if (toHistoryTimestamp(entry?.timestamp) > toHistoryTimestamp(current.timestamp)) {
+              current.timestamp = entry.timestamp;
+            }
+            continue;
+          }
+
+          groupedEntries.set(key, {
+            timestamp: entry.timestamp,
+            companySearchMode: "exa_search",
+            filterName,
+            batchType: "expand_50",
+            page: 1,
+            requestedCount: 1,
+            returnedCount: 1,
+            relevantCount: 0,
+            relevanceRatio: 0,
+            categoryBreakdown: {},
+            passedThreshold: false,
+            recommendation: "live-exa-cache",
+            fetchedSampleCount: 1,
+            eligibleSampleCount: 0,
+            discoveryQueries: [query],
+            queryStats: [{
+              query,
+              rawFound: 1,
+              duplicates: 0,
+              accepted: 0,
+              rejectedDifferentCategory: 0,
+              rejectedOther: 0
+            }],
+            decisionSamples: []
+          });
+        }
+
+        return sortSearchHistoryByTimestamp(Array.from(groupedEntries.values()));
+      }
+
+      function getLiveQueryTextsForSearchHistory(searchHistory, data = bootstrapData) {
+        const historyQueries = (searchHistory || []).flatMap((entry) => entry.discoveryQueries || []).filter(Boolean);
+        const historyTimestamps = (searchHistory || []).map((entry) => toHistoryTimestamp(entry?.timestamp)).filter((value) => value > 0);
+        const oldestVisibleTimestamp = historyTimestamps.length > 0 ? Math.min(...historyTimestamps) : 0;
+        const liveCacheQueries = (data?.liveExaCache?.entries || [])
+          .filter((entry) => !oldestVisibleTimestamp || toHistoryTimestamp(entry?.timestamp) >= oldestVisibleTimestamp)
+          .map((entry) => entry.discoveryQuery)
+          .filter(Boolean);
+        const persistedQueryRuns = (data?.liveExaCache?.queryRuns || [])
+          .filter((entry) => !oldestVisibleTimestamp || toHistoryTimestamp(entry?.timestamp) >= oldestVisibleTimestamp)
+          .map((entry) => entry.query)
+          .filter(Boolean);
+
+        return Array.from(new Set([...historyQueries, ...liveCacheQueries, ...persistedQueryRuns]));
+      }
+
+      function formatPlannerPromptMessages(promptMessages) {
+        return (promptMessages || []).map((message) => `[${message.role}]
+${message.content || ""}`).join("\n\n");
+      }
+
+      function getLatestLivePlannerDebugData(searchHistory, data = bootstrapData) {
+        const historyEntries = sortSearchHistoryByTimestamp(searchHistory || []);
+        const historyEntry = historyEntries.find((entry) => (
+          (Array.isArray(entry?.plannedQueries) && entry.plannedQueries.length > 0)
+          || (Array.isArray(entry?.promptMessages) && entry.promptMessages.length > 0)
+          || (Array.isArray(entry?.excludedDomains) && entry.excludedDomains.length > 0)
+        ));
+        const latestQueryRun = sortSearchHistoryByTimestamp(data?.liveExaCache?.queryRuns || [])[0];
+
+        return {
+          filterName: historyEntry?.filterName || latestQueryRun?.filterName || data?.latestLeadRun?.requested?.targetCategories?.[0] || "Unbekannter Filter",
+          source: Array.isArray(historyEntry?.promptMessages) && historyEntry.promptMessages.length > 0
+            ? "azure_planner"
+            : (latestQueryRun ? "live_exa_cache" : "not_persisted_yet"),
+          lastExecutedQuery: historyEntry?.discoveryQueries?.[0] || latestQueryRun?.query || null,
+          plannedQueries: historyEntry?.plannedQueries || latestQueryRun?.plannedQueries || [],
+          promptMessages: historyEntry?.promptMessages || latestQueryRun?.promptMessages || [],
+          excludedDomains: historyEntry?.excludedDomains || latestQueryRun?.excludedDomains || [],
+          timestamp: historyEntry?.timestamp || latestQueryRun?.timestamp || data?.latestLeadRun?.createdAt || null
+        };
+      }
+
+      function renderLiveSearchDebugPanel(searchHistory, data = bootstrapData) {
+        if (!liveSearchDebugPanel) {
           return;
         }
 
-        latestRunList.innerHTML = [
-          `<div class="history-item"><strong>${latestLeadRun.summary.foundCandidates} Kontakte im letzten Export</strong><span class="mini-meta">Erstellt: ${new Date(latestLeadRun.createdAt).toLocaleString("de-DE")}</span><span class="mini-meta">Filter getestet: ${latestLeadRun.summary.filtersTested}, frueh gestoppt: ${latestLeadRun.summary.filtersStoppedEarly}</span></div>`,
-          ...latestLeadRun.contacts.slice(0, 4).map((contact) => `
-            <div class="history-item">
-              <strong>${contact.companyName}</strong>
-              <span class="mini-meta">${contact.category} · Score ${contact.relevanceScore}</span>
-              <span class="mini-meta">${contact.sourceFilter}</span>
-              ${contact.outreachLanguage ? `<span class="mini-meta">Sprache: ${contact.outreachLanguage.toUpperCase()} · Rankings C/S/P: ${(contact.rankings?.customer ?? "-")}/${(contact.rankings?.serviceProvider ?? "-")}/${(contact.rankings?.partner ?? "-")}</span>` : ""}
-              ${typeof contact.businessPotentialEUR === "number" ? `<span class="mini-meta">Potential: EUR ${Math.round(contact.businessPotentialEUR).toLocaleString("de-DE")}</span>` : ""}
-              ${contact.targetIndustry ? `<span class="mini-meta">Target Industry: ${contact.targetIndustry}</span>` : ""}
-              ${contact.productsOffered ? `<span class="mini-meta">Products Offered: ${contact.productsOffered}</span>` : ""}
-              ${contact.publicContactEmails?.length ? `<span class="mini-meta">E-Mail: ${contact.publicContactEmails.slice(0, 2).join(", ")}</span>` : ""}
-              ${contact.publicContactPhones?.length ? `<span class="mini-meta">Telefon: ${contact.publicContactPhones.slice(0, 2).join(", ")}</span>` : ""}
-            </div>
-          `)
+        const debugData = getLatestLivePlannerDebugData(searchHistory, data);
+        const hasPlannerData = debugData.plannedQueries.length > 0 || debugData.promptMessages.length > 0 || debugData.excludedDomains.length > 0;
+
+        liveSearchDebugPanel.innerHTML = `
+          <div class="debug-card" style="grid-column: 1 / -1;">
+            <h3>Live Search Debug</h3>
+            <p>Hier sollte der Azure-Planer-Prompt fuer die Exa-Query-Generierung direkt sichtbar sein, ohne dass man einzelne Verlaufseintraege aufklappen muss.</p>
+            <p><strong>Quelle:</strong> ${escapeHtml(debugData.source)}</p>
+            <p><strong>Filter:</strong> ${escapeHtml(debugData.filterName || "Unbekannt")}</p>
+            <p><strong>Letztes Update:</strong> ${escapeHtml(debugData.timestamp ? new Date(debugData.timestamp).toLocaleString("de-DE") : "n/a")}</p>
+            ${debugData.lastExecutedQuery ? `<details open><summary>Aktuelle / letzte Exa Query</summary><pre>${escapeHtml(debugData.lastExecutedQuery)}</pre></details>` : ""}
+            ${debugData.plannedQueries.length > 0 ? `<details open><summary>Geplante Exa-Queries (${debugData.plannedQueries.length})</summary><pre>${escapeHtml(debugData.plannedQueries.join("\n\n"))}</pre></details>` : ""}
+            ${debugData.promptMessages.length > 0 ? `<details open><summary>Azure Planner Prompt</summary><pre>${escapeHtml(formatPlannerPromptMessages(debugData.promptMessages))}</pre></details>` : ""}
+            ${debugData.excludedDomains.length > 0 ? `<details><summary>Excluded Websites (${debugData.excludedDomains.length})</summary><pre>${escapeHtml(debugData.excludedDomains.join("\n"))}</pre></details>` : ""}
+            ${!hasPlannerData ? '<div class="history-item" style="margin-top: 12px;"><strong>Noch keine sichtbaren Azure-Planer-Daten im Live-Verlauf</strong><span class="mini-meta">Der UI-Block ist jetzt vorhanden. Wenn hier weiter nichts erscheint, fehlt nicht die UI, sondern die Persistenz von plannedQueries, promptMessages und excludedDomains im Live-Pfad.</span></div>' : ""}
+          </div>
+        `;
+      }
+
+      function renderLiveExaOverview(latestLeadRun, searchHistory, settings, data = bootstrapData) {
+        const desiredCategories = latestLeadRun?.requested?.targetCategories?.length
+          ? latestLeadRun.requested.targetCategories
+          : (settings?.targetCategories || []);
+        const queryTexts = getLiveQueryTextsForSearchHistory(searchHistory, data);
+        const foundCategorySummary = summarizeCategoryBreakdown(searchHistory);
+        const latestTimestamp = (searchHistory || [])[0]?.timestamp || latestLeadRun?.createdAt;
+
+        renderLiveSearchDebugPanel(searchHistory, data);
+
+        if ((!searchHistory || searchHistory.length === 0) && queryTexts.length === 0) {
+          liveExaOverviewList.innerHTML = '<div class="history-item"><strong>Noch kein Live Exa Verlauf</strong><span class="mini-meta">Sobald ein Live-Run echte Exa-Schritte ausfuehrt, erscheinen hier Queries, Zielkategorien und Kategorie-Ergebnisse.</span></div>';
+          return;
+        }
+
+        liveExaOverviewList.innerHTML = [
+          `<div class="history-item"><strong>${searchHistory?.length || 0} Suchschritte im aktuellen Verlauf</strong><span class="mini-meta">Letztes Update: ${latestTimestamp ? new Date(latestTimestamp).toLocaleString("de-DE") : "n/a"}</span><span class="mini-meta">Gewuenschte Kategorien: ${(desiredCategories || []).map((category) => getCategoryLabel(category)).join(", ") || "keine"}</span><span class="mini-meta">Echte Query-Texte: ${queryTexts.length}</span></div>`,
+          `<div class="history-item"><strong>Gefundene Kategorien gesamt</strong><span class="mini-meta">${foundCategorySummary.join(" · ") || "Noch keine kategorisierten Ergebnisse."}</span></div>`
         ].join("");
+      }
+
+      function buildExaQueryRows(entries) {
+        const groupedRows = new Map();
+
+        for (const entry of sortSearchHistoryByTimestamp(entries)) {
+          const stats = [];
+          const seenQueries = new Set();
+
+          for (const queryStat of entry?.queryStats || []) {
+            if (!queryStat?.query || seenQueries.has(queryStat.query)) {
+              continue;
+            }
+            seenQueries.add(queryStat.query);
+            stats.push(queryStat);
+          }
+
+          for (const query of entry?.discoveryQueries || []) {
+            if (!query || seenQueries.has(query)) {
+              continue;
+            }
+
+            seenQueries.add(query);
+            stats.push({
+              query,
+              rawFound: 0,
+              duplicates: 0,
+              accepted: 0,
+              rejectedDifferentCategory: 0,
+              rejectedOther: 0,
+              categoryBreakdown: {}
+            });
+          }
+
+          for (const queryStat of stats) {
+            const key = getLiveExaQueryKey(entry?.filterName, queryStat?.query);
+            const existing = groupedRows.get(key);
+
+            if (existing) {
+              existing.rawFound += queryStat.rawFound || 0;
+              existing.duplicates += queryStat.duplicates || 0;
+              existing.accepted += queryStat.accepted || 0;
+              existing.rejectedDifferentCategory += queryStat.rejectedDifferentCategory || 0;
+              existing.rejectedOther += queryStat.rejectedOther || 0;
+              Object.entries(queryStat.categoryBreakdown || {}).forEach(([category, count]) => {
+                existing.categoryBreakdown[category] = (existing.categoryBreakdown[category] || 0) + count;
+              });
+              if ((!existing.promptMessages || existing.promptMessages.length === 0) && Array.isArray(entry?.promptMessages) && entry.promptMessages.length > 0) {
+                existing.promptMessages = entry.promptMessages;
+              }
+              if ((!existing.plannedQueries || existing.plannedQueries.length === 0) && Array.isArray(entry?.plannedQueries) && entry.plannedQueries.length > 0) {
+                existing.plannedQueries = entry.plannedQueries;
+              }
+              if ((!existing.excludedDomains || existing.excludedDomains.length === 0) && Array.isArray(entry?.excludedDomains) && entry.excludedDomains.length > 0) {
+                existing.excludedDomains = entry.excludedDomains;
+              }
+              if (toHistoryTimestamp(entry?.timestamp) > toHistoryTimestamp(existing.timestamp)) {
+                existing.timestamp = entry.timestamp;
+              }
+              continue;
+            }
+
+            groupedRows.set(key, {
+              filterName: entry?.filterName,
+              query: queryStat?.query,
+              timestamp: entry?.timestamp,
+              rawFound: queryStat?.rawFound || 0,
+              duplicates: queryStat?.duplicates || 0,
+              accepted: queryStat?.accepted || 0,
+              rejectedDifferentCategory: queryStat?.rejectedDifferentCategory || 0,
+              rejectedOther: queryStat?.rejectedOther || 0,
+              categoryBreakdown: { ...(queryStat?.categoryBreakdown || {}) },
+              plannedQueries: Array.isArray(entry?.plannedQueries) ? entry.plannedQueries : undefined,
+              promptMessages: Array.isArray(entry?.promptMessages) ? entry.promptMessages : undefined,
+              excludedDomains: Array.isArray(entry?.excludedDomains) ? entry.excludedDomains : undefined
+            });
+          }
+        }
+
+        return Array.from(groupedRows.values())
+          .sort((left, right) => toHistoryTimestamp(right?.timestamp) - toHistoryTimestamp(left?.timestamp));
       }
 
       function getActiveSearchMode(data = bootstrapData) {
@@ -1310,18 +1652,50 @@
       }
 
       function getSearchHistoryForMode(data = bootstrapData) {
-        const latestRunHistory = data?.latestLeadRun?.searchHistory || [];
-        if (latestRunHistory.length > 0) {
-          return latestRunHistory;
+        const activeMode = getActiveSearchMode(data);
+        const latestRunHistory = sortSearchHistoryByTimestamp(data?.latestLeadRun?.searchHistory || []);
+        const modeHistory = sortSearchHistoryByTimestamp(
+          data?.learning?.searchHistoryByMode?.[activeMode]?.searchHistory
+          || (data?.learning?.searchHistory || []).filter((entry) => entry.companySearchMode === activeMode)
+        );
+
+        if (activeMode !== "exa_search") {
+          return latestRunHistory.length > 0 ? latestRunHistory : modeHistory;
         }
 
-        const activeMode = getActiveSearchMode(data);
-        return data?.learning?.searchHistoryByMode?.[activeMode]?.searchHistory
-          || (data?.learning?.searchHistory || []).filter((entry) => entry.companySearchMode === activeMode);
+        const latestRunNewestTimestamp = toHistoryTimestamp(latestRunHistory[0]?.timestamp);
+        const modeNewestTimestamp = toHistoryTimestamp(modeHistory[0]?.timestamp);
+        const liveCacheHistory = buildLiveExaSearchHistoryFromCache(data);
+        const liveCacheNewestTimestamp = toHistoryTimestamp(liveCacheHistory[0]?.timestamp);
+        let selectedHistory = dedupeLiveSearchHistory(latestRunHistory.length > 0 ? latestRunHistory : modeHistory);
+
+        if (modeNewestTimestamp > latestRunNewestTimestamp) {
+          const fresherModeHistory = modeHistory.filter((entry) => toHistoryTimestamp(entry?.timestamp) > latestRunNewestTimestamp);
+          selectedHistory = dedupeLiveSearchHistory(fresherModeHistory.length > 0 ? fresherModeHistory : modeHistory);
+        }
+
+        if (liveCacheNewestTimestamp <= toHistoryTimestamp(selectedHistory[0]?.timestamp)) {
+          return selectedHistory;
+        }
+
+        const selectedQueryKeys = new Set(
+          selectedHistory.flatMap((entry) => (entry.discoveryQueries || []).map((query) => getLiveExaQueryKey(entry.filterName, query)))
+        );
+        const liveCacheFallbackEntries = liveCacheHistory.filter((entry) => {
+          const query = entry.discoveryQueries?.[0];
+          return !selectedQueryKeys.has(getLiveExaQueryKey(entry.filterName, query));
+        });
+
+        return dedupeLiveSearchHistory([...liveCacheFallbackEntries, ...selectedHistory]);
       }
 
       function getTestLabQueryHistory(data = bootstrapData) {
-        return data?.testLabExaCache?.queryHistory || [];
+        const insights = data?.testLabExaCache?.queryInsights;
+        if (Array.isArray(insights) && insights.length > 0) {
+          return insights;
+        }
+
+        return (data?.testLabExaCache?.queryHistory || []).map((query) => ({ query }));
       }
 
       function getLiveExaHistory(data = bootstrapData) {
@@ -1395,26 +1769,49 @@
       }
 
       function renderSearchHistory(entries) {
-        paginationData.searchHistory = entries || [];
+        const queryRows = getActiveSearchMode() === "exa_search" ? buildExaQueryRows(entries || []) : null;
+        paginationData.searchHistory = queryRows || entries || [];
 
-        if (!entries || entries.length === 0) {
+        if ((!queryRows || queryRows.length === 0) && (!entries || entries.length === 0)) {
           searchHistoryList.innerHTML = '<div class="history-item"><strong>Noch keine Suchhistorie</strong><span class="mini-meta">Die 15er-Proben und 50er-Expansionen werden nach dem ersten Lauf hier aufgezeichnet.</span></div>';
           searchHistoryPagination.innerHTML = "";
           return;
         }
 
-        const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
+        const rows = queryRows || entries || [];
+        const totalPages = Math.max(1, Math.ceil(rows.length / HISTORY_PAGE_SIZE));
         const page = Math.min(paginationState.searchHistory, totalPages);
         paginationState.searchHistory = page;
-        const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+        const pageEntries = rows.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+
+        if (queryRows) {
+          searchHistoryList.innerHTML = pageEntries.map((row) => `
+            <div class="history-item">
+              <strong>${escapeHtml(row.query || "Unbekannte Query")}</strong>
+              <span class="mini-meta">Suchlauf: ${escapeHtml(row.filterName || "Unbekannter Filter")}</span>
+              <span class="mini-meta">Ergebnisse der Suche: ${row.rawFound || 0} · Doppelte entfernt: ${row.duplicates || 0}</span>
+              <span class="mini-meta">Kategorien nach AI-Check: ${escapeHtml(summarizeQueryCategoryBreakdown(row.categoryBreakdown) || "Noch keine AI-Ergebnisse gespeichert.")}</span>
+              <span class="mini-meta">Other: ${row.rejectedOther || 0}</span>
+              ${Array.isArray(row.plannedQueries) && row.plannedQueries.length > 0 ? `<details><summary>Geplante Exa-Queries (${row.plannedQueries.length})</summary><pre>${escapeHtml(row.plannedQueries.join("\n\n"))}</pre></details>` : ""}
+              ${Array.isArray(row.promptMessages) && row.promptMessages.length > 0 ? `<details><summary>Azure Planner Prompt</summary><pre>${escapeHtml(row.promptMessages.map((message) => `[${message.role}]\n${message.content || ""}`).join("\n\n"))}</pre></details>` : ""}
+              ${Array.isArray(row.excludedDomains) && row.excludedDomains.length > 0 ? `<details><summary>Excluded Websites (${row.excludedDomains.length})</summary><pre>${escapeHtml(row.excludedDomains.join("\n"))}</pre></details>` : ""}
+            </div>
+          `).join("");
+
+          renderPagination(searchHistoryPagination, "searchHistory", page, totalPages);
+          return;
+        }
 
         searchHistoryList.innerHTML = pageEntries.map((entry) => `
           <div class="history-item">
             <strong>${entry.filterName}</strong>
-            <span class="mini-meta">${entry.companySearchMode === "diffbot_search" ? "Diffbot" : entry.companySearchMode === "exa_search" ? "Exa" : entry.companySearchMode} · ${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page} · Zielkategorie: ${entry.targetCategory || "n/a"}</span>
-            <span class="mini-meta">Relevant: ${entry.relevantCount}/${entry.returnedCount} (${Math.round(entry.relevanceRatio * 100)}%)</span>
-            <span class="mini-meta">Kategorien: ${Object.entries(entry.categoryBreakdown || {}).filter(([, count]) => count > 0).map(([category, count]) => `${category}=${count}`).join(", ") || "keine"}</span>
-            <span class="mini-meta">${entry.recommendation}</span>
+            <span class="mini-meta">${entry.companySearchMode === "diffbot_search" ? "Diffbot" : entry.companySearchMode === "exa_search" ? "Exa" : entry.companySearchMode} · ${entry.batchType === "probe_15" ? "15er Probe" : "50er Expansion"} · Seite ${entry.page}</span>
+            <span class="mini-meta">Gewuenschte Kategorie in diesem Schritt: ${escapeHtml(getCategoryLabel(entry.targetCategory))}</span>
+            <span class="mini-meta">Ergebnis: relevant ${entry.relevantCount}/${entry.returnedCount} (${Math.round(entry.relevanceRatio * 100)}%) · angefragt ${entry.requestedCount}</span>
+            <span class="mini-meta">Gefundene Kategorien: ${Object.entries(entry.categoryBreakdown || {}).filter(([, count]) => count > 0).map(([category, count]) => `${getCategoryLabel(category)}=${count}`).join(", ") || "keine"}</span>
+            ${entry.discoveryQueries?.length ? `<span class="mini-meta">Queries: ${entry.discoveryQueries.map((query) => escapeHtml(query)).join(" | ")}</span>` : ""}
+            ${entry.dropOffSummary ? `<span class="mini-meta">Drop-off: Prior Feedback ${entry.dropOffSummary.filteredByPriorFeedback || 0}, Cache ${entry.dropOffSummary.filteredByCache || 0}, HubSpot ${entry.dropOffSummary.filteredByHubSpot || 0}, Irrelevant ${entry.dropOffSummary.categorizedIrrelevant || 0}, Other ${entry.dropOffSummary.categorizedOther || 0}</span>` : ""}
+            <span class="mini-meta">${escapeHtml(entry.recommendation)}</span>
             ${formatFilterSnapshot(entry.filterSnapshot)}
           </div>
         `).join("");
@@ -1436,10 +1833,12 @@
         paginationState.testLabQueryHistory = page;
         const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
 
-        testLabQueryHistoryList.innerHTML = pageEntries.map((query, index) => `
+        testLabQueryHistoryList.innerHTML = pageEntries.map((entry, index) => `
           <div class="history-item">
             <strong>Test-Lab Query ${escapeHtml((page - 1) * HISTORY_PAGE_SIZE + index + 1)}</strong>
-            <span class="mini-meta">${escapeHtml(query)}</span>
+            <span class="mini-meta">${escapeHtml(entry.query || "")}</span>
+            ${entry.detectedCategories?.length ? `<span class="mini-meta">Simulierte erkannte Klassen: ${escapeHtml(entry.detectedCategories.join(", "))}</span>` : ""}
+            ${entry.note ? `<span class="mini-meta">${escapeHtml(entry.note)}</span>` : ""}
           </div>
         `).join("");
 
@@ -1474,32 +1873,6 @@
         `).join("");
 
         renderPagination(paginationElement, paginationKey, page, totalPages);
-      }
-
-      function renderLiveExaHistory(entries) {
-        paginationData.liveExaHistory = entries || [];
-
-        if (!entries || entries.length === 0) {
-          liveExaHistoryList.innerHTML = '<div class="history-item"><strong>Noch keine rohe Exa-Historie</strong><span class="mini-meta">Hier erscheinen gefundene Websites direkt aus Exa, bevor der KI-Vorfilter sie prueft.</span></div>';
-          liveExaHistoryPagination.innerHTML = "";
-          return;
-        }
-
-        const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
-        const page = Math.min(paginationState.liveExaHistory, totalPages);
-        paginationState.liveExaHistory = page;
-        const pageEntries = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
-
-        liveExaHistoryList.innerHTML = pageEntries.map((entry) => `
-          <div class="history-item">
-            <strong>${escapeHtml(entry.companyName || entry.domain || "Unbekannte Website")}</strong>
-            <span class="mini-meta">${escapeHtml(entry.domain || "keine Domain")}</span>
-            ${entry.discoveryQuery ? `<span class="mini-meta">Query: ${escapeHtml(entry.discoveryQuery)}</span>` : ""}
-            ${entry.timestamp ? `<span class="mini-meta">Gefunden: ${escapeHtml(new Date(entry.timestamp).toLocaleString("de-DE"))}</span>` : ""}
-          </div>
-        `).join("");
-
-        renderPagination(liveExaHistoryPagination, "liveExaHistory", page, totalPages);
       }
 
       function renderTemplates(templates) {
@@ -1581,6 +1954,7 @@
           limit: Number(document.getElementById("debug-limit").value) || 4,
           useExaExcludeDomains: document.getElementById("debug-useExaExcludeDomains").checked,
           useExaCompanyCategory: document.getElementById("debug-useExaCompanyCategory").checked,
+          useAzureQueryPlanner: document.getElementById("debug-useAzureQueryPlanner").checked,
           aiPrefilterConcurrency: Number(document.getElementById("debug-aiPrefilterConcurrency").value) || 8,
           outreachPrepConcurrency: Number(document.getElementById("debug-outreachPrepConcurrency").value) || 6,
           contactSearchConcurrency: Number(document.getElementById("debug-contactSearchConcurrency").value) || 8,
@@ -1650,6 +2024,13 @@
           ...searches.map((search, index) => `
             <article class="debug-card">
               <h3>Suchanfrage ${index + 1}</h3>
+              <details open>
+                <summary>Query-Generierung</summary>
+                <pre>${escapeHtml(JSON.stringify(search.queryGeneration || {
+                  source: "baseline_default_queries",
+                  note: "Kein Azure-Query-Prompt genutzt; Query stammt direkt aus den Baseline-Queries."
+                }, null, 2))}</pre>
+              </details>
               <details open>
                 <summary>Exakte Suchanfrage</summary>
                 <pre>${escapeHtml(search.query)}</pre>
@@ -1813,17 +2194,23 @@
       async function runDebugStage(stage, statusElement, resultsElement, pendingTitle, pendingBody) {
         try {
           const requestPayload = collectStageRequest(stage);
+          const liveRunStatus = await requestJson("/api/control/run-status", { timeoutMs: 5000 }).catch(() => null);
+          const liveRunNote = liveRunStatus?.running
+            ? "Ein Live-Run ist gerade aktiv. Das Test-Lab nutzt einen separaten Endpoint, kann aber waehrenddessen deutlich langsamer antworten."
+            : "";
           setStatus(debugConsoleStatus, `Test Lab laeuft: ${stage}`);
           setStatus(statusElement, "Lauf startet...");
           resultsElement.innerHTML = `
             <div class="debug-card">
               <h3>${escapeHtml(pendingTitle)}</h3>
               <p>${escapeHtml(pendingBody)}</p>
+              ${liveRunNote ? `<p>${escapeHtml(liveRunNote)}</p>` : ""}
             </div>
           `;
           const result = await requestJson("/api/debug/test-console", {
             method: "POST",
-            body: JSON.stringify(requestPayload)
+            body: JSON.stringify(requestPayload),
+            timeoutMs: 180000
           });
 
           if (stage === "company_search") {
@@ -1839,6 +2226,8 @@
             debugTransferState.contactDiscovery = result;
             renderContactsStage(result);
           }
+
+          await refreshRunSurfaces();
 
           setStatus(statusElement, "Fertig");
           setStatus(debugConsoleStatus, `Test Lab fertig: ${stage}`);
@@ -1895,12 +2284,11 @@
           renderSummary(data.settings, data.templates, data.latestLeadRun);
           renderTemplates(data.templates);
           renderContexts(data.categoryContexts);
-          renderLatestRun(data.latestLeadRun);
+          renderLiveExaOverview(data.latestLeadRun, getSearchHistoryForMode(data), data.settings);
           renderSearchHistory(getSearchHistoryForMode(data));
           renderTestLabQueryHistory(getTestLabQueryHistory(data));
           renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", data));
           renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", data));
-          renderLiveExaHistory(getLiveExaHistory(data));
           setStatus(settingsStatus, "Settings geladen");
           setStatus(templatesStatus, "Templates geladen");
         } catch (error) {
@@ -1944,10 +2332,9 @@
         bootstrapData.liveExaCache = (await requestJson("/api/control/cache/live-exa")).cache;
         bootstrapData.companyScreeningDatabase = screeningPayload.database;
         renderSummary(collectSettings(), bootstrapData.templates, latestLeadRun);
-        renderLatestRun(latestLeadRun);
+        renderLiveExaOverview(latestLeadRun, getSearchHistoryForMode(bootstrapData), bootstrapData.settings);
         renderSearchHistory(getSearchHistoryForMode(bootstrapData));
         renderTestLabQueryHistory(getTestLabQueryHistory(bootstrapData));
-        renderLiveExaHistory(getLiveExaHistory(bootstrapData));
         renderRejectedScreeningHistory("debug", getRejectedScreeningRecords("debug", bootstrapData));
         renderRejectedScreeningHistory("live", getRejectedScreeningRecords("live", bootstrapData));
       }
@@ -1975,7 +2362,7 @@
           progressValue: runStatus.progressValue,
           progressDescription: runStatus.progressDescription,
           detail: runStatus.detail,
-          currentQualifiedCompanies: runStatus.foundCandidates ?? 0,
+          currentQualifiedCompanies: runStatus.funnel?.afterHubSpotDedup ?? runStatus.foundCandidates ?? 0,
           exaRawCompanies: runStatus.funnel?.afterCrawlerPrefilter ?? 0,
           qualifiedAfterHubSpotCheck: runStatus.funnel?.afterHubSpotDedup ?? 0,
           qualifiedAfterAiCheck: runStatus.funnel?.afterAzureAICheck ?? runStatus.foundCandidates ?? 0,
@@ -2140,7 +2527,7 @@
 
       document.getElementById("target-categories").addEventListener("change", syncPrequalificationCardState);
 
-      [searchHistoryPagination, testLabQueryHistoryPagination, debugScreeningRejectedPagination, liveScreeningRejectedPagination, liveExaHistoryPagination].forEach((element) => {
+      [searchHistoryPagination, testLabQueryHistoryPagination, debugScreeningRejectedPagination, liveScreeningRejectedPagination].forEach((element) => {
         element.addEventListener("click", (event) => {
           const button = event.target.closest("button[data-page-target]");
           if (!button) {
@@ -2171,8 +2558,6 @@
             renderRejectedScreeningHistory("live", paginationData.liveScreeningRejected);
             return;
           }
-
-          renderLiveExaHistory(paginationData.liveExaHistory);
         });
       });
 

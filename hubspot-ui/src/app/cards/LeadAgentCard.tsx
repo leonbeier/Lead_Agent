@@ -132,6 +132,29 @@ type RunStatusPayload = {
         hubspotInFlight?: number;
       };
     };
+    liveSearchDebug?: {
+      filterName?: string;
+      defaultQueries?: string[];
+      plannedQueries?: string[];
+      promptMessages?: Array<{
+        role: string;
+        content: string;
+      }>;
+      lastExecutedQuery?: string;
+      excludedDomains?: string[];
+      executedQueries?: number;
+      totalQueries?: number;
+      rawCompaniesFound?: number;
+      currentBatchQueryStats?: Array<{
+        query: string;
+        rawFound: number;
+        duplicates: number;
+        accepted: number;
+        rejectedDifferentCategory: number;
+        rejectedOther: number;
+        categoryBreakdown?: Record<string, number>;
+      }>;
+    };
     debugMessages?: string[];
     updatedAt?: string;
   };
@@ -167,6 +190,66 @@ function compactSidebarStatus(value: string | undefined, maxLength = 120) {
   }
 
   return `${normalized.slice(0, maxLength - 1).trimEnd()}...`;
+}
+
+function formatPromptMessages(messages: Array<{ role: string; content: string }> | undefined) {
+  if (!messages || messages.length === 0) {
+    return "";
+  }
+
+  return messages
+    .map((message) => `${message.role.toUpperCase()}\n${message.content}`)
+    .join("\n\n----------------------------------------\n\n");
+}
+
+function formatQueryStats(stats: NonNullable<NonNullable<RunStatusPayload["runStatus"]>["liveSearchDebug"]>["currentBatchQueryStats"] | undefined) {
+  if (!stats || stats.length === 0) {
+    return "";
+  }
+
+  return stats.map((entry) => {
+    const categoryBreakdown = Object.entries(entry.categoryBreakdown ?? {})
+      .filter(([, count]) => Number(count ?? 0) > 0)
+      .map(([category, count]) => `${category}=${count}`)
+      .join(", ");
+
+    return [
+      `Query: ${entry.query}`,
+      `rawFound=${entry.rawFound}, duplicates=${entry.duplicates}, accepted=${entry.accepted}, rejectedDifferentCategory=${entry.rejectedDifferentCategory}, rejectedOther=${entry.rejectedOther}`,
+      categoryBreakdown ? `categories: ${categoryBreakdown}` : undefined
+    ].filter(Boolean).join("\n");
+  }).join("\n\n");
+}
+
+function parseLeadRunStartError(error: unknown): { message: string; runStatus?: RunStatusPayload["runStatus"] } {
+  const fallbackMessage = error instanceof Error ? error.message : "Lead-Run konnte nicht gestartet werden.";
+  const rawMessage = error instanceof Error ? error.message : "";
+
+  if (!rawMessage.trim().startsWith("{")) {
+    return { message: fallbackMessage };
+  }
+
+  try {
+    const payload = JSON.parse(rawMessage) as {
+      error?: string;
+      accepted?: boolean;
+      runStatus?: RunStatusPayload["runStatus"];
+    };
+
+    if (payload.runStatus?.running) {
+      return {
+        message: payload.error || "Lead-Run laeuft bereits. Status wurde aktualisiert.",
+        runStatus: payload.runStatus
+      };
+    }
+
+    return {
+      message: payload.error || fallbackMessage,
+      runStatus: payload.runStatus
+    };
+  } catch {
+    return { message: fallbackMessage };
+  }
 }
 
 function isMeaningfulRunStatus(runStatus?: RunStatusPayload["runStatus"]) {
@@ -460,7 +543,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           reuseQualifiedCompanyCache: false,
           exaApiKey: exaApiKey.trim() || undefined,
           diffbotToken: diffbotToken.trim() || undefined,
-          maxRuntimeMs: Math.max(60_000, Math.round(Math.max(1, maxRuntimeMinutes || 20) * 60_000)),
+          maxRuntimeMs: Math.round(Math.min(180, Math.max(1, maxRuntimeMinutes || 20)) * 60_000),
           earlyStopEnabled: false,
           aiPrefilterConcurrency,
           outreachPrepConcurrency,
@@ -482,7 +565,11 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       setSuccessMessage(variant === "worker_v2" ? "Neuer Worker-Lead-Run wurde gestartet." : "Legacy Lead-Run wurde gestartet.");
       await refreshRuntimeData();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Lead-Run konnte nicht gestartet werden.");
+      const parsedError = parseLeadRunStartError(error);
+      if (parsedError.runStatus) {
+        setRunStatus(parsedError.runStatus);
+      }
+      setErrorMessage(parsedError.message);
     } finally {
       setIsStarting(false);
     }
@@ -559,6 +646,64 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         )}
         {Array.isArray(runStatus?.debugMessages) && runStatus.debugMessages.length > 0 && (
           <Text>{compactSidebarStatus(runStatus.debugMessages[0], 120)}</Text>
+        )}
+        {runStatus?.liveSearchDebug && (
+          <Flex direction="column" gap="extra-small">
+            <Heading>Live Search Debug</Heading>
+            <Text>
+              Filter: {runStatus.liveSearchDebug.filterName || "unbekannt"}. Exa Queries: {runStatus.liveSearchDebug.executedQueries ?? 0}/{runStatus.liveSearchDebug.totalQueries ?? 0}. Roh gefunden: {runStatus.liveSearchDebug.rawCompaniesFound ?? 0}.
+            </Text>
+            {runStatus.liveSearchDebug.lastExecutedQuery && (
+              <TextArea
+                name="liveSearchDebug-lastQuery"
+                label="Aktuelle / letzte Exa Query"
+                value={runStatus.liveSearchDebug.lastExecutedQuery}
+                rows={4}
+                resize="vertical"
+                readOnly={true}
+              />
+            )}
+            {Array.isArray(runStatus.liveSearchDebug.plannedQueries) && runStatus.liveSearchDebug.plannedQueries.length > 0 && (
+              <TextArea
+                name="liveSearchDebug-plannedQueries"
+                label="Geplante Exa Queries"
+                value={runStatus.liveSearchDebug.plannedQueries.join("\n\n")}
+                rows={10}
+                resize="vertical"
+                readOnly={true}
+              />
+            )}
+            {Array.isArray(runStatus.liveSearchDebug.excludedDomains) && runStatus.liveSearchDebug.excludedDomains.length > 0 && (
+              <TextArea
+                name="liveSearchDebug-excludedDomains"
+                label={`Excluded Websites (${runStatus.liveSearchDebug.excludedDomains.length})`}
+                value={runStatus.liveSearchDebug.excludedDomains.join("\n")}
+                rows={10}
+                resize="vertical"
+                readOnly={true}
+              />
+            )}
+            {Array.isArray(runStatus.liveSearchDebug.currentBatchQueryStats) && runStatus.liveSearchDebug.currentBatchQueryStats.length > 0 && (
+              <TextArea
+                name="liveSearchDebug-queryStats"
+                label="Aktuelle Query-Statistiken"
+                value={formatQueryStats(runStatus.liveSearchDebug.currentBatchQueryStats)}
+                rows={12}
+                resize="vertical"
+                readOnly={true}
+              />
+            )}
+            {Array.isArray(runStatus.liveSearchDebug.promptMessages) && runStatus.liveSearchDebug.promptMessages.length > 0 && (
+              <TextArea
+                name="liveSearchDebug-plannerPrompt"
+                label="Azure Planner Prompt"
+                value={formatPromptMessages(runStatus.liveSearchDebug.promptMessages)}
+                rows={16}
+                resize="vertical"
+                readOnly={true}
+              />
+            )}
+          </Flex>
         )}
         <Text>HubSpot-Sync fuer Starts aus dieser Karte: {syncToHubSpot ? "aktiv" : "deaktiviert"}. Suchmodus: {getSearchModeLabel(companySearchMode)}. Markt: {market}.</Text>
         <Text>Aktive Kundentypen: {selectedCategories.length || 0}.</Text>
@@ -711,14 +856,6 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         ))}
       </Flex>
       <ButtonRow disableDropdown={true}>
-        <LoadingButton
-          variant="secondary"
-          loading={isStarting}
-          disabled={!canStart || isLoading}
-          onClick={() => startLeadRun("legacy")}
-        >
-          Legacy Lead Run starten
-        </LoadingButton>
         <LoadingButton
           variant="primary"
           loading={isStarting}

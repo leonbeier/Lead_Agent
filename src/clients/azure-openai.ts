@@ -3,15 +3,18 @@ import {
   ApolloContactCandidate,
   ApolloOrganizationFilter,
   AzureUsageCost,
+  ExaQueryHistoryInsight,
   FilterEvaluation,
   LeadCategory,
   LeadLearningData,
   PreCategorizedCompany,
   PrequalificationConfig,
   PublicContactCandidate,
-  ResearchBrief
+  ResearchBrief,
+  SearchHistoryEntry
 } from "../types";
 import {
+  CATEGORY_PREQUALIFICATION_CONTEXT,
   buildMainContextBlock,
   buildPrequalificationContextBlock,
   buildSearchStrategyContextBlock,
@@ -478,6 +481,82 @@ export class AzureOpenAIClient {
     return rankedCandidates.slice(0, 4);
   }
 
+  async extractPublicContactsFromEvidence(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country" | "category">,
+    evidence: {
+      websitePages: Array<{
+        url: string;
+        evidenceSnippet: string;
+        emails?: string[];
+        phones?: string[];
+        linkedInProfileUrl?: string;
+        namedContacts?: unknown[];
+      }>;
+      hitGroups: Array<{
+        query: string;
+        hits: Array<{
+          url: string;
+          title: string;
+          snippet: string;
+        }>;
+      }>;
+    },
+    dryRun: boolean
+  ): Promise<PublicContactCandidate[]> {
+    if (dryRun || !readiness.azureConfigured) {
+      return [];
+    }
+
+    const evidencePayload = {
+      websitePages: evidence.websitePages.slice(0, 8).map((page) => ({
+        url: page.url,
+        evidenceSnippet: page.evidenceSnippet,
+        emails: page.emails ?? [],
+        phones: page.phones ?? [],
+        linkedInProfileUrl: page.linkedInProfileUrl,
+        namedContacts: page.namedContacts ?? []
+      })),
+      hitGroups: evidence.hitGroups.slice(0, 4)
+    };
+
+    if (evidencePayload.websitePages.length === 0 && evidencePayload.hitGroups.length === 0) {
+      return [];
+    }
+
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Extract and match public contact data for outbound outreach from raw official-website evidence and raw public web-search evidence. Return only evidence-backed contacts for the supplied company. Match email addresses and phone numbers to a named person only when the evidence clearly supports the match. If that match is unclear, keep the email or phone on a separate generic website contact instead of guessing. Reject gibberish, broken encoding, CTA text, navigation text, placeholders, and corrupted names. Prefer real people with personal LinkedIn URLs. Include at most one official generic mailbox contact when it provides a reachable company fallback such as email or phone. Do not invent names, titles, emails, phones, or LinkedIn URLs. Return strict JSON with {"contacts":[{"firstName":"...","lastName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","linkedinConnectionCount":123,"sourceUrl":"...","sourceQuery":"...","sourceSnippet":"...","label":"linkedin_profile|website_named_contact|public_named_mailbox|public_generic_mailbox|web_search_contact"}]}. Keep up to 6 contacts, best first.`
+        },
+        {
+          role: "user",
+          content: [
+            `Company: ${company.name}`,
+            company.domain ? `Domain: ${company.domain}` : undefined,
+            company.country ? `Country: ${company.country}` : undefined,
+            company.category ? `Category: ${company.category}` : undefined,
+            `Raw contact evidence JSON: ${JSON.stringify(evidencePayload)}`
+          ].filter(Boolean).join("\n\n")
+        }
+      ], { maxTokens: 900 });
+
+      const parsed = this.parseJsonObject<{ contacts?: PublicContactCandidate[] }>(content);
+      return (parsed.contacts ?? [])
+        .filter((contact) => Boolean(
+          contact.sourceUrl
+          || contact.linkedinUrl
+          || contact.email
+          || contact.phone
+          || contact.firstName
+          || contact.lastName
+        ))
+        .slice(0, 6);
+    } catch {
+      return [];
+    }
+  }
+
   getUsageTotals(): AzureUsageCost {
     return { ...this.usageTotals };
   }
@@ -564,6 +643,347 @@ export class AzureOpenAIClient {
     } catch {
       return baseFilters;
     }
+  }
+
+  async planExaSearchQueries(
+    filter: ApolloOrganizationFilter,
+    defaultQueries: string[],
+    learning: LeadLearningData | undefined,
+    dryRun: boolean,
+    mainContext?: string,
+    searchStrategyContext?: string,
+    maxQueryCount = 3,
+    options: {
+      recentQueryHistory?: ExaQueryHistoryInsight[];
+      prequalification?: PrequalificationConfig;
+      requestedTargetCategories?: LeadCategory[];
+      debugCapture?: (details: { promptMessages: Array<{ role: "system" | "user"; content: string }> }) => void;
+    } = {}
+  ): Promise<string[]> {
+    const baselineQueries = Array.from(new Set(defaultQueries.map((query) => query.trim()).filter(Boolean))).slice(0, Math.max(1, maxQueryCount));
+    if (baselineQueries.length === 0 || dryRun || !readiness.azureConfigured) {
+      return baselineQueries;
+    }
+
+    try {
+      const requestedLocalities = Array.from(new Set((filter.locations ?? []).map((location) => location.trim()).filter(Boolean)));
+      const requestedCategories = Array.from(new Set((options.requestedTargetCategories ?? filter.targetCategories ?? []).map((category) => category.trim()).filter(Boolean)));
+      const recentQueryHistory = (options.recentQueryHistory ?? [])
+        .filter((entry) => entry?.query?.trim())
+        .slice(0, 50);
+      const exaLearning = learning?.searchHistoryByMode?.exa_search?.searchHistory ?? [];
+      const goodSignalsContext = this.buildExaSearchGoodSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
+      const avoidSignalsContext = this.buildExaSearchAvoidSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
+      const recentExaContext = this.buildExaSearchPerformanceSummary(exaLearning);
+
+      const promptMessages: Array<{ role: "system" | "user"; content: string }> = [
+        {
+          role: "system",
+          content: [
+            this.buildExaPlannerSystemContext(mainContext, searchStrategyContext),
+            [
+              "Task:",
+              `Your job is to create ${Math.max(1, maxQueryCount)} Exa company-discovery queries for ONE WARE.`,
+              "These queries are the first step in the pipeline: Exa finds candidate company websites first, and a later AI check filters those websites afterwards.",
+              "That means Exa should already do as much of the preselection work as possible and bring back the best-fitting official company websites instead of broad noisy results.",
+              "Look at the query history before writing new queries. Use it as evidence for what has already been tried, which wording is overused, and which wording or category angles still deserve coverage.",
+              "Use the search history as evidence. Rotate intelligently across company categories, locations, and use-case keywords when that improves results, but do not rotate just for variety.",
+              "If multiple target categories are desired in this run, make sure the query set covers those desired categories on purpose instead of treating them as drift.",
+              "If the requested market is Germany and you are generating a larger query set, deliberately test multiple German subregions or industrial clusters instead of keeping every query nationwide-only.",
+              "Do not change the filter logic, qualification logic, or category logic. Preserve the same ICP and target intent as the supplied filter.",
+              "You are improving Exa company-discovery queries for an AI/semantic search system, not for a traditional web search engine."
+            ].join("\n"),
+            [
+              "Output:",
+              "Return the result as strict JSON with this shape:",
+              '{"queries":["query 1", "query 2"]}',
+              `Return exactly ${Math.max(1, maxQueryCount)} queries.`,
+              "Do not add explanations outside the JSON."
+            ].join("\n"),
+            [
+              "Stil:",
+              "Write natural-language Exa queries, as if you were briefing a researcher, not building a Boolean search string.",
+              "Do not use site:, quoted keyword packs, long boolean chains, or long negative keyword blocks unless a baseline query already proves they are necessary.",
+              "Keep the useful detail from strong baseline queries: preserve important capability phrases, buyer context, and delivery model cues when they help target the right companies.",
+              "Preserve exclusion intent too, but express it in natural prose.",
+              "Each query should end with an explicit natural-language exclusion tail so Exa is reminded to avoid directories, marketplaces, job boards, news pages, PDFs, and pure component vendors.",
+              "Do not stuff every synonym into every query. Instead, choose a few useful synonyms per query and vary them across the query set so Exa covers the topic more broadly.",
+              "Do not force one fixed query template or one fixed sentence structure. Use examples as inspiration, not as literal formatting instructions.",
+              "When returning multiple queries, vary wording and angle instead of producing near-duplicates."
+            ].join("\n")
+          ].filter(Boolean).join("\n\n")
+        },
+        {
+          role: "user",
+          content: [
+            [
+              "Target:",
+              "This section defines the exact kind of companies you are trying to find.",
+              requestedLocalities.length > 0 ? `- Required locality terms to preserve in every query: ${requestedLocalities.join(", ")}` : undefined,
+              requestedCategories.length > 0 ? `- Desired target categories for this run: ${requestedCategories.join(", ")}` : undefined,
+              this.buildExaSearchUndesiredCategorySummary(requestedCategories as LeadCategory[]),
+              "- Find official company websites for the intended target profile.",
+              "- Do not broaden the ICP beyond the supplied filter.",
+              this.buildExaSearchFilterNarrative(filter)
+            ].filter(Boolean).join("\n"),
+            [
+              "Good Signals:",
+              "Use this section to understand what a good target looks like before the later AI check happens.",
+              "For each relevant category below, the listed signals describe what Exa should actively try to surface.",
+              goodSignalsContext
+            ].filter(Boolean).join("\n\n"),
+            [
+              "Avoid:",
+              "Use this section to understand what should be filtered out already at the query-writing stage whenever possible.",
+              "- Avoid directories, marketplaces, job boards, PDFs, listicles, news articles, media pages, and generic vendor pages unless a baseline query clearly proves a better path.",
+              "- Avoid repeating the exact same query text from recent runs unless that wording clearly outperformed alternatives.",
+              "- If a locality, wording, or angle repeatedly produced no useful target categories or mostly wrong categories, stop spending queries on it just for variety.",
+              "- If the history shows that a city cluster such as Berlin produced no useful target categories, do not retry Berlin only because it has not appeared recently.",
+              "- If industrial automation phrasing underperformed for a vision-integrator target, avoid it there; if it worked for another category such as integrator_relevant_focus, reserve it for that category instead of broadening this one.",
+              "- If multiple target categories are desired, do not describe those desired categories as something to avoid.",
+              "- If the history shows repeated drift into a non-target category, write that wrong company type explicitly into the next query as something to avoid, not only into the generic exclusion tail.",
+              ...this.buildExaSearchCategorySpecificExclusionLines(requestedCategories as LeadCategory[]),
+              "- Use the category-specific avoid signals below as hard guidance for what should not be found.",
+              avoidSignalsContext
+            ].filter(Boolean).join("\n"),
+            [
+              "Output:",
+              "Return only the query output in JSON format.",
+              "Use this exact key:",
+              '- "queries": [ ... ]',
+              `Return exactly ${Math.max(1, maxQueryCount)} query strings.`
+            ].join("\n"),
+            [
+              "Stil:",
+              "Write natural-language Exa queries.",
+              "Think of them as short, concrete work instructions for Exa to find the right official company websites.",
+              "Favor short, concrete, company-finding requests that Exa can use to retrieve official websites of the right companies.",
+              "Explore adjacent but still relevant search angles when the history supports it, for example: system integrator, consulting, solution provider, quality control, visual inspection, robot guidance, industrial automation, surveillance, or other concrete machine-vision application areas.",
+              "Across consecutive runs, deliberately illuminate different specific sub-areas instead of staying on one generic wording.",
+              "Review the recent query history and consciously vary synonym families across the new query set instead of repeating the same wording every time.",
+              "Useful synonym families for this topic include: computer vision, machine vision, industrial vision, visual inspection, automated optical inspection, AOI, edge AI vision, AI camera systems, robotics vision, quality inspection, defect detection, industrial image processing.",
+              "Pick a few of these synonyms per query and mix them differently across the set so the search stays broad without turning every single query into a keyword dump.",
+              "When non-target categories are causing drift, put a short natural-language exclusion clause for those wrong company types into the main query sentence itself, not only into the generic exclusion tail.",
+              "Use locality creatively inside the requested market when helpful, for example major cities or industrial clusters such as Berlin, Munich, Stuttgart, Hamburg, Cologne, the Ruhr area, OWL, Bavaria, Baden-Wuerttemberg, or NRW, but keep the main locality explicit and do not leave the target geography.",
+              "If the requested market is Germany and you return 6 queries, at least 2 queries should explicitly test different useful subregions or industrial clusters such as OWL, Bavaria, Baden-Wuerttemberg, NRW/Ruhr, Munich area, or Stuttgart region.",
+              "End every query with a short natural-language exclusion phrase covering directories, marketplaces, job boards, news articles, PDFs, and pure component or hardware vendors.",
+              "If recent history already covered one angle, prefer a different still-relevant angle on the next run before reusing the same wording again."
+            ].join("\n"),
+            [
+              "Kontext:",
+              "This section gives you the baseline queries and recent performance context so you can improve or rotate query wording based on evidence.",
+              `- Baseline query angles to build on:\n${this.buildExaBaselineQuerySummary(baselineQueries)}`,
+              recentQueryHistory.length > 0
+                ? `- Recent query history with outcomes (last ${recentQueryHistory.length} queries, newest first):\n${recentQueryHistory.map((entry) => [
+                  `Query: ${entry.query}`,
+                  entry.detectedCategories?.length ? `Detected query classes: ${entry.detectedCategories.join(", ")}` : undefined,
+                  entry.foundCategoryBreakdown
+                    ? `Found company categories: ${Object.entries(entry.foundCategoryBreakdown).filter(([, count]) => (count ?? 0) > 0).map(([category, count]) => `${category}=${count}`).join(", ") || "none"}`
+                    : undefined,
+                  entry.note ? `Note: ${entry.note}` : undefined
+                ].filter(Boolean).join(" | ")).join("\n")}`
+                : "- No recent query history is available yet.",
+              "- Use this recent history to decide which synonym families, category angles, and regional variants have been overused or underused.",
+              recentExaContext ? `- Recent Exa search history summary:\n${recentExaContext}` : undefined
+            ].filter(Boolean).join("\n\n")
+          ].filter(Boolean).join("\n\n")
+        }
+      ];
+      options.debugCapture?.({ promptMessages });
+
+      const content = await this.runChat(promptMessages, { maxTokens: 700 });
+
+      const parsed = this.parseJsonObject<{ queries?: string[] }>(content);
+      const plannedQueries = Array.from(new Set((parsed.queries ?? []).map((query) => query.trim()).filter(Boolean)));
+      return plannedQueries.length > 0 ? plannedQueries.slice(0, Math.max(1, maxQueryCount)) : baselineQueries;
+    } catch {
+      return baselineQueries;
+    }
+  }
+
+  private buildExaPlannerSystemContext(mainContext?: string, searchStrategyContext?: string): string {
+    return [
+      "You are the Exa Query Planner for ONE WARE.",
+      mainContext?.trim() ? `ONE WARE context: ${mainContext.trim()}` : undefined,
+      searchStrategyContext?.trim() ? `Search strategy context: ${searchStrategyContext.trim()}` : undefined
+    ].filter(Boolean).join("\n");
+  }
+
+  private buildExaSearchGoodSignalsContext(
+    prequalification: PrequalificationConfig | undefined,
+    requestedCategories: LeadCategory[]
+  ): string | undefined {
+    const requestedSet = new Set(requestedCategories);
+    const foundSections = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
+      .filter((context) => requestedSet.has(context.category) && context.category !== "irrelevant" && context.category !== "other")
+      .map((context) => this.formatExaCategoryGoodSignals(context.category, prequalification));
+
+    return foundSections.length > 0 ? foundSections.join("\n\n") : undefined;
+  }
+
+  private buildExaSearchAvoidSignalsContext(
+    prequalification: PrequalificationConfig | undefined,
+    requestedCategories: LeadCategory[]
+  ): string | undefined {
+    const requestedSet = new Set(requestedCategories);
+    const requestedCategoryDisqualifiers = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
+      .filter((context) => requestedSet.has(context.category) && context.category !== "irrelevant" && context.category !== "other")
+      .map((context) => this.formatExaCategoryTargetAvoidSignals(context.category, prequalification));
+    const nonTargetSections = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
+      .filter((context) => !requestedSet.has(context.category))
+      .map((context) => this.formatExaCategoryDriftAvoidSignals(context.category, prequalification));
+
+    return [
+      requestedCategoryDisqualifiers.length > 0 ? "Target-category disqualifiers:" : undefined,
+      ...requestedCategoryDisqualifiers,
+      nonTargetSections.length > 0 ? "Non-target categories to avoid:" : undefined,
+      ...nonTargetSections
+    ].filter(Boolean).join("\n\n");
+  }
+
+  private formatExaCategoryGoodSignals(category: LeadCategory, prequalification?: PrequalificationConfig): string {
+    const baseContext = CATEGORY_PREQUALIFICATION_CONTEXT[category];
+    const override = category !== "irrelevant" && category !== "other"
+      ? prequalification?.categoryContexts?.[category as Exclude<LeadCategory, "irrelevant" | "other">]
+      : undefined;
+    const classificationRules = this.uniquePromptLines(baseContext.classificationRules, override?.classificationRules ?? []);
+    const addOnContext = override?.addOnContext?.trim();
+
+    return [
+      `Category: ${baseContext.category} (${baseContext.label})`,
+      "This is what a good match for this category looks like:",
+      ...classificationRules.map((rule) => `- Good signal: ${rule}`),
+      addOnContext ? `- Extra guidance: ${addOnContext}` : undefined
+    ].filter(Boolean).join("\n");
+  }
+
+  private formatExaCategoryTargetAvoidSignals(category: LeadCategory, prequalification?: PrequalificationConfig): string {
+    const baseContext = CATEGORY_PREQUALIFICATION_CONTEXT[category];
+    const override = category !== "irrelevant" && category !== "other"
+      ? prequalification?.categoryContexts?.[category as Exclude<LeadCategory, "irrelevant" | "other">]
+      : undefined;
+    const disqualifiers = this.uniquePromptLines(baseContext.disqualifiers, override?.disqualifiers ?? []);
+
+    return [
+      `Category: ${baseContext.category} (${baseContext.label})`,
+      "Even inside the target category, avoid companies with these warning signs:",
+      ...disqualifiers.map((rule) => `- Avoid signal: ${rule}`)
+    ].filter(Boolean).join("\n");
+  }
+
+  private formatExaCategoryDriftAvoidSignals(category: LeadCategory, prequalification?: PrequalificationConfig): string {
+    const baseContext = CATEGORY_PREQUALIFICATION_CONTEXT[category];
+    const override = category !== "irrelevant" && category !== "other"
+      ? prequalification?.categoryContexts?.[category as Exclude<LeadCategory, "irrelevant" | "other">]
+      : undefined;
+    const classificationRules = this.uniquePromptLines(baseContext.classificationRules, override?.classificationRules ?? []).slice(0, 2);
+    const disqualifiers = this.uniquePromptLines(baseContext.disqualifiers, override?.disqualifiers ?? []).filter((rule) => rule !== "None - this is an uncertainty bucket").slice(0, 3);
+    const addOnContext = override?.addOnContext?.trim();
+
+    return [
+      `Category to avoid drifting into: ${baseContext.category} (${baseContext.label})`,
+      "These are signals that the query is drifting toward the wrong company type:",
+      ...classificationRules.map((rule) => `- Avoid companies that mainly look like this: ${rule}`),
+      ...disqualifiers.map((rule) => `- Avoid signal: ${rule}`),
+      addOnContext ? `- Extra guidance: ${addOnContext}` : undefined
+    ].filter(Boolean).join("\n");
+  }
+
+  private buildExaSearchUndesiredCategorySummary(requestedCategories: LeadCategory[]): string | undefined {
+    const requestedSet = new Set(requestedCategories);
+    const nonTargetSelectable = Object.values(CATEGORY_PREQUALIFICATION_CONTEXT)
+      .map((context) => context.category)
+      .filter((category) => category !== "irrelevant" && category !== "other" && !requestedSet.has(category));
+
+    return [
+      nonTargetSelectable.length > 0 ? `- Non-desired selectable categories for this run: ${nonTargetSelectable.join(", ")}` : undefined,
+      "- Also avoid drifting into: other, irrelevant"
+    ].filter(Boolean).join("\n");
+  }
+
+  private buildExaSearchCategorySpecificExclusionLines(requestedCategories: LeadCategory[]): string[] {
+    const requestedSet = new Set(requestedCategories);
+    const exclusionLines: Partial<Record<LeadCategory, string>> = {
+      integrator_vision_ai_consulting: "- If integrator_vision_ai_consulting is not selected, explicitly say not consulting-led boutiques, strategy-heavy consultancies, or advisory-only firms.",
+      integrator_vision_ai_freelancer: "- If integrator_vision_ai_freelancer is not selected, explicitly say not solo freelancers, solo consultants, or independent contractor profiles.",
+      integrator_general_ai: "- If integrator_general_ai is not selected, explicitly say not generic AI agencies, broad software consultancies, or non-specialized AI service firms.",
+      integrator_relevant_focus: "- If integrator_relevant_focus is not selected, explicitly say not surveillance, defence, medtech vision, robotics, agriculture tech, automotive tech, semiconductor, embedded, or measurement-heavy specialist integrators unless another desired category requires them.",
+      industrial_end_customer_scaled: "- If industrial_end_customer_scaled is not selected, explicitly say not factories, plant operators, manufacturers, or industrial end customers running their own production.",
+      camera_manufacturer_partner: "- If camera_manufacturer_partner is not selected, explicitly say not camera manufacturers, imaging hardware vendors, machine-vision component suppliers, or pure hardware sellers.",
+      machine_builder_ai_enablement: "- If machine_builder_ai_enablement is not selected, explicitly say not OEMs, machine builders, scanner vendors, inspection stations, or hardware-centric inspection product companies.",
+      software_platform_embedding: "- If software_platform_embedding is not selected, explicitly say not workflow platforms, app ecosystems, software suites, installable tool environments, or measurement/test software platforms."
+    };
+
+    return Object.entries(exclusionLines)
+      .filter(([category]) => !requestedSet.has(category as LeadCategory))
+      .map(([, line]) => line as string);
+  }
+
+  private buildExaBaselineQuerySummary(baselineQueries: string[]): string {
+    return baselineQueries.map((query, index) => `Angle ${index + 1}: ${this.compactPromptText(query, 180)}`).join("\n");
+  }
+
+  private buildExaSearchPerformanceSummary(searchHistory: SearchHistoryEntry[]): string | undefined {
+    const summary = searchHistory
+      .slice(0, MAX_FILTER_STRATEGY_HISTORY)
+      .map((entry) => {
+        const topCategories = Object.entries(entry.categoryBreakdown ?? {})
+          .filter(([, count]) => Number(count ?? 0) > 0)
+          .sort((a, b) => Number(b[1] ?? 0) - Number(a[1] ?? 0))
+          .slice(0, 3)
+          .map(([category, count]) => `${category}=${count}`)
+          .join(", ");
+        const queryStats = entry.queryStats?.slice(0, 3).map((queryStat: NonNullable<SearchHistoryEntry["queryStats"]>[number]) => `${queryStat.query} => accepted ${queryStat.accepted}, wrong-category ${queryStat.rejectedDifferentCategory}, other ${queryStat.rejectedOther}, duplicates ${queryStat.duplicates}`).join(" || ");
+
+        return [
+          `${entry.filterName} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}%`,
+          topCategories ? `Top categories: ${topCategories}` : undefined,
+          queryStats ? `Sample query outcomes: ${queryStats}` : undefined
+        ].filter(Boolean).join("\n");
+      })
+      .join("\n\n");
+
+    return summary || undefined;
+  }
+
+  private uniquePromptLines(...groups: string[][]): string[] {
+    const seen = new Set<string>();
+
+    return groups
+      .flat()
+      .map((line) => line?.trim())
+      .filter((line): line is string => Boolean(line))
+      .filter((line) => {
+        const normalized = line.toLowerCase();
+        if (seen.has(normalized)) {
+          return false;
+        }
+        seen.add(normalized);
+        return true;
+      });
+  }
+
+  private compactPromptText(value: string, maxLength: number): string {
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+
+    return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+  }
+
+  private buildExaSearchFilterNarrative(filter: ApolloOrganizationFilter): string {
+    return [
+      "Search filter context:",
+      `- Filter name: ${filter.name}`,
+      filter.persona?.trim() ? `- Persona: ${filter.persona.trim()}` : undefined,
+      filter.targetCategories?.length ? `- Target categories in the filter: ${filter.targetCategories.join(", ")}` : undefined,
+      filter.locations?.length ? `- Target locations in the filter: ${filter.locations.join(", ")}` : undefined,
+      filter.industries?.length ? `- Relevant industries: ${filter.industries.join(", ")}` : undefined,
+      filter.keywords?.length ? `- Important keyword signals: ${filter.keywords.join(", ")}` : undefined,
+      filter.employeeRanges?.length ? `- Employee ranges: ${filter.employeeRanges.join(", ")}` : undefined,
+      filter.notes?.trim() ? `- Filter notes: ${filter.notes.trim()}` : undefined
+    ].filter(Boolean).join("\n");
   }
 
   async reviseSearchFilter(

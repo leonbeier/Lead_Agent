@@ -93,12 +93,17 @@ const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
 const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
-const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 90000;
+const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
+const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
+const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
 const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
-const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 30000;
+const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 12000;
+const DEBUG_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 45000;
+const DEBUG_CONTACT_AZURE_MATCH_TIMEOUT_MS = 30000;
+const DEBUG_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -351,42 +356,46 @@ export class HubSpotClient {
     company: PreCategorizedCompany,
     options: { selectedContactsTimeoutMs?: number } = {}
   ): Promise<PublicContactDebugResult> {
+    const emptyAzureMatches = { queries: [], hitGroups: [], contacts: [] };
     const pages = company.domain
-      ? await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain))
+      ? await this.withTimeout(
+          this.collectCandidatePages(this.normalizeCompanyUrl(company.domain)).catch(() => []),
+          DEBUG_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
+          []
+        )
       : [];
     const aliases = this.extractCompanySearchAliases(company, pages);
-    const queries = this.buildPublicContactSearchQueries(company, aliases)
-      .filter((query) => /site:linkedin\.com\/in/i.test(query))
-      .slice(0, 4);
-    const hitGroups = await this.mapWithSearchInterval(
-      queries.map((query) => async () => ({
-        query,
-        hits: await this.searchBingResults(query, 5)
-      })),
-      PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
+    const websitePages = this.buildWebsitePageDebugEntries(company, pages);
+    const { queries, hitGroups, contacts: llmContacts } = await this.withTimeout(
+      this.safeExtractAzureMatchedContacts(company, pages, aliases, websitePages).catch(() => emptyAzureMatches),
+      DEBUG_CONTACT_AZURE_MATCH_TIMEOUT_MS,
+      emptyAzureMatches
     );
-    const relevantHits = hitGroups.flatMap((group) =>
-      group.hits.filter((hit) =>
-        this.isRelevantCompanyHit(company, aliases, [hit.title, hit.snippet].filter(Boolean).join(" | "))
-      )
+    const websiteContacts = await this.withTimeout(
+      this.extractWebsiteContactsFromPages(company, pages).catch(() => []),
+      DEBUG_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS,
+      []
     );
-    const heuristicContacts = this.extractContactsFromSearchHits(company, relevantHits, aliases);
-    const websiteContacts = await this.extractWebsiteContactsFromPages(company, pages);
-    const fallbackSelectedContacts = this.buildTimeoutFallbackPublicContacts(
-      this.mergeDiscoveredContacts(websiteContacts, heuristicContacts)
-    );
+    const fallbackSelectedContacts = llmContacts.length > 0
+      ? llmContacts.slice(0, 4)
+      : this.selectReachableWebsiteFallbackContacts(websiteContacts).slice(0, 4);
+    const contactDiscoveryFallback = this.buildTimeoutFallbackPublicContacts([
+      ...llmContacts,
+      ...websiteContacts,
+      ...fallbackSelectedContacts
+    ]);
     const selectedContacts = options.selectedContactsTimeoutMs
       ? await this.withTimeout(
-          this.findPublicContactsFromPages(company, pages, websiteContacts),
+          this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback),
           options.selectedContactsTimeoutMs,
           fallbackSelectedContacts
         )
-      : await this.findPublicContactsFromPages(company, pages, websiteContacts);
+      : await this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback);
 
     return {
       aliases,
       queries,
-      websitePages: this.buildWebsitePageDebugEntries(company, pages),
+      websitePages,
       hitGroups: hitGroups.map((group) => ({
         query: group.query,
         hits: group.hits.map((hit) => ({
@@ -395,7 +404,7 @@ export class HubSpotClient {
           snippet: hit.snippet
         }))
       })),
-      heuristicContacts,
+      heuristicContacts: llmContacts,
       selectedContacts
     };
   }
@@ -442,7 +451,7 @@ export class HubSpotClient {
           const contactResults = await this.mapWithConcurrency(
             selectedContacts.map((publicContact) => async () => {
               try {
-                const syncedContact = await this.upsertContact(publicContact, contactProperties);
+                const syncedContact = await this.upsertContact(publicContact, contactProperties, syncedCompany.id);
                 if (!syncedContact) {
                   return 0;
                 }
@@ -564,7 +573,8 @@ export class HubSpotClient {
 
   private async upsertContact(
     contact: PublicContactCandidate,
-    availableProperties: Set<string>
+    availableProperties: Set<string>,
+    companyId?: string
   ): Promise<HubSpotObjectResponse | null> {
     const normalizedContact = this.normalizeContactForHubSpot(contact);
     if (!normalizedContact) {
@@ -599,7 +609,30 @@ export class HubSpotClient {
 
     return this.requestJson<HubSpotObjectResponse>(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/contacts`, {
       method: "POST",
-      body: JSON.stringify({ properties })
+      body: JSON.stringify({
+        properties,
+        ...(companyId
+          ? {
+              associations: [
+                {
+                  to: {
+                    id: companyId
+                  },
+                  types: [
+                    {
+                      associationCategory: "HUBSPOT_DEFINED",
+                      associationTypeId: HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY
+                    },
+                    {
+                      associationCategory: "HUBSPOT_DEFINED",
+                      associationTypeId: HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY
+                    }
+                  ]
+                }
+              ]
+            }
+          : {})
+      })
     });
   }
 
@@ -653,9 +686,14 @@ export class HubSpotClient {
       return;
     }
 
-    const combinedNote = this.buildCombinedOutreachNote(company, contact, brief);
-    if (combinedNote) {
-      await this.createAssociatedNote(companyId, contactId, combinedNote);
+    const outreachNotes = [
+      this.buildEmailOutreachNote(company, contact, brief),
+      this.buildLinkedInOutreachNote(company, contact, brief),
+      this.buildPhoneOutreachNote(company, contact, brief)
+    ].filter((note): note is string => Boolean(note));
+
+    for (const note of outreachNotes) {
+      await this.createAssociatedNote(companyId, contactId, note);
     }
   }
 
@@ -680,9 +718,8 @@ export class HubSpotClient {
   }
 
   private async findExistingCompany(company: PreCategorizedCompany): Promise<HubSpotObjectResponse | null> {
-    const normalizedDomain = this.normalizeDomain(company.domain);
-    if (normalizedDomain) {
-      const byDomain = await this.searchObject("companies", "domain", normalizedDomain);
+    for (const domainVariant of this.buildCompanyDomainSearchVariants(company.domain)) {
+      const byDomain = await this.searchObject("companies", "domain", domainVariant);
       if (byDomain) {
         return byDomain;
       }
@@ -827,6 +864,29 @@ export class HubSpotClient {
     }
   }
 
+  private buildCompanyDomainSearchVariants(domain: string | undefined): string[] {
+    const rawDomain = domain?.trim().replace(/\/+$/, "");
+    const normalizedDomain = this.normalizeDomain(domain);
+    const variants = new Set<string>();
+
+    if (rawDomain) {
+      variants.add(rawDomain);
+    }
+
+    if (!normalizedDomain) {
+      return [...variants];
+    }
+
+    variants.add(normalizedDomain);
+    variants.add(`www.${normalizedDomain}`);
+    variants.add(`https://${normalizedDomain}`);
+    variants.add(`https://www.${normalizedDomain}`);
+    variants.add(`http://${normalizedDomain}`);
+    variants.add(`http://www.${normalizedDomain}`);
+
+    return [...variants];
+  }
+
   private async getAvailableProperties(objectType: "companies" | "contacts"): Promise<Set<string>> {
     const cached = this.availableProperties.get(objectType);
     if (cached) {
@@ -842,7 +902,8 @@ export class HubSpotClient {
   }
 
   private normalizeHubSpotIndustryValue(targetIndustry: string | undefined, companyDescription: string): string | undefined {
-    const normalized = `${targetIndustry ?? ""} ${companyDescription}`.toLowerCase();
+    const normalizedTargetIndustry = this.toSingleLineText(targetIndustry) ?? "";
+    const normalized = `${normalizedTargetIndustry} ${companyDescription}`.toLowerCase();
     if (!normalized.trim()) {
       return undefined;
     }
@@ -879,8 +940,8 @@ export class HubSpotClient {
       return "SEMICONDUCTORS";
     }
 
-    return HUBSPOT_STANDARD_INDUSTRIES.has((targetIndustry ?? "").trim())
-      ? (targetIndustry ?? "").trim()
+    return HUBSPOT_STANDARD_INDUSTRIES.has(normalizedTargetIndustry)
+      ? normalizedTargetIndustry
       : undefined;
   }
 
@@ -915,8 +976,8 @@ export class HubSpotClient {
       ai_cc_ranking_serviceprovider: this.toNumericPropertyValue(brief?.rankings.serviceProvider ?? this.getNumericRanking(company.category, "serviceprovider")),
       ai_cc_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
       ai_ranking_customer: this.toNumericPropertyValue(brief?.rankings.customer ?? this.getNumericRanking(company.category, "customer")),
-      ai_cc_customer_products_offered: brief?.productsOffered,
-      ai_cc_customer_target_industry: brief?.targetIndustry
+      ai_cc_customer_products_offered: this.toSingleLineText(brief?.productsOffered),
+      ai_cc_customer_target_industry: this.toSingleLineText(brief?.targetIndustry)
     };
   }
 
@@ -971,42 +1032,138 @@ export class HubSpotClient {
     }
 
     const websiteContacts = seedWebsiteContacts ?? await this.extractWebsiteContactsFromPages(company, pages);
+    const websitePages = this.buildWebsitePageDebugEntries(company, pages);
+    const azureMatchedContacts = (await this.safeExtractAzureMatchedContacts(
+      company,
+      pages,
+      this.extractCompanySearchAliases(company, pages),
+      websitePages
+    )).contacts;
+    const normalizedAzureContacts = this.collapseDuplicateMailboxContacts(
+      azureMatchedContacts.map((contact) => ({
+        ...contact,
+        jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
+        linkedinUrl: this.normalizeLinkedInUrl(contact.linkedinUrl),
+        sourceUrl: contact.sourceUrl || contact.linkedinUrl || company.domain || company.name,
+        label: this.normalizeAzureContactLabel(contact)
+      }))
+    ).filter((contact) => !this.isLowValueMailbox(contact.email ?? ""));
+
+    const websiteFallbackContacts = this.selectReachableWebsiteFallbackContacts(websiteContacts).slice(0, 2);
+
+    if (normalizedAzureContacts.length > 0) {
+      return this.composeFinalPublicContacts(
+        normalizedAzureContacts.slice(0, 4),
+        this.mergeDiscoveredContacts(normalizedAzureContacts, websiteFallbackContacts)
+      ).slice(0, 4);
+    }
+
+    const expandedWebsiteFallbackContacts = websiteFallbackContacts.slice(0, 4);
     const webSearchContacts = await this.withTimeout(
-      this.discoverWebSearchContacts(company, pages, websiteContacts),
+      this.discoverWebSearchContacts(company, pages, websiteContacts).catch(() => [] as PublicContactCandidate[]),
       PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
       [] as PublicContactCandidate[]
     );
-    const mergedContacts = this.mergeDiscoveredContacts(websiteContacts, webSearchContacts);
-    const enrichedContacts = await this.withTimeout(
-      this.mapWithSearchInterval(
-        mergedContacts.map((contact) => async () => this.enrichContactWithLinkedInUrl(company, contact)),
-        1
-      ),
-      PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS,
-      mergedContacts
+    const linkedInFallbackContacts = webSearchContacts
+      .filter((contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl))
+      .slice(0, Math.max(0, 4 - expandedWebsiteFallbackContacts.length));
+
+    return this.mergeDiscoveredContacts(linkedInFallbackContacts, expandedWebsiteFallbackContacts).slice(0, 4);
+  }
+
+  private async extractAzureMatchedContacts(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country" | "category">,
+    pages: Array<{ url: string; html: string }>,
+    aliases: string[],
+    websitePages?: Array<{
+      url: string;
+      evidenceSnippet: string;
+      emails: string[];
+      phones: string[];
+      linkedInProfileUrl?: string;
+      namedContacts: unknown[];
+    }>
+  ): Promise<{
+    queries: string[];
+    hitGroups: Array<{
+      query: string;
+      hits: WebSearchHit[];
+    }>;
+    contacts: PublicContactCandidate[];
+  }> {
+    const normalizedWebsitePages: Array<{
+      url: string;
+      evidenceSnippet: string;
+      emails: string[];
+      phones: string[];
+      linkedInProfileUrl?: string;
+      namedContacts: unknown[];
+    }> = websitePages ?? this.buildWebsitePageDebugEntries(company, pages) ?? [];
+    const queries = this.buildPublicContactSearchQueries(company, aliases)
+      .filter((query) => /site:linkedin\.com\/in/i.test(query))
+      .slice(0, 4);
+    const hitGroups = await this.mapWithSearchInterval(
+      queries.map((query) => async () => ({
+        query,
+        hits: await this.searchBingResults(query, 5)
+      })),
+      PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
     );
+    const contacts = await this.azureOpenAIClient.extractPublicContactsFromEvidence(company, {
+      websitePages: normalizedWebsitePages.map((page) => ({
+        url: page.url,
+        evidenceSnippet: page.evidenceSnippet,
+        emails: page.emails,
+        phones: page.phones,
+        linkedInProfileUrl: page.linkedInProfileUrl,
+        namedContacts: page.namedContacts
+      })),
+      hitGroups: hitGroups.map((group) => ({
+        query: group.query,
+        hits: group.hits.map((hit) => ({
+          url: hit.url,
+          title: hit.title,
+          snippet: hit.snippet
+        }))
+      }))
+    }, false);
 
-    const dedupedContacts = this.collapseDuplicateMailboxContacts(enrichedContacts)
-      .filter((candidate) => !this.isLowValueMailbox(candidate.email ?? ""))
-      .filter((candidate) => !this.isLowConfidenceWebsiteNamedContact(candidate));
-    const contactsForSelection = dedupedContacts;
+    return {
+      queries,
+      hitGroups,
+      contacts
+    };
+  }
 
-    const selectedEmployees = await this.selectRelevantEmployeeContacts(company, contactsForSelection);
-    if (selectedEmployees.length > 0) {
-      return this.composeFinalPublicContacts(selectedEmployees, contactsForSelection);
+  private async safeExtractAzureMatchedContacts(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country" | "category">,
+    pages: Array<{ url: string; html: string }>,
+    aliases: string[],
+    websitePages?: Array<{
+      url: string;
+      evidenceSnippet: string;
+      emails: string[];
+      phones: string[];
+      linkedInProfileUrl?: string;
+      namedContacts: unknown[];
+    }>
+  ): Promise<{
+    queries: string[];
+    hitGroups: Array<{
+      query: string;
+      hits: WebSearchHit[];
+    }>;
+    contacts: PublicContactCandidate[];
+  }> {
+    try {
+      return await this.extractAzureMatchedContacts(company, pages, aliases, websitePages);
+    } catch {
+      return {
+        queries: [],
+        hitGroups: [],
+        contacts: []
+      };
     }
-
-    const namedFallbackContacts = contactsForSelection
-      .filter((contact) => this.isNamedFallbackContact(contact))
-      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
-      .slice(0, 4);
-    if (namedFallbackContacts.length > 0) {
-      return namedFallbackContacts;
-    }
-
-    return contactsForSelection
-      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
-      .slice(0, 4);
   }
 
   private async extractWebsiteContactsFromPages(
@@ -1155,8 +1312,13 @@ export class HubSpotClient {
     selectedEmployees: PublicContactCandidate[],
     allContacts: PublicContactCandidate[]
   ): PublicContactCandidate[] {
+    const hasSelectedLinkedInEmployee = selectedEmployees.some((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl));
     const websiteFallbackContacts = this.selectReachableWebsiteFallbackContacts(allContacts)
       .filter((contact) => !selectedEmployees.some((existing) => this.getPublicContactIdentity(existing) === this.getPublicContactIdentity(contact)))
+      .filter((contact) => !hasSelectedLinkedInEmployee || !selectedEmployees.some((existing) => (
+        Boolean(contact.email && existing.email && contact.email.trim().toLowerCase() === existing.email.trim().toLowerCase())
+        || Boolean(this.normalizePublicContactPhone(contact.phone) && this.normalizePublicContactPhone(contact.phone) === this.normalizePublicContactPhone(existing.phone))
+      )))
       .slice(0, 1);
     const supplementalLinkedInContacts = this.dedupeNamedEmployeeContacts(allContacts)
       .filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl))
@@ -1169,6 +1331,22 @@ export class HubSpotClient {
 
     return this.mergeDiscoveredContacts(prioritizedEmployees, websiteFallbackContacts)
       .slice(0, 4);
+  }
+
+  private normalizeAzureContactLabel(contact: PublicContactCandidate): string {
+    if (typeof contact.label === "string" && contact.label.trim().length > 0) {
+      return contact.label.trim();
+    }
+
+    if (contact.email) {
+      return this.isGenericMailbox(contact.email) ? "public_generic_mailbox" : "public_named_mailbox";
+    }
+
+    if (this.isPersonalLinkedInUrl(contact.linkedinUrl)) {
+      return "linkedin_profile";
+    }
+
+    return "web_search_contact";
   }
 
   private collapseDuplicateMailboxContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
@@ -1241,7 +1419,7 @@ export class HubSpotClient {
     ].filter(Boolean).join("\n\n");
     const strongHeuristicContacts = heuristicContacts.filter((contact) => this.isNamedEmployeeContact(contact));
     const hasKnownWebsiteReachableContact = knownContacts.some((contact) => Boolean(contact.email || contact.phone));
-    const foundryContacts = evidence.trim() && (strongHeuristicContacts.length < 4 || !hasKnownWebsiteReachableContact)
+    const foundryContacts = evidence.trim() && !hasKnownWebsiteReachableContact && strongHeuristicContacts.length < 2
       ? await this.foundryAgentsClient.discoverPublicContacts(company, evidence, false)
       : [];
     const mergedContacts = this.mergeDiscoveredContacts(foundryContacts, heuristicContacts);
@@ -1260,9 +1438,14 @@ export class HubSpotClient {
     const companyToken = normalizedDomain?.split(".")[0];
     const simplifiedCompanyToken = companyToken?.split(/[-_]/).filter(Boolean)[0];
     const simplifiedCompanyName = companyName.replace(/\b(ai|gmbh|ug|ag|ltd|llc|inc)\b/gi, "").replace(/\s+/g, " ").trim();
+    const prioritizedAliases = Array.from(new Set(aliases.map((alias) => alias.trim()).filter(Boolean)))
+      .sort((left, right) => this.getSearchAliasPriority(right) - this.getSearchAliasPriority(left));
+    const preferredCompanyName = this.looksLikeDescriptiveCompanyLabel(companyName)
+      ? prioritizedAliases.find((alias) => alias.length >= 4) ?? simplifiedCompanyToken ?? companyToken ?? companyName
+      : companyName;
     const managerRoleQuery = '"CEO" OR "CTO" OR "COO" OR "Founder" OR "Managing Director" OR "Head of Engineering" OR "Head of Operations" OR "Technology Manager" OR "Operations Manager"';
     const developerRoleQuery = '"Engineer" OR "Developer" OR "Software Engineer" OR "Pipeline Engineer" OR "Technical Director"';
-    const aliasQueries = aliases.flatMap((alias) => [
+    const aliasQueries = prioritizedAliases.flatMap((alias) => [
       `${alias} site:linkedin.com/in`,
       `site:linkedin.com/in "${alias}"`,
       `${alias} ${managerRoleQuery}`,
@@ -1276,27 +1459,42 @@ export class HubSpotClient {
     return Array.from(
       new Set(
         [
-          `${companyName} site:linkedin.com/in`,
-          `site:linkedin.com/in "${companyName}"`,
-          `${companyName} ${managerRoleQuery}`,
+          ...aliasQueries,
+          `${preferredCompanyName} site:linkedin.com/in`,
+          `site:linkedin.com/in "${preferredCompanyName}"`,
+          `${preferredCompanyName} ${managerRoleQuery}`,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `${simplifiedCompanyName} site:linkedin.com/in` : undefined,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}"` : undefined,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `${simplifiedCompanyName} ${managerRoleQuery}` : undefined,
-          `site:linkedin.com/company "${companyName}" people`,
+          `site:linkedin.com/company "${preferredCompanyName}" people`,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/company "${simplifiedCompanyName}" people` : undefined,
-          `site:linkedin.com/in "${companyName}" ${managerRoleQuery}`,
-          `site:linkedin.com/in "${companyName}" ${developerRoleQuery}`,
+          `site:linkedin.com/in "${preferredCompanyName}" ${managerRoleQuery}`,
+          `site:linkedin.com/in "${preferredCompanyName}" ${developerRoleQuery}`,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}" ${managerRoleQuery}` : undefined,
           simplifiedCompanyName && simplifiedCompanyName !== companyName ? `site:linkedin.com/in "${simplifiedCompanyName}" ${developerRoleQuery}` : undefined,
           normalizedDomain ? `site:linkedin.com/in "${normalizedDomain}" ${managerRoleQuery}` : undefined,
+          companyToken ? `${companyToken} site:linkedin.com/in` : undefined,
+          companyToken ? `site:linkedin.com/in "${companyToken}"` : undefined,
           companyToken ? `site:linkedin.com/in "${companyToken}" ${managerRoleQuery}` : undefined,
+          simplifiedCompanyToken && simplifiedCompanyToken !== companyToken ? `${simplifiedCompanyToken} site:linkedin.com/in` : undefined,
+          simplifiedCompanyToken && simplifiedCompanyToken !== companyToken ? `site:linkedin.com/in "${simplifiedCompanyToken}"` : undefined,
           simplifiedCompanyToken && simplifiedCompanyToken !== companyToken ? `site:linkedin.com/in "${simplifiedCompanyToken}" ${managerRoleQuery}` : undefined,
-          `${companyName} linkedin ${managerRoleQuery}`,
-          `${companyName} linkedin ${developerRoleQuery}`,
-          ...aliasQueries
+          `${preferredCompanyName} linkedin ${managerRoleQuery}`,
+          `${preferredCompanyName} linkedin ${developerRoleQuery}`
         ].filter((query): query is string => Boolean(query))
       )
     );
+  }
+
+  private getSearchAliasPriority(alias: string): number {
+    let score = alias.length;
+    if (/\b(gmbh|ag|ug|ltd|llc|inc)\b/i.test(alias)) {
+      score += 50;
+    }
+    if (/\s/.test(alias)) {
+      score += 10;
+    }
+    return score;
   }
 
   private extractCompanySearchAliases(
@@ -1317,10 +1515,16 @@ export class HubSpotClient {
 
     return Array.from(
       new Set(
-        [companyName, companyName.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(), ...pageAliases]
+        [
+          companyName,
+          companyName.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
+          primaryToken ? this.toTitleCase(primaryToken) : undefined,
+          ...pageAliases
+        ]
+          .filter((alias): alias is string => Boolean(alias))
           .map((alias) => alias.replace(/\s+/g, " ").trim())
-          .filter(Boolean)
           .filter((alias) => alias.length <= 40)
+          .filter((alias) => !/^(kontaktieren sie|contact|kontakt|bei|about|ueber|über)\b/i.test(alias))
           .filter((alias) => !primaryToken || alias.toLowerCase().includes(primaryToken.toLowerCase()))
       )
     ).slice(0, 6);
@@ -1388,7 +1592,13 @@ export class HubSpotClient {
   ): boolean {
     const haystack = text.toLowerCase();
     const normalizedHaystack = haystack.replace(/[^a-z0-9]+/g, " ");
+    const normalizedDomain = this.normalizeDomain(company.domain);
+    const primaryToken = normalizedDomain?.split(".")[0]?.split(/[-_]+/).find((token) => token && token.length >= 4);
     if (/(wikipedia|wiktionary|dictionary|cambridge dictionary|collins dictionary|definition\b|meaning\b|translation\b)/i.test(haystack)) {
+      return false;
+    }
+
+    if (primaryToken && this.looksLikeDescriptiveCompanyLabel(company.name) && !normalizedHaystack.includes(primaryToken.toLowerCase())) {
       return false;
     }
 
@@ -1415,8 +1625,6 @@ export class HubSpotClient {
     if (normalizedPhrases.some((phrase) => normalizedHaystack.includes(phrase))) {
       return true;
     }
-
-    const normalizedDomain = this.normalizeDomain(company.domain);
     const companyTokens = Array.from(
       new Set(
         [company.name, normalizedDomain ?? ""]
@@ -1828,11 +2036,12 @@ export class HubSpotClient {
 
   private getPublicContactMergeKeys(contact: PublicContactCandidate): string[] {
     const fullName = `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim().toLowerCase();
+    const normalizedPhone = this.normalizePublicContactPhone(contact.phone);
     return Array.from(new Set([
       contact.linkedinUrl?.trim().toLowerCase(),
       contact.email?.trim().toLowerCase(),
       fullName ? `name:${fullName}` : undefined,
-      contact.phone?.trim() ? `phone:${contact.phone.trim()}` : undefined,
+      normalizedPhone ? `phone:${normalizedPhone}` : undefined,
       this.getPublicContactIdentity(contact)
     ].filter((value): value is string => Boolean(value))));
   }
@@ -1860,12 +2069,21 @@ export class HubSpotClient {
     };
   }
 
+  private normalizePublicContactPhone(phone: string | undefined): string | undefined {
+    if (typeof phone !== "string") {
+      return undefined;
+    }
+
+    const normalized = phone.replace(/\D/g, "");
+    return normalized.length >= 8 ? normalized : undefined;
+  }
+
   private getPublicContactIdentity(contact: PublicContactCandidate): string {
     return [
       contact.email?.trim().toLowerCase(),
       contact.linkedinUrl?.trim().toLowerCase(),
       `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim().toLowerCase(),
-      contact.phone?.trim(),
+      this.normalizePublicContactPhone(contact.phone),
       contact.sourceUrl.trim().toLowerCase()
     ].filter(Boolean).join("::");
   }
@@ -2400,6 +2618,22 @@ export class HubSpotClient {
     return normalized.split(" ").some((token) => ["wer", "wir", "sind", "sensorik"].includes(token));
   }
 
+  private looksLikeDescriptiveCompanyLabel(value: string): boolean {
+    const normalized = value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s/]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) {
+      return false;
+    }
+
+    const wordCount = normalized.split(" ").filter(Boolean).length;
+    return wordCount >= 5
+      && !/\b(gmbh|ag|ug|ltd|llc|inc)\b/i.test(normalized)
+      && /(vision|industrial|automation|inspection|marking|software|ai|computer vision|machine vision)/i.test(normalized);
+  }
+
   private decodeHtmlEntities(value: string): string {
     return value
       .replace(/&nbsp;|&#160;/gi, " ")
@@ -2407,7 +2641,9 @@ export class HubSpotClient {
       .replace(/&quot;/gi, '"')
       .replace(/&#39;|&apos;/gi, "'")
       .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">");
+      .replace(/&gt;/gi, ">")
+      .replace(/&#(\d+);?/g, (_match, codePoint) => String.fromCodePoint(Number(codePoint)))
+      .replace(/&#x([0-9a-f]+);?/gi, (_match, codePoint) => String.fromCodePoint(Number.parseInt(codePoint, 16)));
   }
 
   private async extractCompanyAddress(company: PreCategorizedCompany): Promise<ExtractedCompanyAddress | null> {
@@ -2466,7 +2702,7 @@ export class HubSpotClient {
     ].filter((value): value is string => Boolean(value))));
     const pages: Array<{ url: string; html: string }> = [];
 
-    while (queue.length > 0 && pages.length < 10) {
+    while (queue.length > 0 && pages.length < 6) {
       const url = queue.shift();
       if (!url || visited.has(url)) {
         continue;
@@ -2491,7 +2727,7 @@ export class HubSpotClient {
       pages.push({ url, html });
 
       for (const link of this.extractRelevantLinks(rootUrl, html)) {
-        if (!visited.has(link) && queue.length + pages.length < 18) {
+        if (!visited.has(link) && queue.length + pages.length < 12) {
           queue.push(link);
         }
       }
@@ -2577,9 +2813,10 @@ export class HubSpotClient {
   }
 
   private extractEmails(html: string, allowedDomains: Set<string>): string[] {
+    const decodedHtml = this.decodeHtmlEntities(html);
     return Array.from(
       new Set(
-        [...html.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+        [...decodedHtml.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
           .map((match) => match[0].toLowerCase())
           .filter((email) => !email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.jpeg') && !email.endsWith('.webp'))
           .filter((email) => this.isAllowedCompanyEmail(email, allowedDomains))
@@ -2838,6 +3075,22 @@ export class HubSpotClient {
       "vision",
       "systems",
       "solutions",
+      "technology",
+      "technologies",
+      "digital",
+      "software",
+      "hardware",
+      "robotics",
+      "robotik",
+      "industrial",
+      "analytics",
+      "consulting",
+      "machine",
+      "learning",
+      "smart",
+      "factory",
+      "mes",
+      "erp",
       "group",
       "company",
       "corp",
@@ -3067,11 +3320,31 @@ export class HubSpotClient {
       hasSyntheticCrawlerSummary ? undefined : company.shortDescription,
       company.rationale
     ]
-      .map((value) => value?.trim())
+      .map((value) => this.toSingleLineText(value))
       .filter((value): value is string => Boolean(value));
 
     const uniqueSections = Array.from(new Set(sections));
     return uniqueSections.join(" ").slice(0, 1800);
+  }
+
+  private toSingleLineText(value: unknown): string | undefined {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+
+    if (Array.isArray(value)) {
+      const flattened = value
+        .map((entry) => this.toSingleLineText(entry))
+        .filter((entry): entry is string => Boolean(entry));
+      return flattened.length > 0 ? flattened.join(", ") : undefined;
+    }
+
+    return undefined;
   }
 
   private buildEmailOutreachNote(

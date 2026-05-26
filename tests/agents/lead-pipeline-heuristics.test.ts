@@ -67,7 +67,7 @@ test("known camera manufacturers do not remain in integrator buckets", () => {
   assert.equal(result.category, "camera_manufacturer_partner");
 });
 
-test("direct exa path prefers the machine-builder debug filter for machine_builder_ai_enablement", () => {
+test("direct exa path keeps a machine-builder-compatible live filter without debug labels", () => {
   const agent = new LeadPipelineAgent() as any;
 
   const filter = agent.buildDirectExaSearchFilter(["machine_builder_ai_enablement", "integrator_general_ai"], "DE");
@@ -75,7 +75,7 @@ test("direct exa path prefers the machine-builder debug filter for machine_build
   assert.ok(filter.targetCategories?.includes("machine_builder_ai_enablement"));
   assert.deepEqual(filter.locations, ["Germany"]);
   assert.match(filter.name, /Machine Builders For AI Options/i);
-  assert.match(filter.name, /\[debug Germany\]$/);
+  assert.doesNotMatch(filter.name, /\[debug/i);
 });
 
 test("stopped direct exa runs still sync already qualified companies", async () => {
@@ -199,42 +199,45 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
 
-test("direct exa exclude prioritization keeps same-run and relevant exclusions inside the 1200-domain limit", () => {
+test("direct exa exclude prioritization keeps hubspot, matching rejected websites, and current-run domains deduped inside the 1200-domain limit", () => {
   const agent = new LeadPipelineAgent() as any;
   const hubSpotDomains = Array.from({ length: 1300 }, (_, index) => `hubspot-${index}.example${index}.com`);
-  hubSpotDomains.push("relevant-hubspot.test", "other-hubspot.test");
+  hubSpotDomains.push("relevant-hubspot.test", "duplicate.test");
 
   const prioritized = agent.buildPrioritizedDirectExaExcludedDomains(
     {
       records: [
         {
-          companyName: "Relevant HubSpot",
-          normalizedName: "relevant hubspot",
-          normalizedDomain: "relevant-hubspot.test",
-          existsInHubSpot: true,
-          category: "integrator_vision_industrial_ai"
-        },
-        {
-          companyName: "Other HubSpot",
-          normalizedName: "other hubspot",
-          normalizedDomain: "other-hubspot.test",
-          existsInHubSpot: true,
-          category: "integrator_general_ai"
-        },
-        {
-          companyName: "Screened Out",
-          normalizedName: "screened out",
-          normalizedDomain: "screened-out.test",
+          companyName: "Live Rejected",
+          normalizedName: "live rejected",
+          normalizedDomain: "live-rejected.test",
           existsInHubSpot: false,
-          category: "other"
+          category: "other",
+          sourceFilter: "Germany vision integrators"
+        },
+        {
+          companyName: "Debug Rejected",
+          normalizedName: "debug rejected",
+          normalizedDomain: "debug-rejected.test",
+          existsInHubSpot: false,
+          category: "other",
+          sourceFilter: "manual-debug-input"
+        },
+        {
+          companyName: "Already Matching Target",
+          normalizedName: "already matching target",
+          normalizedDomain: "matching-target.test",
+          existsInHubSpot: false,
+          category: "integrator_vision_industrial_ai",
+          sourceFilter: "Germany vision integrators"
         }
       ]
     },
     ["integrator_vision_industrial_ai"],
     hubSpotDomains,
     {
-      currentRunExcludedDomains: ["same-run-1.test", "same-run-2.test"],
-      historicalExaExcludedDomains: ["prior-run-exa.test"]
+      screeningScope: "live",
+      currentRunExcludedDomains: ["same-run-1.test", "duplicate.test", "same-run-2.test"]
     }
   );
 
@@ -242,12 +245,16 @@ test("direct exa exclude prioritization keeps same-run and relevant exclusions i
 
   assert.equal(prioritized.localExcludedDomains.has("same-run-1.test"), true);
   assert.equal(prioritized.localExcludedDomains.has("relevant-hubspot.test"), true);
-  assert.equal(prioritized.localExcludedDomains.has("screened-out.test"), true);
+  assert.equal(prioritized.localExcludedDomains.has("live-rejected.test"), true);
+  assert.equal(prioritized.localExcludedDomains.has("debug-rejected.test"), false);
+  assert.equal(prioritized.localExcludedDomains.has("matching-target.test"), false);
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), true);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), true);
   assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);
-  assert.equal(requestPayloadDomains.includes("prior-run-exa.test"), true);
-  assert.equal(requestPayloadDomains.includes("screened-out.test"), true);
-  assert.equal(requestPayloadDomains.includes("other-hubspot.test"), true);
+  assert.equal(requestPayloadDomains.includes("live-rejected.test"), true);
+  assert.equal(requestPayloadDomains.includes("debug-rejected.test"), false);
+  assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
+  assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
   assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
 });
+

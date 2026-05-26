@@ -15,6 +15,8 @@ test("buildQueries includes localized Germany variants and official-website disc
 
   assert.ok(queries.some((query) => query.includes("Germany")));
   assert.ok(queries.some((query) => query.includes("Deutschland")));
+  assert.ok(queries.some((query) => query.includes("Berlin Germany")));
+  assert.ok(queries.some((query) => query.includes("Ruhr area Germany")));
   assert.ok(queries.some((query) => /official company websites/i.test(query)));
   assert.ok(queries.some((query) => /exclude directories, marketplaces, job boards/i.test(query)));
 });

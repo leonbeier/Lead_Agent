@@ -7,8 +7,10 @@ import type {
   CompanySample,
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
+  ExaQueryHistoryInsight,
   GeneratedLeadRecord,
   LeadCategory,
+  LeadLearningData,
   LeadJobRequest,
   LeadJobResult,
   LeadRunProgress,
@@ -77,8 +79,20 @@ interface SearchAggregate {
   requestedCount: number;
   executedQueries: number;
   queryTexts: string[];
+  plannedQueries?: string[];
+  promptMessages?: Array<{ role: string; content: string }>;
+  excludedDomains?: string[];
   rawFound: number;
   categoryBreakdown: Record<LeadCategory, number>;
+  queryStats: Array<{
+    query: string;
+    rawFound: number;
+    duplicates: number;
+    accepted: number;
+    rejectedDifferentCategory: number;
+    rejectedOther: number;
+    categoryBreakdown: Record<LeadCategory, number>;
+  }>;
   decisionSamples: SearchHistoryDecisionSample[];
 }
 
@@ -291,9 +305,10 @@ export class LeadWorkerRunService {
     const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 8);
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 1);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
+    const learning = typeof this.controlPlaneStore.getLearning === "function"
+      ? await this.controlPlaneStore.getLearning()
+      : undefined;
     const filters = this.leadPipelineAgent.buildDirectExaFiltersForExecution(targetCategories, request.market);
-    const liveExaCache = request.excludePreviouslyFoundExaDomains ? await this.controlPlaneStore.getLiveExaCache() : undefined;
-
     const aiQueue = new AsyncQueue<{ company: CompanySample; searchId?: string }>();
     const outreachQueue = new AsyncQueue<QualifiedCompanyState>();
     const contactQueue = new AsyncQueue<QualifiedCompanyState>();
@@ -305,9 +320,10 @@ export class LeadWorkerRunService {
     const standbyQualifiedStates: QualifiedCompanyState[] = [];
     const searchAggregates = new Map<string, SearchAggregate>();
     const recentDebugMessages: string[] = [];
+    let liveSearchDebug: LeadRunProgress["liveSearchDebug"];
     const seenCompanyKeys = new Set<string>();
-    const historicalExaExcludedDomains = new Set<string>((liveExaCache?.discoveredDomains ?? []).map((domain) => normalizeDomain(domain)).filter((value): value is string => Boolean(value)));
     const currentRunExcludedDomains = new Set<string>();
+    const currentRunQueryHistory = new Map<string, ExaQueryHistoryInsight>(this.buildRecentLiveExaQueryHistory(learning));
     const metrics: WorkerRunMetrics = {
       exaRequests: 0,
       exaRawFound: 0,
@@ -401,6 +417,7 @@ export class LeadWorkerRunService {
         },
         timedOut,
         stopped: stopping,
+        liveSearchDebug,
         updatedAt: new Date().toISOString(),
         workerMetrics: {
           ...metrics,
@@ -410,6 +427,24 @@ export class LeadWorkerRunService {
       };
 
       options.onProgress?.(progress);
+    };
+
+    const updateLiveSearchDebug = (aggregate: SearchAggregate | undefined, patch: Partial<NonNullable<LeadRunProgress["liveSearchDebug"]>> = {}) => {
+      liveSearchDebug = {
+        ...liveSearchDebug,
+        ...patch,
+        currentBatchQueryStats: aggregate
+          ? aggregate.queryStats.map((queryStat) => ({
+              query: queryStat.query,
+              rawFound: queryStat.rawFound,
+              duplicates: queryStat.duplicates,
+              accepted: queryStat.accepted,
+              rejectedDifferentCategory: queryStat.rejectedDifferentCategory,
+              rejectedOther: queryStat.rejectedOther,
+              categoryBreakdown: { ...queryStat.categoryBreakdown }
+            }))
+          : liveSearchDebug?.currentBatchQueryStats
+      };
     };
 
     const updateScreeningState = (task: ScreeningTask) => {
@@ -533,6 +568,7 @@ export class LeadWorkerRunService {
               fetchedSampleCount: aggregate.rawFound,
               eligibleSampleCount: relevantCount,
               discoveryQueries: aggregate.queryTexts,
+              queryStats: aggregate.queryStats.map((queryStat) => ({ ...queryStat })),
               decisionSamples: aggregate.decisionSamples.slice(0, 10)
             } satisfies SearchHistoryEntry;
           });
@@ -611,7 +647,7 @@ export class LeadWorkerRunService {
         return;
       }
 
-      if (state.contactStatus !== "done") {
+      if (state.contactStatus !== "done" && state.contactStatus !== "failed") {
         return;
       }
 
@@ -634,7 +670,9 @@ export class LeadWorkerRunService {
         metrics.queueSizes.aiInFlight += 1;
         emitProgress();
         try {
-          const analysis = await this.debugConsoleService.classifyCompanyForExecution(item.company);
+          const analysis = await this.debugConsoleService.classifyCompanyForExecution(item.company, {
+            annotateDebugStage: false
+          });
           const categorizedCompany = analysis.categorizedCompany;
           screeningQueue.enqueue({
             type: "upsert",
@@ -658,15 +696,46 @@ export class LeadWorkerRunService {
             }
           }
 
+          const aggregate = item.searchId ? searchAggregates.get(item.searchId) : undefined;
+          const query = item.company.discoveryQuery?.trim();
+          const queryStat = aggregate && query ? getOrCreateQueryStat(aggregate, query) : undefined;
+
           if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory)) {
+            if (queryStat) {
+              queryStat.accepted += 1;
+              queryStat.categoryBreakdown[categorizedCompany.category] += 1;
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+              updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
+            }
             queueQualifiedCompany(categorizedCompany, "exa", item.searchId);
           } else if (categorizedCompany.category === "other") {
             metrics.aiRejectedOther += 1;
+            if (queryStat) {
+              queryStat.rejectedOther += 1;
+              queryStat.categoryBreakdown.other += 1;
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+              updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
+            }
           } else {
             metrics.aiRejectedDifferentCategory += 1;
+            if (queryStat) {
+              queryStat.rejectedDifferentCategory += 1;
+              queryStat.categoryBreakdown[categorizedCompany.category] += 1;
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+              updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
+            }
           }
         } catch (error) {
           metrics.aiRejectedOther += 1;
+          const aggregate = item.searchId ? searchAggregates.get(item.searchId) : undefined;
+          const query = item.company.discoveryQuery?.trim();
+          if (aggregate && query) {
+            const queryStat = getOrCreateQueryStat(aggregate, query);
+            queryStat.rejectedOther += 1;
+            queryStat.categoryBreakdown.other += 1;
+            this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+            updateLiveSearchDebug(aggregate, { lastExecutedQuery: query });
+          }
           log(`KI-Worker Fehler fuer ${item.company.name}: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
           metrics.queueSizes.aiInFlight = Math.max(0, metrics.queueSizes.aiInFlight - 1);
@@ -743,16 +812,10 @@ export class LeadWorkerRunService {
           maybeQueueHubSpot(state);
         } catch (error) {
           state.contactStatus = "failed";
-          state.removed = true;
-          state.pipelineAssigned = false;
           metrics.contactFailed += 1;
           state.contacts = [];
-          log(`Kontakt-Worker Fehler, Firma entfernt: ${state.company.name}: ${error instanceof Error ? error.message : String(error)}`);
-          maybePromoteStandby();
-          screeningQueue.enqueue({
-            type: "upsert",
-            record: buildScreeningRecord(state.company)
-          });
+          log(`Kontakt-Worker Fehler, HubSpot laeuft ohne Kontakte weiter: ${state.company.name}: ${error instanceof Error ? error.message : String(error)}`);
+          maybeQueueHubSpot(state);
         } finally {
           metrics.queueSizes.contactInFlight = Math.max(0, metrics.queueSizes.contactInFlight - 1);
           emitProgress();
@@ -862,6 +925,7 @@ export class LeadWorkerRunService {
           queryTexts: [],
           rawFound: 0,
           categoryBreakdown: createEmptyCategoryBreakdown(),
+          queryStats: [],
           decisionSamples: []
         };
         searchAggregates.set(searchId, aggregate);
@@ -874,21 +938,58 @@ export class LeadWorkerRunService {
           targetCategories,
           exaQueryCount,
           {
-            currentRunExcludedDomains: Array.from(currentRunExcludedDomains),
-            historicalExaExcludedDomains: Array.from(historicalExaExcludedDomains)
+            screeningScope: "live",
+            currentRunExcludedDomains: Array.from(currentRunExcludedDomains)
+          },
+          {
+            dryRun: request.dryRun,
+            learning,
+            mainContext: request.mainContext,
+            searchStrategyContext: request.searchStrategyContext,
+            recentQueryHistory: Array.from(currentRunQueryHistory.values()),
+            prequalification: request.prequalification
           },
           (update) => {
             aggregate.executedQueries = update.executedQueries;
             aggregate.rawFound = update.rawCompaniesFound;
             aggregate.queryTexts.push(update.query);
+            aggregate.plannedQueries = update.plannedQueries;
+            aggregate.promptMessages = update.promptMessages;
+            aggregate.excludedDomains = update.excludedDomains;
+            updateLiveSearchDebug(aggregate, {
+              filterName: update.filterName,
+              defaultQueries: update.defaultQueries,
+              plannedQueries: update.plannedQueries,
+              promptMessages: update.promptMessages,
+              lastExecutedQuery: update.query,
+              excludedDomains: update.excludedDomains,
+              executedQueries: update.executedQueries,
+              totalQueries: update.totalQueries,
+              rawCompaniesFound: update.rawCompaniesFound
+            });
+            if (!currentRunQueryHistory.has(update.query)) {
+              currentRunQueryHistory.set(update.query, {
+                query: update.query,
+                timestamp: new Date().toISOString(),
+                foundCategoryBreakdown: createEmptyCategoryBreakdown()
+              });
+            }
             historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...aggregate.queryTexts] } });
+            emitProgress();
           }
         );
 
         const uniqueRawCompanies: CompanySample[] = [];
         for (const company of rawCompanies) {
+          const query = company.discoveryQuery?.trim();
+          if (query) {
+            getOrCreateQueryStat(aggregate, query).rawFound += 1;
+          }
           const key = buildCompanyKey(company);
           if (seenCompanyKeys.has(key)) {
+            if (query) {
+              getOrCreateQueryStat(aggregate, query).duplicates += 1;
+            }
             continue;
           }
           seenCompanyKeys.add(key);
@@ -911,6 +1012,20 @@ export class LeadWorkerRunService {
             discoveryQuery: company.discoveryQuery,
             sourceFilter: company.sourceFilter
           })));
+        }
+
+        const persistedQueryTexts = [...new Set(aggregate.queryTexts.map((query) => query.trim()).filter(Boolean))];
+        if (persistedQueryTexts.length > 0) {
+          await this.controlPlaneStore.recordLiveExaQueryRuns(
+            persistedQueryTexts.map((query) => ({
+              timestamp: new Date().toISOString(),
+              filterName: aggregate.filter.name,
+              query,
+              plannedQueries: aggregate.plannedQueries,
+              promptMessages: aggregate.promptMessages,
+              excludedDomains: aggregate.excludedDomains
+            }))
+          );
         }
 
         for (const company of uniqueRawCompanies.slice(0, SEARCH_BATCH_SIZE + SEARCH_RESULT_HEADROOM)) {
@@ -1027,6 +1142,9 @@ export class LeadWorkerRunService {
           fetchedSampleCount: aggregate.rawFound,
           eligibleSampleCount: relevantCount,
           discoveryQueries: [...new Set(aggregate.queryTexts)],
+          plannedQueries: aggregate.plannedQueries,
+          promptMessages: aggregate.promptMessages,
+          excludedDomains: aggregate.excludedDomains,
           decisionSamples: aggregate.decisionSamples.slice(0, 10)
         } satisfies SearchHistoryEntry;
       });
@@ -1095,4 +1213,68 @@ export class LeadWorkerRunService {
     emitProgress();
     return result;
   }
+
+  private buildRecentLiveExaQueryHistory(learning?: LeadLearningData): Array<[string, ExaQueryHistoryInsight]> {
+    const recentEntries = (learning?.searchHistoryByMode?.exa_search?.searchHistory ?? [])
+      .slice()
+      .sort((left: SearchHistoryEntry, right: SearchHistoryEntry) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime())
+      .slice(0, 12);
+    const history = new Map<string, ExaQueryHistoryInsight>();
+
+    for (const entry of recentEntries) {
+      for (const queryStat of entry.queryStats ?? []) {
+        const query = queryStat.query?.trim();
+        if (!query || history.has(query)) {
+          continue;
+        }
+
+        history.set(query, {
+          query,
+          timestamp: entry.timestamp,
+          foundCategoryBreakdown: { ...queryStat.categoryBreakdown },
+          note: entry.filterName
+        });
+      }
+    }
+
+    return Array.from(history.entries());
+  }
+
+  private updateRecentLiveQueryHistory(
+    history: Map<string, ExaQueryHistoryInsight>,
+    query: string | undefined,
+    categoryBreakdown: Record<LeadCategory, number>
+  ): void {
+    const normalizedQuery = query?.trim();
+    if (!normalizedQuery) {
+      return;
+    }
+
+    const existing = history.get(normalizedQuery);
+    history.set(normalizedQuery, {
+      query: normalizedQuery,
+      timestamp: existing?.timestamp ?? new Date().toISOString(),
+      foundCategoryBreakdown: { ...categoryBreakdown },
+      note: existing?.note
+    });
+  }
+}
+
+function getOrCreateQueryStat(aggregate: SearchAggregate, query: string) {
+  const existing = aggregate.queryStats.find((entry) => entry.query === query);
+  if (existing) {
+    return existing;
+  }
+
+  const created = {
+    query,
+    rawFound: 0,
+    duplicates: 0,
+    accepted: 0,
+    rejectedDifferentCategory: 0,
+    rejectedOther: 0,
+    categoryBreakdown: createEmptyCategoryBreakdown()
+  };
+  aggregate.queryStats.push(created);
+  return created;
 }

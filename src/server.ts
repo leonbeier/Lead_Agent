@@ -25,6 +25,7 @@ type LeadRunStatus = LeadRunProgress & {
 };
 
 const STALE_LEAD_RUN_THRESHOLD_MS = 90_000;
+const DEBUG_CONSOLE_TIMEOUT_MS = 180_000;
 
 const leadRunStatus: LeadRunStatus = {
   running: false,
@@ -60,6 +61,7 @@ function resetLeadRunStatus(detail: string, stage: LeadRunStatus["stage"] = "idl
   leadRunStatus.lastError = undefined;
   leadRunStatus.runVariant = undefined;
   leadRunStatus.workerMetrics = undefined;
+  leadRunStatus.liveSearchDebug = undefined;
   leadRunStatus.debugMessages = undefined;
   leadRunStatus.startedAt = undefined;
   leadRunStatus.finishedAt = new Date().toISOString();
@@ -92,6 +94,7 @@ function applyLeadRunProgress(progress: LeadRunProgress & { runVariant?: "legacy
   leadRunStatus.updatedAt = progress.updatedAt;
   leadRunStatus.runVariant = progress.runVariant ?? leadRunStatus.runVariant;
   leadRunStatus.workerMetrics = progress.workerMetrics;
+  leadRunStatus.liveSearchDebug = progress.liveSearchDebug;
   leadRunStatus.debugMessages = progress.debugMessages;
 }
 
@@ -122,6 +125,7 @@ async function startManagedLeadRun(
   leadRunStatus.lastError = undefined;
   leadRunStatus.runVariant = variant;
   leadRunStatus.workerMetrics = undefined;
+  leadRunStatus.liveSearchDebug = undefined;
   leadRunStatus.debugMessages = undefined;
   leadRunStatus.stage = "starting";
   leadRunStatus.stageLabel = variant === "worker_v2" ? "Neuer Worker-Run startet" : "Lead-Run startet";
@@ -397,6 +401,7 @@ const debugConsoleRequestSchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(20),
   useExaExcludeDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
+  useAzureQueryPlanner: z.boolean().optional(),
   excludePreviouslyFoundExaDomains: z.boolean().optional(),
   aiPrefilterConcurrency: z.coerce.number().int().min(1).optional(),
   outreachPrepConcurrency: z.coerce.number().int().min(1).optional(),
@@ -580,12 +585,13 @@ app.post("/api/control/cache/live-exa/reset", async (_request, response, next) =
 
 app.post("/api/control/cache/live-exa-history/reset", async (_request, response, next) => {
   try {
-    const [learning, cache] = await Promise.all([
+    const [learning, cache, latestLeadRun] = await Promise.all([
       controlPlaneStore.clearSearchHistoryMode("exa_search"),
-      controlPlaneStore.clearLiveExaCache()
+      controlPlaneStore.clearLiveExaCache(),
+      controlPlaneStore.clearLatestLeadRunSearchHistory("exa_search")
     ]);
 
-    response.json({ learning, cache });
+    response.json({ learning, cache, latestLeadRun });
   } catch (error) {
     next(error);
   }
@@ -853,13 +859,20 @@ app.post("/api/debug/test-console", async (request, response, next) => {
       throw new Error("At least one target category is required for the debug console.");
     }
 
-    const result = await debugConsoleService.run({
+    const debugRunPromise = debugConsoleService.run({
       ...parsedRequest,
       targetCategory: parsedRequest.targetCategory ?? normalizedTargetCategories[0],
       targetCategories: normalizedTargetCategories,
       exaApiKey: parsedRequest.exaApiKey ?? settings.exaApiKey,
       diffbotToken: parsedRequest.diffbotToken ?? settings.diffbotToken
     });
+
+    const result = await Promise.race([
+      debugRunPromise,
+      new Promise<never>((_resolve, reject) => {
+        setTimeout(() => reject(Object.assign(new Error(`Test-Lab request timed out after ${DEBUG_CONSOLE_TIMEOUT_MS}ms.`), { statusCode: 504 })), DEBUG_CONSOLE_TIMEOUT_MS);
+      })
+    ]);
 
     response.json(result);
   } catch (error) {
@@ -904,7 +917,10 @@ app.post("/api/hubspot/workflow-trigger-new", async (request, response, next) =>
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : "Unknown error";
-  response.status(500).json({
+  const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof (error as { statusCode?: unknown }).statusCode === "number"
+    ? (error as { statusCode: number }).statusCode
+    : 500;
+  response.status(statusCode).json({
     error: message
   });
 });

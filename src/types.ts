@@ -217,9 +217,22 @@ export interface RawExaHistoryEntry {
   sourceFilter?: string;
 }
 
+export interface LiveExaQueryRun {
+  timestamp: string;
+  filterName: string;
+  query: string;
+  plannedQueries?: string[];
+  promptMessages?: Array<{
+    role: string;
+    content: string;
+  }>;
+  excludedDomains?: string[];
+}
+
 export interface LiveExaCache {
   entries: RawExaHistoryEntry[];
   discoveredDomains: string[];
+  queryRuns?: LiveExaQueryRun[];
 }
 
 export interface StoredFilterSnapshot {
@@ -267,8 +280,31 @@ export interface SearchHistoryEntry {
   fetchedSampleCount?: number;
   eligibleSampleCount?: number;
   discoveryQueries?: string[];
+  plannedQueries?: string[];
+  promptMessages?: Array<{
+    role: string;
+    content: string;
+  }>;
+  excludedDomains?: string[];
+  queryStats?: Array<{
+    query: string;
+    rawFound: number;
+    duplicates: number;
+    accepted: number;
+    rejectedDifferentCategory: number;
+    rejectedOther: number;
+    categoryBreakdown: Record<LeadCategory, number>;
+  }>;
   dropOffSummary?: SearchHistoryDropOffSummary;
   decisionSamples?: SearchHistoryDecisionSample[];
+}
+
+export interface ExaQueryHistoryInsight {
+  query: string;
+  timestamp?: string;
+  detectedCategories?: LeadCategory[];
+  foundCategoryBreakdown?: Partial<Record<LeadCategory, number>>;
+  note?: string;
 }
 
 export interface GeneratedLeadRecord {
@@ -424,6 +460,29 @@ export interface LeadRunProgress {
   funnel?: LeadRunFunnel;
   timedOut?: boolean;
   stopped?: boolean;
+  liveSearchDebug?: {
+    filterName?: string;
+    defaultQueries?: string[];
+    plannedQueries?: string[];
+    promptMessages?: Array<{
+      role: string;
+      content: string;
+    }>;
+    lastExecutedQuery?: string;
+    excludedDomains?: string[];
+    executedQueries?: number;
+    totalQueries?: number;
+    rawCompaniesFound?: number;
+    currentBatchQueryStats?: Array<{
+      query: string;
+      rawFound: number;
+      duplicates: number;
+      accepted: number;
+      rejectedDifferentCategory: number;
+      rejectedOther: number;
+      categoryBreakdown: Partial<Record<LeadCategory, number>>;
+    }>;
+  };
   updatedAt: string;
 }
 

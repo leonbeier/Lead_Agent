@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { CompanyScreeningDatabase, CompanyScreeningRecord, LiveExaCache, RawExaHistoryEntry } from "./types";
+import { CompanyScreeningDatabase, CompanyScreeningRecord, ExaQueryHistoryInsight, LiveExaCache, RawExaHistoryEntry } from "./types";
 
 type MetadataKey = "screeningMigrated" | "liveExaMigrated" | "testLabExaMigrated";
 
@@ -58,12 +58,34 @@ export class CacheDatabaseStore {
           source_filter TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS live_exa_query_runs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          timestamp TEXT NOT NULL,
+          filter_name TEXT NOT NULL,
+          query TEXT NOT NULL,
+          planned_queries_json TEXT,
+          prompt_messages_json TEXT,
+          excluded_domains_json TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS testlab_exa_queries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           created_at TEXT NOT NULL,
           query TEXT NOT NULL
         );
       `);
+
+      try {
+        database.exec("ALTER TABLE testlab_exa_queries ADD COLUMN detected_categories_json TEXT;");
+      } catch {
+        // Already migrated.
+      }
+
+      try {
+        database.exec("ALTER TABLE testlab_exa_queries ADD COLUMN note TEXT;");
+      } catch {
+        // Already migrated.
+      }
 
       return callback(database);
     } finally {
@@ -175,6 +197,18 @@ export class CacheDatabaseStore {
         FROM discovered_domains
         ORDER BY last_seen_at DESC, domain ASC
       `).all() as Array<{ domain: string }>;
+      const queryRuns = database.prepare(`
+        SELECT timestamp, filter_name, query, planned_queries_json, prompt_messages_json, excluded_domains_json
+        FROM live_exa_query_runs
+        ORDER BY timestamp DESC, id DESC
+      `).all() as Array<{
+        timestamp: string;
+        filter_name: string;
+        query: string;
+        planned_queries_json: string | null;
+        prompt_messages_json: string | null;
+        excluded_domains_json: string | null;
+      }>;
 
       return {
         entries: entries.map<RawExaHistoryEntry>((entry) => ({
@@ -184,14 +218,22 @@ export class CacheDatabaseStore {
           discoveryQuery: entry.discovery_query ?? undefined,
           sourceFilter: entry.source_filter ?? undefined
         })),
-        discoveredDomains: discoveredDomains.map((entry) => entry.domain)
+        discoveredDomains: discoveredDomains.map((entry) => entry.domain),
+        queryRuns: queryRuns.map((entry) => ({
+          timestamp: entry.timestamp,
+          filterName: entry.filter_name,
+          query: entry.query,
+          plannedQueries: entry.planned_queries_json ? JSON.parse(entry.planned_queries_json) as string[] : undefined,
+          promptMessages: entry.prompt_messages_json ? JSON.parse(entry.prompt_messages_json) as Array<{ role: string; content: string }> : undefined,
+          excludedDomains: entry.excluded_domains_json ? JSON.parse(entry.excluded_domains_json) as string[] : undefined
+        }))
       };
     });
   }
 
   writeLiveExaCache(cache: LiveExaCache): void {
     this.withDatabase((database) => {
-      database.exec("DELETE FROM live_exa_entries; DELETE FROM discovered_domains;");
+      database.exec("DELETE FROM live_exa_entries; DELETE FROM discovered_domains; DELETE FROM live_exa_query_runs;");
       const entryStatement = database.prepare(`
         INSERT INTO live_exa_entries (timestamp, domain, company_name, discovery_query, source_filter)
         VALUES (?, ?, ?, ?, ?)
@@ -199,6 +241,10 @@ export class CacheDatabaseStore {
       const domainStatement = database.prepare(`
         INSERT INTO discovered_domains (domain, last_seen_at)
         VALUES (?, ?)
+      `);
+      const queryRunStatement = database.prepare(`
+        INSERT INTO live_exa_query_runs (timestamp, filter_name, query, planned_queries_json, prompt_messages_json, excluded_domains_json)
+        VALUES (?, ?, ?, ?, ?, ?)
       `);
 
       for (const entry of cache.entries) {
@@ -214,16 +260,27 @@ export class CacheDatabaseStore {
       for (const domain of cache.discoveredDomains) {
         domainStatement.run(domain, new Date().toISOString());
       }
+
+      for (const queryRun of cache.queryRuns ?? []) {
+        queryRunStatement.run(
+          queryRun.timestamp,
+          queryRun.filterName,
+          queryRun.query,
+          queryRun.plannedQueries ? JSON.stringify(queryRun.plannedQueries) : null,
+          queryRun.promptMessages ? JSON.stringify(queryRun.promptMessages) : null,
+          queryRun.excludedDomains ? JSON.stringify(queryRun.excludedDomains) : null
+        );
+      }
     });
   }
 
-  readTestLabExaCache(): { queryHistory: string[]; discoveredDomains: string[] } {
+  readTestLabExaCache(): { queryHistory: string[]; queryInsights: ExaQueryHistoryInsight[]; discoveredDomains: string[] } {
     return this.withDatabase((database) => {
       const queryHistory = database.prepare(`
-        SELECT query
+        SELECT created_at, query, detected_categories_json, note
         FROM testlab_exa_queries
         ORDER BY id ASC
-      `).all() as Array<{ query: string }>;
+      `).all() as Array<{ created_at: string; query: string; detected_categories_json?: string | null; note?: string | null }>;
       const discoveredDomains = database.prepare(`
         SELECT domain
         FROM discovered_domains
@@ -232,26 +289,41 @@ export class CacheDatabaseStore {
 
       return {
         queryHistory: queryHistory.map((entry) => entry.query),
+        queryInsights: queryHistory.map((entry) => ({
+          query: entry.query,
+          timestamp: entry.created_at,
+          detectedCategories: entry.detected_categories_json
+            ? JSON.parse(entry.detected_categories_json) as ExaQueryHistoryInsight["detectedCategories"]
+            : undefined,
+          note: entry.note ?? undefined
+        })),
         discoveredDomains: discoveredDomains.map((entry) => entry.domain)
       };
     });
   }
 
-  writeTestLabExaCache(cache: { queryHistory: string[]; discoveredDomains: string[] }): void {
+  writeTestLabExaCache(cache: { queryHistory: string[]; queryInsights?: ExaQueryHistoryInsight[]; discoveredDomains: string[] }): void {
     this.withDatabase((database) => {
       database.exec("DELETE FROM testlab_exa_queries; DELETE FROM discovered_domains;");
       const queryStatement = database.prepare(`
-        INSERT INTO testlab_exa_queries (created_at, query)
-        VALUES (?, ?)
+        INSERT INTO testlab_exa_queries (created_at, query, detected_categories_json, note)
+        VALUES (?, ?, ?, ?)
       `);
       const domainStatement = database.prepare(`
         INSERT INTO discovered_domains (domain, last_seen_at)
         VALUES (?, ?)
       `);
       const now = new Date().toISOString();
+      const queryInsightsByQuery = new Map((cache.queryInsights ?? []).map((entry) => [entry.query, entry]));
 
       for (const query of cache.queryHistory) {
-        queryStatement.run(now, query);
+        const insight = queryInsightsByQuery.get(query);
+        queryStatement.run(
+          insight?.timestamp ?? now,
+          query,
+          insight?.detectedCategories?.length ? JSON.stringify(insight.detectedCategories) : null,
+          insight?.note ?? null
+        );
       }
 
       for (const domain of cache.discoveredDomains) {

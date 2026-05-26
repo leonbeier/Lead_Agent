@@ -57,6 +57,7 @@ test("worker run consumes matching live screening seeds before starting Exa", as
 
   const service = new LeadWorkerRunService({
     controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
       getCompanyScreeningDatabase: async () => ({
         records: [{
           companyName: "Seed Vision",
@@ -134,6 +135,7 @@ test("worker run promotes standby AI matches when the active company fails downs
 
   const service = new LeadWorkerRunService({
     controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
       getCompanyScreeningDatabase: async () => ({ records: [] }),
       getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
       writeCompanyScreeningDatabase: async () => undefined,
@@ -220,6 +222,7 @@ test("worker run does not promote standby companies after target is reached", as
 
   const service = new LeadWorkerRunService({
     controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
       getCompanyScreeningDatabase: async () => ({ records: [] }),
       getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
       writeCompanyScreeningDatabase: async () => undefined,
@@ -312,10 +315,8 @@ test("worker run does not promote standby companies after target is reached", as
   assert.ok(progressSnapshots.some((snapshot) => snapshot.funnel?.afterHubSpotDedup === 2 && snapshot.funnel?.syncedToHubSpot === 1));
 });
 
-test("worker run drops contact-failed companies instead of syncing them to HubSpot", async () => {
+test("worker run still syncs companies to HubSpot when contact discovery fails", async () => {
   const syncedCompanies: string[] = [];
-  const abortController = new AbortController();
-
   const service = new LeadWorkerRunService({
     controlPlaneStore: {
       getCompanyScreeningDatabase: async () => ({
@@ -367,8 +368,6 @@ test("worker run drops contact-failed companies instead of syncing them to HubSp
     } as any
   });
 
-  const abortTimer = setTimeout(() => abortController.abort(), 50);
-
   const result = await service.run({
     targetLeadCount: 1,
     targetCategories: ["integrator_vision_industrial_ai"],
@@ -379,15 +378,11 @@ test("worker run drops contact-failed companies instead of syncing them to HubSp
     aiPrefilterConcurrency: 1,
     outreachPrepConcurrency: 1,
     contactSearchConcurrency: 1
-  }, {
-    signal: abortController.signal
   });
 
-  clearTimeout(abortTimer);
-
-  assert.deepEqual(syncedCompanies, []);
-  assert.equal(result.hubspotSync.companySyncedCount, 0);
-  assert.equal(result.shortlistedCompanies.length, 0);
+  assert.deepEqual(syncedCompanies, ["Timeout Vision"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  assert.equal(result.shortlistedCompanies.length, 1);
 });
 
 test("AsyncQueue clear removes queued items before close", async () => {

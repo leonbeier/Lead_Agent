@@ -6,7 +6,7 @@ import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { WebSearchAgent } from "../clients/web-search-agent";
 import { ControlPlaneStore } from "../control-plane";
-import { ApolloOrganizationFilter, CompanySample, LeadCategory, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
+import { ApolloOrganizationFilter, CompanySample, ExaQueryHistoryInsight, LeadCategory, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
 import { buildDebugSearchFilter, DebugConsoleSearchMode, normalizeManualWebsites } from "./test-console";
 
 export type DebugConsoleStage = "company_search" | "ai_prefilter" | "outreach_prep" | "contact_discovery";
@@ -21,6 +21,7 @@ export interface DebugConsoleRunRequest {
   limit: number;
   useExaExcludeDomains?: boolean;
   useExaCompanyCategory?: boolean;
+  useAzureQueryPlanner?: boolean;
   aiPrefilterConcurrency?: number;
   outreachPrepConcurrency?: number;
   contactSearchConcurrency?: number;
@@ -41,6 +42,15 @@ export interface DebugConsoleRunResult {
 
 export interface DebugConsoleSearchQueryResult {
   query: string;
+  queryGeneration: {
+    source: "azure_planner" | "baseline_default_queries";
+    defaultQueries: string[];
+    plannedQueries: string[];
+    promptMessages?: Array<{
+      role: string;
+      content: string;
+    }>;
+  };
   exaRequestPayload?: unknown;
   rawResults: Array<{
     title?: string;
@@ -153,8 +163,11 @@ export class DebugConsoleService {
     return this.buildManualCompany(website, filter);
   }
 
-  async classifyCompanyForExecution(company: CompanySample): Promise<DebugConsoleWebsiteAnalysis> {
-    return this.classifyWebsite(company);
+  async classifyCompanyForExecution(
+    company: CompanySample,
+    options: { annotateDebugStage?: boolean } = {}
+  ): Promise<DebugConsoleWebsiteAnalysis> {
+    return this.classifyWebsite(company, options);
   }
 
   async buildResearchBriefForExecution(company: PreCategorizedCompany): Promise<ResearchBrief> {
@@ -267,16 +280,22 @@ export class DebugConsoleService {
     };
   }
 
-  private async classifyWebsite(company: CompanySample): Promise<DebugConsoleWebsiteAnalysis> {
+  private async classifyWebsite(
+    company: CompanySample,
+    options: { annotateDebugStage?: boolean } = {}
+  ): Promise<DebugConsoleWebsiteAnalysis> {
     try {
       const websiteProfile = await this.webSearchAgent.crawlCompanyWebsite(company.domain, "open_crawler_search");
       const azureEvaluation = await this.debugCategorizeWebsite(company, websiteProfile?.summary ?? company.shortDescription);
+      const sourceFilter = options.annotateDebugStage === false
+        ? company.sourceFilter
+        : `${company.sourceFilter} | debug-stage=ai_prefilter`;
       const categorizedCompany: PreCategorizedCompany = {
         ...company,
         category: azureEvaluation.category as LeadCategory,
         relevanceScore: azureEvaluation.relevanceScore,
         rationale: azureEvaluation.rationale,
-        sourceFilter: `${company.sourceFilter} | debug-stage=ai_prefilter`
+        sourceFilter
       };
 
       return {
@@ -486,27 +505,28 @@ export class DebugConsoleService {
     const requestedCompanyCount = Math.max(limit, 20);
     const requestedQueryCount = Math.max(1, request.exaQueryCount ?? 3);
     const usedFilters: ApolloOrganizationFilter[] = [];
-    const excludedDomains = await exaClient.loadKnownExcludedDomains();
+    const [settings, learning] = request.useAzureQueryPlanner
+      ? await Promise.all([
+        this.controlPlaneStore.getSettings(),
+        this.controlPlaneStore.getLearning()
+      ])
+      : [undefined, undefined];
+    const hubSpotExcludedDomains = await exaClient.loadKnownExcludedDomains();
     const testLabCache = await this.controlPlaneStore.getTestLabExaCache();
+    testLabCache.queryInsights = Array.isArray(testLabCache.queryInsights)
+      ? testLabCache.queryInsights
+      : testLabCache.queryHistory.map((query) => ({ query }));
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
+    const prioritizedExcludedDomains = this.leadPipelineAgent.buildPrioritizedDirectExaExcludedDomains(
+      screeningDatabase,
+      request.targetCategories,
+      hubSpotExcludedDomains,
+      {
+        screeningScope: "debug"
+      }
+    );
+    const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
     let executedQueryCount = 0;
-
-    for (const domain of testLabCache.discoveredDomains) {
-      const normalized = exaClient.toExcludeDomain(domain);
-      if (normalized) {
-        excludedDomains.add(normalized);
-      }
-    }
-
-    for (const record of screeningDatabase.records) {
-      if (!record.normalizedDomain) {
-        continue;
-      }
-
-      if (record.existsInHubSpot || (record.category && !request.targetCategories.includes(record.category as SelectableLeadCategory))) {
-        excludedDomains.add(record.normalizedDomain);
-      }
-    }
 
     for (const filter of filters) {
       if (executedQueryCount >= requestedQueryCount) {
@@ -514,18 +534,43 @@ export class DebugConsoleService {
       }
 
       usedFilters.push(filter);
-      const queries = exaClient.buildQueries(filter, 1);
-      const unseenQueries = queries.filter((query) => !testLabCache.queryHistory.includes(query));
+      const recentQueryHistory = testLabCache.queryInsights;
+      const defaultQueries = exaClient.buildQueries(filter, 1);
       const remainingQueryCount = requestedQueryCount - executedQueryCount;
-      const queriesToRun = (unseenQueries.length > 0 ? unseenQueries : queries).slice(0, remainingQueryCount);
+      const plannerQueryCount = request.useAzureQueryPlanner
+        ? Math.min(defaultQueries.length, Math.max(remainingQueryCount, 6))
+        : remainingQueryCount;
+      let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;
+      const queries = request.useAzureQueryPlanner
+        ? await this.azureOpenAIClient.planExaSearchQueries(
+          filter,
+          defaultQueries.slice(0, plannerQueryCount),
+          learning,
+          false,
+          settings?.mainContext,
+          settings?.searchStrategyContext,
+          plannerQueryCount,
+          {
+            recentQueryHistory,
+            prequalification: settings?.prequalification,
+            requestedTargetCategories: request.targetCategories,
+            debugCapture: (details) => {
+              queryGenerationPromptMessages = details.promptMessages;
+            }
+          }
+        )
+        : defaultQueries;
+      const candidateQueries = Array.from(new Set([...queries, ...defaultQueries].map((query) => query.trim()).filter(Boolean)));
+      const unseenQueries = candidateQueries.filter((query) => !testLabCache.queryHistory.includes(query));
+      const queriesToRun = (unseenQueries.length > 0 ? unseenQueries : candidateQueries).slice(0, remainingQueryCount);
 
       for (const query of queriesToRun) {
         if (executedQueryCount >= requestedQueryCount) {
           break;
         }
 
-        const exaRequestPayload = exaClient.buildSearchPayload(query, 20, Array.from(excludedDomains));
-        const payload = await exaClient.runSearch(apiKey, query, 20, Array.from(excludedDomains));
+        const exaRequestPayload = exaClient.buildSearchPayload(query, 20, prioritizedExcludedDomains.requestExcludedDomains);
+        const payload = await exaClient.runSearch(apiKey, query, 20, prioritizedExcludedDomains.requestExcludedDomains);
         const acceptedCompanies: CompanySample[] = [];
         const rejectedResults: Array<{ title?: string; url?: string; reason: string }> = [];
 
@@ -558,6 +603,12 @@ export class DebugConsoleService {
 
         generatedSearches.push({
           query,
+          queryGeneration: {
+            source: request.useAzureQueryPlanner ? "azure_planner" : "baseline_default_queries",
+            defaultQueries: defaultQueries.slice(0, plannerQueryCount),
+            plannedQueries: queries,
+            promptMessages: queryGenerationPromptMessages
+          },
           exaRequestPayload,
           rawResults: payload.results ?? [],
           acceptedCompanies,
@@ -566,6 +617,7 @@ export class DebugConsoleService {
         executedQueryCount += 1;
 
         testLabCache.queryHistory.unshift(query);
+        testLabCache.queryInsights.unshift(this.buildSimulatedTestLabQueryInsight(query, filter));
         for (const result of payload.results ?? []) {
           const normalized = exaClient.toExcludeDomain(result.url);
           if (normalized) {
@@ -577,6 +629,7 @@ export class DebugConsoleService {
 
     await this.controlPlaneStore.writeTestLabExaCache({
       queryHistory: testLabCache.queryHistory,
+      queryInsights: testLabCache.queryInsights,
       discoveredDomains: testLabCache.discoveredDomains
     });
 
@@ -585,6 +638,69 @@ export class DebugConsoleService {
       usedFilters,
       generatedSearches,
       discoveredCompanies
+    };
+  }
+
+  private buildSimulatedTestLabQueryInsight(query: string, filter: ApolloOrganizationFilter): ExaQueryHistoryInsight {
+    const weightedCategories: LeadCategory[] = [];
+    const queryText = query.toLowerCase();
+    const addCategory = (category: LeadCategory, weight = 1) => {
+      for (let index = 0; index < weight; index += 1) {
+        weightedCategories.push(category);
+      }
+    };
+
+    for (const category of filter.targetCategories ?? []) {
+      addCategory(category, 2);
+    }
+
+    if (/consulting|consultant|beratung/.test(queryText)) {
+      addCategory("integrator_vision_ai_consulting", 3);
+    }
+    if (/freelance|freelancer/.test(queryText)) {
+      addCategory("integrator_vision_ai_freelancer", 3);
+    }
+    if (/system integrator|integrator|solution provider/.test(queryText)) {
+      addCategory("integrator_vision_industrial_ai", 3);
+      addCategory("integrator_relevant_focus", 1);
+    }
+    if (/industrial automation|automation/.test(queryText)) {
+      addCategory("integrator_relevant_focus", 2);
+      addCategory("machine_builder_ai_enablement", 1);
+    }
+    if (/platform|embedding/.test(queryText)) {
+      addCategory("software_platform_embedding", 2);
+    }
+    if (/camera|imaging|optical/.test(queryText)) {
+      addCategory("camera_manufacturer_partner", 1);
+    }
+    if (/general ai|machine learning|artificial intelligence/.test(queryText)) {
+      addCategory("integrator_general_ai", 2);
+    }
+
+    if (weightedCategories.length === 0) {
+      addCategory("integrator_vision_industrial_ai", 1);
+      addCategory("integrator_relevant_focus", 1);
+    }
+
+    const detectedCategories: LeadCategory[] = [];
+    const hash = Array.from(queryText).reduce((value, character) => (value * 31 + character.charCodeAt(0)) >>> 0, 7);
+    const pickCount = Math.min(Array.from(new Set(weightedCategories)).length, hash % 2 === 0 ? 2 : 1);
+    let cursor = hash % weightedCategories.length;
+
+    while (detectedCategories.length < pickCount) {
+      const candidate = weightedCategories[cursor % weightedCategories.length];
+      if (!detectedCategories.includes(candidate)) {
+        detectedCategories.push(candidate);
+      }
+      cursor += 3;
+    }
+
+    return {
+      query,
+      timestamp: new Date().toISOString(),
+      detectedCategories,
+      note: "Test-Lab simulation: erkannte Query-Klassen aus dem Query-Text abgeleitet."
     };
   }
 
@@ -613,6 +729,11 @@ export class DebugConsoleService {
       generatedSearches: [
         {
           query,
+          queryGeneration: {
+            source: "baseline_default_queries",
+            defaultQueries: [query],
+            plannedQueries: [query]
+          },
           rawResults: discoveredCompanies.map((company) => ({
             title: company.name,
             url: company.domain,
