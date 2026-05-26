@@ -7,6 +7,7 @@ import {
   FilterEvaluation,
   LeadCategory,
   LeadLearningData,
+  normalizeOutreachLanguage,
   PreCategorizedCompany,
   PrequalificationConfig,
   PublicContactCandidate,
@@ -304,7 +305,7 @@ export class AzureOpenAIClient {
         }
       ]);
 
-      const parsed = this.parseJsonObject<Omit<ResearchBrief, "companyName">>(content);
+      const parsed = this.parseJsonObject<Omit<ResearchBrief, "companyName" | "outreachLanguage"> & { outreachLanguage?: string }>(content);
       return {
         companyName: company.name,
         appliedAgentContext: mainContext,
@@ -314,7 +315,8 @@ export class AzureOpenAIClient {
           ...(crawledWebsiteEvidence?.citations ?? []),
           ...(webResearchEvidence?.citations ?? [])
         ])),
-        ...parsed
+        ...parsed,
+        outreachLanguage: normalizeOutreachLanguage(parsed.outreachLanguage, parsed.likelyGermanSpeaking ? "de" : "en")
       };
     } catch {
       return this.buildFallbackResearchBrief(

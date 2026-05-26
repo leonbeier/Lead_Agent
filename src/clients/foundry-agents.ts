@@ -1,7 +1,7 @@
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, LeadCategory, LeadLearningData, PreCategorizedCompany, PrequalificationConfig, PublicContactCandidate, ResearchBrief, StoredFilterSnapshot } from "../types";
+import { ApolloOrganizationFilter, LeadCategory, LeadLearningData, normalizeOutreachLanguage, PreCategorizedCompany, PrequalificationConfig, PublicContactCandidate, ResearchBrief, StoredFilterSnapshot } from "../types";
 import {
   ONE_WARE_PROMPT_CONTEXT,
   TARGET_REGIONS,
@@ -222,13 +222,14 @@ export class FoundryAgentsClient {
         ].join("\n\n")
       );
 
-      const parsed = JSON.parse(response.text) as Omit<ResearchBrief, "companyName">;
+      const parsed = JSON.parse(response.text) as Omit<ResearchBrief, "companyName" | "outreachLanguage"> & { outreachLanguage?: string };
 
       return {
         companyName: company.name,
         appliedAgentContext: mainContext,
         citations: response.citations,
-        ...parsed
+        ...parsed,
+        outreachLanguage: normalizeOutreachLanguage(parsed.outreachLanguage, parsed.likelyGermanSpeaking ? "de" : "en")
       };
     } catch {
       return null;

@@ -98,7 +98,7 @@ test("syncQualifiedCompanies reports missing required company properties before 
   assert.match(result.errors[0] ?? "", /ai_cc_email_subject/i);
 });
 
-test("previewHubSpotSync skips generic mailbox contacts without person identity", async () => {
+test("previewHubSpotSync keeps generic company mailboxes when the email is usable", async () => {
   const client = new HubSpotClient();
   const contacts: PublicContactCandidate[] = [
     {
@@ -119,12 +119,31 @@ test("previewHubSpotSync skips generic mailbox contacts without person identity"
 
   const preview = await client.previewHubSpotSync(buildSampleCompany(), buildSampleBrief(), contacts, { includeAddressLookup: false });
 
-  assert.equal(preview.contacts[0]?.skipped, true);
-  assert.match(preview.contacts[0]?.skipReason ?? "", /Generic mailbox/i);
+  assert.equal(preview.contacts[0]?.skipped, false);
+  assert.equal(preview.contacts[0]?.properties.email, "info@sample-automation.de");
   assert.equal(preview.contacts[1]?.properties.firstname, "Martin");
   assert.equal(preview.contacts[1]?.properties.jobtitle, "Managing Director");
   assert.equal(preview.contacts[1]?.properties.hs_linkedin_url, "https://www.linkedin.com/in/martin-minsel");
   assert.match(preview.contacts[1]?.outreachNote ?? "", /LinkedIn Outreach/);
+});
+
+test("previewHubSpotSync still skips low-value noreply mailboxes without person identity", async () => {
+  const client = new HubSpotClient();
+  const preview = await client.previewHubSpotSync(
+    buildSampleCompany(),
+    buildSampleBrief(),
+    [
+      {
+        email: "noreply@sample-automation.de",
+        sourceUrl: "https://sample-automation.de/contact",
+        label: "public_generic_mailbox"
+      }
+    ],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.contacts[0]?.skipped, true);
+  assert.match(preview.contacts[0]?.skipReason ?? "", /Low-value mailbox/i);
 });
 
 test("previewHubSpotSync keeps generic mailbox contacts when a phone number is present", async () => {

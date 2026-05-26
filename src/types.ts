@@ -66,6 +66,22 @@ export interface PreCategorizedCompany extends CompanySample {
   rationale: string;
 }
 
+export type OutreachLanguage = "de" | "en";
+
+export function normalizeOutreachLanguage(value: unknown, fallback: OutreachLanguage = "en"): OutreachLanguage {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+
+  if (["de", "deutsch", "german"].includes(normalized)) {
+    return "de";
+  }
+
+  if (["en", "english"].includes(normalized)) {
+    return "en";
+  }
+
+  return fallback;
+}
+
 export interface ResearchBrief {
   companyName: string;
   website?: string;
@@ -79,7 +95,7 @@ export interface ResearchBrief {
   qualifyingSignals: string[];
   riskFlags: string[];
   likelyGermanSpeaking: boolean;
-  outreachLanguage: "de" | "en";
+  outreachLanguage: OutreachLanguage;
   rankings: {
     customer: number;
     serviceProvider: number;
@@ -316,7 +332,7 @@ export interface GeneratedLeadRecord {
   sourceFilter: string;
   rationale: string;
   likelyGermanSpeaking?: boolean;
-  outreachLanguage?: "de" | "en";
+  outreachLanguage?: OutreachLanguage;
   rankings?: {
     customer: number;
     serviceProvider: number;

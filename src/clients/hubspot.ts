@@ -3,7 +3,7 @@ import { ApolloClient } from "./apollo";
 import { AzureOpenAIClient } from "./azure-openai";
 import { FoundryAgentsClient } from "./foundry-agents";
 import { OpenAIWebSearchClient } from "./openai-web-search";
-import { PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../types";
+import { normalizeOutreachLanguage, PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../types";
 
 interface HubSpotPropertyDefinition {
   name: string;
@@ -329,7 +329,7 @@ export class HubSpotClient {
       ) {
         return {
           skipped: true,
-          skipReason: "Generic mailbox without person identity or phone is skipped.",
+          skipReason: "Low-value mailbox without person identity or phone is skipped.",
           normalizedContact,
           properties: {}
         } satisfies HubSpotContactPreview;
@@ -672,7 +672,7 @@ export class HubSpotClient {
   private shouldSkipHubSpotContact(contact: PublicContactCandidate): boolean {
     return Boolean(
       contact.email
-      && this.isGenericMailbox(contact.email)
+      && this.isLowValueMailbox(contact.email)
       && !contact.firstName
       && !contact.lastName
       && !contact.linkedinUrl
@@ -3045,7 +3045,7 @@ export class HubSpotClient {
   }
 
   private isLowValueMailbox(email: string): boolean {
-    return /^(privacy|datenschutz|compliance|legal|impressum|career|careers|jobs|bewerbung|hr|people|invoice|billing)@/i.test(email);
+    return /^(privacy|datenschutz|compliance|legal|impressum|career|careers|jobs|bewerbung|hr|people|invoice|billing|noreply|no-reply|donotreply|do-not-reply)@/i.test(email);
   }
 
   private isLikelyPersonNameToken(value: string): boolean {
@@ -3471,7 +3471,7 @@ export class HubSpotClient {
     contact: PublicContactCandidate,
     outreachLanguage: ResearchBrief["outreachLanguage"]
   ): string {
-    const salutation = this.buildSuggestedSalutation(contact, outreachLanguage);
+    const salutation = this.buildSuggestedSalutation(contact, normalizeOutreachLanguage(outreachLanguage, "en"));
 
     return message
       .replace(/^Hallo Herr\/Frau \[Name\],?/m, salutation)
