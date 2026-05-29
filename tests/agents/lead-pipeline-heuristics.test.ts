@@ -199,6 +199,98 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
 
+test("apollo contact fallback errors do not abort collection", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  const company: PreCategorizedCompany = {
+    name: "Fallback Systems GmbH",
+    domain: "https://fallback-systems.example",
+    country: "Germany",
+    shortDescription: "Industrial software integration.",
+    sourceFilter: "Debug filter",
+    category: "integrator_general_ai",
+    relevanceScore: 74,
+    rationale: "Strong delivery fit."
+  };
+
+  agent.apolloClient.searchContactsForCompany = async () => {
+    throw new Error("Apollo timed out");
+  };
+
+  const result = await agent.collectApolloContacts(
+    [company],
+    [{
+      companyName: company.name,
+      overview: "Overview",
+      qualificationSummary: "Qualified.",
+      qualifyingSignals: [],
+      riskFlags: [],
+      likelyGermanSpeaking: true,
+      outreachLanguage: "de",
+      rankings: { customer: 0, serviceProvider: 0, partner: 0 },
+      businessPotentialEUR: 0,
+      businessPotentialReasoning: "",
+      targetIndustry: "",
+      productsOffered: "",
+      recommendedTemplateKey: "integrator_general_ai_template",
+      personalizationRule: "",
+      linkedInAngle: "",
+      emailAngle: "",
+      phoneAngle: "",
+      linkedInMessage: "",
+      emailSubject: "",
+      emailBody: "",
+      phoneScript: ""
+    }],
+    false,
+    ""
+  );
+
+  assert.deepEqual(result.get("fallback-systems.example"), []);
+});
+
+test("direct exa path can skip Azure query planning when explicitly disabled", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  let plannerCalls = 0;
+
+  agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
+  agent.azureClient.planExaSearchQueries = async () => {
+    plannerCalls += 1;
+    return ["planned query"];
+  };
+  agent.exaPreviewClient = {
+    runtimeApiKey: "exa-test-key",
+    buildQueries: () => ["default query 1", "default query 2"],
+    runSearch: async () => ({ results: [] }),
+    toExcludeDomain: () => undefined,
+    normalizeUrl: () => undefined,
+    toCanonicalCompanyDomain: (value: string) => value,
+    deriveCompanyName: () => "",
+    inferCountryFromDomain: () => undefined,
+    buildDescription: () => "",
+    loadKnownExcludedDomains: async () => new Set<string>()
+  };
+
+  const discovered = await agent.runDirectExaCompanySearch(
+    {
+      name: "Germany Vision Integrators",
+      persona: "Integrator",
+      industries: ["Industrial Automation"],
+      keywords: ["machine vision integrator"],
+      locations: ["Germany"],
+      employeeRanges: ["11,50"],
+      targetCategories: ["integrator_vision_industrial_ai"],
+      notes: "live"
+    },
+    ["integrator_vision_industrial_ai"],
+    2,
+    { screeningScope: "live" },
+    { useAzureQueryPlanner: false }
+  );
+
+  assert.equal(plannerCalls, 0);
+  assert.deepEqual(discovered, []);
+});
+
 test("direct exa exclude prioritization keeps hubspot, matching rejected websites, and current-run domains deduped inside the 1200-domain limit", () => {
   const agent = new LeadPipelineAgent() as any;
   const hubSpotDomains = Array.from({ length: 1300 }, (_, index) => `hubspot-${index}.example${index}.com`);

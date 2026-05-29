@@ -132,6 +132,13 @@ type DirectExaQueryPlanningContext = {
   searchStrategyContext?: string;
   recentQueryHistory?: ExaQueryHistoryInsight[];
   prequalification?: PrequalificationConfig;
+  useAzureQueryPlanner?: boolean;
+  forcedQueries?: string[];
+  plannedQueryMetadata?: {
+    defaultQueries?: string[];
+    plannedQueries?: string[];
+    promptMessages?: Array<{ role: string; content: string }>;
+  };
   debugCapture?: (details: { promptMessages: Array<{ role: string; content: string }> }) => void;
 };
 
@@ -247,13 +254,13 @@ export class LeadPipelineAgent {
     this.apolloClient.setExaSearchPayloadOptions({
       includeExcludeDomains: request.useExaExcludeDomains ?? true,
       includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
-      maxQueryCount: request.exaQueryCount ?? 3
+      maxQueryCount: request.exaQueryCount ?? 4
     });
     this.exaPreviewClient.setApiKey(request.exaApiKey);
     this.exaPreviewClient.setSearchPayloadOptions({
       includeExcludeDomains: request.useExaExcludeDomains ?? true,
       includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
-      maxQueryCount: request.exaQueryCount ?? 3
+      maxQueryCount: request.exaQueryCount ?? 4
     });
     const deadlineAt = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS);
     const wasStopped = () => Boolean(options?.shouldStop?.());
@@ -289,7 +296,6 @@ export class LeadPipelineAgent {
     const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false || companySearchMode === "exa_search"
       ? []
       : this.getCachedQualifiedCompanies(targetCategories, request.market, request.targetLeadCount);
-    await this.preloadKnownHubSpotDomains(disableHubSpotDeduplication);
     this.apolloClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
     let suggestedFilters = companySearchMode === "exa_search"
       ? this.buildDirectExaSearchFilters(targetCategories, request.market)
@@ -537,7 +543,7 @@ export class LeadPipelineAgent {
       const exaFilters = suggestedFilters.length > 0
         ? suggestedFilters
         : this.buildDirectExaSearchFilters(targetCategories, request.market);
-      const maxQueryCount = Math.max(1, request.exaQueryCount ?? 3);
+      const maxQueryCount = Math.max(1, request.exaQueryCount ?? 4);
       const emitDirectExaProgress = (
         progressValue: number,
         detail: string,
@@ -586,7 +592,8 @@ export class LeadPipelineAgent {
             dryRun,
             learning,
             mainContext: request.mainContext,
-            searchStrategyContext: request.searchStrategyContext
+            searchStrategyContext: request.searchStrategyContext,
+            useAzureQueryPlanner: request.useAzureQueryPlanner
           }, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
             emitDirectExaProgress(
               Math.min(42, 14 + executedQueries * 8),
@@ -1711,6 +1718,10 @@ export class LeadPipelineAgent {
     }
 
     if (companySearchMode === "open_crawler_search") {
+      return modeAdjustedBaselineFilters;
+    }
+
+    if (companySearchMode === "diffbot_test_data") {
       return modeAdjustedBaselineFilters;
     }
 
@@ -3662,6 +3673,9 @@ export class LeadPipelineAgent {
       executedQueries: number;
       totalQueries: number;
       query: string;
+      returnedResults: number;
+      filteredByExcludedDomains: number;
+      duplicatesRemoved: number;
       rawCompaniesFound: number;
       filterName: string;
       defaultQueries: string[];
@@ -3697,46 +3711,60 @@ export class LeadPipelineAgent {
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
 
     const defaultQueries = exaClient.buildQueries(filter, 1);
-    const plannerQueryCount = Math.min(defaultQueries.length, Math.max(1, maxQueryCount, 6));
+    const useAzureQueryPlanner = queryPlanningContext.useAzureQueryPlanner ?? true;
+    const plannerQueryCount = Math.min(defaultQueries.length, Math.max(1, maxQueryCount, 4));
     let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;
-    const queries = (await this.azureClient.planExaSearchQueries(
-      filter,
-      defaultQueries.slice(0, plannerQueryCount),
-      queryPlanningContext.learning,
-      Boolean(queryPlanningContext.dryRun),
-      queryPlanningContext.mainContext,
-      queryPlanningContext.searchStrategyContext,
-      plannerQueryCount,
-      {
-        recentQueryHistory: queryPlanningContext.recentQueryHistory,
-        prequalification: queryPlanningContext.prequalification,
-        requestedTargetCategories: targetCategories,
-        debugCapture: (details) => {
-          queryGenerationPromptMessages = details.promptMessages;
-          queryPlanningContext.debugCapture?.(details);
-        }
-      }
-    )).slice(0, Math.max(1, maxQueryCount));
+    const forcedQueries = Array.from(new Set((queryPlanningContext.forcedQueries ?? []).map((query) => query.trim()).filter(Boolean)));
+    const queries = (forcedQueries.length > 0
+      ? forcedQueries
+      : useAzureQueryPlanner
+        ? await this.azureClient.planExaSearchQueries(
+          filter,
+          defaultQueries.slice(0, plannerQueryCount),
+          queryPlanningContext.learning,
+          Boolean(queryPlanningContext.dryRun),
+          queryPlanningContext.mainContext,
+          queryPlanningContext.searchStrategyContext,
+          plannerQueryCount,
+          {
+            recentQueryHistory: queryPlanningContext.recentQueryHistory,
+            prequalification: queryPlanningContext.prequalification,
+            excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
+            requestedTargetCategories: targetCategories,
+            debugCapture: (details) => {
+              queryGenerationPromptMessages = details.promptMessages;
+              queryPlanningContext.debugCapture?.(details);
+            }
+          }
+        )
+        : defaultQueries).slice(0, Math.max(1, maxQueryCount));
     const debugUpdateBase = {
       filterName: filter.name,
-      defaultQueries: defaultQueries.slice(0, plannerQueryCount),
-      plannedQueries: queries,
-      promptMessages: queryGenerationPromptMessages,
+      defaultQueries: queryPlanningContext.plannedQueryMetadata?.defaultQueries ?? defaultQueries.slice(0, plannerQueryCount),
+      plannedQueries: queryPlanningContext.plannedQueryMetadata?.plannedQueries ?? queries,
+      promptMessages: queryPlanningContext.plannedQueryMetadata?.promptMessages ?? queryGenerationPromptMessages,
       excludedDomains: prioritizedExcludedDomains.requestExcludedDomains
     };
     onQueryProgress?.({
       executedQueries: 0,
       totalQueries: queries.length,
       query: queries[0] ?? "",
+      returnedResults: 0,
+      filteredByExcludedDomains: 0,
+      duplicatesRemoved: 0,
       rawCompaniesFound: 0,
       ...debugUpdateBase
     });
     let completedQueries = 0;
+    let returnedResultsCount = 0;
+    let filteredByExcludedDomainsCount = 0;
     let discoveredCompanyCount = 0;
     const queryResults = await this.mapWithConcurrency(
       queries.map((query) => async () => {
         const payload = await exaClient.runSearch(apiKey, query, 20, prioritizedExcludedDomains.requestExcludedDomains);
         const discoveredCompanies: CompanySample[] = [];
+        const queryReturnedResults = payload.results?.length ?? 0;
+        let queryFilteredByExcludedDomains = 0;
 
         for (const result of payload.results ?? []) {
           const normalizedDomain = exaClient.normalizeUrl(result.url);
@@ -3746,6 +3774,7 @@ export class LeadPipelineAgent {
 
           const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
           if (excludeDomain && excludedDomains.has(excludeDomain)) {
+            queryFilteredByExcludedDomains += 1;
             continue;
           }
 
@@ -3764,11 +3793,16 @@ export class LeadPipelineAgent {
         }
 
         completedQueries += 1;
+        returnedResultsCount += queryReturnedResults;
+        filteredByExcludedDomainsCount += queryFilteredByExcludedDomains;
         discoveredCompanyCount += discoveredCompanies.length;
         onQueryProgress?.({
           executedQueries: completedQueries,
           totalQueries: queries.length,
           query,
+          returnedResults: returnedResultsCount,
+          filteredByExcludedDomains: filteredByExcludedDomainsCount,
+          duplicatesRemoved: Math.max(0, returnedResultsCount - filteredByExcludedDomainsCount - discoveredCompanyCount),
           rawCompaniesFound: discoveredCompanyCount,
           ...debugUpdateBase
         });
@@ -3791,6 +3825,9 @@ export class LeadPipelineAgent {
       executedQueries: number;
       totalQueries: number;
       query: string;
+      returnedResults: number;
+      filteredByExcludedDomains: number;
+      duplicatesRemoved: number;
       rawCompaniesFound: number;
       filterName: string;
       defaultQueries: string[];
@@ -4628,17 +4665,21 @@ export class LeadPipelineAgent {
 
     const entries = await this.mapWithConcurrency(
       companies.map((company) => async () => {
-        const brief = researchBriefs.find((entry) => entry.companyName === company.name);
-        const apolloCandidates = await this.apolloClient.searchContactsForCompany(company, 20);
-        const selectedCandidates = await this.azureClient.chooseApolloContacts(company, apolloCandidates, dryRun, mainContext, brief);
-        const enrichedContacts = (await this.mapWithConcurrency(
-          selectedCandidates.map((candidate) => async () => this.apolloClient.enrichContactEmail(candidate, company)),
-          Math.min(APOLLO_EMAIL_ENRICH_CONCURRENCY, Math.max(1, selectedCandidates.length))
-        ))
-          .filter((contact): contact is PublicContactCandidate => Boolean(contact))
-          .filter((contact, index, allContacts) => allContacts.findIndex((existing) => existing.email === contact.email) === index);
+        try {
+          const brief = researchBriefs.find((entry) => entry.companyName === company.name);
+          const apolloCandidates = await this.apolloClient.searchContactsForCompany(company, 20);
+          const selectedCandidates = await this.azureClient.chooseApolloContacts(company, apolloCandidates, dryRun, mainContext, brief);
+          const enrichedContacts = (await this.mapWithConcurrency(
+            selectedCandidates.map((candidate) => async () => this.apolloClient.enrichContactEmail(candidate, company)),
+            Math.min(APOLLO_EMAIL_ENRICH_CONCURRENCY, Math.max(1, selectedCandidates.length))
+          ))
+            .filter((contact): contact is PublicContactCandidate => Boolean(contact))
+            .filter((contact, index, allContacts) => allContacts.findIndex((existing) => existing.email === contact.email) === index);
 
-        return [this.getCompanyKey(company), enrichedContacts] as const;
+          return [this.getCompanyKey(company), enrichedContacts] as const;
+        } catch {
+          return [this.getCompanyKey(company), [] as PublicContactCandidate[]] as const;
+        }
       }),
       this.contactSearchConcurrency
     );

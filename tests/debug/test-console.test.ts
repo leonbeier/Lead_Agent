@@ -279,6 +279,153 @@ test("runExaCompanySearch can route queries through the Azure planner when enabl
   });
 });
 
+test("runExaCompanySearch passes live Exa query stats into planner history", async () => {
+  const service = new DebugConsoleService() as any;
+  const plannerCalls: Array<{ recentQueryHistory?: Array<{ query: string; note?: string }> }> = [];
+
+  service.exaSearchClient = {
+    runtimeApiKey: "test-api-key",
+    buildQueries: () => ["default one"],
+    runSearch: async () => ({ results: [] }),
+    buildSearchPayload: (query: string) => ({ query }),
+    loadKnownExcludedDomains: async () => new Set<string>(),
+    toExcludeDomain: (value?: string) => {
+      if (!value) {
+        return undefined;
+      }
+
+      return new URL(value.includes("://") ? value : `https://${value}`).hostname.replace(/^www\./i, "");
+    },
+    normalizeUrl: (url?: string) => url,
+    toCanonicalCompanyDomain: (url: string) => url,
+    deriveCompanyName: (domain: string) => domain,
+    inferCountryFromDomain: () => "Germany",
+    buildDescription: () => "Mock description"
+  };
+
+  service.azureOpenAIClient = {
+    planExaSearchQueries: async (
+      _filter: unknown,
+      _defaultQueries: string[],
+      _learning: unknown,
+      _dryRun: boolean,
+      _mainContext?: string,
+      _searchStrategyContext?: string,
+      _maxQueryCount = 3,
+      options?: {
+        recentQueryHistory?: Array<{ query: string; note?: string }>;
+      }
+    ) => {
+      plannerCalls.push({
+        recentQueryHistory: [...(options?.recentQueryHistory ?? [])]
+      });
+      return ["planned query"];
+    }
+  };
+
+  service.controlPlaneStore = {
+    getSettings: async () => ({
+      mainContext: "Main context",
+      searchStrategyContext: "Search strategy"
+    }),
+    getLearning: async () => ({
+      companyFeedback: [],
+      filterPerformance: {},
+      searchHistory: [],
+      searchHistoryByMode: {
+        exa_search: {
+          filterPerformance: {},
+          searchHistory: [
+            {
+              timestamp: "2026-05-23T14:05:00.000Z",
+              companySearchMode: "exa_search",
+              filterName: "Live filter",
+              batchType: "probe_15",
+              page: 1,
+              requestedCount: 20,
+              returnedCount: 20,
+              relevantCount: 2,
+              relevanceRatio: 0.1,
+              categoryBreakdown: {
+                integrator_vision_industrial_ai: 1,
+                integrator_general_ai: 0,
+                integrator_relevant_focus: 0,
+                industrial_end_customer_scaled: 0,
+                machine_builder_ai_enablement: 0,
+                software_platform_embedding: 0,
+                integrator_vision_ai_consulting: 0,
+                integrator_vision_ai_freelancer: 0,
+                camera_manufacturer_partner: 0,
+                irrelevant: 0,
+                other: 1
+              },
+              passedThreshold: false,
+              recommendation: "retry",
+              queryStats: [
+                {
+                  query: "live industrial vision query",
+                  rawFound: 11,
+                  duplicates: 4,
+                  accepted: 1,
+                  rejectedDifferentCategory: 5,
+                  rejectedOther: 1,
+                  categoryBreakdown: {
+                    integrator_vision_industrial_ai: 1,
+                    integrator_general_ai: 0,
+                    integrator_relevant_focus: 0,
+                    industrial_end_customer_scaled: 0,
+                    machine_builder_ai_enablement: 0,
+                    software_platform_embedding: 0,
+                    integrator_vision_ai_consulting: 0,
+                    integrator_vision_ai_freelancer: 0,
+                    camera_manufacturer_partner: 0,
+                    irrelevant: 0,
+                    other: 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }),
+    getTestLabExaCache: async () => ({
+      queryHistory: ["older test-lab query"],
+      queryInsights: [
+        {
+          query: "older test-lab query",
+          timestamp: "2026-05-23T14:00:00.000Z",
+          note: "older debug run"
+        }
+      ],
+      discoveredDomains: []
+    }),
+    getCompanyScreeningDatabase: async () => ({ records: [] }),
+    writeTestLabExaCache: async () => undefined
+  };
+
+  await service.runExaCompanySearch(
+    {
+      stage: "company_search",
+      targetCategory: "integrator_vision_industrial_ai",
+      targetCategories: ["integrator_vision_industrial_ai"],
+      companySearchMode: "exa_search",
+      exaQueryCount: 1,
+      limit: 20,
+      useAzureQueryPlanner: true
+    },
+    [buildDebugSearchFilter("integrator_vision_industrial_ai", "Germany")],
+    20
+  );
+
+  assert.equal(plannerCalls.length, 1);
+  assert.deepEqual(plannerCalls[0]?.recentQueryHistory?.map((entry) => entry.query), [
+    "live industrial vision query",
+    "older test-lab query"
+  ]);
+  assert.match(plannerCalls[0]?.recentQueryHistory?.[0]?.note ?? "", /Live filter \| accepted 1, wrong-category 5, other 1, duplicates 4/);
+});
+
 test("runExaCompanySearch avoids repeating the exact previous query when Azure returns it again", async () => {
   const service = new DebugConsoleService() as any;
   const executedQueries: string[] = [];

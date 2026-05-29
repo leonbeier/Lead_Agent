@@ -3,3 +3,11 @@ dist/
 .env
 hubspot-ui/src/hsprofile.*.json
 !hubspot-ui/src/hsprofile.example.json
+.tmp-*.ts
+.tmp-*.mjs
+.tmp-*.txt
+railway-deploy-reset-fix*.log
+runstatus-body.txt
+data/cache-db/
+data/lead-run-discovery-checkpoints/
+data/diffbot/*.crawler-keyword-eval.json

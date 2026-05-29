@@ -200,6 +200,11 @@ export class FoundryAgentsClient {
     }
 
     const template = getTemplateForCategory(company.category);
+    const targetOutreachLanguage = this.inferTargetOutreachLanguage(company);
+    const targetOutreachLanguageLabel = targetOutreachLanguage === "de" ? "German" : "English";
+    const templateLanguageInstruction = targetOutreachLanguage === "de"
+      ? "Use the supplied template text directly as the base direction and keep the final outreach in German."
+      : "The supplied template text may be German. Translate its meaning into natural English first and use that translated English version as the base direction. Never copy German phrases into English outreach.";
 
     try {
       const response = await this.runAgentWithMetadata(
@@ -213,6 +218,8 @@ export class FoundryAgentsClient {
           buildExecutionContextBlock(company.category, mainContext),
           `Source filter: ${company.sourceFilter}`,
           `Relevance score: ${company.relevanceScore}`,
+          `Target outreach language: ${targetOutreachLanguageLabel} (${targetOutreachLanguage})`,
+          templateLanguageInstruction,
           `Template key: ${template.key}`,
           `Template subject: ${template.subject}`,
           `Template email body:\n${template.emailBody}`,
@@ -234,6 +241,24 @@ export class FoundryAgentsClient {
     } catch {
       return null;
     }
+  }
+
+  private inferTargetOutreachLanguage(company: Pick<PreCategorizedCompany, "country" | "domain" | "name">): "de" | "en" {
+    const normalizedCountry = company.country?.trim().toLowerCase();
+    if (["germany", "austria", "switzerland", "de", "at", "ch", "deutschland", "oesterreich", "österreich", "schweiz"].includes(normalizedCountry ?? "")) {
+      return "de";
+    }
+
+    const normalizedDomain = company.domain?.trim().toLowerCase();
+    if (normalizedDomain?.endsWith(".de") || normalizedDomain?.endsWith(".at")) {
+      return "de";
+    }
+
+    if (/(gmbh|ag|kg|ug)\b/i.test(company.name)) {
+      return "de";
+    }
+
+    return "en";
   }
 
   async discoverPublicContacts(
@@ -417,7 +442,7 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Deep Research Agent. Use web grounding to verify the company, identify its business model, target customers, recent signals, likely Vision-AI or process-automation relevance, and clear outreach hooks. Always adapt your reasoning to the supplied main context and category-specific execution context. Estimate whether likely target contacts are German-speaking. If yes, produce outreach in German, otherwise in English. For LinkedIn, always produce two separate texts: linkedInConnectionRequest as a short connection request with a hard maximum of 200 characters, and linkedInMessage as the longer follow-up message after connecting. For German outreach, always start emailBody naturally with "Hallo [Name]," and never with "Hello". Keep German phrasing natural and direct, avoid long list-like opener sentences, avoid vague department enumerations that sound AI-written, and do not use dash punctuation such as "–" or "—" in outreach copy. Prefer commas or full sentences instead. Estimate rankings on a 0-10 scale for customer, serviceProvider, and partner. Estimate businessPotentialEUR as a euro value. Return targetIndustry and productsOffered. Use the provided segment template as the base. Personalize only if there is a clear factual hook. Do not rewrite the outreach from scratch. Make the output steerable by preserving the template direction while sharpening the most relevant business pain. Keep linkedInConnectionRequest shorter, simpler, and curiosity-driven than linkedInMessage. For service-provider or partner-leaning companies, keep phoneScript collaboration-first: first ask whether they already implement Vision AI or have relevant experience, then position ONE WARE as a software layer for faster production-ready models, and finally test whether a delivery partnership or joint customer work could make sense. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInConnectionRequest, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.` ,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Deep Research Agent. Use web grounding to verify the company, identify its business model, target customers, recent signals, likely Vision-AI or process-automation relevance, and clear outreach hooks. Always adapt your reasoning to the supplied main context, category-specific execution context, and any explicit target outreach language in the user message. Estimate whether likely target contacts are German-speaking. If yes, produce outreach in German, otherwise in English. The output field outreachLanguage must be exactly "de" or "en", never language words such as "German" or "English". If the supplied template text is in German but the target outreach language is English, translate the template meaning into natural English first and use that translated English version as the base. Never copy German wording into English outreach. For LinkedIn, always produce two separate texts: linkedInConnectionRequest as a short connection request with a hard maximum of 200 characters, and linkedInMessage as the longer follow-up message after connecting. For German outreach, always start emailBody naturally with "Hallo [Name]," and never with "Hello". For English outreach, always start emailBody naturally with "Hello [Name]," and never with "Hallo". Keep German phrasing natural and direct, avoid long list-like opener sentences, avoid vague department enumerations that sound AI-written, and do not use dash punctuation such as "–" or "—" in outreach copy. Prefer commas or full sentences instead. Estimate rankings on a 0-10 scale for customer, serviceProvider, and partner. Estimate businessPotentialEUR as a euro value. Return targetIndustry and productsOffered. Use the provided segment template as the base. Personalize only if there is a clear factual hook. Do not rewrite the outreach from scratch. Make the output steerable by preserving the template direction while sharpening the most relevant business pain. Keep linkedInConnectionRequest shorter, simpler, and curiosity-driven than linkedInMessage. For service-provider or partner-leaning companies, keep phoneScript collaboration-first: first ask whether they already implement Vision AI or have relevant experience, then position ONE WARE as a software layer for faster production-ready models, and finally test whether a delivery partnership or joint customer work could make sense. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInConnectionRequest, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.` ,
           tools
         };
       }

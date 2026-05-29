@@ -529,8 +529,22 @@ export function getTemplateForCategory(category: LeadCategory): OutreachTemplate
   return OUTREACH_TEMPLATES[getTemplateKeyForCategory(category)];
 }
 
-export function getExecutionContextForCategory(category: LeadCategory): CategoryExecutionContext {
-  return CATEGORY_EXECUTION_CONTEXT[category];
+function normalizeExecutionContextCategory(category: LeadCategory | string | undefined): SelectableLeadCategory {
+  const normalizedCategory = category?.trim().toLowerCase();
+
+  if (normalizedCategory === "integrator_vision_ai_consulting_freelancer") {
+    return "integrator_vision_ai_consulting";
+  }
+
+  if (normalizedCategory && normalizedCategory in CATEGORY_EXECUTION_CONTEXT) {
+    return normalizedCategory as SelectableLeadCategory;
+  }
+
+  return "integrator_general_ai";
+}
+
+export function getExecutionContextForCategory(category: LeadCategory | string): CategoryExecutionContext {
+  return CATEGORY_EXECUTION_CONTEXT[normalizeExecutionContextCategory(category)];
 }
 
 export function buildMainContextBlock(mainContext?: string): string {
@@ -547,7 +561,7 @@ export function buildSearchStrategyContextBlock(searchStrategyContext?: string, 
 }
 
 export function buildExecutionContextBlock(
-  category: LeadCategory,
+  category: LeadCategory | string,
   mainContext?: string,
   override?: EditableExecutionContext
 ): string {

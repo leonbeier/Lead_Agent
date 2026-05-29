@@ -602,9 +602,10 @@ export class ExaSearchClient {
 
     try {
       const parsed = new URL(url);
+      parsed.protocol = "https:";
       parsed.hash = "";
       parsed.search = "";
-      parsed.pathname = parsed.pathname.replace(/\/$/, "") || "/";
+      parsed.pathname = "/";
       return parsed.toString().replace(/\/$/, "");
     } catch {
       return undefined;
@@ -612,7 +613,8 @@ export class ExaSearchClient {
   }
 
   private toCanonicalCompanyDomain(domain: string): string {
-    return domain.replace(/\/$/, "");
+    const normalized = this.normalizeUrl(domain);
+    return normalized ?? domain.replace(/\/$/, "");
   }
 
   private inferCountryFromDomain(domain: string, result: ExaSearchResult, fallbackLocation?: string): string | undefined {

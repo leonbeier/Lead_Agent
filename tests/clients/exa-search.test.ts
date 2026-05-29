@@ -114,7 +114,7 @@ test("discoverCompanies keeps duplicate valid Exa company URLs for downstream Az
   assert.equal(companies[1]?.domain, "https://example-integrator.de");
 });
 
-test("discoverCompanies preserves individual Exa website paths for downstream Azure review", async () => {
+test("discoverCompanies canonicalizes Exa results to the root company domain", async () => {
   const client = new ExaSearchClient();
   client.setApiKey("test-key");
   client["runSearch"] = async () => ({
@@ -141,8 +141,16 @@ test("discoverCompanies preserves individual Exa website paths for downstream Az
     targetCategories: ["integrator_vision_industrial_ai"]
   }, 2, 1);
 
-  assert.equal(companies[0]?.domain, "https://example-integrator.de/team");
-  assert.equal(companies[1]?.domain, "https://example-integrator.de/contact");
+  assert.equal(companies[0]?.domain, "https://example-integrator.de");
+  assert.equal(companies[1]?.domain, "https://example-integrator.de");
+});
+
+test("normalizeUrl collapses Exa result urls to the root company domain", () => {
+  const client = new ExaSearchClient();
+  const normalizeUrl = client["normalizeUrl"].bind(client) as (url?: string) => string | undefined;
+
+  assert.equal(normalizeUrl("http://www.example-integrator.de/team/?a=1#people"), "https://www.example-integrator.de");
+  assert.equal(normalizeUrl("https://example-integrator.de/contact"), "https://example-integrator.de");
 });
 
 test("deriveCompanyName falls back to the domain when Exa returns a marketing headline", () => {

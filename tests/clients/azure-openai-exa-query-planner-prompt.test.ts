@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readiness } from "../../src/config";
 import { AzureOpenAIClient } from "../../src/clients/azure-openai";
 
-test("Exa query planner prompt asks for natural-language Exa AI queries with explicit locality", async () => {
+test("Exa query planner prompt uses the new ONE WARE system and structured user prompt", async () => {
   const azureClient = new AzureOpenAIClient() as unknown as {
     planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
     runChat: (messages: Array<{ role: string; content: string }>) => Promise<string>;
@@ -111,8 +111,20 @@ test("Exa query planner prompt asks for natural-language Exa AI queries with exp
               irrelevant: 0,
               other: 3
             },
+            returnedResults: 20,
+            filteredByExcludedDomains: 8,
+            rawFound: 12,
+            duplicates: 3,
+            accepted: 0,
+            rejectedDifferentCategory: 0,
+            rejectedOther: 3,
             note: "Berlin cluster underperformed"
           }
+        ],
+        excludedDomainExamples: [
+          "senswork.com",
+          "ait.de",
+          "fraunhofer.de"
         ]
       }
     );
@@ -124,31 +136,45 @@ test("Exa query planner prompt asks for natural-language Exa AI queries with exp
     assert.doesNotMatch(systemPrompt, /Main context:/i);
     assert.doesNotMatch(systemPrompt, /Search strategy:/i);
     assert.match(systemPrompt, /You are the Exa Query Planner for ONE WARE/i);
-    assert.match(systemPrompt, /ONE WARE context: Main context/i);
-    assert.match(systemPrompt, /Search strategy context: Search strategy context/i);
-    assert.match(systemPrompt, /AI\/semantic search system, not for a traditional web search engine/i);
+    assert.match(systemPrompt, /ONE WARE context:[\s\S]*Main context/i);
+    assert.match(systemPrompt, /Search strategy context:[\s\S]*Search strategy context/i);
+    assert.match(systemPrompt, /These queries are for an AI\/semantic search system, not a traditional keyword search engine/i);
     assert.match(systemPrompt, /Task:/i);
-    assert.match(systemPrompt, /Your job is to create 1 Exa company-discovery queries for ONE WARE/i);
-    assert.match(systemPrompt, /These queries are the first step in the pipeline/i);
-    assert.match(systemPrompt, /Exa should already do as much of the preselection work as possible/i);
-    assert.match(systemPrompt, /Look at the query history before writing new queries/i);
-    assert.match(systemPrompt, /Use the search history as evidence\. Rotate intelligently across company categories, locations, and use-case keywords/i);
+    assert.match(systemPrompt, /Your job is to create exactly 1 Exa company-discovery queries for ONE WARE/i);
+    assert.match(systemPrompt, /The queries you create are the first step in the pipeline/i);
+    assert.match(systemPrompt, /Exa should already do as much preselection work as possible/i);
+    assert.match(systemPrompt, /Always-not-wanted result types:/i);
+    assert.match(systemPrompt, /Common wrong-company types:/i);
+    assert.match(systemPrompt, /False-positive prevention:/i);
+    assert.match(systemPrompt, /Official-website preference:/i);
+    assert.match(systemPrompt, /Avoid broad keyword stuffing:/i);
+    assert.match(systemPrompt, /Every query should make clear what kind of company should not be found/i);
+    assert.match(systemPrompt, /Every query should explicitly ask for official company websites or official websites/i);
+    assert.match(systemPrompt, /press pages, patents, academic pages, product brochures, trade-fair profiles, association member pages, investor pages/i);
+    assert.match(systemPrompt, /Most important rule: do not repeat old queries/i);
+    assert.match(systemPrompt, /Do not repeat overused openings such as Europe official company websites of machine vision system integrators/i);
     assert.match(systemPrompt, /Output:/i);
-    assert.match(systemPrompt, /Return the result as strict JSON with this shape:/i);
-    assert.match(systemPrompt, /\{"queries":\["query 1", "query 2"\]\}/i);
-    assert.match(systemPrompt, /Stil:/i);
-    assert.match(systemPrompt, /Write natural-language Exa queries, as if you were briefing a researcher/i);
+    assert.match(systemPrompt, /Return only strict JSON with this exact shape:/i);
+    assert.match(systemPrompt, /\{"queries":\["query 1"\]\}/i);
+    assert.match(systemPrompt, /Query style:/i);
+    assert.match(systemPrompt, /Write natural-language Exa queries/i);
     assert.match(systemPrompt, /Do not use site:/i);
-    assert.match(systemPrompt, /Keep the useful detail from strong baseline queries/i);
-    assert.match(systemPrompt, /Preserve exclusion intent too, but express it in natural prose/i);
-    assert.match(systemPrompt, /Do not stuff every synonym into every query/i);
-    assert.match(systemPrompt, /Do not force one fixed query template or one fixed sentence structure/i);
-    assert.match(systemPrompt, /vary wording and angle instead of producing near-duplicates/i);
+    assert.match(systemPrompt, /Critical query diversity requirement:/i);
+    assert.match(systemPrompt, /Capability angle:/i);
+    assert.match(systemPrompt, /Company self-description angle:/i);
+    assert.match(systemPrompt, /Buyer, vertical, or use-case angle:/i);
+    assert.match(systemPrompt, /Geography angle:/i);
+    assert.match(systemPrompt, /Exclusion angle:/i);
+    assert.match(systemPrompt, /The examples are not templates to copy exactly/i);
+    assert.match(systemPrompt, /Old-query avoidance:/i);
+    assert.match(systemPrompt, /Always avoid noisy result types unless explicitly requested otherwise/i);
     assert.match(userPrompt, /Target:/i);
     assert.match(userPrompt, /This section defines the exact kind of companies you are trying to find/i);
     assert.match(userPrompt, /Required locality terms to preserve in every query: Germany/i);
     assert.match(userPrompt, /Desired target categories for this run: integrator_vision_industrial_ai/i);
     assert.match(userPrompt, /Non-desired selectable categories for this run:/i);
+    assert.match(userPrompt, /Also avoid drifting into: other, irrelevant/i);
+    assert.match(userPrompt, /Find official company websites for the intended target profile/i);
     assert.match(userPrompt, /Search filter context:/i);
     assert.match(userPrompt, /Good Signals:/i);
     assert.match(userPrompt, /Use this section to understand what a good target looks like before the later AI check happens/i);
@@ -159,28 +185,34 @@ test("Exa query planner prompt asks for natural-language Exa AI queries with exp
     assert.match(userPrompt, /Good signal: Relevant when the website explicitly mentions Vision AI/i);
     assert.match(userPrompt, /Avoid:/i);
     assert.match(userPrompt, /Use this section to understand what should be filtered out already at the query-writing stage/i);
-    assert.match(userPrompt, /If the history shows repeated drift into a non-target category, write that wrong company type explicitly into the next query as something to avoid/i);
+    assert.match(userPrompt, /If recent history shows wrong-category drift, name that wrong company type explicitly as something to avoid/i);
     assert.match(userPrompt, /If integrator_relevant_focus is not selected, explicitly say not surveillance, defence, medtech vision, robotics/i);
     assert.match(userPrompt, /If machine_builder_ai_enablement is not selected, explicitly say not OEMs, machine builders, scanner vendors, inspection stations, or hardware-centric inspection product companies/i);
     assert.match(userPrompt, /Target-category disqualifiers:/i);
     assert.match(userPrompt, /Non-target categories to avoid:/i);
+    assert.match(userPrompt, /Known excluded websites already covered or already rejected:/i);
+    assert.match(userPrompt, /Do not target them again/i);
+    assert.match(userPrompt, /senswork\.com/i);
+    assert.match(userPrompt, /ait\.de/i);
+    assert.match(userPrompt, /fraunhofer\.de/i);
     assert.match(userPrompt, /Category to avoid drifting into: other \(Other \/ unclear\)/i);
     assert.match(userPrompt, /These are signals that the query is drifting toward the wrong company type:/i);
     assert.match(userPrompt, /Avoid signal: Pure product vendor without implementation ownership/i);
-    assert.match(userPrompt, /Output:/i);
-    assert.match(userPrompt, /Return only the query output in JSON format/i);
-    assert.match(userPrompt, /Stil:/i);
-    assert.match(userPrompt, /Think of them as short, concrete work instructions for Exa/i);
-    assert.match(userPrompt, /Review the recent query history and consciously vary synonym families across the new query set/i);
-    assert.match(userPrompt, /computer vision, machine vision, industrial vision, visual inspection, automated optical inspection, AOI/i);
-    assert.match(userPrompt, /put a short natural-language exclusion clause for those wrong company types into the main query sentence itself/i);
-    assert.match(userPrompt, /Kontext:/i);
-    assert.match(userPrompt, /This section gives you the baseline queries and recent performance context/i);
-    assert.match(userPrompt, /Use this recent history to decide which synonym families, category angles, and regional variants have been overused or underused/i);
-    assert.match(userPrompt, /Recent query history with outcomes \(last 1 queries, newest first\):/i);
+    assert.match(userPrompt, /Recent query history with outcomes:/i);
+    assert.match(userPrompt, /These queries have already been tried/i);
+    assert.match(userPrompt, /Use them as evidence for what worked, what failed, and what caused category drift/i);
     assert.match(userPrompt, /Berlin Germany official company websites for machine vision system integrators delivering industrial image processing/i);
+    assert.match(userPrompt, /Observed counts: returned=20 excluded=8 duplicates=3 accepted=0 wrong_category=0 other=3 raw_found=12/i);
     assert.match(userPrompt, /Found company categories: other=3/i);
     assert.match(userPrompt, /Note: Berlin cluster underperformed/i);
+    assert.match(userPrompt, /Recent Exa search history summary:/i);
+    assert.match(userPrompt, /Vision Integrators Germany \| 3\/20 relevant \| 15%/i);
+    assert.match(userPrompt, /Final task:/i);
+    assert.match(userPrompt, /Create exactly 1 new Exa company-discovery queries/i);
+    assert.match(userPrompt, /Baseline query angles to build on:/i);
+    assert.match(userPrompt, /Angle 1: Germany companies that provide machine vision system integration for industrial automation/i);
+    assert.match(userPrompt, /Return only:/i);
+    assert.match(userPrompt, /\{"queries":\["\.\.\."\]\}/i);
   } finally {
     readiness.azureConfigured = previousAzureConfigured;
   }

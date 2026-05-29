@@ -1,290 +1,38 @@
 {
-  "createdAt": "2026-05-20T10:41:18.508Z",
+  "createdAt": "2026-05-27T08:30:23.206Z",
   "requested": {
-    "targetLeadCount": 1,
+    "targetLeadCount": 10,
     "market": "Germany",
-    "mainContext": "You represent ONE WARE GmbH.\n\nCore positioning:\n- ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months.\n- The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.\n- ONE WARE is strongest when messaging stays close to concrete delivery problems, production constraints, integration friction, cost-to-serve, and hardware realities instead of generic AI hype.\n- Keep the value proposition grounded in production readiness: fast path from data to usable model, repeatable deployment, lower engineering overhead, and a practical route to customer value.\n\nMessaging rules:\n- Do not rewrite outreach from scratch every time.\n- Start from the segment template and personalize only where there is a clear factual hook.\n- Keep ONE WARE's USP visible: less trial and error, faster delivery, more predictable projects, local training, smaller hardware-efficient models, lower development effort.\n- Personalization should point to a concrete delivery bottleneck, use case, or market signal, not generic flattery.",
-    "searchStrategyContext": "You are steering the search and qualification loop for ONE WARE, not writing final outreach.\n\nSearch-loop behavior:\n- Start with internet research in 15-company probe batches. Use multiple public discovery paths such as official company websites, trade fair exhibitor lists, expo catalogs, partner pages, technical magazine coverage, and customer case studies to discover candidate firms.\n- Prioritize the strongest search clusters already seen in live runs: Germany Machine Vision System Integrators, Germany Industrial Computer Vision Engineering Services, Germany Automation Software Integrators, and Germany Smart Factory Software Engineering Partners.\n- A probe is acceptable when at least 15% of reviewed companies are relevant.\n- Relevant means: the company fits one of the active target categories and is in Europe-first geography unless there is an unusually strong exception.\n- If a probe falls below 15%, tighten the search strategy instead of widening it. Keep already-found relevant companies for later research.\n- If a probe is above threshold, continue with 50-company expansion batches and stop when relevance drops.\n- Once enough good-fit companies are collected, the later research step should go deep on those companies only. Use Apollo only as a fallback for contact discovery when public contact details are missing.\n\nTargeting priorities:\n- Germany first, then DACH, Benelux, Nordics, and the rest of Europe.\n- Strongest fit is usually software or automation companies with real delivery ownership, industrial end customers with clear operational use cases, machine builders, camera/imaging manufacturers, or software platforms with a credible embedding surface.\n- Prefer delivery and integration ownership over advisory-only positioning.\n- Deprioritize finance, HR, recruiting, generic consulting, investors, pure resellers, direct competing AI-platform vendors, and directory-like aggregator pages.\n\nFilter quality rules:\n- Build practical search prompts, query variants, and company-discovery angles with realistic industries, keywords, employee ranges, and locations.\n- Favor filters that are narrow enough to hit a strong category but broad enough to scale if the probe succeeds.\n- Avoid filters that depend on vague AI buzzwords alone.",
-    "searchStrategyPreset": "default",
-    "companySearchMode": "exa_search",
-    "creditLessMode": true,
-    "prequalification": {
-      "mainContext": "Decide relevance conservatively. A company is relevant only when there is evidence for real delivery ownership, industrial applicability, or a credible ONE WARE partner path. Reject weak-fit finance, recruiting, HR, generic non-industrial SaaS, and vague consulting profiles without implementation responsibility.",
-      "categoryContexts": {
-        "integrator_vision_industrial_ai": {
-          "classificationRules": [
-            "Relevant when the website explicitly mentions Vision AI, machine vision, industrial AI delivery, inspection AI, computer vision integration, or edge-vision deployment.",
-            "Delivery ownership should be visible through implementation services, custom projects, deployment language, system integration, or customer solution references.",
-            "Signals like integrator, solution provider, automation partner, inspection projects, or hardware/software deployment strengthen relevance."
-          ],
-          "disqualifiers": [
-            "Pure product vendor without implementation ownership",
-            "Direct competing own vision platform as the primary business",
-            "Generic AI marketing with no real delivery proof"
-          ],
-          "addOnContext": "Require explicit evidence for Vision AI, machine vision, industrial inspection, edge AI deployment, or comparable delivery work. Relevance is strongest when the company implements custom projects for customers instead of just reselling products."
-        },
-        "integrator_general_ai": {
-          "classificationRules": [
-            "Relevant when the company clearly delivers AI projects or software implementations but is not strongly Vision-AI-specific yet.",
-            "There should be evidence for project execution, implementation ownership, or customer-specific delivery rather than advisory-only positioning.",
-            "Use this bucket when Vision AI is plausible but not explicit, and the company still looks like a real delivery partner."
-          ],
-          "disqualifiers": [
-            "AI consulting without implementation",
-            "Generic SaaS AI features without project delivery",
-            "Thought leadership or training-only AI firms"
-          ],
-          "addOnContext": "Only treat as relevant when the company clearly delivers AI projects and there is a plausible path into Vision AI or industrial deployment. Generic AI branding alone is not enough."
-        },
-        "integrator_relevant_focus": {
-          "classificationRules": [
-            "Relevant when the company delivers projects in surveillance, defence, medtech vision, robotics, drones, agriculture tech, automotive tech, or industrial automation.",
-            "The vertical should make camera, inspection, perception, tracking, or edge-AI use cases plausible from the company description.",
-            "Delivery ownership still matters; do not use this bucket for pure component vendors or research organizations."
-          ],
-          "disqualifiers": [
-            "No project-delivery signals",
-            "Irrelevant vertical without vision or automation tie-in",
-            "Pure R&D lab with no commercial delivery path"
-          ],
-          "addOnContext": "Require both project-delivery ownership and a relevant vertical such as robotics, surveillance, medtech vision, agriculture tech, defence, automotive, or industrial automation. The vertical should make camera-, inspection-, or edge-AI use cases plausible."
-        },
-        "industrial_end_customer_scaled": {
-          "classificationRules": [
-            "Relevant when the company runs its own manufacturing, production lines, plants, or industrial operations at meaningful scale.",
-            "Look for evidence of quality control, inspection, defect detection, process automation, packaging, assembly, or engineering-led operations.",
-            "Engineering ownership, factory footprint, multi-site production, or industrial equipment references strengthen relevance."
-          ],
-          "disqualifiers": [
-            "Small workshop without engineering capacity",
-            "No own production context",
-            "Distributor or trader with no industrial operations"
-          ],
-          "addOnContext": "Treat as relevant only when the company has its own production, operational scale, and a believable quality-control, inspection, or process-automation need. Look for factories, plants, manufacturing lines, engineering teams, or industrial operations."
-        },
-        "camera_manufacturer_partner": {
-          "classificationRules": [
-            "Relevant when the company manufactures cameras, imaging systems, machine-vision components, or related hardware sold into customer solutions.",
-            "There should be a credible partner path where ONE WARE could upgrade the hardware offer with AI-ready capabilities.",
-            "Choose this bucket only when partner fit is stronger than competition risk."
-          ],
-          "disqualifiers": [
-            "Strong own competing vision software monetization",
-            "Pure reseller without product control",
-            "Imaging distributor with no manufacturer or OEM role"
-          ],
-          "addOnContext": "Treat as relevant when the company manufactures cameras, imaging modules, or machine-vision hardware and could benefit from offering AI-ready solutions to customers. Exclude firms whose core monetization is already their own competing vision software stack."
-        },
-        "machine_builder_ai_enablement": {
-          "classificationRules": [
-            "Relevant when the company builds machines, OEM systems, manufacturing equipment, production cells, or industrial fixtures that could gain from embedded Vision AI.",
-            "Look for OEM, Sondermaschinenbau, industrial equipment, packaging, assembly, inspection stations, or production-line language.",
-            "Relevance is strongest when the company could offer AI as an option, module, retrofit, or performance upgrade to customers."
-          ],
-          "disqualifiers": [
-            "Pure distributor without machine-building capability",
-            "Component seller with no system integration ownership",
-            "No visible OEM or industrial equipment context"
-          ],
-          "addOnContext": "Treat as relevant when the company builds machines, OEM systems, production equipment, or industrial fixtures and could add Vision AI as an option or product enhancement. Require real machine-building capability, not just distribution."
-        },
-        "software_platform_embedding": {
-          "classificationRules": [
-            "Relevant when the company operates a software platform, workflow product, or developer-facing environment that could embed model-generation capabilities.",
-            "A credible integration path should be visible through APIs, extensions, workflow automation, platform modules, or customer-configurable tooling.",
-            "Use this only when there is real product surface for embedding, not just service delivery."
-          ],
-          "disqualifiers": [
-            "No extensibility or integration path",
-            "Direct platform competitor with no partner incentive",
-            "Pure agency or service shop with no platform product"
-          ],
-          "addOnContext": "Treat as relevant when the company operates a software platform with a credible integration surface where ONE WARE could be embedded as a model-generation backend. Require an actual platform product or workflow layer, not a services-only company."
-        }
-      }
-    },
-    "executionContexts": {
-      "integrator_vision_industrial_ai": {
-        "researchPriorities": [
-          "Validate recurring vision-heavy delivery ownership.",
-          "Look for fixed-price pressure and repeatable project patterns."
-        ],
-        "outreachPriorities": [
-          "Lead with throughput and margin improvements.",
-          "Keep partner framing and project efficiency language."
-        ],
-        "personalizationRules": [
-          "Personalize only with concrete delivery hooks.",
-          "Retain template backbone and ONE WARE USP wording."
-        ],
-        "avoidSignals": [
-          "Generic AI buzzwords without delivery context"
-        ]
-      },
-      "integrator_general_ai": {
-        "researchPriorities": [
-          "Identify where generic AI delivery can benefit from faster vision model cycles.",
-          "Check if they implement projects, not only advise."
-        ],
-        "outreachPriorities": [
-          "Connect ONE WARE to project speed and predictability."
-        ],
-        "personalizationRules": [
-          "Personalize around current delivery workflow gaps."
-        ],
-        "avoidSignals": [
-          "Treating them as AI beginners"
-        ]
-      },
-      "integrator_relevant_focus": {
-        "researchPriorities": [
-          "Pinpoint vertical-specific delivery bottlenecks and hardware constraints.",
-          "Validate recurring vision/edge components."
-        ],
-        "outreachPriorities": [
-          "Anchor message in vertical project risk reduction."
-        ],
-        "personalizationRules": [
-          "Use factual vertical hooks only."
-        ],
-        "avoidSignals": [
-          "Over-generalized messaging"
-        ]
-      },
-      "industrial_end_customer_scaled": {
-        "researchPriorities": [
-          "Confirm production scale and internal engineering capability.",
-          "Find QC, inspection, and process automation leverage points."
-        ],
-        "outreachPriorities": [
-          "Lead with economics, feasibility, and speed to production."
-        ],
-        "personalizationRules": [
-          "Ground in concrete production context."
-        ],
-        "avoidSignals": [
-          "Abstract transformation talk"
-        ]
-      },
-      "camera_manufacturer_partner": {
-        "researchPriorities": [
-          "Validate partner fit and customer AI-enablement potential."
-        ],
-        "outreachPriorities": [
-          "Focus on enabling customer-ready AI setups."
-        ],
-        "personalizationRules": [
-          "Personalize with product-line evidence only."
-        ],
-        "avoidSignals": [
-          "Positioning as replacement of core hardware business"
-        ]
-      },
-      "machine_builder_ai_enablement": {
-        "researchPriorities": [
-          "Validate OEM integration pathways and customer-facing AI option potential."
-        ],
-        "outreachPriorities": [
-          "Position ONE WARE as fast AI enablement layer for machine offerings."
-        ],
-        "personalizationRules": [
-          "Use machine/product context, not generic AI language."
-        ],
-        "avoidSignals": [
-          "Ignoring mechanical integration realities"
-        ]
-      },
-      "software_platform_embedding": {
-        "researchPriorities": [
-          "Validate embeddability and partner incentives."
-        ],
-        "outreachPriorities": [
-          "Lead with integration leverage and user value lift."
-        ],
-        "personalizationRules": [
-          "Tie outreach to concrete platform workflows."
-        ],
-        "avoidSignals": [
-          "Overpromising without integration fit"
-        ]
-      }
-    },
     "targetCategories": [
-      "integrator_vision_industrial_ai",
-      "integrator_general_ai",
-      "integrator_relevant_focus"
+      "integrator_vision_industrial_ai"
     ],
-    "runDeepResearch": true,
-    "dryRun": false,
+    "companySearchMode": "diffbot_test_data",
+    "dryRun": true,
     "syncToHubSpot": false,
-    "earlyStopEnabled": true,
-    "earlyStopReviewCount": 5,
-    "earlyStopThreshold": 0.15,
-    "exaApiKey": "d35d532b-c8b7-4f4b-ae05-eb7051562461",
-    "maxRuntimeMs": 120000,
-    "earlyStopMinRelevantCount": 1
+    "runDeepResearch": false,
+    "maxRuntimeMs": 1200000
   },
   "summary": {
-    "foundCandidates": 1,
-    "filtersTested": 0,
-    "filtersStoppedEarly": 0,
-    "companiesSkippedAfterEarlyStop": 0,
+    "foundCandidates": 0,
+    "filtersTested": 2,
+    "filtersStoppedEarly": 2,
+    "companiesSkippedAfterEarlyStop": 40,
     "funnel": {
-      "crawledPages": 9,
-      "afterCrawlerPrefilter": 9,
-      "afterHubSpotDedup": 1,
-      "afterAzureAICheck": 1,
+      "crawledPages": 0,
+      "afterCrawlerPrefilter": 0,
+      "afterHubSpotDedup": 0,
+      "afterAzureAICheck": 0,
       "syncedToHubSpot": 0
     },
     "timedOut": false,
-    "stopped": false
+    "stopped": false,
+    "completionReason": "Die Suche endete, weil alle 2 Filter im direkten Ablauf verarbeitet wurden."
   },
-  "contacts": [
-    {
-      "companyName": "AISLab GmbH",
-      "domain": "https://aislab.de",
-      "country": "Germany",
-      "category": "integrator_general_ai",
-      "relevanceScore": 75,
-      "sourceFilter": "Germany Machine Vision System Integrators (exa-search: \"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbe)",
-      "rationale": "Delivers industrial automation, SPS, robotics, MES software with implementation and training services.",
-      "likelyGermanSpeaking": true,
-      "outreachLanguage": "de",
-      "rankings": {
-        "customer": 3,
-        "serviceProvider": 8,
-        "partner": 4
-      },
-      "businessPotentialEUR": 14000,
-      "businessPotentialReasoning": "General AI integrator with likely upsell into vision projects, but less concentrated than explicit vision specialists. Estimated at about EUR 14,000.",
-      "targetIndustry": "Industrial automation, robotics, machine vision, and AI project delivery",
-      "productsOffered": "AI delivery services, software implementation, applied ML projects",
-      "overview": "AISLab GmbH appears relevant based on its positioning around aislab gmbh. # aislab gmbh\n\naislab gmbh is a it services and it consulting company. aislab gmbh is a modern-driven service provider in the field of industrial software development, sps and robot programming, as well as image processing. they offer specialized training in these technological fields and aim to optimize production processes and digitalize business processes. they provide customized solutions that optimize production processes and digitalize business processes. founded in 2017. headquartered in mannheim, baden-württemberg, germany.\n\n## about\ndie aislab gmbh ist ein zukunftsorientiertes unternehmen für industrielle softwareentwicklung und automatisierung. wir bieten maßgeschneiderte lösungen mit fokus auf effizienz, qualität und innovation – von sps- und roboterprogrammierung über anlagenautomatisierung bis hin zur mes- und erp-integration.\n\ndank unserer langjährigen erfahrung garantieren wir schnelle, kompetente und lösungsorientierte projektumsetzung. wir integrieren bewährte softwaretools und hardwarestandards nahtlos in bestehende systeme – für nachhaltige, transparente und zukunftssichere lösungen.\n\nunser leistungsspektrum:\n- anlagen- und prozessautomatisierung\n- roboter- und sps-programmierung\n- individuelle softwarelösungen\n- mes-/erp-integration und systemmigration\n- industrielle bildverarbeitungssysteme\n\nweiterbildung & know-how-transfer:\nneben technischen .",
-      "qualificationSummary": "Potential fit for ONE WARE where faster Vision-AI delivery and reduced trial-and-error are commercially relevant.",
-      "linkedInConnectionRequest": "Kurze Frage: Haben Sie bei Ihren Software- oder AI-Projekten auch schon Vision-AI-Erfahrung gesammelt? Falls ja, könnte ONE WARE relevant für Sie sein.",
-      "linkedInMessage": "Kurze Frage: Haben Sie bei Ihren Software- oder AI-Projekten auch schon Vision-AI-Erfahrung gesammelt? Falls ja, könnten wir für schnellere und effizientere Vision-AI-Umsetzung interessant sein.",
-      "emailSubject": "AI-Projekte schneller zu produktionsreifer Vision-AI machen",
-      "emailBody": "Hallo [Name],\n\nich habe gesehen, dass Sie Software- und AI-Projekte umsetzen. Mich würde interessieren, ob Sie dabei auch schon praktische Erfahrung mit Vision AI gesammelt haben.\n\nFalls ja, könnte ONE WARE für Sie interessant sein. Unsere Software erzeugt Vision-AI-Modelle deutlich effizienter, mit weniger manuellem Ausprobieren und deutlich geringerem Aufwand bis zur produktionsreifen Lösung.\n\nFür Integratoren und Dienstleister ist das spannend, weil Projekte schneller lieferbar werden. Zusätzlich haben wir Firmenkunden mit konkreten Use Cases, bei denen wir passende Partner für die Umsetzung einbinden können.\n\nWäre ein kurzer Austausch sinnvoll, ob das für Sie relevant sein könnte?\n\nMit freundlichen Grüßen\n[Ihr Name]",
-      "phoneScript": "Hallo Herr/Frau [Name], hier ist [Ihr Name] von ONE WARE. Ich wollte kurz fragen, ob Sie bereits Vision-AI-Anwendungen für Kunden umsetzen oder das aktuell aufbauen. Wir haben eine Software, mit der Vision-AI-Modelle deutlich schneller produktionsreif werden. Da wir nicht alle Integrations- und Beratungsprojekte selbst stemmen können, suchen wir Gespräche mit Dienstleistern, bei denen eine Zusammenarbeit sinnvoll sein könnte. Wäre das für Sie ein Thema?",
-      "riskFlags": [
-        "Needs manual verification against direct competing own Vision AI software before outreach."
-      ],
-      "publicContactEmails": [
-        "info@aislab.de"
-      ],
-      "publicContactPhones": [
-        "004962149075611"
-      ],
-      "publicContactSources": [
-        "https://aislab.de/de/unternehmen/ueber-uns#c1540"
-      ]
-    }
-  ],
+  "contacts": [],
   "searchHistory": [
     {
-      "timestamp": "2026-05-20T10:40:55.885Z",
-      "companySearchMode": "exa_search",
+      "timestamp": "2026-05-27T08:30:19.155Z",
+      "companySearchMode": "diffbot_test_data",
       "filterName": "Germany Machine Vision System Integrators",
       "filterSnapshot": {
         "persona": "German system integrator delivering machine vision inspection and industrial image processing projects for customers",
@@ -318,112 +66,232 @@
       "targetCategory": "integrator_vision_industrial_ai",
       "batchType": "probe_15",
       "page": 1,
-      "requestedCount": 5,
-      "returnedCount": 9,
-      "relevantCount": 1,
-      "relevanceRatio": 0.1111111111111111,
+      "requestedCount": 30,
+      "returnedCount": 30,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
       "categoryBreakdown": {
-        "integrator_vision_industrial_ai": 0,
+        "integrator_vision_industrial_ai": 3,
         "integrator_vision_ai_consulting": 0,
         "integrator_vision_ai_freelancer": 0,
         "integrator_general_ai": 1,
-        "integrator_relevant_focus": 0,
+        "integrator_relevant_focus": 19,
         "industrial_end_customer_scaled": 0,
-        "camera_manufacturer_partner": 0,
-        "machine_builder_ai_enablement": 1,
+        "camera_manufacturer_partner": 1,
+        "machine_builder_ai_enablement": 0,
         "software_platform_embedding": 0,
-        "irrelevant": 1,
-        "other": 6
+        "irrelevant": 6,
+        "other": 0
       },
       "passedThreshold": false,
       "recommendation": "Revise the search before spending more credits.",
-      "fetchedSampleCount": 45,
-      "eligibleSampleCount": 9,
-      "discoveryQueries": [
-        "German system integrator delivering machine vision inspection and industrial image processing projects for customers Germany system integrator customer projects industrial inspection engineering services",
-        "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" Germany system integrator customer projects",
-        "machine vision integrator industrielle bildverarbeitung Germany customer projects inspection systems engineering services",
-        "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" \"industrial image processing\" \"inspection systems\" \"quality inspection\" Germany official company website system integrator"
-      ],
+      "fetchedSampleCount": 93,
+      "eligibleSampleCount": 30,
+      "discoveryQueries": [],
       "dropOffSummary": {
         "filteredByPriorFeedback": 0,
         "filteredByCache": 0,
         "filteredByHubSpot": 0,
-        "categorizedIrrelevant": 1,
-        "categorizedOther": 6
+        "categorizedIrrelevant": 6,
+        "categorizedOther": 0
       },
       "decisionSamples": [
         {
-          "companyName": "Math & Tech Engineering GmbH",
-          "domain": "https://mathtech.eu",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: German system integrator delivering machine vision inspection and indust)",
-          "discoveryQuery": "German system integrator delivering machine vision inspection and industrial image processing projects for customers Germany system integrator customer projects industrial inspection engineering services",
-          "category": "other",
-          "relevanceScore": 25,
-          "rationale": "Website evidence could not be classified reliably and should stay in manual-review territory."
+          "companyName": "Phoenix Contact",
+          "domain": "https://phoenixcontact.com",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 79,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
         },
         {
-          "companyName": "Adaptive Vision and Robotics",
-          "domain": "https://adaptive-companies.com",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: German system integrator delivering machine vision inspection and indust)",
-          "discoveryQuery": "German system integrator delivering machine vision inspection and industrial image processing projects for customers Germany system integrator customer projects industrial inspection engineering services",
-          "category": "other",
-          "relevanceScore": 25,
-          "rationale": "Website evidence could not be classified reliably and should stay in manual-review territory."
+          "companyName": "Amalfi Systems",
+          "domain": "https://amalfisystems.com",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 79,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
         },
         {
-          "companyName": "AISLab GmbH",
-          "domain": "https://aislab.de",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: \"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbe)",
-          "discoveryQuery": "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" Germany system integrator customer projects",
+          "companyName": "Belden",
+          "domain": "https://belden.com",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 75,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+        },
+        {
+          "companyName": "Isam Ag",
+          "domain": "https://isam-ag.de",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 75,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+        },
+        {
+          "companyName": "It Robotics",
+          "domain": "https://it-robotics.it",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+          "category": "irrelevant",
+          "relevanceScore": 8,
+          "rationale": "Company profile signals a non-industrial service or platform segment outside ONE WARE's ICP."
+        },
+        {
+          "companyName": "Gevaonline",
+          "domain": "https://gevaonline.com",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 75,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+        },
+        {
+          "companyName": "EKB",
+          "domain": "https://ekb.nl",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
           "category": "integrator_general_ai",
           "relevanceScore": 75,
-          "rationale": "Delivers industrial automation, SPS, robotics, MES software with implementation and training services."
+          "rationale": "Description suggests implementation or integration services."
         },
         {
-          "companyName": "Ingenieurbüro Guttenberger",
-          "domain": "https://t-guttenberger.de",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: \"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbe)",
-          "discoveryQuery": "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" Germany system integrator customer projects",
+          "companyName": "PROMEXX Technical Automation",
+          "domain": "https://promexx.nl",
+          "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+          "category": "integrator_vision_industrial_ai",
+          "relevanceScore": 87,
+          "rationale": "Description signals vision or industrial AI delivery capability."
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-05-27T08:30:19.174Z",
+      "companySearchMode": "diffbot_test_data",
+      "filterName": "Germany Industrial Computer Vision Engineering Services",
+      "filterSnapshot": {
+        "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+        "industries": [
+          "Industrial Automation",
+          "Industrial Software",
+          "System Integration",
+          "Electronics"
+        ],
+        "keywords": [
+          "automated optical inspection",
+          "aoi integrator",
+          "inline inspection",
+          "optische qualitaetskontrolle",
+          "industrial image processing",
+          "computer vision engineering services",
+          "machine vision integration",
+          "optical quality control",
+          "embedded computer vision",
+          "beratung projektbewertung bildverarbeitung"
+        ],
+        "locations": [
+          "Germany"
+        ],
+        "employeeRanges": [
+          "11,50",
+          "51,200",
+          "201,500"
+        ],
+        "notes": "Targets project-driven firms with AOI, inline inspection, and industrial computer vision delivery rather than broad AI vendors. Market focus: Germany."
+      },
+      "targetCategory": "integrator_vision_industrial_ai",
+      "batchType": "probe_15",
+      "page": 1,
+      "requestedCount": 30,
+      "returnedCount": 30,
+      "relevantCount": 0,
+      "relevanceRatio": 0,
+      "categoryBreakdown": {
+        "integrator_vision_industrial_ai": 5,
+        "integrator_vision_ai_consulting": 0,
+        "integrator_vision_ai_freelancer": 0,
+        "integrator_general_ai": 0,
+        "integrator_relevant_focus": 15,
+        "industrial_end_customer_scaled": 2,
+        "camera_manufacturer_partner": 0,
+        "machine_builder_ai_enablement": 0,
+        "software_platform_embedding": 0,
+        "irrelevant": 4,
+        "other": 4
+      },
+      "passedThreshold": false,
+      "recommendation": "Revise the search before spending more credits.",
+      "fetchedSampleCount": 66,
+      "eligibleSampleCount": 30,
+      "discoveryQueries": [],
+      "dropOffSummary": {
+        "filteredByPriorFeedback": 0,
+        "filteredByCache": 0,
+        "filteredByHubSpot": 0,
+        "categorizedIrrelevant": 4,
+        "categorizedOther": 4
+      },
+      "decisionSamples": [
+        {
+          "companyName": "PROMEXX Technical Automation",
+          "domain": "https://promexx.nl",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+          "category": "integrator_vision_industrial_ai",
+          "relevanceScore": 87,
+          "rationale": "Description signals vision or industrial AI delivery capability."
+        },
+        {
+          "companyName": "IXION",
+          "domain": "https://ixion.es",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+          "category": "integrator_vision_industrial_ai",
+          "relevanceScore": 87,
+          "rationale": "Description signals vision or industrial AI delivery capability."
+        },
+        {
+          "companyName": "Inovako",
+          "domain": "https://inovako.com",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
           "category": "other",
-          "relevanceScore": 25,
-          "rationale": "Website evidence could not be classified reliably and should stay in manual-review territory."
+          "relevanceScore": 35,
+          "rationale": "Company may have software or AI capability, but the profile lacks clear industrial, automation, or vision-delivery signals."
         },
         {
-          "companyName": "Svs Vistek",
-          "domain": "https://svs-vistek.com",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: \"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbe)",
-          "discoveryQuery": "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" Germany system integrator customer projects",
-          "category": "other",
-          "relevanceScore": 25,
-          "rationale": "Website evidence could not be classified reliably and should stay in manual-review territory."
+          "companyName": "Bonetto Group",
+          "domain": "https://bonetto-group.com",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 75,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
         },
         {
-          "companyName": "Wesys",
-          "domain": "https://wesys.de",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: \"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbe)",
-          "discoveryQuery": "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" Germany system integrator customer projects",
-          "category": "machine_builder_ai_enablement",
-          "relevanceScore": 85,
-          "rationale": "Weber Systemtechnik develops and manufactures complete vision systems for industrial testing and inspection."
+          "companyName": "HAHN Automation Group US",
+          "domain": "https://hahnautomation.group",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+          "category": "integrator_vision_industrial_ai",
+          "relevanceScore": 87,
+          "rationale": "Description signals vision or industrial AI delivery capability."
         },
         {
-          "companyName": "Australian Machine Vision",
-          "domain": "https://amvco.com.au",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: \"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbe)",
-          "discoveryQuery": "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" Germany system integrator customer projects",
-          "category": "other",
-          "relevanceScore": 25,
-          "rationale": "Website evidence could not be classified reliably and should stay in manual-review territory."
+          "companyName": "QING",
+          "domain": "https://qing.nl",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 79,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
         },
         {
-          "companyName": "Makdycorp",
-          "domain": "https://makdycorp.com",
-          "sourceFilter": "Germany Machine Vision System Integrators (exa-search: \"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbe)",
-          "discoveryQuery": "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" Germany system integrator customer projects",
-          "category": "irrelevant",
-          "relevanceScore": 0,
-          "rationale": "Official website could not be loaded reliably, so the company is rejected before qualification."
+          "companyName": "Seugmbh",
+          "domain": "https://seugmbh.de",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 81,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+        },
+        {
+          "companyName": "SODEREL",
+          "domain": "https://soderel.com",
+          "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+          "category": "integrator_relevant_focus",
+          "relevanceScore": 79,
+          "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
         }
       ]
     }
@@ -431,7 +299,7 @@
   "hubspotSync": {
     "attempted": false,
     "mode": "dry-run",
-    "candidateCount": 2,
+    "candidateCount": 0,
     "syncedCount": 0,
     "companySyncedCount": 0,
     "contactSyncedCount": 0,
@@ -439,10 +307,10 @@
   },
   "costs": {
     "azure": {
-      "requests": 3,
-      "promptTokens": 13368,
-      "completionTokens": 822,
-      "totalTokens": 14190,
+      "requests": 0,
+      "promptTokens": 0,
+      "completionTokens": 0,
+      "totalTokens": 0,
       "estimatedCostUsd": 0
     }
   }

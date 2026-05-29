@@ -314,10 +314,16 @@ export class CacheDatabaseStore {
         VALUES (?, ?)
       `);
       const now = new Date().toISOString();
-      const queryInsightsByQuery = new Map((cache.queryInsights ?? []).map((entry) => [entry.query, entry]));
+      const queryInsightsByQuery = new Map<string, ExaQueryHistoryInsight[]>();
+
+      for (const entry of cache.queryInsights ?? []) {
+        const existingEntries = queryInsightsByQuery.get(entry.query) ?? [];
+        existingEntries.push(entry);
+        queryInsightsByQuery.set(entry.query, existingEntries);
+      }
 
       for (const query of cache.queryHistory) {
-        const insight = queryInsightsByQuery.get(query);
+        const insight = queryInsightsByQuery.get(query)?.shift();
         queryStatement.run(
           insight?.timestamp ?? now,
           query,

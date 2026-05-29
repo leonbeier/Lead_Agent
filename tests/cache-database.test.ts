@@ -70,3 +70,40 @@ test("CacheDatabaseStore keeps test-lab query history separate from discovered d
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("CacheDatabaseStore preserves repeated test-lab queries with their matching insights", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lead-agent-cache-db-"));
+  const databasePath = path.join(tempDir, "testlab-duplicates.sqlite");
+  const store = new CacheDatabaseStore(databasePath);
+
+  try {
+    store.writeTestLabExaCache({
+      queryHistory: ["repeat query", "repeat query", "new query"],
+      queryInsights: [
+        {
+          query: "repeat query",
+          timestamp: "2026-05-23T14:00:00.000Z",
+          note: "first run"
+        },
+        {
+          query: "repeat query",
+          timestamp: "2026-05-23T14:05:00.000Z",
+          note: "second run"
+        },
+        {
+          query: "new query",
+          timestamp: "2026-05-23T14:10:00.000Z",
+          note: "third run"
+        }
+      ],
+      discoveredDomains: []
+    });
+
+    const cache = store.readTestLabExaCache();
+
+    assert.deepEqual(cache.queryHistory, ["repeat query", "repeat query", "new query"]);
+    assert.deepEqual(cache.queryInsights.map((entry) => entry.note), ["first run", "second run", "third run"]);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});

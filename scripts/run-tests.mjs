@@ -30,22 +30,24 @@ async function main() {
     return;
   }
 
-  await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", ...testFiles], {
-      stdio: "inherit",
-      env: process.env
-    });
+  for (const testFile of testFiles) {
+    await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ["--import", "tsx", "--test", testFile], {
+        stdio: "inherit",
+        env: process.env
+      });
 
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
+      child.on("exit", (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
 
-      reject(new Error(`Tests failed with exit code ${code ?? 1}.`));
+        reject(new Error(`Tests failed in ${testFile} with exit code ${code ?? 1}.`));
+      });
+      child.on("error", reject);
     });
-    child.on("error", reject);
-  });
+  }
 }
 
 main().catch((error) => {

@@ -146,6 +146,7 @@
             "machine vision integrator industrielle bildverarbeitung Germany customer projects inspection systems engineering services",
             "\"machine vision integrator\" \"industrielle bildverarbeitung\" \"bildverarbeitungssysteme\" \"industrial image processing\" \"inspection systems\" \"quality inspection\" Germany official company website system integrator"
           ],
+          "queryStats": [],
           "dropOffSummary": {
             "filteredByPriorFeedback": 0,
             "filteredByCache": 0,
@@ -286,6 +287,7 @@
           "fetchedSampleCount": 2,
           "eligibleSampleCount": 2,
           "discoveryQueries": [],
+          "queryStats": [],
           "dropOffSummary": {
             "filteredByPriorFeedback": 0,
             "filteredByCache": 0,
@@ -311,6 +313,289 @@
               "rationale": "Mozilla is a non-profit internet and open-source AI community, not an industrial AI delivery or integrator."
             }
           ]
+        }
+      ]
+    },
+    "diffbot_test_data": {
+      "filterPerformance": {
+        "Germany Machine Vision System Integrators": {
+          "runs": 1,
+          "averageRelevanceRatio": 0,
+          "earlyStopCount": 1
+        },
+        "Germany Industrial Computer Vision Engineering Services": {
+          "runs": 1,
+          "averageRelevanceRatio": 0,
+          "earlyStopCount": 1
+        }
+      },
+      "searchHistory": [
+        {
+          "timestamp": "2026-05-27T08:30:19.155Z",
+          "companySearchMode": "diffbot_test_data",
+          "filterName": "Germany Machine Vision System Integrators",
+          "filterSnapshot": {
+            "persona": "German system integrator delivering machine vision inspection and industrial image processing projects for customers",
+            "industries": [
+              "Industrial Automation",
+              "System Integration",
+              "Industrial Software",
+              "Machinery"
+            ],
+            "keywords": [
+              "machine vision integrator",
+              "industrielle bildverarbeitung",
+              "bildverarbeitungssysteme",
+              "industrial image processing",
+              "inspection systems",
+              "quality inspection",
+              "system integrator",
+              "machbarkeitsanalyse bildverarbeitung"
+            ],
+            "locations": [
+              "Germany"
+            ],
+            "employeeRanges": [
+              "11,50",
+              "51,200",
+              "201,500",
+              "501,1000"
+            ],
+            "notes": "Primary ICP. Target delivery-oriented German machine-vision and inspection integrators with customer project ownership. Market focus: Germany."
+          },
+          "targetCategory": "integrator_vision_industrial_ai",
+          "batchType": "probe_15",
+          "page": 1,
+          "requestedCount": 30,
+          "returnedCount": 30,
+          "relevantCount": 0,
+          "relevanceRatio": 0,
+          "categoryBreakdown": {
+            "integrator_vision_industrial_ai": 3,
+            "integrator_vision_ai_consulting": 0,
+            "integrator_vision_ai_freelancer": 0,
+            "integrator_general_ai": 1,
+            "integrator_relevant_focus": 19,
+            "industrial_end_customer_scaled": 0,
+            "camera_manufacturer_partner": 1,
+            "machine_builder_ai_enablement": 0,
+            "software_platform_embedding": 0,
+            "irrelevant": 6,
+            "other": 0
+          },
+          "passedThreshold": false,
+          "recommendation": "Revise the search before spending more credits.",
+          "fetchedSampleCount": 93,
+          "eligibleSampleCount": 30,
+          "discoveryQueries": [],
+          "dropOffSummary": {
+            "filteredByPriorFeedback": 0,
+            "filteredByCache": 0,
+            "filteredByHubSpot": 0,
+            "categorizedIrrelevant": 6,
+            "categorizedOther": 0
+          },
+          "decisionSamples": [
+            {
+              "companyName": "Phoenix Contact",
+              "domain": "https://phoenixcontact.com",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 79,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "Amalfi Systems",
+              "domain": "https://amalfisystems.com",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 79,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "Belden",
+              "domain": "https://belden.com",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 75,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "Isam Ag",
+              "domain": "https://isam-ag.de",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 75,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "It Robotics",
+              "domain": "https://it-robotics.it",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "irrelevant",
+              "relevanceScore": 8,
+              "rationale": "Company profile signals a non-industrial service or platform segment outside ONE WARE's ICP."
+            },
+            {
+              "companyName": "Gevaonline",
+              "domain": "https://gevaonline.com",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 75,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "EKB",
+              "domain": "https://ekb.nl",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "integrator_general_ai",
+              "relevanceScore": 75,
+              "rationale": "Description suggests implementation or integration services."
+            },
+            {
+              "companyName": "PROMEXX Technical Automation",
+              "domain": "https://promexx.nl",
+              "sourceFilter": "Germany Machine Vision System Integrators (diffbot-test-data)",
+              "category": "integrator_vision_industrial_ai",
+              "relevanceScore": 87,
+              "rationale": "Description signals vision or industrial AI delivery capability."
+            }
+          ],
+          "queryStats": []
+        },
+        {
+          "timestamp": "2026-05-27T08:30:19.174Z",
+          "companySearchMode": "diffbot_test_data",
+          "filterName": "Germany Industrial Computer Vision Engineering Services",
+          "filterSnapshot": {
+            "persona": "German engineering and software service provider delivering machine vision, AOI, inline inspection, or embedded computer vision projects for industrial customers",
+            "industries": [
+              "Industrial Automation",
+              "Industrial Software",
+              "System Integration",
+              "Electronics"
+            ],
+            "keywords": [
+              "automated optical inspection",
+              "aoi integrator",
+              "inline inspection",
+              "optische qualitaetskontrolle",
+              "industrial image processing",
+              "computer vision engineering services",
+              "machine vision integration",
+              "optical quality control",
+              "embedded computer vision",
+              "beratung projektbewertung bildverarbeitung"
+            ],
+            "locations": [
+              "Germany"
+            ],
+            "employeeRanges": [
+              "11,50",
+              "51,200",
+              "201,500"
+            ],
+            "notes": "Targets project-driven firms with AOI, inline inspection, and industrial computer vision delivery rather than broad AI vendors. Market focus: Germany."
+          },
+          "targetCategory": "integrator_vision_industrial_ai",
+          "batchType": "probe_15",
+          "page": 1,
+          "requestedCount": 30,
+          "returnedCount": 30,
+          "relevantCount": 0,
+          "relevanceRatio": 0,
+          "categoryBreakdown": {
+            "integrator_vision_industrial_ai": 5,
+            "integrator_vision_ai_consulting": 0,
+            "integrator_vision_ai_freelancer": 0,
+            "integrator_general_ai": 0,
+            "integrator_relevant_focus": 15,
+            "industrial_end_customer_scaled": 2,
+            "camera_manufacturer_partner": 0,
+            "machine_builder_ai_enablement": 0,
+            "software_platform_embedding": 0,
+            "irrelevant": 4,
+            "other": 4
+          },
+          "passedThreshold": false,
+          "recommendation": "Revise the search before spending more credits.",
+          "fetchedSampleCount": 66,
+          "eligibleSampleCount": 30,
+          "discoveryQueries": [],
+          "dropOffSummary": {
+            "filteredByPriorFeedback": 0,
+            "filteredByCache": 0,
+            "filteredByHubSpot": 0,
+            "categorizedIrrelevant": 4,
+            "categorizedOther": 4
+          },
+          "decisionSamples": [
+            {
+              "companyName": "PROMEXX Technical Automation",
+              "domain": "https://promexx.nl",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "integrator_vision_industrial_ai",
+              "relevanceScore": 87,
+              "rationale": "Description signals vision or industrial AI delivery capability."
+            },
+            {
+              "companyName": "IXION",
+              "domain": "https://ixion.es",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "integrator_vision_industrial_ai",
+              "relevanceScore": 87,
+              "rationale": "Description signals vision or industrial AI delivery capability."
+            },
+            {
+              "companyName": "Inovako",
+              "domain": "https://inovako.com",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "other",
+              "relevanceScore": 35,
+              "rationale": "Company may have software or AI capability, but the profile lacks clear industrial, automation, or vision-delivery signals."
+            },
+            {
+              "companyName": "Bonetto Group",
+              "domain": "https://bonetto-group.com",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 75,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "HAHN Automation Group US",
+              "domain": "https://hahnautomation.group",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "integrator_vision_industrial_ai",
+              "relevanceScore": 87,
+              "rationale": "Description signals vision or industrial AI delivery capability."
+            },
+            {
+              "companyName": "QING",
+              "domain": "https://qing.nl",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 79,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "Seugmbh",
+              "domain": "https://seugmbh.de",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 81,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            },
+            {
+              "companyName": "SODEREL",
+              "domain": "https://soderel.com",
+              "sourceFilter": "Germany Industrial Computer Vision Engineering Services (diffbot-test-data)",
+              "category": "integrator_relevant_focus",
+              "relevanceScore": 79,
+              "rationale": "Profile shows delivery-led industrial automation or embedded integration work, but no explicit AI specialization."
+            }
+          ],
+          "queryStats": []
         }
       ]
     }

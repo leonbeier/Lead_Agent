@@ -53,6 +53,16 @@ function getCompanyKey(company: Pick<PreCategorizedCompany, "name" | "domain">):
   return normalizedDomain || company.name.trim().toLowerCase();
 }
 
+function hasNonGenericReachableContact(contacts: PublicContactCandidate[]): boolean {
+  return contacts.some((contact) => {
+    const email = contact.email?.trim().toLowerCase() ?? "";
+    const isGenericMailbox = /^((info|sales|office|kontakt|contact|hello|team|support|service|mail)@)/i.test(email)
+      || contact.label === "public_generic_mailbox";
+
+    return Boolean(contact.email || contact.phone) && !isGenericMailbox;
+  });
+}
+
 async function mapWithConcurrency<T, R>(items: T[], concurrency: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let nextIndex = 0;
@@ -107,7 +117,6 @@ async function main() {
       primaryContacts: Map<string, PublicContactCandidate[]>,
       fallbackContacts: Map<string, PublicContactCandidate[]>
     ) => Map<string, PublicContactCandidate[]>;
-    hasReachableContact: (contacts: PublicContactCandidate[]) => boolean;
   };
   const azureClient = new AzureOpenAIClient();
   const hubspotClient = new HubSpotClient();
@@ -119,7 +128,7 @@ async function main() {
   const publicContactsByCompany = await pipeline.collectPublicContacts(companies, false);
   const companiesNeedingApolloContacts = companies.filter((company) => {
     const currentContacts = publicContactsByCompany.get(getCompanyKey(company)) ?? [];
-    return !pipeline.hasReachableContact(currentContacts);
+    return !hasNonGenericReachableContact(currentContacts);
   });
 
   const apolloContactsByCompany = await pipeline.collectApolloContacts(
