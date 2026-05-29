@@ -848,15 +848,30 @@ export class OpenAIWebSearchClient {
       "Use only organization-level information from the company website, legal notice, contact page, map listing, or reputable company directory.",
       "Do not include or search for personal data such as employee names, personal emails, direct phone numbers, or personal social profiles.",
       "Return only the best verified headquarters or main office mailing address if available.",
+      "Accept an address only when a full street-level postal address is explicitly shown in a trustworthy source.",
+      "Reject marketing copy, news fragments, certifications, slogans, award text, date strings, boilerplate, or generic company descriptions even if they contain numbers or locations.",
+      "If you cannot verify a full postal address confidently, return empty strings and mark verificationStatus as not_found or uncertain instead of guessing.",
       `Company name: ${company.name}`,
       company.domain ? `Known website: ${company.domain}` : undefined,
       company.country ? `Known country: ${company.country}` : undefined,
-      "Return strict JSON with {\"address\":\"...\",\"city\":\"...\",\"zip\":\"...\",\"state\":\"...\",\"country\":\"...\"}. Use empty strings for unknown values."
+      "Return strict JSON with {\"address\":\"...\",\"city\":\"...\",\"zip\":\"...\",\"state\":\"...\",\"country\":\"...\",\"verificationStatus\":\"verified|uncertain|not_found\",\"confidence\":0.0,\"sourceType\":\"official_website|legal_notice|map_listing|directory|other\",\"reason\":\"...\"}. Use empty strings for unknown values."
     ].filter(Boolean).join("\n\n");
 
     try {
       const response = await this.runWebSearch(prompt, 320, "preResearch");
-      const parsed = this.parseJson<{ address?: string; city?: string; zip?: string; state?: string; country?: string }>(response.text);
+      const parsed = this.parseJson<{
+        address?: string;
+        city?: string;
+        zip?: string;
+        state?: string;
+        country?: string;
+        verificationStatus?: string;
+        confidence?: number | string;
+      }>(response.text);
+      const verificationStatus = parsed.verificationStatus?.trim().toLowerCase();
+      const confidence = typeof parsed.confidence === "number"
+        ? parsed.confidence
+        : Number.parseFloat(String(parsed.confidence ?? ""));
       const result = {
         address: parsed.address?.trim(),
         city: parsed.city?.trim(),
@@ -865,10 +880,50 @@ export class OpenAIWebSearchClient {
         country: parsed.country?.trim() || company.country
       };
 
+      if (!this.looksLikeStructuredPostalAddress(result.address, result.city, result.zip)) {
+        return null;
+      }
+
+      if (verificationStatus === "not_found") {
+        return null;
+      }
+
+      if (Number.isFinite(confidence) && confidence < 0.2) {
+        return null;
+      }
+
       return result.address || result.city || result.zip || result.state || result.country ? result : null;
     } catch {
       return null;
     }
+  }
+
+  private looksLikeStructuredPostalAddress(address?: string, city?: string, zip?: string): boolean {
+    const street = address?.trim();
+    const locality = city?.trim();
+    const postalCode = zip?.trim();
+
+    if (!street || !locality || !postalCode) {
+      return false;
+    }
+
+    if (street.length > 120 || /[.!?]/.test(street)) {
+      return false;
+    }
+
+    const hasStreetKeyword = /(straße|strasse|street|road|avenue|platz|allee|gasse|lane|boulevard|drive|ring|weg|damm|ufer|rue|calle|carrer|plaza|laan|straat|via|viale|quai|court|terrace|chauss[ée]e)/i.test(street);
+    const hasSimpleHouseNumberPattern = /^\d{1,4}[a-zA-Z]?\s+.+/.test(street)
+      || /^.+\s+\d{1,4}[a-zA-Z]?$/.test(street);
+
+    if (!hasStreetKeyword && !hasSimpleHouseNumberPattern) {
+      return false;
+    }
+
+    if (/\d/.test(locality) || locality.split(/\s+/).length > 4) {
+      return false;
+    }
+
+    return /^[A-Z]{0,2}[\- ]?\d{4,5}$/i.test(postalCode.replace(/\s+/g, " "));
   }
 
   async findCompanyContactInfo(company: Pick<PreCategorizedCompany, "name" | "domain" | "country">): Promise<{

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readiness } from "../../src/config";
 import { HubSpotClient } from "../../src/clients/hubspot";
 import { PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../../src/types";
 
@@ -59,43 +60,114 @@ test("previewHubSpotSync builds company field previews from the same mapping as 
 
 test("syncQualifiedCompanies reports missing required company properties before live sync", async () => {
   const client = new HubSpotClient();
+  const previousHubSpotConfigured = readiness.hubspotConfigured;
+  readiness.hubspotConfigured = true;
 
-  client["requestJson"] = async (url: string, init?: RequestInit) => {
-    if (url.endsWith("/crm/v3/properties/companies") && !init?.method) {
-      return {
-        results: [
-          { name: "ai_cc_cold_call_email" },
-          { name: "ai_cc_cold_call_linkedin" },
-          { name: "ai_cc_category" }
-        ]
-      };
-    }
+  try {
+    client["requestJson"] = async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/crm/v3/properties/companies") && !init?.method) {
+        return {
+          results: [
+            { name: "ai_cc_cold_call_email" },
+            { name: "ai_cc_cold_call_linkedin" },
+            { name: "ai_cc_category" }
+          ]
+        };
+      }
 
-    if (url.endsWith("/crm/v3/properties/contacts") && !init?.method) {
-      return {
-        results: [
-          { name: "email" },
-          { name: "firstname" },
-          { name: "lastname" }
-        ]
-      };
-    }
+      if (url.endsWith("/crm/v3/properties/contacts") && !init?.method) {
+        return {
+          results: [
+            { name: "email" },
+            { name: "firstname" },
+            { name: "lastname" }
+          ]
+        };
+      }
 
-    throw new Error(`Unexpected request: ${url} ${init?.method ?? "GET"}`);
-  };
+      if (url.includes("/associations/contacts") && init?.method === "GET") {
+        return { results: [] };
+      }
 
-  client["upsertCompany"] = async () => ({ id: "company-1", properties: {} });
+      if (url.endsWith("/crm/v3/objects/contacts/batch/read") && init?.method === "POST") {
+        return { results: [] };
+      }
 
-  const result = await client.syncQualifiedCompanies(
-    [buildSampleCompany()],
-    [buildSampleBrief()],
-    new Map(),
-    false
-  );
+      throw new Error(`Unexpected request: ${url} ${init?.method ?? "GET"}`);
+    };
 
-  assert.equal(result.companySyncedCount, 1);
-  assert.match(result.errors[0] ?? "", /Missing required HubSpot company properties/i);
-  assert.match(result.errors[0] ?? "", /ai_cc_email_subject/i);
+    client["upsertCompany"] = async () => ({ id: "company-1", properties: {} });
+
+    const result = await client.syncQualifiedCompanies(
+      [buildSampleCompany()],
+      [buildSampleBrief()],
+      new Map(),
+      false
+    );
+
+    assert.equal(result.companySyncedCount, 1);
+    assert.match(result.errors[0] ?? "", /Missing required HubSpot company properties/i);
+    assert.match(result.errors[0] ?? "", /ai_cc_email_subject/i);
+  } finally {
+    readiness.hubspotConfigured = previousHubSpotConfigured;
+  }
+});
+
+test("syncQualifiedCompanies still creates a company when address lookup fails", async () => {
+  const client = new HubSpotClient();
+  const previousHubSpotConfigured = readiness.hubspotConfigured;
+  readiness.hubspotConfigured = true;
+
+  try {
+    client["extractCompanyAddress"] = async () => {
+      throw new TypeError("fetch failed");
+    };
+
+    client["requestJson"] = async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/crm/v3/properties/companies") && !init?.method) {
+        return {
+          results: [
+            { name: "name" },
+            { name: "domain" },
+            { name: "description" },
+            { name: "ai_cc_category" }
+          ]
+        };
+      }
+
+      if (url.endsWith("/crm/v3/properties/contacts") && !init?.method) {
+        return { results: [] };
+      }
+
+      if (url.endsWith("/crm/v3/objects/companies") && init?.method === "POST") {
+        return { id: "company-1", properties: {} };
+      }
+
+      if (url.includes("/associations/contacts") && init?.method === "GET") {
+        return { results: [] };
+      }
+
+      if (url.endsWith("/crm/v3/objects/contacts/batch/read") && init?.method === "POST") {
+        return { results: [] };
+      }
+
+      throw new Error(`Unexpected request: ${url} ${init?.method ?? "GET"}`);
+    };
+
+    client["searchObject"] = async () => null;
+
+    const result = await client.syncQualifiedCompanies(
+      [buildSampleCompany()],
+      [buildSampleBrief()],
+      new Map(),
+      false
+    );
+
+    assert.equal(result.companySyncedCount, 1);
+    assert.deepEqual(result.failedCompanyKeys, []);
+  } finally {
+    readiness.hubspotConfigured = previousHubSpotConfigured;
+  }
 });
 
 test("previewHubSpotSync keeps generic company mailboxes when the email is usable", async () => {
@@ -146,7 +218,7 @@ test("previewHubSpotSync still skips low-value noreply mailboxes without person 
   assert.match(preview.contacts[0]?.skipReason ?? "", /Low-value mailbox/i);
 });
 
-test("previewHubSpotSync drops company LinkedIn URLs from contact properties", async () => {
+test("previewHubSpotSync keeps company LinkedIn URLs as a reachable fallback channel", async () => {
   const client = new HubSpotClient();
   const preview = await client.previewHubSpotSync(
     buildSampleCompany(),
@@ -165,7 +237,7 @@ test("previewHubSpotSync drops company LinkedIn URLs from contact properties", a
   );
 
   assert.equal(preview.contacts[0]?.skipped, false);
-  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, undefined);
+  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, "https://www.linkedin.com/company/sample-automation");
   assert.equal(preview.contacts[0]?.properties.email, "martin@sample-automation.de");
 });
 
@@ -186,6 +258,103 @@ test("previewHubSpotSync keeps generic mailbox contacts when a phone number is p
   assert.equal(preview.contacts[0]?.skipped, false);
   assert.equal(preview.contacts[0]?.properties.email, "info@pexon-consulting.de");
   assert.equal(preview.contacts[0]?.properties.phone, "+49 69 96759440");
+});
+
+test("previewHubSpotSync clears false names on generic mailbox contacts without personal LinkedIn", async () => {
+  const client = new HubSpotClient();
+  const preview = await client.previewHubSpotSync(
+    buildSampleCompany(),
+    buildSampleBrief(),
+    [
+      {
+        firstName: "Dublin",
+        lastName: "Core",
+        email: "info@sample-automation.de",
+        phone: "+49 89 1234",
+        jobTitle: "Managing Director",
+        sourceUrl: "https://sample-automation.de/kontakt",
+        label: "website_named_contact"
+      }
+    ],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.contacts[0]?.skipped, false);
+  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
+  assert.equal(preview.contacts[0]?.properties.lastname, undefined);
+  assert.equal(preview.contacts[0]?.properties.jobtitle, undefined);
+  assert.equal(preview.contacts[0]?.properties.email, "info@sample-automation.de");
+  assert.equal(preview.contacts[0]?.properties.phone, "+49 89 1234");
+});
+
+test("previewHubSpotSync clears mailbox names that only mirror the company domain", async () => {
+  const client = new HubSpotClient();
+  const preview = await client.previewHubSpotSync(
+    buildSampleCompany(),
+    buildSampleBrief(),
+    [
+      {
+        email: "framaval@framaval.com",
+        firstName: "Framaval",
+        phone: "+34 968 23 29 43",
+        jobTitle: "Public contact",
+        sourceUrl: "https://framaval.com/contact",
+        label: "public_named_mailbox"
+      }
+    ],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.contacts[0]?.skipped, false);
+  assert.equal(preview.contacts[0]?.properties.email, "framaval@framaval.com");
+  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
+  assert.equal(preview.contacts[0]?.properties.lastname, undefined);
+});
+
+test("previewHubSpotSync strips generic CTA job titles from personal contacts", async () => {
+  const client = new HubSpotClient();
+  const preview = await client.previewHubSpotSync(
+    buildSampleCompany(),
+    buildSampleBrief(),
+    [
+      {
+        firstName: "Christian",
+        lastName: "Hanbauer",
+        phone: "+43 3182 490130",
+        linkedinUrl: "https://www.linkedin.com/in/christian-hanbauer",
+        jobTitle: "Ihre Ansprechpartner",
+        sourceUrl: "https://www.linkedin.com/in/christian-hanbauer",
+        label: "linkedin_profile"
+      }
+    ],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.contacts[0]?.skipped, false);
+  assert.equal(preview.contacts[0]?.properties.firstname, "Christian");
+  assert.equal(preview.contacts[0]?.properties.lastname, "Hanbauer");
+  assert.equal(preview.contacts[0]?.properties.jobtitle, undefined);
+  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, "https://www.linkedin.com/in/christian-hanbauer");
+});
+
+test("previewHubSpotSync skips name-only contacts without a reachable channel", async () => {
+  const client = new HubSpotClient();
+  const preview = await client.previewHubSpotSync(
+    buildSampleCompany(),
+    buildSampleBrief(),
+    [
+      {
+        firstName: "Martin",
+        lastName: "Peres",
+        sourceUrl: "https://octum.de/team",
+        label: "website_named_contact"
+      }
+    ],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.contacts[0]?.skipped, true);
+  assert.match(preview.contacts[0]?.skipReason ?? "", /no reachable identity/i);
 });
 
 test("previewHubSpotSync includes resolved address fields when address lookup is enabled", async () => {
@@ -394,6 +563,24 @@ test("name extraction rejects CTA-style phrases", () => {
   assert.equal(client["extractNameFromLine"]("What To Expect"), null);
   assert.equal(client["extractNameFromLine"]("Aislab Technology"), null);
   assert.equal(client["extractNameFromLine"]("Wie MES"), null);
+  assert.equal(client["extractNameFromLine"]("Mailen Sie Uns"), null);
+});
+
+test("previewHubSpotSync derives personal LinkedIn urls from sourceUrl when linkedinUrl is missing", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  const preview = await client.previewHubSpotSync(company, undefined, [
+    {
+      firstName: "Luca",
+      lastName: "Keresztesi",
+      sourceUrl: "https://hu.linkedin.com/in/keresztesiluca",
+      label: "linkedin_profile"
+    }
+  ]);
+
+  assert.equal(preview.contacts[0]?.skipped, false);
+  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, "https://hu.linkedin.com/in/keresztesiluca");
 });
 
 test("email extraction decodes HTML entity obfuscation", () => {
@@ -430,6 +617,107 @@ test("company alias extraction ignores contact CTA phrases from page text", () =
   );
 
   assert.ok(!aliases.includes("Kontaktieren Sie AISLab GmbH"));
+});
+
+test("mergeDiscoveredContacts does not merge unrelated contacts only because they share a source url", () => {
+  const client = new HubSpotClient();
+  const merged = client["mergeDiscoveredContacts"](
+    [{
+      firstName: "David",
+      lastName: "Fehrenbach",
+      email: "contact@preml.io",
+      sourceUrl: "https://preml.io/team",
+      label: "public_generic_mailbox"
+    }],
+    [{
+      firstName: "Jonas",
+      lastName: "Fehrenbach",
+      linkedinUrl: "https://www.linkedin.com/in/jonas-fehrenbach-7063641ba",
+      sourceUrl: "https://preml.io/team",
+      label: "linkedin_profile"
+    }]
+  );
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged.some((contact: PublicContactCandidate) => contact.email === "contact@preml.io" && !contact.linkedinUrl), true);
+  assert.equal(merged.some((contact: PublicContactCandidate) => contact.linkedinUrl === "https://www.linkedin.com/in/jonas-fehrenbach-7063641ba" && !contact.email), true);
+});
+
+test("name extraction rejects tax and legal fragments as person names", () => {
+  const client = new HubSpotClient();
+
+  assert.equal(client["extractNameFromLine"]("UStIdNr. DE 812345678"), null);
+  assert.equal(client["extractNameFromLine"]("VAT DE123456789"), null);
+});
+
+test("existing generic mailbox contacts clear non-person names during cleanup", () => {
+  const client = new HubSpotClient();
+  const cleanup = client["buildExistingContactCleanupProperties"]({
+    id: "contact-1",
+    properties: {
+      email: "info@platiscan.com",
+      firstname: "Ustidnr",
+      lastname: "De"
+    }
+  }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
+
+  assert.deepEqual(cleanup, {
+    firstname: "",
+    lastname: ""
+  });
+});
+
+test("existing generic mailbox contacts clear mismatched LinkedIn urls during cleanup", () => {
+  const client = new HubSpotClient();
+  const cleanup = client["buildExistingContactCleanupProperties"]({
+    id: "contact-2",
+    properties: {
+      email: "contact@preml.io",
+      firstname: "David",
+      lastname: "Fehrenbach",
+      hs_linkedin_url: "https://www.linkedin.com/in/jonas-fehrenbach-7063641ba"
+    }
+  }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
+
+  assert.deepEqual(cleanup, {
+    hs_linkedin_url: ""
+  });
+});
+
+test("existing contacts clear mailbox names derived from the company domain and generic CTA titles during cleanup", () => {
+  const client = new HubSpotClient();
+  const cleanup = client["buildExistingContactCleanupProperties"]({
+    id: "contact-3",
+    properties: {
+      email: "framaval@framaval.com",
+      firstname: "Framaval",
+      lastname: "",
+      jobtitle: "Ihre Ansprechpartner"
+    }
+  }, new Set(["firstname", "lastname", "jobtitle"]));
+
+  assert.deepEqual(cleanup, {
+    firstname: "",
+    lastname: "",
+    jobtitle: ""
+  });
+});
+
+test("existing generic mailbox contacts clear stale person job titles during cleanup", () => {
+  const client = new HubSpotClient();
+  const cleanup = client["buildExistingContactCleanupProperties"]({
+    id: "contact-4",
+    properties: {
+      email: "info@lanz.ai",
+      firstname: "",
+      lastname: "",
+      jobtitle: "Managing Director"
+    }
+  }, new Set(["jobtitle"]));
+
+  assert.deepEqual(cleanup, {
+    jobtitle: ""
+  });
 });
 
 test("descriptive company labels reject LinkedIn hits that do not mention the domain token", () => {
@@ -546,6 +834,36 @@ test("browser fallback is not triggered by embedded recaptcha widgets on otherwi
   );
 
   assert.equal(shouldRetry, false);
+});
+
+test("requestJson retries transient fetch failures before succeeding", async () => {
+  const client = new HubSpotClient();
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+
+  globalThis.fetch = async () => {
+    attempts += 1;
+
+    if (attempts < 3) {
+      throw new TypeError("fetch failed");
+    }
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: {
+        "content-type": "application/json"
+      }
+    }) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
+  };
+
+  try {
+    const response = await client["requestJson"]<{ ok: boolean }>("https://api.hubapi.com/test");
+
+    assert.deepEqual(response, { ok: true });
+    assert.equal(attempts, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("website contact filter rejects business-phrase false positives", () => {
@@ -867,6 +1185,7 @@ test("findPublicContacts adds official website email and phone from web search w
   const company = buildSampleCompany();
 
   client["collectCandidatePages"] = async () => [];
+  client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
   client["openAIWebSearchClient"]["findCompanyContactInfo"] = async () => ({
     emails: ["info@sample-automation.de"],
     phones: ["+49 30 123456"],

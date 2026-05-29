@@ -56,6 +56,7 @@ const SIDEBAR_CATEGORY_OPTIONS: CategoryOption[] = [
 ];
 
 const SIDEBAR_DEFAULT_TARGET_LEADS = 20;
+const SIDEBAR_DEFAULT_EXA_QUERY_COUNT = 4;
 
 type SettingsPayload = {
   settings?: {
@@ -64,6 +65,7 @@ type SettingsPayload = {
     targetCategories?: string[];
     companySearchMode?: "internet_research" | "open_crawler_search" | "apollo_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
     syncToHubSpot?: boolean;
+    exaQueryCount?: number;
     exaApiKey?: string;
     diffbotToken?: string;
     maxRuntimeMs?: number;
@@ -72,6 +74,8 @@ type SettingsPayload = {
     contactSearchConcurrency?: number;
   };
 };
+
+type SidebarSettingsUpdatePayload = NonNullable<SettingsPayload["settings"]>;
 
 type LatestLeadRunPayload = {
   selectableCategories?: CategoryOption[];
@@ -113,6 +117,9 @@ type RunStatusPayload = {
     };
     workerMetrics?: {
       exaRequests?: number;
+      exaReturnedResults?: number;
+      exaFilteredByExcludedDomains?: number;
+      exaDuplicatesRemoved?: number;
       exaRawFound?: number;
       aiAccepted?: number;
       aiRejectedDifferentCategory?: number;
@@ -121,6 +128,7 @@ type RunStatusPayload = {
       contactCompleted?: number;
       hubspotWritten?: number;
       queueSizes?: {
+        exaInFlight?: number;
         aiWaiting?: number;
         aiInFlight?: number;
         waitingAfterAi?: number;
@@ -144,9 +152,14 @@ type RunStatusPayload = {
       excludedDomains?: string[];
       executedQueries?: number;
       totalQueries?: number;
+      returnedResults?: number;
+      filteredByExcludedDomains?: number;
+      duplicatesRemoved?: number;
       rawCompaniesFound?: number;
       currentBatchQueryStats?: Array<{
         query: string;
+        returnedResults?: number;
+        filteredByExcludedDomains?: number;
         rawFound: number;
         duplicates: number;
         accepted: number;
@@ -215,7 +228,7 @@ function formatQueryStats(stats: NonNullable<NonNullable<RunStatusPayload["runSt
 
     return [
       `Query: ${entry.query}`,
-      `rawFound=${entry.rawFound}, duplicates=${entry.duplicates}, accepted=${entry.accepted}, rejectedDifferentCategory=${entry.rejectedDifferentCategory}, rejectedOther=${entry.rejectedOther}`,
+      `returned=${entry.returnedResults ?? 0}, excluded=${entry.filteredByExcludedDomains ?? 0}, rawFound=${entry.rawFound}, duplicates=${entry.duplicates}, accepted=${entry.accepted}, rejectedDifferentCategory=${entry.rejectedDifferentCategory}, rejectedOther=${entry.rejectedOther}`,
       categoryBreakdown ? `categories: ${categoryBreakdown}` : undefined
     ].filter(Boolean).join("\n");
   }).join("\n\n");
@@ -287,6 +300,36 @@ function normalizeSidebarSearchMode(
   return "exa_search";
 }
 
+function buildSidebarSettingsPayload(input: {
+  targetLeadCount: number;
+  market: string;
+  selectedCategories: string[];
+  companySearchMode: SidebarSearchMode;
+  syncToHubSpot: boolean;
+  exaQueryCount: number;
+  exaApiKey: string;
+  diffbotToken: string;
+  maxRuntimeMinutes: number;
+  aiPrefilterConcurrency: number;
+  outreachPrepConcurrency: number;
+  contactSearchConcurrency: number;
+}): SidebarSettingsUpdatePayload {
+  return {
+    targetLeadCount: Math.max(input.targetLeadCount, SIDEBAR_DEFAULT_TARGET_LEADS),
+    market: input.market,
+    targetCategories: input.selectedCategories,
+    companySearchMode: input.companySearchMode,
+    syncToHubSpot: input.syncToHubSpot,
+    exaQueryCount: Math.max(1, input.exaQueryCount),
+    exaApiKey: input.exaApiKey.trim(),
+    diffbotToken: input.diffbotToken.trim(),
+    maxRuntimeMs: Math.round(Math.min(180, Math.max(1, input.maxRuntimeMinutes || 20)) * 60_000),
+    aiPrefilterConcurrency: Math.max(1, input.aiPrefilterConcurrency),
+    outreachPrepConcurrency: Math.max(1, input.outreachPrepConcurrency),
+    contactSearchConcurrency: Math.max(1, input.contactSearchConcurrency)
+  };
+}
+
 function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCardProps) {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isStarting, setIsStarting] = React.useState(false);
@@ -302,12 +345,16 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const [errorMessage, setErrorMessage] = React.useState<string>("");
   const [successMessage, setSuccessMessage] = React.useState<string>("");
   const [syncToHubSpot, setSyncToHubSpot] = React.useState(true);
+  const [exaQueryCount, setExaQueryCount] = React.useState<number>(SIDEBAR_DEFAULT_EXA_QUERY_COUNT);
   const [exaApiKey, setExaApiKey] = React.useState("");
   const [diffbotToken, setDiffbotToken] = React.useState("");
   const [maxRuntimeMinutes, setMaxRuntimeMinutes] = React.useState<number>(20);
   const [aiPrefilterConcurrency, setAiPrefilterConcurrency] = React.useState<number>(8);
   const [outreachPrepConcurrency, setOutreachPrepConcurrency] = React.useState<number>(6);
   const [contactSearchConcurrency, setContactSearchConcurrency] = React.useState<number>(8);
+  const [settingsSaveState, setSettingsSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+  const lastSavedSettingsRef = React.useRef<string>("");
+  const hasLoadedSettingsRef = React.useRef(false);
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
   const consoleUrl = `${normalizedBaseUrl}/hubspot/ui?portalId=${encodeURIComponent(portalId)}&key=${encodeURIComponent(sharedKey)}`;
   const canOpenConsole = Boolean(normalizedBaseUrl && sharedKey && openIframe);
@@ -318,11 +365,12 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
 
   const requestJson = React.useCallback(async <T,>(
     pathname: string,
-    options?: { method?: "GET" | "POST"; timeout?: number }
+    options?: { method?: "GET" | "POST" | "PUT"; timeout?: number; body?: unknown }
   ) => {
     const response = await hubspot.fetch(`${normalizedBaseUrl}${pathname}?key=${encodeURIComponent(sharedKey)}`, {
       method: options?.method ?? "GET",
-      timeout: options?.timeout ?? 120000
+      timeout: options?.timeout ?? 120000,
+      body: options?.body
     });
 
     let payload: unknown = undefined;
@@ -363,6 +411,34 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const refreshRuntimeData = React.useCallback(async () => {
     await Promise.all([refreshRunStatus(), refreshLatestRun()]);
   }, [refreshLatestRun, refreshRunStatus]);
+
+  const currentSettingsPayload = React.useMemo(() => buildSidebarSettingsPayload({
+    targetLeadCount,
+    market,
+    selectedCategories,
+    companySearchMode,
+    syncToHubSpot,
+    exaQueryCount,
+    exaApiKey,
+    diffbotToken,
+    maxRuntimeMinutes,
+    aiPrefilterConcurrency,
+    outreachPrepConcurrency,
+    contactSearchConcurrency
+  }), [
+    aiPrefilterConcurrency,
+    companySearchMode,
+    contactSearchConcurrency,
+    diffbotToken,
+    exaApiKey,
+    exaQueryCount,
+    market,
+    maxRuntimeMinutes,
+    outreachPrepConcurrency,
+    selectedCategories,
+    syncToHubSpot,
+    targetLeadCount
+  ]);
 
   const toggleCategory = (category: string, checked: boolean) => {
     setSelectedCategories((current) => {
@@ -411,6 +487,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         setMarket(settingsPayload.settings?.market ?? "Europe");
         setCompanySearchMode(normalizeSidebarSearchMode(settingsPayload.settings?.companySearchMode));
         setSyncToHubSpot(settingsPayload.settings?.syncToHubSpot ?? true);
+        setExaQueryCount(settingsPayload.settings?.exaQueryCount ?? SIDEBAR_DEFAULT_EXA_QUERY_COUNT);
         setExaApiKey(settingsPayload.settings?.exaApiKey ?? "");
         setDiffbotToken(settingsPayload.settings?.diffbotToken ?? "");
         setMaxRuntimeMinutes(Math.max(1, Math.round((settingsPayload.settings?.maxRuntimeMs ?? 1_200_000) / 60_000)));
@@ -418,9 +495,26 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         setOutreachPrepConcurrency(settingsPayload.settings?.outreachPrepConcurrency ?? 6);
         setContactSearchConcurrency(settingsPayload.settings?.contactSearchConcurrency ?? 8);
         setSelectedCategories(settingsPayload.settings?.targetCategories ?? []);
+        lastSavedSettingsRef.current = JSON.stringify(buildSidebarSettingsPayload({
+          targetLeadCount: Math.max(settingsPayload.settings?.targetLeadCount ?? SIDEBAR_DEFAULT_TARGET_LEADS, SIDEBAR_DEFAULT_TARGET_LEADS),
+          market: settingsPayload.settings?.market ?? "Europe",
+          selectedCategories: settingsPayload.settings?.targetCategories ?? [],
+          companySearchMode: normalizeSidebarSearchMode(settingsPayload.settings?.companySearchMode),
+          syncToHubSpot: settingsPayload.settings?.syncToHubSpot ?? true,
+          exaQueryCount: settingsPayload.settings?.exaQueryCount ?? SIDEBAR_DEFAULT_EXA_QUERY_COUNT,
+          exaApiKey: settingsPayload.settings?.exaApiKey ?? "",
+          diffbotToken: settingsPayload.settings?.diffbotToken ?? "",
+          maxRuntimeMinutes: Math.max(1, Math.round((settingsPayload.settings?.maxRuntimeMs ?? 1_200_000) / 60_000)),
+          aiPrefilterConcurrency: settingsPayload.settings?.aiPrefilterConcurrency ?? 8,
+          outreachPrepConcurrency: settingsPayload.settings?.outreachPrepConcurrency ?? 6,
+          contactSearchConcurrency: settingsPayload.settings?.contactSearchConcurrency ?? 8
+        }));
+        hasLoadedSettingsRef.current = true;
+        setSettingsSaveState("saved");
       } catch (error) {
         if (!isCancelled) {
           setErrorMessage(error instanceof Error ? error.message : "Lead-Agent-Daten konnten nicht geladen werden.");
+          setSettingsSaveState("error");
         }
       } finally {
         if (!isCancelled) {
@@ -442,6 +536,36 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       isCancelled = true;
     };
   }, [canFetch, refreshRuntimeData, requestJson]);
+
+  React.useEffect(() => {
+    if (!canFetch || isLoading || !hasLoadedSettingsRef.current || Boolean(runStatus?.running)) {
+      return;
+    }
+
+    const serializedSettings = JSON.stringify(currentSettingsPayload);
+    if (serializedSettings === lastSavedSettingsRef.current) {
+      return;
+    }
+
+    setSettingsSaveState("saving");
+    const handle = setTimeout(() => {
+      requestJson<{ settings?: SidebarSettingsUpdatePayload }>("/api/control/settings", {
+        method: "PUT",
+        timeout: 20000,
+        body: currentSettingsPayload
+      })
+        .then(() => {
+          lastSavedSettingsRef.current = serializedSettings;
+          setSettingsSaveState("saved");
+        })
+        .catch((error) => {
+          setSettingsSaveState("error");
+          setErrorMessage(error instanceof Error ? error.message : "Settings konnten nicht gespeichert werden.");
+        });
+    }, 800);
+
+    return () => clearTimeout(handle);
+  }, [canFetch, currentSettingsPayload, isLoading, requestJson, runStatus?.running]);
 
   React.useEffect(() => {
     if (!canFetch) {
@@ -541,6 +665,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           dryRun: false,
           syncToHubSpot,
           reuseQualifiedCompanyCache: false,
+          exaQueryCount,
           exaApiKey: exaApiKey.trim() || undefined,
           diffbotToken: diffbotToken.trim() || undefined,
           maxRuntimeMs: Math.round(Math.min(180, Math.max(1, maxRuntimeMinutes || 20)) * 60_000),
@@ -608,6 +733,13 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
             {runStatus?.stageLabel || (runStatus?.running ? "Laeuft" : "Bereit")}
           </StatusTag>
         </Flex>
+        <StatusTag variant={settingsSaveState === "error" ? "danger" : settingsSaveState === "saving" ? "warning" : "success"}>
+          {settingsSaveState === "saving"
+            ? "Settings werden gespeichert"
+            : settingsSaveState === "error"
+              ? "Settings nicht gespeichert"
+              : "Settings geladen"}
+        </StatusTag>
         <ProgressBar
           title={runStatus?.running ? "Lead-Run Fortschritt" : "Noch kein aktiver Lead-Run."}
           value={progressValue}
@@ -638,8 +770,8 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         )}
         {runStatus?.workerMetrics && (
           <Text>
-            Exa Requests: {runStatus.workerMetrics.exaRequests ?? 0}. Roh gefunden: {runStatus.workerMetrics.exaRawFound ?? 0}. KI passend: {runStatus.workerMetrics.aiAccepted ?? 0}. 
-            Wartend nach KI: {runStatus.workerMetrics.queueSizes?.waitingAfterAi ?? 0}. KI in Arbeit: {runStatus.workerMetrics.queueSizes?.aiInFlight ?? 0}. 
+            Exa Requests: {runStatus.workerMetrics.exaRequests ?? 0}. Exa API Treffer: {runStatus.workerMetrics.exaReturnedResults ?? 0}. Durch Excludes verworfen: {runStatus.workerMetrics.exaFilteredByExcludedDomains ?? 0}. Doppelte Firmen: {runStatus.workerMetrics.exaDuplicatesRemoved ?? 0}. Unique Firmen: {runStatus.workerMetrics.exaRawFound ?? 0}. KI passend: {runStatus.workerMetrics.aiAccepted ?? 0}. 
+            Exa in Arbeit: {runStatus.workerMetrics.queueSizes?.exaInFlight ?? 0}. Wartend nach KI: {runStatus.workerMetrics.queueSizes?.waitingAfterAi ?? 0}. KI in Arbeit: {runStatus.workerMetrics.queueSizes?.aiInFlight ?? 0}. 
             Outreach in Arbeit: {runStatus.workerMetrics.queueSizes?.outreachInFlight ?? 0}. Kontakte in Arbeit: {runStatus.workerMetrics.queueSizes?.contactInFlight ?? 0}. 
             HubSpot geschrieben: {runStatus.workerMetrics.hubspotWritten ?? 0}.
           </Text>
@@ -651,7 +783,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           <Flex direction="column" gap="extra-small">
             <Heading>Live Search Debug</Heading>
             <Text>
-              Filter: {runStatus.liveSearchDebug.filterName || "unbekannt"}. Exa Queries: {runStatus.liveSearchDebug.executedQueries ?? 0}/{runStatus.liveSearchDebug.totalQueries ?? 0}. Roh gefunden: {runStatus.liveSearchDebug.rawCompaniesFound ?? 0}.
+              Filter: {runStatus.liveSearchDebug.filterName || "unbekannt"}. Exa Queries: {runStatus.liveSearchDebug.executedQueries ?? 0}/{runStatus.liveSearchDebug.totalQueries ?? 0}. Exa API Treffer: {runStatus.liveSearchDebug.returnedResults ?? 0}. Exclude-Filter: {runStatus.liveSearchDebug.filteredByExcludedDomains ?? 0}. Doppelte Firmen: {runStatus.liveSearchDebug.duplicatesRemoved ?? 0}. Unique Firmen: {runStatus.liveSearchDebug.rawCompaniesFound ?? 0}.
             </Text>
             {runStatus.liveSearchDebug.lastExecutedQuery && (
               <TextArea
@@ -736,10 +868,19 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
         />
         <NumberInput
+          label="Exa Queries pro Batch"
+          name="exaQueryCount"
+          min={1}
+          max={12}
+          step={1}
+          value={exaQueryCount}
+          onChange={(value) => setExaQueryCount(Math.max(1, Math.min(12, Number(value) || SIDEBAR_DEFAULT_EXA_QUERY_COUNT)))}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <NumberInput
           label="KI Vorfilter parallel"
           name="aiPrefilterConcurrency"
           min={1}
-          max={32}
           step={1}
           value={aiPrefilterConcurrency}
           onChange={(value) => setAiPrefilterConcurrency(Number(value) || 1)}
@@ -749,7 +890,6 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           label="Outreach parallel"
           name="outreachPrepConcurrency"
           min={1}
-          max={32}
           step={1}
           value={outreachPrepConcurrency}
           onChange={(value) => setOutreachPrepConcurrency(Number(value) || 1)}
@@ -759,7 +899,6 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           label="Kontaktsuche parallel"
           name="contactSearchConcurrency"
           min={1}
-          max={32}
           step={1}
           value={contactSearchConcurrency}
           onChange={(value) => setContactSearchConcurrency(Number(value) || 1)}

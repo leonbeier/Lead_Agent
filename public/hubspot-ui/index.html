@@ -898,7 +898,7 @@
             runDeepResearch: false,
             dryRun: false,
             syncToHubSpot: true,
-            exaQueryCount: 1,
+            exaQueryCount: 4,
             aiPrefilterConcurrency: 8,
             outreachPrepConcurrency: 6,
             contactSearchConcurrency: 8,
@@ -2299,10 +2299,7 @@ ${message.content || ""}`).join("\n\n");
       async function saveSettings() {
         try {
           setStatus(settingsStatus, "Speichere Settings...");
-          const result = await requestJson("/api/control/settings", {
-            method: "PUT",
-            body: JSON.stringify(collectSettings())
-          });
+          const result = await persistCurrentSettings();
           if (bootstrapData) {
             bootstrapData.settings = result.settings;
           }
@@ -2314,6 +2311,19 @@ ${message.content || ""}`).join("\n\n");
           setStatus(settingsStatus, "Settings konnten nicht gespeichert werden", true);
           resultOutput.textContent = String(error);
         }
+      }
+
+      async function persistCurrentSettings() {
+        const result = await requestJson("/api/control/settings", {
+          method: "PUT",
+          body: JSON.stringify(collectSettings())
+        });
+
+        if (bootstrapData) {
+          bootstrapData.settings = result.settings;
+        }
+
+        return result;
       }
 
       async function refreshRunSurfaces() {
@@ -2384,6 +2394,7 @@ ${message.content || ""}`).join("\n\n");
                 hubspotWritten: runStatus.workerMetrics.hubspotWritten ?? 0,
                 queueSizes: queueSizes
                   ? {
+                      exaInFlight: queueSizes.exaInFlight ?? 0,
                       aiWaiting: queueSizes.aiWaiting ?? 0,
                       aiInFlight: queueSizes.aiInFlight ?? 0,
                       waitingAfterAi: queueSizes.waitingAfterAi ?? 0,
@@ -2440,6 +2451,8 @@ ${message.content || ""}`).join("\n\n");
       async function triggerRun(endpoint) {
         try {
           resultOutput.textContent = "Lauf wird gestartet...";
+          await persistCurrentSettings();
+          setStatus(settingsStatus, "Settings gespeichert");
           const result = await requestJson(endpoint, {
             method: "POST",
             body: JSON.stringify(collectSettings())

@@ -28,6 +28,9 @@ type QueueName = "exa" | "ai" | "outreach" | "contact" | "hubspot" | "screening"
 
 interface WorkerRunMetrics {
   exaRequests: number;
+  exaReturnedResults: number;
+  exaFilteredByExcludedDomains: number;
+  exaDuplicatesRemoved: number;
   exaRawFound: number;
   aiAccepted: number;
   aiRejectedDifferentCategory: number;
@@ -38,6 +41,7 @@ interface WorkerRunMetrics {
   contactFailed: number;
   hubspotWritten: number;
   queueSizes: {
+    exaInFlight: number;
     aiWaiting: number;
     aiInFlight: number;
     waitingAfterAi: number;
@@ -82,10 +86,15 @@ interface SearchAggregate {
   plannedQueries?: string[];
   promptMessages?: Array<{ role: string; content: string }>;
   excludedDomains?: string[];
+  returnedResults?: number;
+  filteredByExcludedDomains?: number;
+  duplicatesRemoved?: number;
   rawFound: number;
   categoryBreakdown: Record<LeadCategory, number>;
   queryStats: Array<{
     query: string;
+    returnedResults: number;
+    filteredByExcludedDomains: number;
     rawFound: number;
     duplicates: number;
     accepted: number;
@@ -94,6 +103,13 @@ interface SearchAggregate {
     categoryBreakdown: Record<LeadCategory, number>;
   }>;
   decisionSamples: SearchHistoryDecisionSample[];
+}
+
+interface PendingExaQueryPlan {
+  remainingQueries: string[];
+  plannedQueries: string[];
+  defaultQueries?: string[];
+  promptMessages?: Array<{ role: string; content: string }>;
 }
 
 type ScreeningTask =
@@ -116,6 +132,7 @@ interface LeadWorkerRunDependencies {
   hubSpotClient?: HubSpotClient;
   leadPipelineAgent?: LeadPipelineAgent;
   contactTaskTimeoutMs?: number;
+  hubspotTaskTimeoutMs?: number;
 }
 
 export class AsyncQueue<T> {
@@ -173,6 +190,7 @@ const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
+const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = 180_000;
 
 function createEmptyCategoryBreakdown(): Record<LeadCategory, number> {
   return {
@@ -276,13 +294,15 @@ export class LeadWorkerRunService {
   private readonly hubSpotClient: HubSpotClient;
   private readonly leadPipelineAgent: LeadPipelineAgent;
   private readonly contactTaskTimeoutMs: number;
+  private readonly hubspotTaskTimeoutMs: number;
 
   constructor(dependencies: LeadWorkerRunDependencies = {}) {
     this.controlPlaneStore = dependencies.controlPlaneStore ?? new ControlPlaneStore();
     this.debugConsoleService = dependencies.debugConsoleService ?? new DebugConsoleService();
     this.hubSpotClient = dependencies.hubSpotClient ?? new HubSpotClient();
     this.leadPipelineAgent = dependencies.leadPipelineAgent ?? new LeadPipelineAgent();
-    this.contactTaskTimeoutMs = Math.max(1_000, dependencies.contactTaskTimeoutMs ?? DEFAULT_CONTACT_TASK_TIMEOUT_MS);
+    this.contactTaskTimeoutMs = Math.max(1, dependencies.contactTaskTimeoutMs ?? DEFAULT_CONTACT_TASK_TIMEOUT_MS);
+    this.hubspotTaskTimeoutMs = Math.max(1, dependencies.hubspotTaskTimeoutMs ?? DEFAULT_HUBSPOT_TASK_TIMEOUT_MS);
   }
 
   async run(request: LeadJobRequest, options: WorkerRunOptions = {}): Promise<LeadJobResult> {
@@ -303,12 +323,14 @@ export class LeadWorkerRunService {
     const aiConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? 2);
     const outreachConcurrency = Math.max(1, request.outreachPrepConcurrency ?? 6);
     const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 8);
-    const exaQueryCount = Math.max(1, request.exaQueryCount ?? 1);
+    const exaQueryCount = Math.max(1, request.exaQueryCount ?? 4);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const learning = typeof this.controlPlaneStore.getLearning === "function"
       ? await this.controlPlaneStore.getLearning()
       : undefined;
     const filters = this.leadPipelineAgent.buildDirectExaFiltersForExecution(targetCategories, request.market);
+    const exaConcurrency = Math.min(2, Math.max(1, filters.length));
+    const hubspotConcurrency = 3;
     const aiQueue = new AsyncQueue<{ company: CompanySample; searchId?: string }>();
     const outreachQueue = new AsyncQueue<QualifiedCompanyState>();
     const contactQueue = new AsyncQueue<QualifiedCompanyState>();
@@ -324,8 +346,12 @@ export class LeadWorkerRunService {
     const seenCompanyKeys = new Set<string>();
     const currentRunExcludedDomains = new Set<string>();
     const currentRunQueryHistory = new Map<string, ExaQueryHistoryInsight>(this.buildRecentLiveExaQueryHistory(learning));
+    const pendingExaQueryPlans = new Map<string, PendingExaQueryPlan>();
     const metrics: WorkerRunMetrics = {
       exaRequests: 0,
+      exaReturnedResults: 0,
+      exaFilteredByExcludedDomains: 0,
+      exaDuplicatesRemoved: 0,
       exaRawFound: 0,
       aiAccepted: 0,
       aiRejectedDifferentCategory: 0,
@@ -336,6 +362,7 @@ export class LeadWorkerRunService {
       contactFailed: 0,
       hubspotWritten: 0,
       queueSizes: {
+        exaInFlight: 0,
         aiWaiting: 0,
         aiInFlight: 0,
         waitingAfterAi: 0,
@@ -354,6 +381,7 @@ export class LeadWorkerRunService {
     let searchCompleted = false;
     let stopReason = "";
     let searchCounter = 0;
+    let completedExaWorkers = 0;
     let screeningFlushDue = false;
 
     const markQueueSizes = () => {
@@ -436,6 +464,8 @@ export class LeadWorkerRunService {
         currentBatchQueryStats: aggregate
           ? aggregate.queryStats.map((queryStat) => ({
               query: queryStat.query,
+              returnedResults: queryStat.returnedResults,
+              filteredByExcludedDomains: queryStat.filteredByExcludedDomains,
               rawFound: queryStat.rawFound,
               duplicates: queryStat.duplicates,
               accepted: queryStat.accepted,
@@ -704,7 +734,7 @@ export class LeadWorkerRunService {
             if (queryStat) {
               queryStat.accepted += 1;
               queryStat.categoryBreakdown[categorizedCompany.category] += 1;
-              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
               updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
             }
             queueQualifiedCompany(categorizedCompany, "exa", item.searchId);
@@ -713,7 +743,7 @@ export class LeadWorkerRunService {
             if (queryStat) {
               queryStat.rejectedOther += 1;
               queryStat.categoryBreakdown.other += 1;
-              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
               updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
             }
           } else {
@@ -721,7 +751,7 @@ export class LeadWorkerRunService {
             if (queryStat) {
               queryStat.rejectedDifferentCategory += 1;
               queryStat.categoryBreakdown[categorizedCompany.category] += 1;
-              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
               updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
             }
           }
@@ -733,7 +763,7 @@ export class LeadWorkerRunService {
             const queryStat = getOrCreateQueryStat(aggregate, query);
             queryStat.rejectedOther += 1;
             queryStat.categoryBreakdown.other += 1;
-            this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat.categoryBreakdown);
+            this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
             updateLiveSearchDebug(aggregate, { lastExecutedQuery: query });
           }
           log(`KI-Worker Fehler fuer ${item.company.name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -823,7 +853,7 @@ export class LeadWorkerRunService {
       }
     })());
 
-    const hubspotWorker = (async () => {
+    const hubspotWorkers = Array.from({ length: hubspotConcurrency }, () => (async () => {
       while (true) {
         const state = await hubspotQueue.dequeue();
         if (!state) {
@@ -839,12 +869,17 @@ export class LeadWorkerRunService {
         emitProgress();
         try {
           const companySyncKey = new URL(state.company.domain?.startsWith("http") ? state.company.domain : `https://${state.company.domain ?? state.company.name}`).hostname.replace(/^www\./i, "").toLowerCase();
-          const syncResult = await this.hubSpotClient.syncQualifiedCompanies(
-            [state.company],
-            state.researchBrief ? [state.researchBrief] : [],
-            new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
-            Boolean(request.dryRun || request.syncToHubSpot === false)
-          );
+          const syncResult = await Promise.race([
+            this.hubSpotClient.syncQualifiedCompanies(
+              [state.company],
+              state.researchBrief ? [state.researchBrief] : [],
+              new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
+              Boolean(request.dryRun || request.syncToHubSpot === false)
+            ),
+            delay(this.hubspotTaskTimeoutMs).then(() => {
+              throw new Error(`HubSpot worker timed out after ${this.hubspotTaskTimeoutMs}ms`);
+            })
+          ]);
           state.hubspotStatus = "done";
           state.pipelineAssigned = false;
           state.completedAt = new Date().toISOString();
@@ -864,14 +899,17 @@ export class LeadWorkerRunService {
           maybePromoteStandby();
         } catch (error) {
           state.hubspotStatus = "failed";
+          state.removed = true;
+          state.pipelineAssigned = false;
           state.hubspotError = error instanceof Error ? error.message : String(error);
           log(`HubSpot Fehler fuer ${state.company.name}: ${state.hubspotError}`);
+          maybePromoteStandby();
         } finally {
           metrics.queueSizes.hubspotInFlight = Math.max(0, metrics.queueSizes.hubspotInFlight - 1);
           emitProgress();
         }
       }
-    })();
+    })());
 
     const seedRecords = screeningDatabase.records.filter((record) => {
       if (record.existsInHubSpot) {
@@ -906,7 +944,7 @@ export class LeadWorkerRunService {
       screeningQueue.enqueue({ type: "remove", key });
     }
 
-    const exaWorker = (async () => {
+    const exaWorkers = Array.from({ length: exaConcurrency }, () => (async () => {
       while (!stopping && Date.now() < deadlineMs && metrics.hubspotWritten < targetLeadCount) {
         maybePromoteStandby();
         if (neededCompanies() <= 0) {
@@ -931,114 +969,182 @@ export class LeadWorkerRunService {
         searchAggregates.set(searchId, aggregate);
         metrics.exaRequests += 1;
         searchCounter += 1;
+        metrics.queueSizes.exaInFlight += 1;
         log(`Exa-Worker startet Batch ${searchId} fuer ${filter.name}`);
 
-        const rawCompanies = await this.leadPipelineAgent.discoverDirectExaCompaniesForExecution(
-          filter,
-          targetCategories,
-          exaQueryCount,
-          {
-            screeningScope: "live",
-            currentRunExcludedDomains: Array.from(currentRunExcludedDomains)
-          },
-          {
-            dryRun: request.dryRun,
-            learning,
-            mainContext: request.mainContext,
-            searchStrategyContext: request.searchStrategyContext,
-            recentQueryHistory: Array.from(currentRunQueryHistory.values()),
-            prequalification: request.prequalification
-          },
-          (update) => {
-            aggregate.executedQueries = update.executedQueries;
-            aggregate.rawFound = update.rawCompaniesFound;
-            aggregate.queryTexts.push(update.query);
-            aggregate.plannedQueries = update.plannedQueries;
-            aggregate.promptMessages = update.promptMessages;
-            aggregate.excludedDomains = update.excludedDomains;
-            updateLiveSearchDebug(aggregate, {
-              filterName: update.filterName,
-              defaultQueries: update.defaultQueries,
-              plannedQueries: update.plannedQueries,
-              promptMessages: update.promptMessages,
-              lastExecutedQuery: update.query,
-              excludedDomains: update.excludedDomains,
-              executedQueries: update.executedQueries,
-              totalQueries: update.totalQueries,
-              rawCompaniesFound: update.rawCompaniesFound
-            });
-            if (!currentRunQueryHistory.has(update.query)) {
-              currentRunQueryHistory.set(update.query, {
-                query: update.query,
-                timestamp: new Date().toISOString(),
-                foundCategoryBreakdown: createEmptyCategoryBreakdown()
+        try {
+          const pendingPlanKey = filter.name;
+          const pendingPlan = pendingExaQueryPlans.get(pendingPlanKey);
+          const forcedQueries = pendingPlan?.remainingQueries.slice(0, exaQueryCount) ?? [];
+          const usingPendingQueryPlan = forcedQueries.length > 0;
+          let plannedDefaultQueries: string[] | undefined;
+          let plannedPromptMessages: Array<{ role: string; content: string }> | undefined;
+
+          const rawCompanies = await this.leadPipelineAgent.discoverDirectExaCompaniesForExecution(
+            filter,
+            targetCategories,
+            exaQueryCount,
+            {
+              screeningScope: "live",
+              currentRunExcludedDomains: Array.from(currentRunExcludedDomains)
+            },
+            {
+              dryRun: request.dryRun,
+              learning,
+              mainContext: request.mainContext,
+              searchStrategyContext: request.searchStrategyContext,
+              recentQueryHistory: Array.from(currentRunQueryHistory.values()),
+              prequalification: request.prequalification,
+              forcedQueries: usingPendingQueryPlan ? forcedQueries : undefined,
+              plannedQueryMetadata: usingPendingQueryPlan
+                ? {
+                    defaultQueries: pendingPlan?.defaultQueries,
+                    plannedQueries: pendingPlan?.plannedQueries,
+                    promptMessages: pendingPlan?.promptMessages
+                  }
+                : undefined
+            },
+            (update) => {
+              const previousReturnedResults = aggregate.returnedResults ?? 0;
+              const previousFilteredByExcludedDomains = aggregate.filteredByExcludedDomains ?? 0;
+              plannedDefaultQueries = update.defaultQueries;
+              plannedPromptMessages = update.promptMessages;
+              aggregate.executedQueries = update.executedQueries;
+              aggregate.rawFound = update.rawCompaniesFound;
+              const queryStat = getOrCreateQueryStat(aggregate, update.query);
+              queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
+              queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
+              aggregate.queryTexts.push(update.query);
+              aggregate.plannedQueries = update.plannedQueries;
+              aggregate.promptMessages = update.promptMessages;
+              aggregate.excludedDomains = update.excludedDomains;
+              aggregate.returnedResults = update.returnedResults;
+              aggregate.filteredByExcludedDomains = update.filteredByExcludedDomains;
+              aggregate.duplicatesRemoved = update.duplicatesRemoved;
+              updateLiveSearchDebug(aggregate, {
+                filterName: update.filterName,
+                defaultQueries: update.defaultQueries,
+                plannedQueries: update.plannedQueries,
+                promptMessages: update.promptMessages,
+                lastExecutedQuery: update.query,
+                excludedDomains: update.excludedDomains,
+                executedQueries: update.executedQueries,
+                totalQueries: update.totalQueries,
+                returnedResults: update.returnedResults,
+                filteredByExcludedDomains: update.filteredByExcludedDomains,
+                duplicatesRemoved: update.duplicatesRemoved,
+                rawCompaniesFound: update.rawCompaniesFound
               });
+              if (!currentRunQueryHistory.has(update.query)) {
+                currentRunQueryHistory.set(update.query, {
+                  query: update.query,
+                  timestamp: new Date().toISOString(),
+                  foundCategoryBreakdown: createEmptyCategoryBreakdown()
+                });
+              }
+              historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...aggregate.queryTexts] } });
+              emitProgress();
             }
-            historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...aggregate.queryTexts] } });
-            emitProgress();
-          }
-        );
-
-        const uniqueRawCompanies: CompanySample[] = [];
-        for (const company of rawCompanies) {
-          const query = company.discoveryQuery?.trim();
-          if (query) {
-            getOrCreateQueryStat(aggregate, query).rawFound += 1;
-          }
-          const key = buildCompanyKey(company);
-          if (seenCompanyKeys.has(key)) {
-            if (query) {
-              getOrCreateQueryStat(aggregate, query).duplicates += 1;
-            }
-            continue;
-          }
-          seenCompanyKeys.add(key);
-          uniqueRawCompanies.push(company);
-          const normalizedDomain = normalizeDomain(company.domain);
-          if (normalizedDomain) {
-            currentRunExcludedDomains.add(normalizedDomain);
-          }
-        }
-
-        aggregate.rawFound = uniqueRawCompanies.length;
-        metrics.exaRawFound += uniqueRawCompanies.length;
-        historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...new Set(aggregate.queryTexts)] } });
-
-        if (uniqueRawCompanies.length > 0) {
-          await this.controlPlaneStore.recordLiveExaRawResults(uniqueRawCompanies.map((company) => ({
-            timestamp: new Date().toISOString(),
-            domain: normalizeDomain(company.domain) ?? company.name.trim().toLowerCase(),
-            companyName: company.name,
-            discoveryQuery: company.discoveryQuery,
-            sourceFilter: company.sourceFilter
-          })));
-        }
-
-        const persistedQueryTexts = [...new Set(aggregate.queryTexts.map((query) => query.trim()).filter(Boolean))];
-        if (persistedQueryTexts.length > 0) {
-          await this.controlPlaneStore.recordLiveExaQueryRuns(
-            persistedQueryTexts.map((query) => ({
-              timestamp: new Date().toISOString(),
-              filterName: aggregate.filter.name,
-              query,
-              plannedQueries: aggregate.plannedQueries,
-              promptMessages: aggregate.promptMessages,
-              excludedDomains: aggregate.excludedDomains
-            }))
           );
-        }
 
-        for (const company of uniqueRawCompanies.slice(0, SEARCH_BATCH_SIZE + SEARCH_RESULT_HEADROOM)) {
-          aiQueue.enqueue({ company, searchId });
-        }
+          if (usingPendingQueryPlan) {
+            const remainingQueries = pendingPlan?.remainingQueries.slice(forcedQueries.length) ?? [];
+            if (remainingQueries.length > 0 && pendingPlan) {
+              pendingExaQueryPlans.set(pendingPlanKey, {
+                ...pendingPlan,
+                remainingQueries
+              });
+            } else {
+              pendingExaQueryPlans.delete(pendingPlanKey);
+            }
+          } else {
+            const plannedQueries = Array.from(new Set((aggregate.plannedQueries ?? []).map((query) => query.trim()).filter(Boolean)));
+            const remainingQueries = plannedQueries.slice(exaQueryCount);
+            if (remainingQueries.length > 0) {
+              pendingExaQueryPlans.set(pendingPlanKey, {
+                remainingQueries,
+                plannedQueries,
+                defaultQueries: plannedDefaultQueries,
+                promptMessages: plannedPromptMessages
+              });
+            } else {
+              pendingExaQueryPlans.delete(pendingPlanKey);
+            }
+          }
 
-        emitProgress();
+          const uniqueRawCompanies: CompanySample[] = [];
+          metrics.exaReturnedResults += aggregate.returnedResults ?? 0;
+          metrics.exaFilteredByExcludedDomains += aggregate.filteredByExcludedDomains ?? 0;
+          for (const company of rawCompanies) {
+            const query = company.discoveryQuery?.trim();
+            if (query) {
+              getOrCreateQueryStat(aggregate, query).rawFound += 1;
+            }
+            const key = buildCompanyKey(company);
+            if (seenCompanyKeys.has(key)) {
+              if (query) {
+                getOrCreateQueryStat(aggregate, query).duplicates += 1;
+              }
+              metrics.exaDuplicatesRemoved += 1;
+              continue;
+            }
+            seenCompanyKeys.add(key);
+            uniqueRawCompanies.push(company);
+            const normalizedDomain = normalizeDomain(company.domain);
+            if (normalizedDomain) {
+              currentRunExcludedDomains.add(normalizedDomain);
+            }
+          }
+
+          aggregate.rawFound = uniqueRawCompanies.length;
+          aggregate.returnedResults = aggregate.queryStats.reduce((sum, queryStat) => sum + queryStat.returnedResults, 0);
+          aggregate.filteredByExcludedDomains = aggregate.queryStats.reduce((sum, queryStat) => sum + queryStat.filteredByExcludedDomains, 0);
+          aggregate.duplicatesRemoved = aggregate.queryStats.reduce((sum, queryStat) => sum + queryStat.duplicates, 0);
+          metrics.exaRawFound += uniqueRawCompanies.length;
+          historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...new Set(aggregate.queryTexts)] } });
+
+          if (uniqueRawCompanies.length > 0) {
+            await this.controlPlaneStore.recordLiveExaRawResults(uniqueRawCompanies.map((company) => ({
+              timestamp: new Date().toISOString(),
+              domain: normalizeDomain(company.domain) ?? company.name.trim().toLowerCase(),
+              companyName: company.name,
+              discoveryQuery: company.discoveryQuery,
+              sourceFilter: company.sourceFilter
+            })));
+          }
+
+          const persistedQueryTexts = [...new Set(aggregate.queryTexts.map((query) => query.trim()).filter(Boolean))];
+          if (persistedQueryTexts.length > 0) {
+            await this.controlPlaneStore.recordLiveExaQueryRuns(
+              persistedQueryTexts.map((query) => ({
+                timestamp: new Date().toISOString(),
+                filterName: aggregate.filter.name,
+                query,
+                plannedQueries: aggregate.plannedQueries,
+                promptMessages: aggregate.promptMessages,
+                excludedDomains: aggregate.excludedDomains
+              }))
+            );
+          }
+
+          for (const company of uniqueRawCompanies.slice(0, SEARCH_BATCH_SIZE + SEARCH_RESULT_HEADROOM)) {
+            aiQueue.enqueue({ company, searchId });
+          }
+
+          emitProgress();
+        } finally {
+          metrics.queueSizes.exaInFlight = Math.max(0, metrics.queueSizes.exaInFlight - 1);
+          emitProgress();
+        }
       }
 
-      searchCompleted = true;
-      aiQueue.close();
-      emitProgress();
-    })();
+      completedExaWorkers += 1;
+      if (completedExaWorkers >= exaWorkers.length) {
+        searchCompleted = true;
+        aiQueue.close();
+        emitProgress();
+      }
+    })());
 
     const abortHandler = () => {
       stopping = true;
@@ -1080,14 +1186,14 @@ export class LeadWorkerRunService {
         await delay(SEARCH_IDLE_MS);
       }
 
-      await exaWorker;
+      await Promise.all(exaWorkers);
       outreachQueue.close();
       contactQueue.close();
       await Promise.all(aiWorkers);
       await Promise.all(outreachWorkers);
       await Promise.all(contactWorkers);
       hubspotQueue.close();
-      await hubspotWorker;
+      await Promise.all(hubspotWorkers);
 
       const remainingQualifiedStates = Array.from(qualifiedStates.values())
         .filter((state) => !state.removed && state.hubspotStatus !== "done");
@@ -1232,6 +1338,13 @@ export class LeadWorkerRunService {
           query,
           timestamp: entry.timestamp,
           foundCategoryBreakdown: { ...queryStat.categoryBreakdown },
+          returnedResults: queryStat.returnedResults,
+          filteredByExcludedDomains: queryStat.filteredByExcludedDomains,
+          rawFound: queryStat.rawFound,
+          duplicates: queryStat.duplicates,
+          accepted: queryStat.accepted,
+          rejectedDifferentCategory: queryStat.rejectedDifferentCategory,
+          rejectedOther: queryStat.rejectedOther,
           note: entry.filterName
         });
       }
@@ -1243,7 +1356,16 @@ export class LeadWorkerRunService {
   private updateRecentLiveQueryHistory(
     history: Map<string, ExaQueryHistoryInsight>,
     query: string | undefined,
-    categoryBreakdown: Record<LeadCategory, number>
+    queryStat: {
+      categoryBreakdown: Record<LeadCategory, number>;
+      returnedResults: number;
+      filteredByExcludedDomains: number;
+      rawFound: number;
+      duplicates: number;
+      accepted: number;
+      rejectedDifferentCategory: number;
+      rejectedOther: number;
+    }
   ): void {
     const normalizedQuery = query?.trim();
     if (!normalizedQuery) {
@@ -1254,7 +1376,14 @@ export class LeadWorkerRunService {
     history.set(normalizedQuery, {
       query: normalizedQuery,
       timestamp: existing?.timestamp ?? new Date().toISOString(),
-      foundCategoryBreakdown: { ...categoryBreakdown },
+      foundCategoryBreakdown: { ...queryStat.categoryBreakdown },
+      returnedResults: queryStat.returnedResults,
+      filteredByExcludedDomains: queryStat.filteredByExcludedDomains,
+      rawFound: queryStat.rawFound,
+      duplicates: queryStat.duplicates,
+      accepted: queryStat.accepted,
+      rejectedDifferentCategory: queryStat.rejectedDifferentCategory,
+      rejectedOther: queryStat.rejectedOther,
       note: existing?.note
     });
   }
@@ -1268,6 +1397,8 @@ function getOrCreateQueryStat(aggregate: SearchAggregate, query: string) {
 
   const created = {
     query,
+    returnedResults: 0,
+    filteredByExcludedDomains: 0,
     rawFound: 0,
     duplicates: 0,
     accepted: 0,

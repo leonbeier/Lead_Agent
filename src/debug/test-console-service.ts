@@ -179,8 +179,9 @@ export class DebugConsoleService {
   async discoverContactsForExecution(
     company: PreCategorizedCompany,
     options: { selectedContactsTimeoutMs?: number } = {}
-  ): Promise<Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>>> {
-    return this.buildDetailedContactDebug(company, options);
+  ): Promise<{ selectedContacts: Awaited<ReturnType<HubSpotClient["discoverPublicContactsForExecution"]>> }> {
+    const selectedContacts = await this.hubspotClient.discoverPublicContactsForExecution(company, options);
+    return { selectedContacts };
   }
 
   async run(request: DebugConsoleRunRequest): Promise<DebugConsoleRunResult> {
@@ -503,7 +504,7 @@ export class DebugConsoleService {
     const generatedSearches: DebugConsoleSearchQueryResult[] = [];
     const discoveredCompanies: CompanySample[] = [];
     const requestedCompanyCount = Math.max(limit, 20);
-    const requestedQueryCount = Math.max(1, request.exaQueryCount ?? 3);
+    const requestedQueryCount = Math.max(1, request.exaQueryCount ?? 4);
     const usedFilters: ApolloOrganizationFilter[] = [];
     const [settings, learning] = request.useAzureQueryPlanner
       ? await Promise.all([
@@ -534,11 +535,11 @@ export class DebugConsoleService {
       }
 
       usedFilters.push(filter);
-      const recentQueryHistory = testLabCache.queryInsights;
+      const recentQueryHistory = this.buildRecentExaQueryHistory(testLabCache.queryInsights, learning);
       const defaultQueries = exaClient.buildQueries(filter, 1);
       const remainingQueryCount = requestedQueryCount - executedQueryCount;
       const plannerQueryCount = request.useAzureQueryPlanner
-        ? Math.min(defaultQueries.length, Math.max(remainingQueryCount, 6))
+        ? Math.min(defaultQueries.length, Math.max(remainingQueryCount, 4))
         : remainingQueryCount;
       let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;
       const queries = request.useAzureQueryPlanner
@@ -553,6 +554,7 @@ export class DebugConsoleService {
           {
             recentQueryHistory,
             prequalification: settings?.prequalification,
+            excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
             requestedTargetCategories: request.targetCategories,
             debugCapture: (details) => {
               queryGenerationPromptMessages = details.promptMessages;
@@ -702,6 +704,29 @@ export class DebugConsoleService {
       detectedCategories,
       note: "Test-Lab simulation: erkannte Query-Klassen aus dem Query-Text abgeleitet."
     };
+  }
+
+  private buildRecentExaQueryHistory(
+    testLabQueryInsights: ExaQueryHistoryInsight[],
+    learning?: Awaited<ReturnType<ControlPlaneStore["getLearning"]>>
+  ): ExaQueryHistoryInsight[] {
+    const liveQueryInsights = (learning?.searchHistoryByMode?.exa_search?.searchHistory ?? [])
+      .slice(0, 40)
+      .flatMap((entry) => (entry.queryStats ?? []).map((queryStat) => ({
+        query: queryStat.query,
+        timestamp: entry.timestamp,
+        foundCategoryBreakdown: { ...queryStat.categoryBreakdown },
+        note: `${entry.filterName} | accepted ${queryStat.accepted}, wrong-category ${queryStat.rejectedDifferentCategory}, other ${queryStat.rejectedOther}, duplicates ${queryStat.duplicates}`
+      })));
+
+    return [...testLabQueryInsights, ...liveQueryInsights]
+      .filter((entry) => entry.query?.trim())
+      .sort((left, right) => {
+        const leftTime = left.timestamp ? Date.parse(left.timestamp) : 0;
+        const rightTime = right.timestamp ? Date.parse(right.timestamp) : 0;
+        return rightTime - leftTime;
+      })
+      .slice(0, 50);
   }
 
   private async runDiffbotCompanySearch(filters: ApolloOrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {

@@ -315,6 +315,454 @@ test("worker run does not promote standby companies after target is reached", as
   assert.ok(progressSnapshots.some((snapshot) => snapshot.funnel?.afterHubSpotDedup === 2 && snapshot.funnel?.syncedToHubSpot === 1));
 });
 
+test("worker run defaults to four Exa queries per batch when no explicit exaQueryCount is provided", async () => {
+  const observedQueryCounts: number[] = [];
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => ({
+        attempted: true,
+        mode: "live",
+        candidateCount: 1,
+        syncedCount: 1,
+        companySyncedCount: 1,
+        contactSyncedCount: 1
+      })
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async (
+        _filter: ApolloOrganizationFilter,
+        _targetCategories: LeadCategory[],
+        maxQueryCount: number
+      ) => {
+        observedQueryCounts.push(maxQueryCount);
+        return [{
+          name: "Query Count Vision",
+          domain: "query-count-vision.example.com",
+          shortDescription: "fast-path company",
+          sourceFilter: "exa-filter"
+        }];
+      }
+    } as any
+  });
+
+  await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.ok(observedQueryCounts.length > 0);
+  assert.ok(observedQueryCounts.every((count) => count === 4));
+});
+
+test("worker run reuses planned Exa queries before requesting a fresh Azure plan", async () => {
+  const forcedQueryBatches: string[][] = [];
+  let freshPlanRequests = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => ({
+        attempted: true,
+        mode: "live",
+        candidateCount: 1,
+        syncedCount: 1,
+        companySyncedCount: 1,
+        contactSyncedCount: 1
+      })
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async (
+        filter: ApolloOrganizationFilter,
+        _targetCategories: LeadCategory[],
+        _maxQueryCount: number,
+        _excludeDomainSources: unknown,
+        queryPlanningContext?: {
+          forcedQueries?: string[];
+          plannedQueryMetadata?: {
+            plannedQueries?: string[];
+          };
+        },
+        onQueryProgress?: (update: {
+          executedQueries: number;
+          totalQueries: number;
+          query: string;
+          returnedResults: number;
+          filteredByExcludedDomains: number;
+          duplicatesRemoved: number;
+          rawCompaniesFound: number;
+          filterName: string;
+          defaultQueries: string[];
+          plannedQueries: string[];
+          promptMessages?: Array<{ role: string; content: string }>;
+          excludedDomains: string[];
+        }) => void
+      ) => {
+        const activeQuery = queryPlanningContext?.forcedQueries?.[0] ?? "query one";
+        const plannedQueries = queryPlanningContext?.plannedQueryMetadata?.plannedQueries ?? ["query one", "query two", "query three"];
+
+        if (queryPlanningContext?.forcedQueries?.length) {
+          forcedQueryBatches.push([...queryPlanningContext.forcedQueries]);
+        } else {
+          freshPlanRequests += 1;
+        }
+
+        onQueryProgress?.({
+          executedQueries: 0,
+          totalQueries: 1,
+          query: activeQuery,
+          returnedResults: 0,
+          filteredByExcludedDomains: 0,
+          duplicatesRemoved: 0,
+          rawCompaniesFound: 0,
+          filterName: filter.name,
+          defaultQueries: ["default one", "default two", "default three"],
+          plannedQueries,
+          promptMessages: [{ role: "system", content: "prompt" }],
+          excludedDomains: []
+        });
+
+        onQueryProgress?.({
+          executedQueries: 1,
+          totalQueries: 1,
+          query: activeQuery,
+          returnedResults: 1,
+          filteredByExcludedDomains: 0,
+          duplicatesRemoved: 0,
+          rawCompaniesFound: 1,
+          filterName: filter.name,
+          defaultQueries: ["default one", "default two", "default three"],
+          plannedQueries,
+          promptMessages: [{ role: "system", content: "prompt" }],
+          excludedDomains: []
+        });
+
+        return [{
+          name: activeQuery,
+          domain: `${activeQuery.replace(/\s+/g, "-")}.example.com`,
+          shortDescription: "planned query result",
+          sourceFilter: filter.name,
+          discoveryQuery: activeQuery
+        }];
+      }
+    } as any
+  });
+
+  await service.run({
+    targetLeadCount: 3,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.equal(freshPlanRequests, 1);
+  assert.deepEqual(forcedQueryBatches, [["query two"], ["query three"]]);
+});
+
+test("worker run can search with two Exa producer workers in parallel when multiple filters exist", async () => {
+  let activeExaCalls = 0;
+  let maxActiveExaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.91,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => ({
+        attempted: true,
+        mode: "live",
+        candidateCount: 1,
+        syncedCount: 1,
+        companySyncedCount: 1,
+        contactSyncedCount: 1
+      })
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [
+        createFilter("integrator_vision_industrial_ai"),
+        createFilter("integrator_general_ai")
+      ],
+      discoverDirectExaCompaniesForExecution: async (
+        filter: ApolloOrganizationFilter,
+        _targetCategories: LeadCategory[],
+        _maxQueryCount: number,
+        _excludeDomainSources: unknown,
+        _queryPlanningContext: unknown,
+        onQueryProgress?: (update: {
+          executedQueries: number;
+          totalQueries: number;
+          query: string;
+          returnedResults: number;
+          filteredByExcludedDomains: number;
+          duplicatesRemoved: number;
+          rawCompaniesFound: number;
+          filterName: string;
+          defaultQueries: string[];
+          plannedQueries: string[];
+          excludedDomains: string[];
+        }) => void
+      ) => {
+        activeExaCalls += 1;
+        maxActiveExaCalls = Math.max(maxActiveExaCalls, activeExaCalls);
+
+        onQueryProgress?.({
+          executedQueries: 1,
+          totalQueries: 1,
+          query: `query-${filter.name}`,
+          returnedResults: 1,
+          filteredByExcludedDomains: 0,
+          duplicatesRemoved: 0,
+          rawCompaniesFound: 1,
+          filterName: filter.name,
+          defaultQueries: [`query-${filter.name}`],
+          plannedQueries: [`query-${filter.name}`],
+          excludedDomains: []
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        activeExaCalls -= 1;
+
+        return [{
+          name: `${filter.name}-company`,
+          domain: `${filter.name}.example.com`,
+          shortDescription: "parallel result",
+          sourceFilter: filter.name,
+          discoveryQuery: `query-${filter.name}`
+        }];
+      }
+    } as any
+  });
+
+  await service.run({
+    targetLeadCount: 2,
+    targetCategories: ["integrator_vision_industrial_ai", "integrator_general_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.equal(maxActiveExaCalls, 2);
+});
+
+test("worker run reports raw Exa results separately from excluded and unique companies", async () => {
+  const progressSnapshots: Array<{
+    workerMetrics?: {
+      exaRequests?: number;
+      exaReturnedResults?: number;
+      exaFilteredByExcludedDomains?: number;
+      exaDuplicatesRemoved?: number;
+      exaRawFound?: number;
+    };
+    liveSearchDebug?: {
+      returnedResults?: number;
+      filteredByExcludedDomains?: number;
+      duplicatesRemoved?: number;
+      rawCompaniesFound?: number;
+    };
+  }> = [];
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => ({
+        attempted: true,
+        mode: "live",
+        candidateCount: 1,
+        syncedCount: 1,
+        companySyncedCount: 1,
+        contactSyncedCount: 1
+      })
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async (
+        filter: ApolloOrganizationFilter,
+        _targetCategories: LeadCategory[],
+        _maxQueryCount: number,
+        _excludeDomainSources: unknown,
+        _queryPlanningContext: unknown,
+        onQueryProgress?: (update: {
+          executedQueries: number;
+          totalQueries: number;
+          query: string;
+          returnedResults: number;
+          filteredByExcludedDomains: number;
+          duplicatesRemoved: number;
+          rawCompaniesFound: number;
+          filterName: string;
+          defaultQueries: string[];
+          plannedQueries: string[];
+          excludedDomains: string[];
+        }) => void
+      ) => {
+        onQueryProgress?.({
+          executedQueries: 1,
+          totalQueries: 1,
+          query: "query one",
+          returnedResults: 20,
+          filteredByExcludedDomains: 17,
+          duplicatesRemoved: 0,
+          rawCompaniesFound: 3,
+          filterName: filter.name,
+          defaultQueries: ["query one"],
+          plannedQueries: ["query one"],
+          excludedDomains: []
+        });
+
+        return [
+          { name: "Alpha Vision", domain: "alpha-vision.example.com", shortDescription: "alpha", sourceFilter: filter.name, discoveryQuery: "query one" },
+          { name: "Alpha Vision", domain: "alpha-vision.example.com", shortDescription: "alpha duplicate", sourceFilter: filter.name, discoveryQuery: "query one" },
+          { name: "Beta Vision", domain: "beta-vision.example.com", shortDescription: "beta", sourceFilter: filter.name, discoveryQuery: "query one" }
+        ];
+      }
+    } as any
+  });
+
+  await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1,
+    exaQueryCount: 1
+  }, {
+    onProgress: (progress) => {
+      progressSnapshots.push({
+        workerMetrics: progress.workerMetrics
+          ? {
+              exaRequests: progress.workerMetrics.exaRequests,
+              exaReturnedResults: progress.workerMetrics.exaReturnedResults,
+              exaFilteredByExcludedDomains: progress.workerMetrics.exaFilteredByExcludedDomains,
+              exaDuplicatesRemoved: progress.workerMetrics.exaDuplicatesRemoved,
+              exaRawFound: progress.workerMetrics.exaRawFound
+            }
+          : undefined,
+        liveSearchDebug: progress.liveSearchDebug
+          ? {
+              returnedResults: progress.liveSearchDebug.returnedResults,
+              filteredByExcludedDomains: progress.liveSearchDebug.filteredByExcludedDomains,
+              duplicatesRemoved: progress.liveSearchDebug.duplicatesRemoved,
+              rawCompaniesFound: progress.liveSearchDebug.rawCompaniesFound
+            }
+          : undefined
+      });
+    }
+  });
+
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaReturnedResults === 20));
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaFilteredByExcludedDomains === 17));
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaDuplicatesRemoved === 1));
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaRawFound === 2));
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.liveSearchDebug?.returnedResults === 20));
+});
+
 test("worker run still syncs companies to HubSpot when contact discovery fails", async () => {
   const syncedCompanies: string[] = [];
   const service = new LeadWorkerRunService({
@@ -383,6 +831,96 @@ test("worker run still syncs companies to HubSpot when contact discovery fails",
   assert.deepEqual(syncedCompanies, ["Timeout Vision"]);
   assert.equal(result.hubspotSync.companySyncedCount, 1);
   assert.equal(result.shortlistedCompanies.length, 1);
+});
+
+test("worker run times out a stuck HubSpot sync instead of blocking the drain forever", async () => {
+  let syncCalls = 0;
+  const progressMessages: string[] = [];
+  const filterCallCounts = new Map<string, number>();
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncCalls += 1;
+        if (companies[0]?.name === "Alpha Vision") {
+          await new Promise((resolve) => setTimeout(resolve, 80));
+        }
+
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: companies[0]?.name === "Alpha Vision" ? 0 : 1,
+          contactSyncedCount: companies[0]?.name === "Alpha Vision" ? 0 : 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai"), createFilter("integrator_general_ai")],
+      discoverDirectExaCompaniesForExecution: async (filter: ApolloOrganizationFilter) => {
+        const filterName = filter.name;
+        const nextCount = (filterCallCounts.get(filterName) ?? 0) + 1;
+        filterCallCounts.set(filterName, nextCount);
+        const companyName = filter.targetCategories?.[0] === "integrator_general_ai"
+          ? (nextCount === 1 ? "Beta Vision" : "Gamma Vision")
+          : (nextCount === 1 ? "Alpha Vision" : "Delta Vision");
+        return [{
+          name: companyName,
+          domain: `${companyName.toLowerCase().replace(/\s+/g, "-")}.example.com`,
+          shortDescription: "fit",
+          sourceFilter: filter.name,
+          discoveryQuery: `query-${companyName}`
+        }];
+      }
+    } as any,
+    hubspotTaskTimeoutMs: 20
+  });
+
+  const result = await service.run({
+    targetLeadCount: 2,
+    targetCategories: ["integrator_vision_industrial_ai", "integrator_general_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  }, {
+    onProgress: (progress) => {
+      if (progress.detail) {
+        progressMessages.push(progress.detail);
+      }
+    }
+  });
+
+  assert.ok(syncCalls >= 2);
+  assert.equal(result.hubspotSync.companySyncedCount, 2);
+  assert.ok(progressMessages.some((message) => message.includes("HubSpot worker timed out after 20ms")));
 });
 
 test("AsyncQueue clear removes queued items before close", async () => {

@@ -433,7 +433,7 @@ export class AzureOpenAIClient {
     dryRun: boolean
   ): Promise<PublicContactCandidate[]> {
     const rankedCandidates = candidates.slice(0, 12);
-    if (rankedCandidates.length <= 4 || dryRun || !readiness.azureConfigured) {
+    if (rankedCandidates.length === 0 || dryRun || !readiness.azureConfigured) {
       return rankedCandidates.slice(0, 4);
     }
 
@@ -456,7 +456,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Select up to 4 public web-search contacts for outbound outreach. Apply these rules strictly: managers and decision-makers first; if fewer than 4 relevant manager-type people are evidence-backed, fill remaining slots with developers or engineering contacts; exclude unclear people unless titles are missing across the candidate set, and then use the highest LinkedIn connection counts as the fallback. Treat founder or company-founding evidence in snippets, for example wording like "we founded <company>", as a strong executive-leadership signal even if no explicit CEO title is present. Prefer one executive sponsor plus one technical or operational owner when possible. Prefer contacts that combine multiple reachable data points such as LinkedIn URL, email, and phone. Avoid HR, recruiting, finance, legal, support, generic sales, marketing, students, advisors, and unrelated contacts. Use only the provided evidence. Return strict JSON with {"selectedContactIds":["..."],"reason":"..."}.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Rank and select up to 4 public web-search contacts for outbound outreach. Use this step mainly to prioritize, not to aggressively discard. Managers and decision-makers first; if fewer than 4 relevant manager-type people are evidence-backed, fill remaining slots with developers or engineering contacts. Reject only candidates that are clearly invalid, for example one-word names, CTA text, navigation fragments, generic phrases such as represented by, our customers, about us, team, contact, company, business, or similar non-person labels. Reject candidates whose evidence points to a different company, parent brand, partner brand, directory, or unrelated domain unless the evidence explicitly says they work for the supplied company. Do not treat LinkedIn company pages or generic company mailboxes as people, but you may keep one such company-level fallback contact when it is the only evidence-backed public outreach channel for the supplied company. Treat founder or company-founding evidence in snippets, for example wording like "we founded <company>", as a strong executive-leadership signal even if no explicit CEO title is present. Prefer one executive sponsor plus one technical or operational owner when possible. Prefer contacts that combine multiple reachable data points such as personal LinkedIn URL, named company email, and phone. Avoid HR, recruiting, finance, legal, support, generic sales, marketing, students, advisors, and unrelated contacts when stronger company-matching contacts exist. When evidence-backed personal LinkedIn profiles or named employee contacts exist for the supplied company, keep them rather than returning an empty result. Use only the provided evidence. Return strict JSON with {"selectedContactIds":["..."],"reason":"..."}.`
         },
         {
           role: "user",
@@ -471,7 +471,12 @@ export class AzureOpenAIClient {
       ], { maxTokens: 220 });
 
       const parsed = this.parseJsonObject<{ selectedContactIds?: string[] }>(content);
-      const selectedIds = new Set(parsed.selectedContactIds ?? []);
+      if (Array.isArray(parsed.selectedContactIds)) {
+        const selectedIds = new Set(parsed.selectedContactIds);
+        return rankedCandidates.filter((_, index) => selectedIds.has(`contact_${index + 1}`)).slice(0, 4);
+      }
+
+      const selectedIds = new Set<string>(parsed.selectedContactIds ?? []);
       const selected = rankedCandidates.filter((_, index) => selectedIds.has(`contact_${index + 1}`));
       if (selected.length > 0) {
         return selected.slice(0, 4);
@@ -529,7 +534,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Extract and match public contact data for outbound outreach from raw official-website evidence and raw public web-search evidence. Return only evidence-backed contacts for the supplied company. Match email addresses and phone numbers to a named person only when the evidence clearly supports the match. If that match is unclear, keep the email or phone on a separate generic website contact instead of guessing. Reject gibberish, broken encoding, CTA text, navigation text, placeholders, and corrupted names. Prefer real people with personal LinkedIn URLs. Include at most one official generic mailbox contact when it provides a reachable company fallback such as email or phone. Do not invent names, titles, emails, phones, or LinkedIn URLs. Return strict JSON with {"contacts":[{"firstName":"...","lastName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","linkedinConnectionCount":123,"sourceUrl":"...","sourceQuery":"...","sourceSnippet":"...","label":"linkedin_profile|website_named_contact|public_named_mailbox|public_generic_mailbox|web_search_contact"}]}. Keep up to 6 contacts, best first.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Extract and match public contact data for outbound outreach from raw official-website evidence and raw public web-search evidence. This step is for extraction and matching, not for aggressive filtering. Return all evidence-backed contacts for the supplied company up to 6 entries. Keep every evidence-backed personal LinkedIn profile that clearly belongs to the supplied company. Keep website email addresses and phone numbers even when they cannot be matched to a named person; in that case emit a separate generic website contact instead of guessing. If the only public LinkedIn evidence is a company LinkedIn page or other non-person LinkedIn reference that clearly belongs to the supplied company, keep at most one such company-level fallback contact instead of dropping LinkedIn entirely. Match email addresses and phone numbers to a named person only when the evidence clearly supports the match. Reject only gibberish, broken encoding, CTA text, navigation text, placeholders, and corrupted names. Do not invent names, titles, emails, phones, or LinkedIn URLs. Return strict JSON with {"contacts":[{"firstName":"...","lastName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","linkedinConnectionCount":123,"sourceUrl":"...","sourceQuery":"...","sourceSnippet":"...","label":"linkedin_profile|website_named_contact|public_named_mailbox|public_generic_mailbox|web_search_contact"}]}. Keep up to 6 contacts, best first.`
         },
         {
           role: "user",
@@ -658,11 +663,13 @@ export class AzureOpenAIClient {
     options: {
       recentQueryHistory?: ExaQueryHistoryInsight[];
       prequalification?: PrequalificationConfig;
+      excludedDomainExamples?: string[];
       requestedTargetCategories?: LeadCategory[];
       debugCapture?: (details: { promptMessages: Array<{ role: "system" | "user"; content: string }> }) => void;
     } = {}
   ): Promise<string[]> {
-    const baselineQueries = Array.from(new Set(defaultQueries.map((query) => query.trim()).filter(Boolean))).slice(0, Math.max(1, maxQueryCount));
+    const targetQueryCount = Math.max(1, maxQueryCount);
+    const baselineQueries = Array.from(new Set(defaultQueries.map((query) => query.trim()).filter(Boolean))).slice(0, targetQueryCount);
     if (baselineQueries.length === 0 || dryRun || !readiness.azureConfigured) {
       return baselineQueries;
     }
@@ -677,118 +684,27 @@ export class AzureOpenAIClient {
       const goodSignalsContext = this.buildExaSearchGoodSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
       const avoidSignalsContext = this.buildExaSearchAvoidSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
       const recentExaContext = this.buildExaSearchPerformanceSummary(exaLearning);
+      const excludedDomainExamples = Array.from(new Set((options.excludedDomainExamples ?? []).map((domain) => domain.trim().toLowerCase()).filter(Boolean))).slice(0, 30);
 
       const promptMessages: Array<{ role: "system" | "user"; content: string }> = [
         {
           role: "system",
-          content: [
-            this.buildExaPlannerSystemContext(mainContext, searchStrategyContext),
-            [
-              "Task:",
-              `Your job is to create ${Math.max(1, maxQueryCount)} Exa company-discovery queries for ONE WARE.`,
-              "These queries are the first step in the pipeline: Exa finds candidate company websites first, and a later AI check filters those websites afterwards.",
-              "That means Exa should already do as much of the preselection work as possible and bring back the best-fitting official company websites instead of broad noisy results.",
-              "Look at the query history before writing new queries. Use it as evidence for what has already been tried, which wording is overused, and which wording or category angles still deserve coverage.",
-              "Use the search history as evidence. Rotate intelligently across company categories, locations, and use-case keywords when that improves results, but do not rotate just for variety.",
-              "If multiple target categories are desired in this run, make sure the query set covers those desired categories on purpose instead of treating them as drift.",
-              "If the requested market is Germany and you are generating a larger query set, deliberately test multiple German subregions or industrial clusters instead of keeping every query nationwide-only.",
-              "Do not change the filter logic, qualification logic, or category logic. Preserve the same ICP and target intent as the supplied filter.",
-              "You are improving Exa company-discovery queries for an AI/semantic search system, not for a traditional web search engine."
-            ].join("\n"),
-            [
-              "Output:",
-              "Return the result as strict JSON with this shape:",
-              '{"queries":["query 1", "query 2"]}',
-              `Return exactly ${Math.max(1, maxQueryCount)} queries.`,
-              "Do not add explanations outside the JSON."
-            ].join("\n"),
-            [
-              "Stil:",
-              "Write natural-language Exa queries, as if you were briefing a researcher, not building a Boolean search string.",
-              "Do not use site:, quoted keyword packs, long boolean chains, or long negative keyword blocks unless a baseline query already proves they are necessary.",
-              "Keep the useful detail from strong baseline queries: preserve important capability phrases, buyer context, and delivery model cues when they help target the right companies.",
-              "Preserve exclusion intent too, but express it in natural prose.",
-              "Each query should end with an explicit natural-language exclusion tail so Exa is reminded to avoid directories, marketplaces, job boards, news pages, PDFs, and pure component vendors.",
-              "Do not stuff every synonym into every query. Instead, choose a few useful synonyms per query and vary them across the query set so Exa covers the topic more broadly.",
-              "Do not force one fixed query template or one fixed sentence structure. Use examples as inspiration, not as literal formatting instructions.",
-              "When returning multiple queries, vary wording and angle instead of producing near-duplicates."
-            ].join("\n")
-          ].filter(Boolean).join("\n\n")
+          content: this.buildExaPlannerSystemPrompt(mainContext, searchStrategyContext, targetQueryCount)
         },
         {
           role: "user",
-          content: [
-            [
-              "Target:",
-              "This section defines the exact kind of companies you are trying to find.",
-              requestedLocalities.length > 0 ? `- Required locality terms to preserve in every query: ${requestedLocalities.join(", ")}` : undefined,
-              requestedCategories.length > 0 ? `- Desired target categories for this run: ${requestedCategories.join(", ")}` : undefined,
-              this.buildExaSearchUndesiredCategorySummary(requestedCategories as LeadCategory[]),
-              "- Find official company websites for the intended target profile.",
-              "- Do not broaden the ICP beyond the supplied filter.",
-              this.buildExaSearchFilterNarrative(filter)
-            ].filter(Boolean).join("\n"),
-            [
-              "Good Signals:",
-              "Use this section to understand what a good target looks like before the later AI check happens.",
-              "For each relevant category below, the listed signals describe what Exa should actively try to surface.",
-              goodSignalsContext
-            ].filter(Boolean).join("\n\n"),
-            [
-              "Avoid:",
-              "Use this section to understand what should be filtered out already at the query-writing stage whenever possible.",
-              "- Avoid directories, marketplaces, job boards, PDFs, listicles, news articles, media pages, and generic vendor pages unless a baseline query clearly proves a better path.",
-              "- Avoid repeating the exact same query text from recent runs unless that wording clearly outperformed alternatives.",
-              "- If a locality, wording, or angle repeatedly produced no useful target categories or mostly wrong categories, stop spending queries on it just for variety.",
-              "- If the history shows that a city cluster such as Berlin produced no useful target categories, do not retry Berlin only because it has not appeared recently.",
-              "- If industrial automation phrasing underperformed for a vision-integrator target, avoid it there; if it worked for another category such as integrator_relevant_focus, reserve it for that category instead of broadening this one.",
-              "- If multiple target categories are desired, do not describe those desired categories as something to avoid.",
-              "- If the history shows repeated drift into a non-target category, write that wrong company type explicitly into the next query as something to avoid, not only into the generic exclusion tail.",
-              ...this.buildExaSearchCategorySpecificExclusionLines(requestedCategories as LeadCategory[]),
-              "- Use the category-specific avoid signals below as hard guidance for what should not be found.",
-              avoidSignalsContext
-            ].filter(Boolean).join("\n"),
-            [
-              "Output:",
-              "Return only the query output in JSON format.",
-              "Use this exact key:",
-              '- "queries": [ ... ]',
-              `Return exactly ${Math.max(1, maxQueryCount)} query strings.`
-            ].join("\n"),
-            [
-              "Stil:",
-              "Write natural-language Exa queries.",
-              "Think of them as short, concrete work instructions for Exa to find the right official company websites.",
-              "Favor short, concrete, company-finding requests that Exa can use to retrieve official websites of the right companies.",
-              "Explore adjacent but still relevant search angles when the history supports it, for example: system integrator, consulting, solution provider, quality control, visual inspection, robot guidance, industrial automation, surveillance, or other concrete machine-vision application areas.",
-              "Across consecutive runs, deliberately illuminate different specific sub-areas instead of staying on one generic wording.",
-              "Review the recent query history and consciously vary synonym families across the new query set instead of repeating the same wording every time.",
-              "Useful synonym families for this topic include: computer vision, machine vision, industrial vision, visual inspection, automated optical inspection, AOI, edge AI vision, AI camera systems, robotics vision, quality inspection, defect detection, industrial image processing.",
-              "Pick a few of these synonyms per query and mix them differently across the set so the search stays broad without turning every single query into a keyword dump.",
-              "When non-target categories are causing drift, put a short natural-language exclusion clause for those wrong company types into the main query sentence itself, not only into the generic exclusion tail.",
-              "Use locality creatively inside the requested market when helpful, for example major cities or industrial clusters such as Berlin, Munich, Stuttgart, Hamburg, Cologne, the Ruhr area, OWL, Bavaria, Baden-Wuerttemberg, or NRW, but keep the main locality explicit and do not leave the target geography.",
-              "If the requested market is Germany and you return 6 queries, at least 2 queries should explicitly test different useful subregions or industrial clusters such as OWL, Bavaria, Baden-Wuerttemberg, NRW/Ruhr, Munich area, or Stuttgart region.",
-              "End every query with a short natural-language exclusion phrase covering directories, marketplaces, job boards, news articles, PDFs, and pure component or hardware vendors.",
-              "If recent history already covered one angle, prefer a different still-relevant angle on the next run before reusing the same wording again."
-            ].join("\n"),
-            [
-              "Kontext:",
-              "This section gives you the baseline queries and recent performance context so you can improve or rotate query wording based on evidence.",
-              `- Baseline query angles to build on:\n${this.buildExaBaselineQuerySummary(baselineQueries)}`,
-              recentQueryHistory.length > 0
-                ? `- Recent query history with outcomes (last ${recentQueryHistory.length} queries, newest first):\n${recentQueryHistory.map((entry) => [
-                  `Query: ${entry.query}`,
-                  entry.detectedCategories?.length ? `Detected query classes: ${entry.detectedCategories.join(", ")}` : undefined,
-                  entry.foundCategoryBreakdown
-                    ? `Found company categories: ${Object.entries(entry.foundCategoryBreakdown).filter(([, count]) => (count ?? 0) > 0).map(([category, count]) => `${category}=${count}`).join(", ") || "none"}`
-                    : undefined,
-                  entry.note ? `Note: ${entry.note}` : undefined
-                ].filter(Boolean).join(" | ")).join("\n")}`
-                : "- No recent query history is available yet.",
-              "- Use this recent history to decide which synonym families, category angles, and regional variants have been overused or underused.",
-              recentExaContext ? `- Recent Exa search history summary:\n${recentExaContext}` : undefined
-            ].filter(Boolean).join("\n\n")
-          ].filter(Boolean).join("\n\n")
+          content: this.buildExaPlannerUserPrompt(
+            filter,
+            requestedLocalities,
+            requestedCategories as LeadCategory[],
+            goodSignalsContext,
+            avoidSignalsContext,
+            baselineQueries,
+            recentQueryHistory,
+            recentExaContext,
+            excludedDomainExamples,
+            targetQueryCount
+          )
         }
       ];
       options.debugCapture?.({ promptMessages });
@@ -797,18 +713,785 @@ export class AzureOpenAIClient {
 
       const parsed = this.parseJsonObject<{ queries?: string[] }>(content);
       const plannedQueries = Array.from(new Set((parsed.queries ?? []).map((query) => query.trim()).filter(Boolean)));
-      return plannedQueries.length > 0 ? plannedQueries.slice(0, Math.max(1, maxQueryCount)) : baselineQueries;
+      const initialQueries = plannedQueries.length > 0 ? plannedQueries.slice(0, targetQueryCount) : baselineQueries;
+
+      if (initialQueries.length > 1 && this.exaQueriesNeedDiversification(initialQueries, requestedLocalities, baselineQueries)) {
+        const rewrittenContent = await this.runChat(
+          [
+            promptMessages[0],
+            {
+              role: "user",
+              content: this.buildExaPlannerDiversityRewritePrompt(
+                filter,
+                requestedLocalities,
+                requestedCategories as LeadCategory[],
+                baselineQueries,
+                recentQueryHistory,
+                excludedDomainExamples,
+                initialQueries,
+                targetQueryCount
+              )
+            }
+          ],
+          { maxTokens: 700 }
+        );
+
+        const rewrittenParsed = this.parseJsonObject<{ queries?: string[] }>(rewrittenContent);
+        const rewrittenQueries = Array.from(new Set((rewrittenParsed.queries ?? []).map((query) => query.trim()).filter(Boolean))).slice(0, targetQueryCount);
+        if (rewrittenQueries.length > 0) {
+          return rewrittenQueries;
+        }
+      }
+
+      return initialQueries;
     } catch {
       return baselineQueries;
     }
   }
 
-  private buildExaPlannerSystemContext(mainContext?: string, searchStrategyContext?: string): string {
+  private buildExaPlannerSystemPrompt(mainContext: string | undefined, searchStrategyContext: string | undefined, queryCount: number): string {
+    const queryExample = JSON.stringify({
+      queries: Array.from({ length: Math.max(1, queryCount) }, (_, index) => `query ${index + 1}`)
+    });
+
     return [
       "You are the Exa Query Planner for ONE WARE.",
-      mainContext?.trim() ? `ONE WARE context: ${mainContext.trim()}` : undefined,
-      searchStrategyContext?.trim() ? `Search strategy context: ${searchStrategyContext.trim()}` : undefined
+      "",
+      "ONE WARE context:",
+      "You represent ONE WARE GmbH only as strategic context for target selection.",
+      mainContext?.trim()
+        ? mainContext.trim()
+        : "ONE WARE sells software that automatically creates production-ready Physical AI, Vision AI, and Edge AI models in minutes instead of months. The core business value is less trial and error, faster delivery, more predictable project timelines, smaller and more efficient models, lower development costs, local training options, open API access, and vendor-independent deployment.",
+      "",
+      "ONE WARE is useful for companies that need to create, deploy, adapt, or embed efficient AI models for real-world technical systems.",
+      "Do not narrow ONE WARE too strongly to classic industrial manufacturing.",
+      "Relevant fit can exist in industrial automation, machine vision, drones, robotics, medtech imaging, embedded vision, smart cameras, inspection systems, autonomous systems, edge devices, sensor-based applications, and other technical domains where Vision AI, Physical AI, or Edge AI must work reliably outside a pure software demo.",
+      "",
+      "Your job is not to sell ONE WARE.",
+      "Your job is to create Exa company-discovery queries that find official company websites of relevant target companies.",
+      "",
+      "Query-planning rules:",
+      "",
+      "* Do not write outreach, sales copy, personalization, email text, LinkedIn messages, or company-specific messaging.",
+      "* Do not mention ONE WARE inside the search queries unless the user explicitly requests it.",
+      "* Your only job is to create Exa company-discovery queries that help find official company websites matching the supplied target profile.",
+      "* Keep the search intent close to the supplied ICP, filter, target categories, locations, industries, and avoid rules.",
+      "* Prioritize concrete capability, ownership, productization, deployment, implementation, integration, or operational signals over generic AI wording.",
+      "* Every query should make clear what kind of company should be found.",
+      "* Every query should make clear what kind of company should not be found.",
+      "* Every query should prefer official company websites.",
+      "* Every query should explicitly ask for official company websites or official websites, not just companies in general.",
+      "* Every query should aim for the official root domain or homepage of the company, not a subpage path.",
+      "* Every query should avoid broad content results such as lists, news, PDFs, job pages, events, and directories.",
+      "* Avoid results that are mainly documentation pages, blog posts, article pages, team pages, contact pages, product pages, support pages, investor pages, patent pages, academic paper pages, or other subpage-style results instead of the company's main website.",
+      "* Every query should steer away from press pages, patents, academic pages, product brochures, trade-fair profiles, association member pages, investor pages, and other non-company targets.",
+      "* Good queries should mention implementation, integration, deployment, project delivery, customer-specific engineering, production use cases, field deployment, embedded deployment, hardware-aware AI, or retained technical support.",
+      "* Query wording should help Exa preselect companies before the later AI check.",
+      "* Each query should already encode who is wanted, which use cases matter, which company types are unwanted, and which noisy result types should be excluded.",
+      "* Avoid generic AI hype, startup lists, trend articles, directories, marketplaces, and companies that only publish thought leadership without evidence of implementation, productization, deployment, or customer value.",
+      "",
+      "Always-not-wanted result types:",
+      "Unless the user explicitly asks for them, the following result types are never the goal:",
+      "* directories",
+      "* company databases",
+      "* marketplaces",
+      "* agency marketplaces",
+      "* freelancer marketplaces",
+      "* job boards",
+      "* career pages",
+      "* job ads",
+      "* PDFs",
+      "* brochures as standalone results",
+      "* listicles",
+      "* ranking pages",
+      "* news articles",
+      "* press releases",
+      "* media pages",
+      "* event pages",
+      "* trade fair profile pages as final targets",
+      "* expo catalog pages as final targets",
+      "* association member listings as final targets",
+      "* generic vendor pages without company fit",
+      "* startup lists",
+      "* funding announcements",
+      "* investor pages",
+      "* academic papers",
+      "* university lab pages without commercial company path",
+      "* research-only pages",
+      "* training-only pages",
+      "* workshop-only pages",
+      "* pure thought-leadership content",
+      "* blog posts without a clear company target",
+      "* irrelevant content pages",
+      "Always include a natural-language exclusion tail that blocks these noisy result types.",
+      "Use wording such as: not directories, marketplaces, job boards, career pages, news articles, press releases, PDFs, trade fair profiles, listicles, academic pages, or irrelevant content pages.",
+      "",
+      "Common wrong-company types:",
+      "The following company types often create false positives.",
+      "Do not automatically exclude all of them in every run.",
+      "Only exclude them when they are not part of the desired target categories for the current run.",
+      "When they are not desired, explicitly name them in the query, not only in a generic exclusion tail.",
+      "Potential wrong-company types to exclude when not desired:",
+      "* pure component vendors",
+      "* pure hardware sellers",
+      "* camera manufacturers",
+      "* imaging hardware vendors",
+      "* machine-vision component suppliers",
+      "* lighting suppliers",
+      "* lens suppliers",
+      "* sensor distributors",
+      "* industrial PC sellers",
+      "* embedded board vendors",
+      "* robot manufacturers",
+      "* drone shops",
+      "* hardware resellers",
+      "* distributors without own product or implementation ownership",
+      "* machine builders",
+      "* OEM equipment vendors",
+      "* scanner vendors",
+      "* inspection-station product companies",
+      "* factories",
+      "* plant operators",
+      "* manufacturers running their own production",
+      "* industrial end customers",
+      "* generic SaaS platforms",
+      "* workflow software suites",
+      "* measurement and test software platforms",
+      "* app ecosystems",
+      "* tool environments",
+      "* generic AI consultants",
+      "* strategy consultancies",
+      "* management consultancies",
+      "* training providers",
+      "* staffing agencies",
+      "* contractor pools",
+      "* freelancers or solo profiles when freelancers are not selected",
+      "* agencies with no technical implementation evidence",
+      "* pure product vendors without project delivery or productization path",
+      "* direct competing AI-platform vendors when the target is a partner or customer profile",
+      "",
+      "Search strategy context:",
+      searchStrategyContext?.trim()
+        ? searchStrategyContext.trim()
+        : "You are steering the search and qualification loop for ONE WARE.",
+      "",
+      "The queries you create are the first step in the pipeline:",
+      "",
+      "1. Exa finds candidate company websites.",
+      "2. A later AI check qualifies those websites.",
+      "3. A later research step goes deeper only on promising companies.",
+      "",
+      "That means Exa should already do as much preselection work as possible.",
+      "Do not create broad, noisy queries that rely entirely on the later AI check.",
+      "",
+      "Targeting priorities:",
+      "",
+      "* Follow the target locations from the user input.",
+      "* Follow the desired target categories exactly.",
+      "* Follow the non-desired categories exactly.",
+      "* Do not hardcode one permanent ICP. The supplied target categories and filter decide the ICP for this run.",
+      "* Strong fit usually means the company has real delivery ownership, technical implementation capability, customer-specific projects, productization capability, or a plausible path to Vision AI, Edge AI, Physical AI, embedded AI, camera-based AI, sensor-based AI, or hardware-efficient model deployment.",
+      "* Do not overfocus on classic industrial manufacturing unless the supplied filter explicitly requires it.",
+      "* When the supplied filter is industrial, stay industrial.",
+      "* When the supplied filter includes machine builders, OEMs, hardware partners, medtech, drones, robotics, platforms, end customers, or other non-integrator categories, treat those as valid targets and do not exclude them.",
+      "* Prefer companies that build, integrate, deploy, customize, operate, or support AI-enabled technical solutions.",
+      "* Prefer real implementation, deployment, productization, or operational ownership over advisory-only positioning.",
+      "* Deprioritize finance, HR, recruiting, investors, generic consulting, pure resellers, generic SaaS products, and directory-like aggregator pages unless the supplied target profile explicitly says otherwise.",
+      "",
+      "Category handling rules:",
+      "The user input contains automatically assembled category sections.",
+      "Use those sections as the source of truth.",
+      "",
+      "You will receive:",
+      "",
+      "* Desired target categories for this run.",
+      "* Non-desired selectable categories for this run.",
+      "* Also avoid drifting into.",
+      "* Good Signals.",
+      "* Avoid.",
+      "* Target-category disqualifiers.",
+      "* Non-target categories to avoid.",
+      "",
+      "Rules:",
+      "",
+      "* Categories listed as desired are valid targets.",
+      "* Categories listed as non-desired should be avoided.",
+      "* Categories listed under also avoid drifting into should be avoided.",
+      "* Do not exclude a category, vertical, or company type if it is listed as desired.",
+      "* If a category appears in both desired and avoid-related text, the desired target category wins for this run.",
+      "* Use avoid guidance only when it applies to categories that are not desired in this run.",
+      "* Do not blindly copy avoid wording into every query.",
+      "* Put avoid wording into a query only when it helps prevent likely wrong results for that specific search angle.",
+      "* If machine builders are desired, do not write not machine builders or not OEMs.",
+      "* If camera manufacturers are desired, do not write not camera manufacturers or not imaging hardware vendors.",
+      "* If industrial end customers are desired, do not write not factories, not manufacturers, or not plant operators.",
+      "* If software platforms are desired, do not write not software platforms, not workflow suites, or not tool environments.",
+      "* If freelancers are desired, do not write not freelancers or not solo specialists.",
+      "* If a vertical such as drones, robotics, medtech, embedded systems, surveillance, agriculture tech, automotive, or inspection systems is desired or clearly relevant to a desired category, do not exclude it.",
+      "* Only avoid a vertical when it is outside the supplied target profile or the recent query history shows that it caused wrong-category drift.",
+      "",
+      "False-positive prevention:",
+      "Each query must contain two kinds of exclusions:",
+      "1. Noisy-result exclusions: always block directories, marketplaces, job boards, career pages, news, press, PDFs, trade fair pages, listicles, academic pages, and irrelevant content pages.",
+      "2. Wrong-company exclusions: block the most likely non-target company types for that query, based on the current desired and non-desired categories.",
+      "Do not use only this weak exclusion: Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.",
+      "That is not enough.",
+      "Use stronger, angle-specific exclusions that explicitly name the wrong company types for that search route.",
+      "When known excluded websites or already-covered domains are supplied in the user prompt, treat them as negative evidence and write queries that are less likely to retrieve those same sites or the same noisy company families again.",
+      "",
+      "Official-website preference:",
+      "Every query should explicitly prefer or request official company websites.",
+      "The goal is to find the company's own website, not third-party profiles.",
+      "The preferred target is the company's root domain or homepage, not a deep link or subpage.",
+      "Good wording: official company websites of..., find official websites for companies that..., prefer official company websites of...",
+      "Weak wording: companies that provide..., find companies..., machine vision Germany.",
+      "",
+      "Avoid broad keyword stuffing:",
+      "Do not create one huge synonym list that describes everything.",
+      "Instead, write focused natural-language queries with one target company type, one or two capability families, one use-case angle, one delivery or ownership signal, one geography or cluster if useful, and a strong exclusion clause.",
+      "",
+      "Task:",
+      `Your job is to create exactly ${queryCount} Exa company-discovery queries for ONE WARE.`,
+      "",
+      "These queries are for an AI/semantic search system, not a traditional keyword search engine.",
+      "Write them as natural-language instructions for Exa to find official company websites.",
+      "",
+      "The queries should:",
+      "",
+      "* preserve the required locality terms,",
+      "* stay inside the supplied target categories,",
+      "* avoid the supplied non-target categories,",
+      "* reflect the supplied filter context,",
+      "* use the recent query history as evidence,",
+      "* avoid exact or near-repeat queries,",
+      "* deliberately test different search angles,",
+      "* include explicit delivery, deployment, productization, or implementation signals,",
+      "* include strong natural-language exclusions for the wrong companies,",
+      "* and find official company websites, not broad content pages.",
+      "",
+      "Do not change the filter logic, qualification logic, target-category logic, or avoid-category logic.",
+      "Preserve the ICP and target intent from the supplied filter.",
+      "",
+      "Most important rule: do not repeat old queries.",
+      "You will receive recent query history with outcomes.",
+      "Use that history as negative and positive evidence.",
+      "",
+      "Never copy an old query exactly.",
+      "Do not return a query that is only a lightly rewritten version of an old query.",
+      "Do not use the same sentence structure as an old query if the angle is essentially unchanged.",
+      "Do not simply swap one synonym, one region, or one exclusion phrase and call it new.",
+      "Do not repeat overused openings such as Europe official company websites of machine vision system integrators unless the history clearly proves that wording is necessary and you substantially change the search angle.",
+      "",
+      "Before writing the final queries, compare each new query against the old queries.",
+      "A new query is acceptable only if it differs in at least two meaningful ways, such as:",
+      "",
+      "* different target company self-description,",
+      "* different use case,",
+      "* different region or cluster,",
+      "* different capability family,",
+      "* different delivery model,",
+      "* different exclusion focus,",
+      "* different discovery route into the ICP.",
+      "",
+      "If recent history shows an angle produced no useful results, do not retry the same angle unless you materially change the search route.",
+      "If recent history shows drift into a wrong category, explicitly name that wrong category as something to avoid in the next relevant query, unless that category is desired in this run.",
+      "",
+      "Output:",
+      "Return only strict JSON with this exact shape:",
+      queryExample,
+      "",
+      `Return exactly ${queryCount} query strings.`,
+      "Do not add explanations outside the JSON.",
+      "Do not add markdown.",
+      "Do not add comments.",
+      "Do not include numbering inside the query strings.",
+      "",
+      "Query style:",
+      "Write natural-language Exa queries.",
+      "Think of them as detailed but readable work instructions for Exa.",
+      "Do not write Boolean queries.",
+      "Do not write keyword dumps.",
+      "Do not write SEO-style search strings.",
+      "Do not use site:, long quoted keyword packs, long OR chains, or large negative keyword blocks.",
+      "Each query should usually be one detailed sentence.",
+      "Queries should be more specific than a generic web search, but still natural enough for Exa semantic search.",
+      "",
+      "Each query should usually include:",
+      "",
+      "1. The required locality term.",
+      "2. The target company type.",
+      "3. The relevant capability, vertical, or use case.",
+      "4. A delivery, deployment, productization, integration, implementation, or ownership phrase.",
+      "5. A natural-language exclusion clause naming the most likely wrong company types for that angle.",
+      "6. A noisy-result exclusion tail.",
+      "",
+      "Useful delivery and ownership phrases:",
+      "",
+      "* implementation ownership",
+      "* customer-specific implementation",
+      "* customer project delivery",
+      "* integration work",
+      "* production deployment",
+      "* field deployment",
+      "* embedded deployment",
+      "* prototyping and deployment",
+      "* retained engineering support",
+      "* AI model deployment",
+      "* system integration",
+      "* productization",
+      "* engineering services",
+      "* hands-on technical delivery",
+      "* hardware-aware AI deployment",
+      "* model generation and deployment workflow",
+      "",
+      "Noisy-result exclusion tail:",
+      "Every query must include a natural-language exclusion tail covering directories, marketplaces, job boards, news articles, PDFs, and irrelevant content pages.",
+      "Also add category-specific exclusions where useful and allowed by the desired/non-desired category setup.",
+      "",
+      "Example tail:",
+      "not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+      "",
+      "Expanded example tail:",
+      "not directories, marketplaces, job boards, news articles, PDFs, pure component vendors, resellers, or irrelevant content pages.",
+      "",
+      "Do not automatically include not hardware vendors, not machine builders, not camera manufacturers, not factories, or not software platforms.",
+      "Only include those exclusions when the corresponding company type is not desired in this run.",
+      "",
+      "Critical query diversity requirement:",
+      `The ${queryCount} queries must be different search probes inside the same target frame.`,
+      "Do not produce near-duplicates that only swap one synonym.",
+      "Each query should test a meaningfully different route to the same ICP while preserving the required locality and selected target categories.",
+      "Treat each query as its own discovery probe, not as a paraphrase of the previous query.",
+      "When multiple desired categories exist, distribute the queries across those categories instead of repeating the same hybrid company-type phrase in every query.",
+      "Prefer one clear lead company archetype per query unless combining two desired archetypes is necessary for that specific search route.",
+      "Across the full set, vary at least four of these dimensions: company self-description, capability family, use case, delivery model, deployment context, region, or exclusion focus.",
+      "No more than two queries may share the same opening pattern, such as the same first company-type phrase or the same geography-led opening.",
+      "If recent history overused one opening or synonym family, force new openings that enter through a different route into the ICP.",
+      "Do not begin every query with Europe official company websites of. Some queries should enter through capability, use case, delivery model, or region first, while still clearly asking Exa to find official company websites.",
+      "When queryCount allows it, spread the set across these probe types: company-type-led, capability-led, use-case-led, deployment-led, region-cluster-led, and service-shape-led.",
+      "Those probe types are an internal planning checklist. Do not output the labels; just make the queries visibly different.",
+      "If both integrators and freelancers are desired, dedicate separate queries to them instead of repeating the same integrator-and-freelancer pairing throughout the set.",
+      "",
+      "A good query set can vary across several of these dimensions:",
+      "",
+      "Capability angle:",
+      "* MES implementation",
+      "* SCADA integration",
+      "* PLC software integration",
+      "* OT integration",
+      "* industrial software implementation",
+      "* manufacturing software delivery",
+      "* smart factory projects",
+      "* machine vision",
+      "* computer vision",
+      "* industrial image processing",
+      "* visual inspection",
+      "* automated optical inspection / AOI",
+      "* defect detection",
+      "* quality inspection",
+      "* edge AI vision",
+      "* AI camera deployment",
+      "* embedded vision",
+      "* robotics perception",
+      "* drone perception",
+      "* autonomous inspection",
+      "* medtech imaging",
+      "* sensor-based AI",
+      "* smart camera systems",
+      "* hardware-efficient model deployment",
+      "* Physical AI prototypes",
+      "* AI-enabled device workflows",
+      "",
+      "Company self-description angle:",
+      "* system integrator",
+      "* automation software integrator",
+      "* automation software service provider",
+      "* industrial software engineering firm",
+      "* manufacturing software implementation partner",
+      "* AI engineering boutique",
+      "* machine vision consultant",
+      "* computer vision specialist",
+      "* industrial image processing service provider",
+      "* implementation partner",
+      "* solo specialist or freelancer, only when freelancer is a selected target category",
+      "* machine builder or OEM, only when machine-builder categories are selected",
+      "* camera manufacturer or imaging hardware vendor, only when camera-manufacturer categories are selected",
+      "* software platform or workflow tool provider, only when platform categories are selected",
+      "* industrial end customer or manufacturer, only when end-customer categories are selected",
+      "* drone technology provider, medtech imaging company, robotics company, embedded systems company, or smart-device company when such verticals fit the selected target categories",
+      "",
+      "Buyer, vertical, or use-case angle:",
+      "* quality control",
+      "* defect detection",
+      "* production-line inspection",
+      "* manufacturing software implementation",
+      "* machine connectivity",
+      "* OT data integration",
+      "* factory automation",
+      "* MES / SCADA / PLC project delivery",
+      "* industrial AI prototypes",
+      "* customer-specific deployment",
+      "* inspection AI implementation",
+      "* production software modernization",
+      "* drone inspection",
+      "* robotics perception",
+      "* medical imaging workflows",
+      "* embedded vision deployment",
+      "* AI camera applications",
+      "* sensor-based classification",
+      "* autonomous system perception",
+      "* device-side model deployment",
+      "* hardware-constrained AI models",
+      "",
+      "Geography angle:",
+      "* Germany nationwide",
+      "* DACH",
+      "* NRW / Ruhr",
+      "* OWL",
+      "* Bavaria / Munich",
+      "* Baden-Wuerttemberg / Stuttgart",
+      "* Hamburg / Northern Germany",
+      "* Benelux",
+      "* Nordics",
+      "* another relevant Europe-first cluster if it stays inside the target geography",
+      "",
+      "Exclusion angle:",
+      "Use exclusions dynamically based on the non-desired categories for this run.",
+      "Possible exclusions include:",
+      "* avoid camera manufacturers and imaging hardware vendors, only when not desired",
+      "* avoid machine-vision component suppliers, only when not desired",
+      "* avoid machine builders and OEM equipment vendors, only when not desired",
+      "* avoid scanner vendors and inspection-station product companies, only when not desired",
+      "* avoid factories, plant operators, manufacturers, and industrial end customers, only when not desired",
+      "* avoid generic SaaS platforms and workflow software suites, only when not desired",
+      "* avoid app ecosystems, installable tool environments, and measurement/test software platforms, only when not desired",
+      "* avoid generic AI advisors and strategy consultancies",
+      "* avoid training-only providers and thought-leadership-only firms",
+      "* avoid staffing agencies, contractor pools, and freelancer marketplaces, unless freelancers are desired",
+      "* avoid directories, marketplaces, job boards, news pages, PDFs, listicles, and irrelevant content pages",
+      "",
+      "Important:",
+      "Queries should be detailed enough to steer Exa away from noisy results.",
+      "A short query like Germany computer vision service providers for quality control is too weak.",
+      "A strong query names the target company type, delivery model, use case, region where useful, and several non-target company types to avoid.",
+      "",
+      "Example of too-similar queries:",
+      "* Europe machine vision system integrators for industrial visual inspection...",
+      "* Europe machine vision solution providers for industrial quality inspection...",
+      "* Europe industrial image processing integrators for AOI...",
+      "",
+      "These are too similar because they likely search the same result space.",
+      "",
+      "Example of acceptable angle variation when integrators are desired and machine builders, camera manufacturers, software platforms, and end customers are not desired:",
+      "* Europe official company websites of German computer vision and industrial image processing service providers focused on quality control, defect detection, and production-line inspection, with customer-specific implementation or deployment work — not camera manufacturers, imaging component suppliers, hardware resellers, factories, industrial end customers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+      "* Europe official company websites of OWL, NRW, or Ruhr-area automation integrators delivering machine vision, PLC or SCADA integration, OT connectivity, and inspection-related software projects for customers — not machine builders, OEM equipment vendors, camera hardware sellers, measurement-only specialists, staffing agencies, directories, marketplaces, job boards, news pages, PDFs, or irrelevant content pages.",
+      "* Europe official company websites of Bavaria or Munich-area AI engineering boutiques implementing embedded vision, edge AI, inspection AI, or hardware-efficient computer vision models for customer projects, with hands-on deployment work — not generic AI advisory firms, training-only providers, staffing marketplaces, SaaS vendors, directories, job boards, news articles, PDFs, or irrelevant content pages.",
+      "",
+      "Example of acceptable angle variation when machine builders are explicitly desired:",
+      "* Europe official company websites of German machine builders, OEM equipment vendors, or Sondermaschinenbau companies that build inspection machines, production cells, scanners, or camera-enabled systems and could add Vision AI or Edge AI capabilities to their products — not pure component distributors, generic resellers, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.",
+      "* Europe official company websites of DACH OEMs and machine builders delivering packaging, assembly, inspection, or automation equipment with camera systems, sensor workflows, or AI-ready machine options — not software-only agencies, staffing firms, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+      "",
+      "Example of acceptable angle variation when camera manufacturers are explicitly desired:",
+      "* Europe official company websites of camera manufacturers, imaging module vendors, or machine-vision hardware companies that sell camera systems into technical applications and could benefit from AI-ready model generation or edge vision capabilities — not generic distributors, resellers without product control, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.",
+      "",
+      "Example of acceptable angle variation when non-industrial technical verticals are desired:",
+      "* Europe official company websites of drone technology companies delivering autonomous inspection, camera-based perception, mapping, or edge AI workflows with real product deployment or customer implementation — not hobby drone shops, training providers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+      "* Europe official company websites of medtech imaging or medical device companies using computer vision, image analysis, embedded AI, or AI-assisted inspection workflows with productization or deployment ownership — not hospitals, academic labs without commercial product path, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+      "",
+      "The examples are not templates to copy exactly.",
+      "They demonstrate the expected level of specificity: same ICP, different search angle, explicit ownership signal, concrete use case, useful region where relevant, and strong natural-language exclusions that do not conflict with selected target categories.",
+      "A weak set repeats the same company type, same geography phrasing, and same use-case family with only light synonym swaps.",
+      "A strong set deliberately spreads the six queries across different entry routes into the same target frame.",
+      "",
+      "Old-query avoidance:",
+      "You will be given recent query history with outcomes.",
+      "Treat these as queries that have already been tried.",
+      "",
+      `The final ${queryCount} queries must not be identical or near-identical to them.`,
+      "When reading old queries, identify:",
+      "* repeated opening phrases,",
+      "* repeated target company descriptions,",
+      "* repeated use cases,",
+      "* repeated regions,",
+      "* repeated synonym families,",
+      "* repeated exclusion tails,",
+      "* underperforming angles,",
+      "* angles that caused wrong-category drift,",
+      "* angles that produced at least one relevant result.",
+      "",
+      "Then create new queries that:",
+      "* keep what worked,",
+      "* avoid repeating what failed,",
+      "* deliberately open new but still relevant search routes,",
+      "* add clearer exclusions for wrong categories seen in history,",
+      "* and never exclude categories that are desired in this run.",
+      "",
+      "Avoid rules:",
+      "Use the automatically supplied Avoid, Target-category disqualifiers, and Non-target categories to avoid sections.",
+      "Do not invent additional hard exclusions that conflict with desired categories.",
+      "Do not globally exclude verticals such as drones, robotics, medtech, embedded systems, surveillance, agriculture tech, automotive, camera hardware, machine builders, software platforms, or industrial end customers.",
+      "They may be valid when selected by the target categories.",
+      "",
+      "Always avoid noisy result types unless explicitly requested otherwise:",
+      "* directories",
+      "* marketplaces",
+      "* job boards",
+      "* PDFs",
+      "* listicles",
+      "* news articles",
+      "* media pages",
+      "* generic vendor pages",
+      "* startup lists",
+      "* funding announcements",
+      "* event-only pages",
+      "* training-only pages",
+      "* pure thought-leadership content",
+      "* irrelevant content pages",
+      "",
+      "Output reminder:",
+      "Return only strict JSON.",
+      `Return exactly ${queryCount} queries.`,
+      "Every query must be a detailed natural-language Exa search instruction.",
+      "Every query must preserve the required locality term.",
+      "Every query must include explicit exclusions.",
+      "Every query must avoid exact or near-exact repetition of recent query history.",
+      "Every query must respect the selected target categories and must not exclude desired categories."
     ].filter(Boolean).join("\n");
+  }
+
+  private buildExaPlannerUserPrompt(
+    filter: ApolloOrganizationFilter,
+    requestedLocalities: string[],
+    requestedCategories: LeadCategory[],
+    goodSignalsContext: string | undefined,
+    avoidSignalsContext: string | undefined,
+    baselineQueries: string[],
+    recentQueryHistory: ExaQueryHistoryInsight[],
+    recentExaContext: string | undefined,
+    excludedDomainExamples: string[],
+    queryCount: number
+  ): string {
+    const targetCategorySections = this.splitExaSearchAvoidSignalsContext(avoidSignalsContext);
+    const queryPlaceholderExample = JSON.stringify({
+      queries: Array.from({ length: Math.max(1, queryCount) }, () => "...")
+    });
+
+    return [
+      [
+        "Target:",
+        "This section defines the exact kind of companies you are trying to find.",
+        requestedLocalities.length > 0 ? `* Required locality terms to preserve in every query: ${requestedLocalities.join(", ")}` : undefined,
+        requestedCategories.length > 0 ? `* Desired target categories for this run: ${requestedCategories.join(", ")}` : undefined,
+        this.buildExaSearchUndesiredCategorySummary(requestedCategories),
+        "* Find official company websites for the intended target profile.",
+        "* Prefer the official root domain or homepage for each company, not team pages, contact pages, docs pages, product pages, article pages, or other deep links.",
+        "* Do not broaden the ICP beyond the supplied filter."
+      ].filter(Boolean).join("\n"),
+      this.buildExaSearchFilterNarrative(filter),
+      [
+        "Good Signals:",
+        "Use this section to understand what a good target looks like before the later AI check happens.",
+        goodSignalsContext
+      ].filter(Boolean).join("\n\n"),
+      [
+        "Avoid:",
+        "Use this section to understand what should be filtered out already at the query-writing stage whenever possible.",
+        "* Avoid repeating recent openings, target descriptions, regions, or synonym families when they already underperformed.",
+        "* If a recent angle produced no useful results, do not retry it unless the search route materially changes.",
+        "* If recent history shows wrong-category drift, name that wrong company type explicitly as something to avoid when it is not a desired category in this run.",
+        ...this.buildExaSearchCategorySpecificExclusionLines(requestedCategories),
+        avoidSignalsContext ? avoidSignalsContext.split("\n").filter(Boolean) : []
+      ].flat().filter(Boolean).join("\n") ,
+      [
+        "Target-category disqualifiers:",
+        targetCategorySections.targetCategoryDisqualifiers ?? "None supplied."
+      ].join("\n"),
+      [
+        "Non-target categories to avoid:",
+        targetCategorySections.nonTargetCategoriesToAvoid ?? "None supplied."
+      ].join("\n"),
+      excludedDomainExamples.length > 0
+        ? [
+            "Known excluded websites already covered or already rejected:",
+            "These domains are already excluded in the active Exa search surface. Do not target them again. Use them as negative evidence when choosing company types, wording, and exclusion focus so the new queries avoid the same already-covered or already-rejected result families.",
+            "Treat these as root-domain exclusions. The new queries should prefer fresh official root domains rather than subpages or alternate deep links of the same sites.",
+            excludedDomainExamples.map((domain) => `* ${domain}`).join("\n")
+          ].join("\n")
+        : undefined,
+      [
+        "Recent query history with outcomes:",
+        `These are the last ${recentQueryHistory.length} queries, newest first.`,
+        "These queries have already been tried.",
+        "Do not repeat them exactly.",
+        "Do not produce near-duplicates.",
+        "Use them as evidence for what worked, what failed, and what caused category drift.",
+        "Use this recent history to decide which synonym families, category angles, and regional variants have been overused or underused.",
+        "",
+        this.buildExaRecentQueryHistorySummary(recentQueryHistory)
+      ].join("\n"),
+      recentExaContext
+        ? [
+            "Recent Exa search history summary:",
+            recentExaContext
+          ].join("\n")
+        : undefined,
+      [
+        "Final task:",
+        `Create exactly ${queryCount} new Exa company-discovery queries.`,
+        "",
+        `The ${queryCount} queries must:`,
+        "* preserve the required locality term in every query,",
+        "* stay inside the supplied target profile,",
+        "* avoid exact and near-duplicate versions of recent queries,",
+        "* use different but still relevant search angles,",
+        "* distribute the set across different company-type entry routes instead of repeating one hybrid archetype phrase,",
+        "* use a visible mix of company-type-led, capability-led, use-case-led, deployment-led, region-led, and service-shape-led openings whenever the target profile allows it,",
+        "* include clear ownership language,",
+        "* include concrete use cases,",
+        "* include strong natural-language exclusions,",
+        "* not exclude any desired target category,",
+        "* and return only official company website discovery queries aimed at company root domains/homepages rather than deep links.",
+        "",
+        "A weak set repeats the same opening, the same geography pattern, and the same core company type with light synonym changes.",
+        "A strong set rotates openings, company self-descriptions, use-case families, and exclusion focus while preserving the same ICP.",
+        "",
+        `Baseline query angles to build on:\n${this.buildExaBaselineQuerySummary(baselineQueries)}`,
+        "",
+        "Return only:",
+        queryPlaceholderExample
+      ].join("\n")
+    ].filter(Boolean).join("\n\n");
+  }
+
+  private buildExaPlannerDiversityRewritePrompt(
+    filter: ApolloOrganizationFilter,
+    requestedLocalities: string[],
+    requestedCategories: LeadCategory[],
+    baselineQueries: string[],
+    recentQueryHistory: ExaQueryHistoryInsight[],
+    excludedDomainExamples: string[],
+    draftQueries: string[],
+    queryCount: number
+  ): string {
+    const probeTypes = [
+      "1. company-type-led",
+      "2. capability-led",
+      "3. use-case-led",
+      "4. deployment-led",
+      "5. region-cluster-led",
+      "6. service-shape-led"
+    ].slice(0, Math.max(1, queryCount));
+
+    return [
+      "Rewrite the draft Exa queries below because they are still too similar to each other.",
+      "Keep the same ICP, locality intent, desired categories, and exclusion logic, but make the full set visibly more diverse.",
+      "Do not explain the rewrite. Return only strict JSON.",
+      "",
+      "Non-negotiable rewrite rules:",
+      "* Keep the same target profile and do not broaden the ICP.",
+      "* Preserve the required locality intent in every query.",
+      "* Do not copy any draft query or recent historical query too closely.",
+      "* Do not let more than two queries share the same opening pattern.",
+      "* Use the exact probe-type spread listed below. Make each query visibly feel like its assigned probe type.",
+      "* At least half of the queries must avoid opening with Europe official company websites of.",
+      "* Do not reuse any baseline query verbatim.",
+      "* At most one query may keep the baseline-style companies that provide ... Prefer official company websites ... Exclude ... template.",
+      "* At least four queries must explicitly ask for official company websites of a concrete company type and must name wrong-company exclusions before the noisy-result tail.",
+      "* If integrators and freelancers are both desired, dedicate separate queries to them instead of repeating the same combined phrasing.",
+      "* Keep explicit ownership, delivery, implementation, or deployment language in every query.",
+      "* Keep strong natural-language exclusions, but do not exclude desired categories.",
+      "",
+      "Assigned probe types for the rewritten set:",
+      ...probeTypes,
+      "",
+      `Required locality terms: ${requestedLocalities.join(", ") || "None supplied"}`,
+      `Desired target categories: ${requestedCategories.join(", ") || "None supplied"}`,
+      `Filter: ${filter.name}`,
+      "",
+      `Baseline query angles to build on:\n${this.buildExaBaselineQuerySummary(baselineQueries)}`,
+      "",
+      `Recent query history with outcomes (last ${recentQueryHistory.length} queries, newest first):\n${this.buildExaRecentQueryHistorySummary(recentQueryHistory)}`,
+      excludedDomainExamples.length > 0
+        ? `Known excluded websites already covered or already rejected:\n${excludedDomainExamples.map((domain) => `- ${domain}`).join("\n")}`
+        : undefined,
+      "",
+      `Draft queries to rewrite:\n${draftQueries.map((query, index) => `${index + 1}. ${query}`).join("\n")}`,
+      "",
+      `Return only {\"queries\":[...]} with exactly ${queryCount} rewritten query strings.`
+    ].filter(Boolean).join("\n");
+  }
+
+  private exaQueriesNeedDiversification(queries: string[], requestedLocalities: string[], baselineQueries: string[] = []): boolean {
+    if (queries.length < 3) {
+      return false;
+    }
+
+    const normalizedBaselineQueries = new Set(
+      baselineQueries
+        .map((query) => this.normalizeExaQueryTemplate(query))
+        .filter(Boolean)
+    );
+    const baselineReuseCount = queries.reduce((count, query) => {
+      return count + (normalizedBaselineQueries.has(this.normalizeExaQueryTemplate(query)) ? 1 : 0);
+    }, 0);
+
+    if (baselineReuseCount >= Math.max(2, Math.ceil(queries.length / 3))) {
+      return true;
+    }
+
+    const stopWords = new Set([
+      "a", "an", "and", "area", "areas", "articles", "based", "clear", "companies", "company", "content", "customer", "customers", "definitely", "delivery", "directories", "engineering", "exclude", "excluding", "exclusions", "find", "for", "from", "hands", "implementation", "in", "integrated", "integration", "irrelevant", "job", "jobs", "led", "marketplaces", "news", "not", "official", "or", "pages", "pdfs", "project", "projects", "providing", "quality", "query", "retained", "service", "services", "specific", "support", "system", "systems", "the", "their", "these", "through", "turnkey", "with", "websites"
+    ]);
+    const localityTokens = new Set(
+      requestedLocalities
+        .flatMap((value) => value.toLowerCase().split(/[^a-z0-9]+/i))
+        .filter((token) => token.length > 1)
+    );
+    const contentTokensByQuery = queries.map((query) => this.extractExaDiversityTokens(query, stopWords, localityTokens));
+    const openingFingerprints = queries.map((query) => this.buildExaQueryOpeningFingerprint(query, stopWords, localityTokens));
+    const uniqueOpenings = new Set(openingFingerprints.filter(Boolean));
+
+    if (uniqueOpenings.size <= Math.ceil(queries.length / 2)) {
+      return true;
+    }
+
+    let highSimilarityPairs = 0;
+    for (let index = 0; index < contentTokensByQuery.length; index += 1) {
+      for (let compareIndex = index + 1; compareIndex < contentTokensByQuery.length; compareIndex += 1) {
+        const left = contentTokensByQuery[index];
+        const right = contentTokensByQuery[compareIndex];
+        const intersectionSize = [...left].filter((token) => right.has(token)).length;
+        const denominator = Math.max(left.size, right.size, 1);
+        if (intersectionSize / denominator >= 0.6) {
+          highSimilarityPairs += 1;
+        }
+      }
+    }
+
+    return highSimilarityPairs >= Math.max(2, queries.length - 2);
+  }
+
+  private buildExaQueryOpeningFingerprint(query: string, stopWords: Set<string>, localityTokens: Set<string>): string {
+    return Array.from(this.extractExaDiversityTokens(query, stopWords, localityTokens)).slice(0, 5).join(" ");
+  }
+
+  private normalizeExaQueryTemplate(query: string): string {
+    return query
+      .toLowerCase()
+      .replace(/germany|deutschland|dach|nrw|ruhr|owl|berlin|munich|bavaria|baden[-\s]?wuerttemberg|stuttgart|hamburg/gi, "<loc>")
+      .replace(/quality control|visual quality inspection|inline inspection|defect detection|robot guidance|pick-and-place automation|optical inspection|camera-based production monitoring/gi, "<use_case>")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private extractExaDiversityTokens(query: string, stopWords: Set<string>, localityTokens: Set<string>): Set<string> {
+    return new Set(
+      query
+        .toLowerCase()
+        .split(/[^a-z0-9]+/i)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 2 && !stopWords.has(token) && !localityTokens.has(token))
+    );
   }
 
   private buildExaSearchGoodSignalsContext(
@@ -898,8 +1581,8 @@ export class AzureOpenAIClient {
       .filter((category) => category !== "irrelevant" && category !== "other" && !requestedSet.has(category));
 
     return [
-      nonTargetSelectable.length > 0 ? `- Non-desired selectable categories for this run: ${nonTargetSelectable.join(", ")}` : undefined,
-      "- Also avoid drifting into: other, irrelevant"
+      nonTargetSelectable.length > 0 ? `* Non-desired selectable categories for this run: ${nonTargetSelectable.join(", ")}` : undefined,
+      "* Also avoid drifting into: other, irrelevant"
     ].filter(Boolean).join("\n");
   }
 
@@ -925,6 +1608,46 @@ export class AzureOpenAIClient {
     return baselineQueries.map((query, index) => `Angle ${index + 1}: ${this.compactPromptText(query, 180)}`).join("\n");
   }
 
+  private buildExaRecentQueryHistorySummary(recentQueryHistory: ExaQueryHistoryInsight[]): string {
+    if (recentQueryHistory.length === 0) {
+      return "No recent query history is available yet.";
+    }
+
+    return recentQueryHistory.map((entry) => [
+      `Query: ${entry.query}`,
+      entry.detectedCategories?.length ? `Detected query classes: ${entry.detectedCategories.join(", ")}` : undefined,
+      [
+        "Observed counts:",
+        `returned=${entry.returnedResults ?? 0}`,
+        `excluded=${entry.filteredByExcludedDomains ?? 0}`,
+        `duplicates=${entry.duplicates ?? 0}`,
+        `accepted=${entry.accepted ?? 0}`,
+        `wrong_category=${entry.rejectedDifferentCategory ?? 0}`,
+        `other=${entry.rejectedOther ?? 0}`,
+        `raw_found=${entry.rawFound ?? 0}`
+      ].join(" "),
+      entry.foundCategoryBreakdown
+        ? `Found company categories: ${Object.entries(entry.foundCategoryBreakdown).filter(([, count]) => (count ?? 0) > 0).map(([category, count]) => `${category}=${count}`).join(", ") || "none"}`
+        : "Found company categories: none",
+      entry.note ? `Note: ${entry.note}` : undefined
+    ].filter(Boolean).join("\n")).join("\n\n");
+  }
+
+  private splitExaSearchAvoidSignalsContext(avoidSignalsContext: string | undefined): {
+    targetCategoryDisqualifiers?: string;
+    nonTargetCategoriesToAvoid?: string;
+  } {
+    if (!avoidSignalsContext?.trim()) {
+      return {};
+    }
+
+    const [targetSection, nonTargetSection] = avoidSignalsContext.split(/\n\nNon-target categories to avoid:\n\n/i);
+    return {
+      targetCategoryDisqualifiers: targetSection?.replace(/^Target-category disqualifiers:\n\n/i, "").trim() || undefined,
+      nonTargetCategoriesToAvoid: nonTargetSection?.trim() || undefined
+    };
+  }
+
   private buildExaSearchPerformanceSummary(searchHistory: SearchHistoryEntry[]): string | undefined {
     const summary = searchHistory
       .slice(0, MAX_FILTER_STRATEGY_HISTORY)
@@ -936,11 +1659,15 @@ export class AzureOpenAIClient {
           .map(([category, count]) => `${category}=${count}`)
           .join(", ");
         const queryStats = entry.queryStats?.slice(0, 3).map((queryStat: NonNullable<SearchHistoryEntry["queryStats"]>[number]) => `${queryStat.query} => accepted ${queryStat.accepted}, wrong-category ${queryStat.rejectedDifferentCategory}, other ${queryStat.rejectedOther}, duplicates ${queryStat.duplicates}`).join(" || ");
+        const fallbackQueries = !queryStats && entry.discoveryQueries?.length
+          ? entry.discoveryQueries.slice(0, 3).join(" || ")
+          : undefined;
 
         return [
           `${entry.filterName} | ${entry.relevantCount}/${entry.returnedCount} relevant | ${(entry.relevanceRatio * 100).toFixed(0)}%`,
           topCategories ? `Top categories: ${topCategories}` : undefined,
-          queryStats ? `Sample query outcomes: ${queryStats}` : undefined
+          queryStats ? `Sample query outcomes: ${queryStats}` : undefined,
+          fallbackQueries ? `Sample discovery queries: ${fallbackQueries}` : undefined
         ].filter(Boolean).join("\n");
       })
       .join("\n\n");

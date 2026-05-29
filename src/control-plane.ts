@@ -189,6 +189,7 @@ const settingsSchema = z.object({
   exaApiKey: z.string().optional(),
   diffbotToken: z.string().optional(),
   exaQueryCount: z.number().int().min(1).max(50).optional(),
+  useAzureQueryPlanner: z.boolean().optional(),
   useExaExcludeDomains: z.boolean().optional(),
   excludePreviouslyFoundExaDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
@@ -476,14 +477,12 @@ const defaultSettings: LeadAgentSettings = {
   runDeepResearch: true,
   dryRun: false,
   syncToHubSpot: true,
-  exaQueryCount: 1,
+  exaQueryCount: 4,
+  useAzureQueryPlanner: true,
   useExaExcludeDomains: true,
   excludePreviouslyFoundExaDomains: true,
   useExaCompanyCategory: false,
   maxRuntimeMs: 600_000,
-  aiPrefilterConcurrency: 20,
-  outreachPrepConcurrency: 20,
-  contactSearchConcurrency: 20,
   earlyStopEnabled: false,
   earlyStopReviewCount: 20,
   earlyStopThreshold: 0.15,
@@ -553,6 +552,7 @@ const suggestedControls = [
   "exaApiKey",
   "diffbotToken",
   "exaQueryCount",
+  "useAzureQueryPlanner",
   "useExaExcludeDomains",
   "excludePreviouslyFoundExaDomains",
   "useExaCompanyCategory",
@@ -651,6 +651,8 @@ export class ControlPlaneStore {
       excludedDomains: entry.excludedDomains?.map((domain) => domain.trim().toLowerCase()).filter(Boolean),
       queryStats: (entry.queryStats ?? []).map((queryStat) => ({
         query: queryStat.query,
+        returnedResults: queryStat.returnedResults ?? 0,
+        filteredByExcludedDomains: queryStat.filteredByExcludedDomains ?? 0,
         rawFound: queryStat.rawFound ?? 0,
         duplicates: queryStat.duplicates ?? 0,
         accepted: queryStat.accepted ?? 0,
@@ -889,16 +891,16 @@ export class ControlPlaneStore {
   }
 
   async writeTestLabExaCache(cache: { queryHistory: string[]; queryInsights?: ExaQueryHistoryInsight[]; discoveredDomains: string[] }): Promise<void> {
-    const queryHistory = Array.from(new Set(cache.queryHistory)).slice(0, 500);
+    const queryHistory = cache.queryHistory
+      .map((query) => query.trim())
+      .filter(Boolean)
+      .slice(0, 500);
     const queryInsights = (cache.queryInsights ?? [])
-      .filter((entry) => queryHistory.includes(entry.query))
-      .reduce<ExaQueryHistoryInsight[]>((entries, entry) => {
-        if (!entries.some((candidate) => candidate.query === entry.query)) {
-          entries.push(entry);
-        }
-
-        return entries;
-      }, [])
+      .filter((entry) => queryHistory.includes(entry.query?.trim()))
+      .map((entry) => ({
+        ...entry,
+        query: entry.query.trim()
+      }))
       .slice(0, 500);
 
     this.debugCacheDatabase.writeTestLabExaCache(testLabExaCacheSchema.parse({
