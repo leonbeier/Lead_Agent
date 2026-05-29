@@ -505,12 +505,18 @@ export interface LeadRunProgress {
     totalQueries?: number;
     returnedResults?: number;
     filteredByExcludedDomains?: number;
+    filteredByHubSpot?: number;
+    filteredByRejectedWebsites?: number;
+    filteredByCurrentRunCache?: number;
     duplicatesRemoved?: number;
     rawCompaniesFound?: number;
     currentBatchQueryStats?: Array<{
       query: string;
       returnedResults: number;
       filteredByExcludedDomains: number;
+      filteredByHubSpot: number;
+      filteredByRejectedWebsites: number;
+      filteredByCurrentRunCache: number;
       rawFound: number;
       duplicates: number;
       accepted: number;

@@ -125,6 +125,8 @@ type DirectExaExcludeDomainSources = {
   currentRunExcludedDomains?: string[];
 };
 
+type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache";
+
 type DirectExaQueryPlanningContext = {
   dryRun?: boolean;
   learning?: LeadLearningData;
@@ -3675,6 +3677,9 @@ export class LeadPipelineAgent {
       query: string;
       returnedResults: number;
       filteredByExcludedDomains: number;
+      filteredByHubSpot: number;
+      filteredByRejectedWebsites: number;
+      filteredByCurrentRunCache: number;
       duplicatesRemoved: number;
       rawCompaniesFound: number;
       filterName: string;
@@ -3709,6 +3714,7 @@ export class LeadPipelineAgent {
       excludeDomainSources
     );
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
+    const excludedDomainCategories = prioritizedExcludedDomains.localExcludedDomainCategories;
 
     const defaultQueries = exaClient.buildQueries(filter, 1);
     const useAzureQueryPlanner = queryPlanningContext.useAzureQueryPlanner ?? true;
@@ -3751,6 +3757,9 @@ export class LeadPipelineAgent {
       query: queries[0] ?? "",
       returnedResults: 0,
       filteredByExcludedDomains: 0,
+      filteredByHubSpot: 0,
+      filteredByRejectedWebsites: 0,
+      filteredByCurrentRunCache: 0,
       duplicatesRemoved: 0,
       rawCompaniesFound: 0,
       ...debugUpdateBase
@@ -3758,6 +3767,9 @@ export class LeadPipelineAgent {
     let completedQueries = 0;
     let returnedResultsCount = 0;
     let filteredByExcludedDomainsCount = 0;
+    let filteredByHubSpotCount = 0;
+    let filteredByRejectedWebsitesCount = 0;
+    let filteredByCurrentRunCacheCount = 0;
     let discoveredCompanyCount = 0;
     const queryResults = await this.mapWithConcurrency(
       queries.map((query) => async () => {
@@ -3765,6 +3777,9 @@ export class LeadPipelineAgent {
         const discoveredCompanies: CompanySample[] = [];
         const queryReturnedResults = payload.results?.length ?? 0;
         let queryFilteredByExcludedDomains = 0;
+        let queryFilteredByHubSpot = 0;
+        let queryFilteredByRejectedWebsites = 0;
+        let queryFilteredByCurrentRunCache = 0;
 
         for (const result of payload.results ?? []) {
           const normalizedDomain = exaClient.normalizeUrl(result.url);
@@ -3775,6 +3790,14 @@ export class LeadPipelineAgent {
           const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
           if (excludeDomain && excludedDomains.has(excludeDomain)) {
             queryFilteredByExcludedDomains += 1;
+            const category = excludedDomainCategories.get(excludeDomain);
+            if (category === "hubspot") {
+              queryFilteredByHubSpot += 1;
+            } else if (category === "rejected_website") {
+              queryFilteredByRejectedWebsites += 1;
+            } else if (category === "current_run_cache") {
+              queryFilteredByCurrentRunCache += 1;
+            }
             continue;
           }
 
@@ -3795,6 +3818,9 @@ export class LeadPipelineAgent {
         completedQueries += 1;
         returnedResultsCount += queryReturnedResults;
         filteredByExcludedDomainsCount += queryFilteredByExcludedDomains;
+        filteredByHubSpotCount += queryFilteredByHubSpot;
+        filteredByRejectedWebsitesCount += queryFilteredByRejectedWebsites;
+        filteredByCurrentRunCacheCount += queryFilteredByCurrentRunCache;
         discoveredCompanyCount += discoveredCompanies.length;
         onQueryProgress?.({
           executedQueries: completedQueries,
@@ -3802,6 +3828,9 @@ export class LeadPipelineAgent {
           query,
           returnedResults: returnedResultsCount,
           filteredByExcludedDomains: filteredByExcludedDomainsCount,
+          filteredByHubSpot: filteredByHubSpotCount,
+          filteredByRejectedWebsites: filteredByRejectedWebsitesCount,
+          filteredByCurrentRunCache: filteredByCurrentRunCacheCount,
           duplicatesRemoved: Math.max(0, returnedResultsCount - filteredByExcludedDomainsCount - discoveredCompanyCount),
           rawCompaniesFound: discoveredCompanyCount,
           ...debugUpdateBase
@@ -3827,6 +3856,9 @@ export class LeadPipelineAgent {
       query: string;
       returnedResults: number;
       filteredByExcludedDomains: number;
+      filteredByHubSpot: number;
+      filteredByRejectedWebsites: number;
+      filteredByCurrentRunCache: number;
       duplicatesRemoved: number;
       rawCompaniesFound: number;
       filterName: string;
@@ -3844,20 +3876,22 @@ export class LeadPipelineAgent {
     targetCategories: LeadCategory[],
     hubSpotExcludedDomains: Iterable<string>,
     excludeDomainSources: DirectExaExcludeDomainSources = {}
-  ): { requestExcludedDomains: string[]; localExcludedDomains: Set<string> } {
+  ): { requestExcludedDomains: string[]; localExcludedDomains: Set<string>; localExcludedDomainCategories: Map<string, DirectExaExcludedDomainCategory> } {
     const seenDomains = new Set<string>();
+    const localExcludedDomainCategories = new Map<string, DirectExaExcludedDomainCategory>();
     const hubSpotDomains: string[] = [];
     const rejectedWebsiteDomains: string[] = [];
     const currentRunExcludedDomains: string[] = [];
     const requestedCategorySet = new Set(targetCategories);
 
-    const pushDomain = (collection: string[], domain: string | undefined) => {
+    const pushDomain = (collection: string[], domain: string | undefined, category: DirectExaExcludedDomainCategory) => {
       const normalizedDomain = this.normalizeExcludeDomain(domain);
       if (!normalizedDomain || seenDomains.has(normalizedDomain)) {
         return;
       }
 
       seenDomains.add(normalizedDomain);
+      localExcludedDomainCategories.set(normalizedDomain, category);
       collection.push(normalizedDomain);
     };
 
@@ -3875,15 +3909,15 @@ export class LeadPipelineAgent {
         continue;
       }
 
-      pushDomain(rejectedWebsiteDomains, normalizedDomain);
+      pushDomain(rejectedWebsiteDomains, normalizedDomain, "rejected_website");
     }
 
     for (const domain of hubSpotExcludedDomains) {
-      pushDomain(hubSpotDomains, domain);
+      pushDomain(hubSpotDomains, domain, "hubspot");
     }
 
     for (const domain of excludeDomainSources.currentRunExcludedDomains ?? []) {
-      pushDomain(currentRunExcludedDomains, domain);
+      pushDomain(currentRunExcludedDomains, domain, "current_run_cache");
     }
 
     return {
@@ -3892,7 +3926,8 @@ export class LeadPipelineAgent {
         ...rejectedWebsiteDomains,
         ...currentRunExcludedDomains
       ],
-      localExcludedDomains: new Set(seenDomains)
+      localExcludedDomains: new Set(seenDomains),
+      localExcludedDomainCategories
     };
   }
 

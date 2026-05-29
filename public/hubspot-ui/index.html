@@ -1592,6 +1592,9 @@ ${message.content || ""}`).join("\n\n");
               accepted: 0,
               rejectedDifferentCategory: 0,
               rejectedOther: 0,
+              filteredByHubSpot: 0,
+              filteredByRejectedWebsites: 0,
+              filteredByCurrentRunCache: 0,
               categoryBreakdown: {}
             });
           }
@@ -1606,6 +1609,9 @@ ${message.content || ""}`).join("\n\n");
               existing.accepted += queryStat.accepted || 0;
               existing.rejectedDifferentCategory += queryStat.rejectedDifferentCategory || 0;
               existing.rejectedOther += queryStat.rejectedOther || 0;
+              existing.filteredByHubSpot += queryStat.filteredByHubSpot || 0;
+              existing.filteredByRejectedWebsites += queryStat.filteredByRejectedWebsites || 0;
+              existing.filteredByCurrentRunCache += queryStat.filteredByCurrentRunCache || 0;
               Object.entries(queryStat.categoryBreakdown || {}).forEach(([category, count]) => {
                 existing.categoryBreakdown[category] = (existing.categoryBreakdown[category] || 0) + count;
               });
@@ -1633,6 +1639,9 @@ ${message.content || ""}`).join("\n\n");
               accepted: queryStat?.accepted || 0,
               rejectedDifferentCategory: queryStat?.rejectedDifferentCategory || 0,
               rejectedOther: queryStat?.rejectedOther || 0,
+              filteredByHubSpot: queryStat?.filteredByHubSpot || 0,
+              filteredByRejectedWebsites: queryStat?.filteredByRejectedWebsites || 0,
+              filteredByCurrentRunCache: queryStat?.filteredByCurrentRunCache || 0,
               categoryBreakdown: { ...(queryStat?.categoryBreakdown || {}) },
               plannedQueries: Array.isArray(entry?.plannedQueries) ? entry.plannedQueries : undefined,
               promptMessages: Array.isArray(entry?.promptMessages) ? entry.promptMessages : undefined,
@@ -1790,6 +1799,7 @@ ${message.content || ""}`).join("\n\n");
               <strong>${escapeHtml(row.query || "Unbekannte Query")}</strong>
               <span class="mini-meta">Suchlauf: ${escapeHtml(row.filterName || "Unbekannter Filter")}</span>
               <span class="mini-meta">Ergebnisse der Suche: ${row.rawFound || 0} · Doppelte entfernt: ${row.duplicates || 0}</span>
+              <span class="mini-meta">Ausgefiltert: HubSpot ${row.filteredByHubSpot || 0} · Aussortierte Websites ${row.filteredByRejectedWebsites || 0} · Aktueller Cache ${row.filteredByCurrentRunCache || 0}</span>
               <span class="mini-meta">Kategorien nach AI-Check: ${escapeHtml(summarizeQueryCategoryBreakdown(row.categoryBreakdown) || "Noch keine AI-Ergebnisse gespeichert.")}</span>
               <span class="mini-meta">Other: ${row.rejectedOther || 0}</span>
               ${Array.isArray(row.plannedQueries) && row.plannedQueries.length > 0 ? `<details><summary>Geplante Exa-Queries (${row.plannedQueries.length})</summary><pre>${escapeHtml(row.plannedQueries.join("\n\n"))}</pre></details>` : ""}

@@ -96,6 +96,9 @@ interface SearchAggregate {
     query: string;
     returnedResults: number;
     filteredByExcludedDomains: number;
+    filteredByHubSpot: number;
+    filteredByRejectedWebsites: number;
+    filteredByCurrentRunCache: number;
     rawFound: number;
     duplicates: number;
     accepted: number;
@@ -472,6 +475,9 @@ export class LeadWorkerRunService {
               query: queryStat.query,
               returnedResults: queryStat.returnedResults,
               filteredByExcludedDomains: queryStat.filteredByExcludedDomains,
+              filteredByHubSpot: queryStat.filteredByHubSpot,
+              filteredByRejectedWebsites: queryStat.filteredByRejectedWebsites,
+              filteredByCurrentRunCache: queryStat.filteredByCurrentRunCache,
               rawFound: queryStat.rawFound,
               duplicates: queryStat.duplicates,
               accepted: queryStat.accepted,
@@ -1022,6 +1028,9 @@ export class LeadWorkerRunService {
               const queryStat = getOrCreateQueryStat(aggregate, update.query);
               queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
               queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
+              queryStat.filteredByHubSpot = update.filteredByHubSpot;
+              queryStat.filteredByRejectedWebsites = update.filteredByRejectedWebsites;
+              queryStat.filteredByCurrentRunCache = update.filteredByCurrentRunCache;
               aggregate.queryTexts.push(update.query);
               aggregate.plannedQueries = update.plannedQueries;
               aggregate.promptMessages = update.promptMessages;
@@ -1040,6 +1049,9 @@ export class LeadWorkerRunService {
                 totalQueries: update.totalQueries,
                 returnedResults: update.returnedResults,
                 filteredByExcludedDomains: update.filteredByExcludedDomains,
+                filteredByHubSpot: update.filteredByHubSpot,
+                filteredByRejectedWebsites: update.filteredByRejectedWebsites,
+                filteredByCurrentRunCache: update.filteredByCurrentRunCache,
                 duplicatesRemoved: update.duplicatesRemoved,
                 rawCompaniesFound: update.rawCompaniesFound
               });
@@ -1407,6 +1419,9 @@ function getOrCreateQueryStat(aggregate: SearchAggregate, query: string) {
     query,
     returnedResults: 0,
     filteredByExcludedDomains: 0,
+    filteredByHubSpot: 0,
+    filteredByRejectedWebsites: 0,
+    filteredByCurrentRunCache: 0,
     rawFound: 0,
     duplicates: 0,
     accepted: 0,
