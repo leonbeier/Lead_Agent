@@ -738,6 +738,7 @@ test("worker run reports raw Exa results separately from excluded and unique com
         workerMetrics: progress.workerMetrics
           ? {
               exaRequests: progress.workerMetrics.exaRequests,
+              exaBatchesStarted: progress.workerMetrics.exaBatchesStarted,
               exaReturnedResults: progress.workerMetrics.exaReturnedResults,
               exaFilteredByExcludedDomains: progress.workerMetrics.exaFilteredByExcludedDomains,
               exaDuplicatesRemoved: progress.workerMetrics.exaDuplicatesRemoved,
@@ -760,6 +761,8 @@ test("worker run reports raw Exa results separately from excluded and unique com
   assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaFilteredByExcludedDomains === 17));
   assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaDuplicatesRemoved === 1));
   assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaRawFound === 2));
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaRequests === 1));
+  assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaBatchesStarted === 1));
   assert.ok(progressSnapshots.some((snapshot) => snapshot.liveSearchDebug?.returnedResults === 20));
 });
 

@@ -935,6 +935,7 @@ export class HubSpotClient {
       email
       && this.isGenericMailbox(email)
       && linkedinUrl
+      && this.isPersonalLinkedInUrl(linkedinUrl)
       && !this.doesLinkedInUrlMatchContactName(linkedinUrl, firstName, lastName)
       && availableProperties.has("hs_linkedin_url")
     ) {

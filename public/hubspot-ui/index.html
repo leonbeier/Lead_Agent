@@ -2356,6 +2356,9 @@ ${message.content || ""}`).join("\n\n");
         }
 
         const settings = bootstrapData?.settings || {};
+        const aiPrefilterWorkers = runStatus.aiPrefilterConcurrency ?? settings.aiPrefilterConcurrency;
+        const outreachWorkers = runStatus.outreachPrepConcurrency ?? settings.outreachPrepConcurrency;
+        const contactWorkers = runStatus.contactSearchConcurrency ?? settings.contactSearchConcurrency;
         const totalCategories = runStatus.totalFilters ?? 0;
         const processedCategories = runStatus.processedFilters ?? 0;
         const queueSizes = runStatus.workerMetrics?.queueSizes;
@@ -2377,12 +2380,13 @@ ${message.content || ""}`).join("\n\n");
           qualifiedAfterHubSpotCheck: runStatus.funnel?.afterHubSpotDedup ?? 0,
           qualifiedAfterAiCheck: runStatus.funnel?.afterAzureAICheck ?? runStatus.foundCandidates ?? 0,
           syncedToHubSpot: runStatus.funnel?.syncedToHubSpot ?? 0,
-          aiPrefilterWorkers: settings.aiPrefilterConcurrency,
-          outreachWorkers: settings.outreachPrepConcurrency,
-          contactWorkers: settings.contactSearchConcurrency,
+              aiPrefilterWorkers,
+              outreachWorkers,
+              contactWorkers,
           workerMetrics: runStatus.workerMetrics
             ? {
                 exaRequests: runStatus.workerMetrics.exaRequests ?? 0,
+                exaBatchesStarted: runStatus.workerMetrics.exaBatchesStarted ?? 0,
                 exaRawFound: runStatus.workerMetrics.exaRawFound ?? 0,
                 aiAccepted: runStatus.workerMetrics.aiAccepted ?? 0,
                 aiRejectedDifferentCategory: runStatus.workerMetrics.aiRejectedDifferentCategory ?? 0,

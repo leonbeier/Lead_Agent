@@ -56,6 +56,10 @@ function resetLeadRunStatus(detail: string, stage: LeadRunStatus["stage"] = "idl
   leadRunStatus.totalFilters = undefined;
   leadRunStatus.foundCandidates = 0;
   leadRunStatus.targetLeadCount = undefined;
+  leadRunStatus.aiPrefilterConcurrency = undefined;
+  leadRunStatus.outreachPrepConcurrency = undefined;
+  leadRunStatus.contactSearchConcurrency = undefined;
+  leadRunStatus.exaQueryCount = undefined;
   leadRunStatus.funnel = undefined;
   leadRunStatus.timedOut = false;
   leadRunStatus.lastError = undefined;
@@ -89,6 +93,10 @@ function applyLeadRunProgress(progress: LeadRunProgress & { runVariant?: "legacy
   leadRunStatus.totalFilters = progress.totalFilters;
   leadRunStatus.foundCandidates = progress.foundCandidates;
   leadRunStatus.targetLeadCount = progress.targetLeadCount;
+  leadRunStatus.aiPrefilterConcurrency = progress.aiPrefilterConcurrency;
+  leadRunStatus.outreachPrepConcurrency = progress.outreachPrepConcurrency;
+  leadRunStatus.contactSearchConcurrency = progress.contactSearchConcurrency;
+  leadRunStatus.exaQueryCount = progress.exaQueryCount;
   leadRunStatus.funnel = progress.funnel;
   leadRunStatus.timedOut = progress.timedOut;
   leadRunStatus.updatedAt = progress.updatedAt;
@@ -141,6 +149,10 @@ async function startManagedLeadRun(
   leadRunStatus.totalFilters = undefined;
   leadRunStatus.foundCandidates = 0;
   leadRunStatus.targetLeadCount = payload.targetLeadCount;
+  leadRunStatus.aiPrefilterConcurrency = payload.aiPrefilterConcurrency;
+  leadRunStatus.outreachPrepConcurrency = payload.outreachPrepConcurrency;
+  leadRunStatus.contactSearchConcurrency = payload.contactSearchConcurrency;
+  leadRunStatus.exaQueryCount = payload.exaQueryCount;
   leadRunStatus.funnel = undefined;
   leadRunStatus.timedOut = false;
   leadRunStatus.updatedAt = new Date().toISOString();
@@ -248,6 +260,35 @@ function clearStaleLeadRunStatusIfNeeded(): void {
     "Veralteter Run freigegeben"
   );
 }
+
+async function buildRunStatusResponse(): Promise<{ runStatus: LeadRunStatus }> {
+  if (leadRunStatus.liveSearchDebug) {
+    return { runStatus: leadRunStatus };
+  }
+
+  const liveExaCache = await controlPlaneStore.getLiveExaCache();
+  const latestQueryRun = liveExaCache.queryRuns?.[0];
+  if (!latestQueryRun) {
+    return { runStatus: leadRunStatus };
+  }
+
+  return {
+    runStatus: {
+      ...leadRunStatus,
+      liveSearchDebug: {
+        filterName: latestQueryRun.filterName,
+        plannedQueries: latestQueryRun.plannedQueries,
+        promptMessages: latestQueryRun.promptMessages,
+        lastExecutedQuery: latestQueryRun.query,
+        excludedDomains: latestQueryRun.excludedDomains,
+        executedQueries: latestQueryRun.plannedQueries?.length,
+        totalQueries: latestQueryRun.plannedQueries?.length
+      },
+      updatedAt: leadRunStatus.updatedAt || latestQueryRun.timestamp
+    }
+  };
+}
+
 const selectableCategorySchema = z.enum([
   "integrator_vision_industrial_ai",
   "integrator_vision_ai_consulting",
@@ -327,6 +368,7 @@ const leadJobSchema = z.object({
   exaApiKey: z.string().optional(),
   diffbotToken: z.string().optional(),
   exaQueryCount: z.coerce.number().int().min(1).max(50).optional(),
+  useAzureQueryPlanner: z.boolean().optional(),
   useExaExcludeDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
   excludePreviouslyFoundExaDomains: z.boolean().optional(),
@@ -360,6 +402,7 @@ const settingsUpdateSchema = z.object({
   exaApiKey: z.string().optional(),
   diffbotToken: z.string().optional(),
   exaQueryCount: z.coerce.number().int().min(1).max(50).optional(),
+  useAzureQueryPlanner: z.boolean().optional(),
   useExaExcludeDomains: z.boolean().optional(),
   useExaCompanyCategory: z.boolean().optional(),
   excludePreviouslyFoundExaDomains: z.boolean().optional(),
@@ -491,6 +534,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     exaApiKey: normalizedBodyExaApiKey ?? normalizedSettingsExaApiKey ?? env.EXA_API_KEY,
     diffbotToken: typeof body.diffbotToken === "string" ? body.diffbotToken : settings.diffbotToken,
     exaQueryCount: body.exaQueryCount ?? settings.exaQueryCount,
+    useAzureQueryPlanner: body.useAzureQueryPlanner ?? settings.useAzureQueryPlanner ?? true,
     useExaExcludeDomains: body.useExaExcludeDomains ?? settings.useExaExcludeDomains,
     useExaCompanyCategory: body.useExaCompanyCategory ?? settings.useExaCompanyCategory,
     excludePreviouslyFoundExaDomains: body.excludePreviouslyFoundExaDomains ?? settings.excludePreviouslyFoundExaDomains,
@@ -775,11 +819,13 @@ app.post("/api/control/cache/company-screening/debug/reset", async (_request, re
   }
 });
 
-app.get("/api/control/run-status", (_request, response) => {
+app.get("/api/control/run-status", async (_request, response, next) => {
   clearStaleLeadRunStatusIfNeeded();
-  response.json({
-    runStatus: leadRunStatus
-  });
+  try {
+    response.json(await buildRunStatusResponse());
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post("/api/control/run-status/reset", (_request, response) => {
@@ -926,7 +972,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 });
 
 export function startServer(): void {
-  app.listen(env.PORT, () => {
-    console.log(`Lead Agent listening on port ${env.PORT}`);
+  app.listen(env.PORT, "0.0.0.0", () => {
+    console.log(`Lead Agent listening on 0.0.0.0:${env.PORT}`);
   });
 }

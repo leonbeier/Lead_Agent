@@ -174,6 +174,7 @@ export interface LeadAgentSettings {
   exaApiKey?: string;
   diffbotToken?: string;
   exaQueryCount?: number;
+  useAzureQueryPlanner?: boolean;
   useExaExcludeDomains?: boolean;
   excludePreviouslyFoundExaDomains?: boolean;
   useExaCompanyCategory?: boolean;
@@ -304,6 +305,8 @@ export interface SearchHistoryEntry {
   excludedDomains?: string[];
   queryStats?: Array<{
     query: string;
+    returnedResults: number;
+    filteredByExcludedDomains: number;
     rawFound: number;
     duplicates: number;
     accepted: number;
@@ -320,6 +323,13 @@ export interface ExaQueryHistoryInsight {
   timestamp?: string;
   detectedCategories?: LeadCategory[];
   foundCategoryBreakdown?: Partial<Record<LeadCategory, number>>;
+  returnedResults?: number;
+  filteredByExcludedDomains?: number;
+  rawFound?: number;
+  duplicates?: number;
+  accepted?: number;
+  rejectedDifferentCategory?: number;
+  rejectedOther?: number;
   note?: string;
 }
 
@@ -441,6 +451,7 @@ export interface LeadJobRequest {
   exaApiKey?: string;
   diffbotToken?: string;
   exaQueryCount?: number;
+  useAzureQueryPlanner?: boolean;
   useExaExcludeDomains?: boolean;
   excludePreviouslyFoundExaDomains?: boolean;
   useExaCompanyCategory?: boolean;
@@ -473,6 +484,10 @@ export interface LeadRunProgress {
   totalFilters?: number;
   foundCandidates?: number;
   targetLeadCount?: number;
+  aiPrefilterConcurrency?: number;
+  outreachPrepConcurrency?: number;
+  contactSearchConcurrency?: number;
+  exaQueryCount?: number;
   funnel?: LeadRunFunnel;
   timedOut?: boolean;
   stopped?: boolean;
@@ -488,9 +503,14 @@ export interface LeadRunProgress {
     excludedDomains?: string[];
     executedQueries?: number;
     totalQueries?: number;
+    returnedResults?: number;
+    filteredByExcludedDomains?: number;
+    duplicatesRemoved?: number;
     rawCompaniesFound?: number;
     currentBatchQueryStats?: Array<{
       query: string;
+      returnedResults: number;
+      filteredByExcludedDomains: number;
       rawFound: number;
       duplicates: number;
       accepted: number;

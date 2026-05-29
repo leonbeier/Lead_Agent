@@ -28,6 +28,7 @@ type QueueName = "exa" | "ai" | "outreach" | "contact" | "hubspot" | "screening"
 
 interface WorkerRunMetrics {
   exaRequests: number;
+  exaBatchesStarted: number;
   exaReturnedResults: number;
   exaFilteredByExcludedDomains: number;
   exaDuplicatesRemoved: number;
@@ -349,6 +350,7 @@ export class LeadWorkerRunService {
     const pendingExaQueryPlans = new Map<string, PendingExaQueryPlan>();
     const metrics: WorkerRunMetrics = {
       exaRequests: 0,
+      exaBatchesStarted: 0,
       exaReturnedResults: 0,
       exaFilteredByExcludedDomains: 0,
       exaDuplicatesRemoved: 0,
@@ -432,10 +434,14 @@ export class LeadWorkerRunService {
         progressMax: 100,
         progressDescription: description,
         detail: recentDebugMessages[0] ?? "Worker-Run initialisiert.",
-        processedFilters: metrics.exaRequests,
+        processedFilters: metrics.exaBatchesStarted,
         totalFilters: undefined,
         foundCandidates: countTotalQualifiedStates(),
         targetLeadCount,
+        aiPrefilterConcurrency: aiConcurrency,
+        outreachPrepConcurrency: outreachConcurrency,
+        contactSearchConcurrency: contactConcurrency,
+        exaQueryCount,
         funnel: {
           crawledPages: 0,
           afterCrawlerPrefilter: metrics.exaRawFound,
@@ -967,7 +973,7 @@ export class LeadWorkerRunService {
           decisionSamples: []
         };
         searchAggregates.set(searchId, aggregate);
-        metrics.exaRequests += 1;
+        metrics.exaBatchesStarted += 1;
         searchCounter += 1;
         metrics.queueSizes.exaInFlight += 1;
         log(`Exa-Worker startet Batch ${searchId} fuer ${filter.name}`);
@@ -1007,9 +1013,11 @@ export class LeadWorkerRunService {
             (update) => {
               const previousReturnedResults = aggregate.returnedResults ?? 0;
               const previousFilteredByExcludedDomains = aggregate.filteredByExcludedDomains ?? 0;
+              const previousExecutedQueries = aggregate.executedQueries;
               plannedDefaultQueries = update.defaultQueries;
               plannedPromptMessages = update.promptMessages;
               aggregate.executedQueries = update.executedQueries;
+              metrics.exaRequests += Math.max(0, update.executedQueries - previousExecutedQueries);
               aggregate.rawFound = update.rawCompaniesFound;
               const queryStat = getOrCreateQueryStat(aggregate, update.query);
               queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);

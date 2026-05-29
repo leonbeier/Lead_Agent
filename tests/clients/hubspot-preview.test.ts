@@ -684,6 +684,19 @@ test("existing generic mailbox contacts clear mismatched LinkedIn urls during cl
   });
 });
 
+test("existing generic mailbox contacts keep company LinkedIn urls during cleanup", () => {
+  const client = new HubSpotClient();
+  const cleanup = client["buildExistingContactCleanupProperties"]({
+    id: "contact-2b",
+    properties: {
+      email: "contact@aidolsgroup.com",
+      hs_linkedin_url: "https://www.linkedin.com/company/aidols"
+    }
+  }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
+
+  assert.deepEqual(cleanup, {});
+});
+
 test("existing contacts clear mailbox names derived from the company domain and generic CTA titles during cleanup", () => {
   const client = new HubSpotClient();
   const cleanup = client["buildExistingContactCleanupProperties"]({
