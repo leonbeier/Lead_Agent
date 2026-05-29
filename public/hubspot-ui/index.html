@@ -2372,6 +2372,12 @@ ${message.content || ""}`).join("\n\n");
         const totalCategories = runStatus.totalFilters ?? 0;
         const processedCategories = runStatus.processedFilters ?? 0;
         const queueSizes = runStatus.workerMetrics?.queueSizes;
+        const currentQueryStats = Array.isArray(runStatus.liveSearchDebug?.currentBatchQueryStats)
+          ? runStatus.liveSearchDebug.currentBatchQueryStats
+          : [];
+        const excludedByHubSpot = currentQueryStats.reduce((sum, entry) => sum + Number(entry?.filteredByHubSpot ?? 0), 0);
+        const excludedByRejectedWebsites = currentQueryStats.reduce((sum, entry) => sum + Number(entry?.filteredByRejectedWebsites ?? 0), 0);
+        const excludedByCurrentRunCache = currentQueryStats.reduce((sum, entry) => sum + Number(entry?.filteredByCurrentRunCache ?? 0), 0);
         const parallelExecutionNote = runStatus.running
           ? "Innerhalb des aktiven Schritts laufen die Worker parallel; angezeigt wird hier immer nur das neueste Einzel-Update aus diesem Block."
           : undefined;
@@ -2385,6 +2391,12 @@ ${message.content || ""}`).join("\n\n");
           progressValue: runStatus.progressValue,
           progressDescription: runStatus.progressDescription,
           detail: runStatus.detail,
+          exaApiReturnedResults: runStatus.workerMetrics?.exaReturnedResults ?? 0,
+          exaExcludedByAllLists: runStatus.workerMetrics?.exaFilteredByExcludedDomains ?? 0,
+          exaExcludedByHubSpot: excludedByHubSpot,
+          exaExcludedByRejectedWebsites: excludedByRejectedWebsites,
+          exaExcludedByCurrentRunCache: excludedByCurrentRunCache,
+          exaUniqueCompaniesAfterExcludes: runStatus.workerMetrics?.exaRawFound ?? 0,
           currentQualifiedCompanies: runStatus.funnel?.afterHubSpotDedup ?? runStatus.foundCandidates ?? 0,
           exaRawCompanies: runStatus.funnel?.afterCrawlerPrefilter ?? 0,
           qualifiedAfterHubSpotCheck: runStatus.funnel?.afterHubSpotDedup ?? 0,
