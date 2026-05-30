@@ -202,7 +202,7 @@ Der Nutzen liegt vor allem in drei Bereichen:
 Aus fachlicher Sicht arbeiten fünf externe Bausteine zusammen:
 
 - Exa für webbasierte Firmensuche, wenn ein Run direkt über Query-Listen arbeiten soll
-- Apollo für Firmensamples und Contact-Daten, wenn der normale Live-Pfad verfügbar ist
+- Apollo für Firmensamples und Kontaktdaten, wenn der normale Live-Pfad verfügbar ist
 - OpenAI Web Search für Unternehmensrecherche und als Ausweichpfad, wenn Apollo oder Exa nicht reichen
 - Azure OpenAI oder Azure AI Foundry für Query-Planung, Firmenbewertung, Research und Contact-Auswahl
 - HubSpot als Steuerungs-, Anzeige- und Zielsystem fuer Ergebnisse
@@ -220,7 +220,7 @@ Wenn ihr den gewuenschten Gesamtfluss in einem Satz beschreiben wollt, dann ist 
 5. Danach werden öffentliche Kontakte und optional Apollo-Kontakte für diese Firmen gesucht und sortiert.
 6. Erst danach werden qualifizierte Firmen und Kontakte nach HubSpot geschrieben.
 
-Wichtig ist die Reihenfolge: nicht erst alle Kontakte sammeln und dann hoffen, dass die Firma passt, sondern erst Query-Planung, dann Exa, dann KI-Check der Firma, dann Outreach und Kontaktfindung nur fuer die verbleibenden Kandidaten.
+Wichtig ist die Reihenfolge: nicht erst alle Kontakte sammeln und dann hoffen, dass die Firma passt, sondern erst Query-Planung, dann Exa, dann KI-Check der Firma, dann Outreach und Kontaktfindung nur für die verbleibenden Kandidaten.
 
 ### Was das System bewusst nicht ist
 
@@ -337,8 +337,8 @@ Das Learning beeinflusst also nicht nur Reporting, sondern die Reihenfolge der F
 Der aktuell wichtigste Zielablauf fuer dieses Repo ist der direkte Exa-Pfad mit KI-geplanter Query-Liste. Im Code sieht diese Kette so aus:
 
 1. `companySearchMode="exa_search"` aktiviert den direkten Exa-Modus in `LeadPipelineAgent.run()`.
-2. `AzureOpenAIClient.planExaSearchQueries()` plant aus Filter, Markt, Zielkategorien, Learning und optionalen Ausschlussdomains mehrere konkrete Suchqueries.
-3. `LeadPipelineAgent.runDirectExaCompanySearch()` fuehrt diese Queries ueber `ExaSearchClient` aus und speichert rohe Treffer plus Query-Historie im Live-Exa-Cache.
+2. `AzureOpenAIClient.planExaSearchQueries()` plant aus Filter, Markt, Zielkategorien, Learning und optionalen Ausschlussdomains mehrere konkrete Suchanfragen.
+3. `LeadPipelineAgent.runDirectExaCompanySearch()` führt diese Queries über `ExaSearchClient` aus und speichert rohe Treffer plus Query-Historie im Live-Exa-Cache.
 4. `LeadPipelineAgent.categorizeCompanies()` gibt jede gefundene Firma an die KI-Prequalification weiter. Dort wird entschieden, ob die Firma wirklich in eine aktive Zielkategorie passt.
 5. Nur die akzeptierten Firmen landen in der Shortlist.
 6. Für diese Shortlist baut `AzureOpenAIClient.buildResearchBrief()` den Firmen- und Outreach-Context auf.
