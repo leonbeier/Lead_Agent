@@ -199,25 +199,25 @@ Der Nutzen liegt vor allem in drei Bereichen:
 
 ### Welche Rolle die externen Systeme spielen
 
-Aus fachlicher Sicht arbeiten fuenf externe Bausteine zusammen:
+Aus fachlicher Sicht arbeiten fünf externe Bausteine zusammen:
 
-- Exa fuer webbasierte Firmensuche, wenn ein Run direkt ueber Query-Listen arbeiten soll
-- Apollo fuer Firmensamples und Contact-Daten, wenn der normale Live-Pfad verfuegbar ist
-- OpenAI Web Search fuer Unternehmensrecherche und als Ausweichpfad, wenn Apollo oder Exa nicht reichen
-- Azure OpenAI oder Azure AI Foundry fuer Query-Planung, Firmenbewertung, Research und Contact-Auswahl
+- Exa für webbasierte Firmensuche, wenn ein Run direkt über Query-Listen arbeiten soll
+- Apollo für Firmensamples und Contact-Daten, wenn der normale Live-Pfad verfügbar ist
+- OpenAI Web Search für Unternehmensrecherche und als Ausweichpfad, wenn Apollo oder Exa nicht reichen
+- Azure OpenAI oder Azure AI Foundry für Query-Planung, Firmenbewertung, Research und Contact-Auswahl
 - HubSpot als Steuerungs-, Anzeige- und Zielsystem fuer Ergebnisse
 
 Fuer Nicht-Entwickler ist vor allem wichtig: Diese Systeme werden nicht isoliert benutzt, sondern als zusammenhaengender Entscheidungsprozess.
 
-### Standardablauf fuer den Exa-gestuetzten Hauptpfad
+### Standardablauf für den Exa-gestützten Hauptpfad
 
 Wenn ihr den gewuenschten Gesamtfluss in einem Satz beschreiben wollt, dann ist es genau dieser:
 
-1. Ein Azure-AI- oder Foundry-gestuetzter Schritt plant mehrere Exa Search Queries aus Markt, Zielkategorien und Kontext.
+1. Ein Azure-AI- oder Foundry-gestützter Schritt plant mehrere Exa Search Queries aus Markt, Zielkategorien und Kontext.
 2. Exa sucht damit rohe Firmenkandidaten im offenen Web.
-3. Die KI prueft jede gefundene Firma gegen die Zielkategorien und sortiert unpassende Firmen aus.
+3. Die KI prüft jede gefundene Firma gegen die Zielkategorien und sortiert unpassende Firmen aus.
 4. Nur Firmen mit passender Kategorie gehen in Research und Outreach-Vorbereitung.
-5. Danach werden oeffentliche Kontakte und optional Apollo-Kontakte fuer diese Firmen gesucht und sortiert.
+5. Danach werden öffentliche Kontakte und optional Apollo-Kontakte für diese Firmen gesucht und sortiert.
 6. Erst danach werden qualifizierte Firmen und Kontakte nach HubSpot geschrieben.
 
 Wichtig ist die Reihenfolge: nicht erst alle Kontakte sammeln und dann hoffen, dass die Firma passt, sondern erst Query-Planung, dann Exa, dann KI-Check der Firma, dann Outreach und Kontaktfindung nur fuer die verbleibenden Kandidaten.
@@ -332,7 +332,7 @@ Danach kann die Pipeline die Filters erweitern oder umsortieren:
 
 Das Learning beeinflusst also nicht nur Reporting, sondern die Reihenfolge der Filterbearbeitung direkt.
 
-### 3b. Der Exa-First-Ablauf im Code
+### 4. Der Exa-First-Ablauf im Code
 
 Der aktuell wichtigste Zielablauf fuer dieses Repo ist der direkte Exa-Pfad mit KI-geplanter Query-Liste. Im Code sieht diese Kette so aus:
 
@@ -341,15 +341,15 @@ Der aktuell wichtigste Zielablauf fuer dieses Repo ist der direkte Exa-Pfad mit 
 3. `LeadPipelineAgent.runDirectExaCompanySearch()` fuehrt diese Queries ueber `ExaSearchClient` aus und speichert rohe Treffer plus Query-Historie im Live-Exa-Cache.
 4. `LeadPipelineAgent.categorizeCompanies()` gibt jede gefundene Firma an die KI-Prequalification weiter. Dort wird entschieden, ob die Firma wirklich in eine aktive Zielkategorie passt.
 5. Nur die akzeptierten Firmen landen in der Shortlist.
-6. Fuer diese Shortlist baut `AzureOpenAIClient.buildResearchBrief()` den Firmen- und Outreach-Context auf.
-7. Anschliessend werden Kontakte gesucht: oeffentliche Website-/Web-Kontakte ueber `HubSpotClient.findPublicContactsForCompany()` und bei Bedarf Apollo-Personen ueber `ApolloClient.searchContactsForCompany()` plus `AzureOpenAIClient.chooseApolloContacts()`.
-8. `HubSpotClient.syncQualifiedCompanies()` schreibt erst ganz am Ende qualifizierte Firmen, ausgewaehlte Kontakte und Outreach-Notizen nach HubSpot.
+6. Für diese Shortlist baut `AzureOpenAIClient.buildResearchBrief()` den Firmen- und Outreach-Context auf.
+7. Anschließend werden Kontakte gesucht: öffentliche Website-/Web-Kontakte über `HubSpotClient.findPublicContactsForCompany()` und bei Bedarf Apollo-Personen über `ApolloClient.searchContactsForCompany()` plus `AzureOpenAIClient.chooseApolloContacts()`.
+8. `HubSpotClient.syncQualifiedCompanies()` schreibt erst ganz am Ende qualifizierte Firmen, ausgewählte Kontakte und Outreach-Notizen nach HubSpot.
 
 Genau damit entspricht das Repo dem gewuenschten Ablauf: Azure AI Agent erstellt Exa Search Queries, Exa liefert Rohfirmen, die KI macht den Firmen-Check, und nur Firmen mit passender Kategorie gehen weiter in Outreach-Vorbereitung und Kontaktfindung.
 
-### 4. Firmenquelle: modusabhaengig, nicht nur Apollo
+### 5. Firmenquelle: modusabhängig, nicht nur Apollo
 
-Die Firmenbeschaffung laeuft ueber `ApolloClient.fetchOrganizationSample()` in `src/clients/apollo.ts` oder direkt ueber den Exa-Pfad in `LeadPipelineAgent.runDirectExaCompanySearch()`.
+Die Firmenbeschaffung läuft über `ApolloClient.fetchOrganizationSample()` in `src/clients/apollo.ts` oder direkt über den Exa-Pfad in `LeadPipelineAgent.runDirectExaCompanySearch()`.
 
 Der Pfad wird zur Laufzeit so entschieden:
 
@@ -370,7 +370,7 @@ Der Pfad wird zur Laufzeit so entschieden:
 
 Zusaetzlich werden duerftige Apollo-Beschreibungen mit `summarizeCompany()` nachangereichert, ebenfalls ueber den OpenAI-Web-Search-Pfad.
 
-### 5. Prequalification: lokale Regeln vor LLM vor Segment-Filterung
+### 6. Prequalification: lokale Regeln vor LLM vor Segment-Filterung
 
 Die Firmenklassifikation ist mehrstufig aufgebaut:
 
@@ -388,7 +388,7 @@ Die Firmenklassifikation ist mehrstufig aufgebaut:
 
 Wichtig: die Kategorieentscheidung wird nicht blind aus dem Filternamen uebernommen. Der Code versucht explizit, den Firmenarchetyp erst objektiv zu erkennen und dann erst gegen die aktiven Zielkategorien zu pruefen.
 
-### 6. Early Stop und Filterbewertung
+### 7. Early Stop und Filterbewertung
 
 Der wirtschaftliche Kern des Systems ist der Fruehabbruch in `LeadPipelineAgent.run()`:
 
@@ -409,7 +409,7 @@ Der Standard im Code ist konservativer als die alte README:
 
 Das bedeutet: Standardmaessig muss ein Filter in den ersten 15 Firmen mindestens 50 Prozent relevantes Signal liefern, sonst wird er nicht weiter skaliert.
 
-### 7. Expansion, Top-Up und Deduplizierung
+### 8. Expansion, Top-Up und Deduplizierung
 
 Wenn ein Filter die Vorprobe besteht, erweitert die Pipeline schrittweise weitere Seiten.
 
@@ -423,7 +423,7 @@ Dabei greifen mehrere Sicherungen:
 
 Die Shortlist ist also das Ergebnis aus Probe + Expansion + Web Top-Up + CRM-Dedupe, nicht nur aus einem einzigen Apollo-Call.
 
-### 8. Research und Outreach-Ableitung
+### 9. Research und Outreach-Ableitung
 
 Research wird nur gebaut, wenn `dryRun` nicht aktiv ist. Danach gilt eine wichtige Feinheit:
 
@@ -456,7 +456,7 @@ Der Output enthaelt unter anderem:
 - `phoneScript`
 - `eventIdea`
 
-### 9. Contact Discovery
+### 10. Contact Discovery
 
 Nach der Firmenauswahl sammelt die Pipeline oeffentlich sichtbare Kontakte. Diese Logik sitzt nicht in einem separaten People-Provider, sondern direkt im `HubSpotClient`.
 
@@ -470,7 +470,7 @@ Nach der Firmenauswahl sammelt die Pipeline oeffentlich sichtbare Kontakte. Dies
 
 In `creditLessMode` wird diese Stufe bewusst uebersprungen.
 
-### 10. HubSpot-Sync
+### 11. HubSpot-Sync
 
 Der Writeback passiert ueber `HubSpotClient.syncQualifiedCompanies()`.
 
@@ -484,7 +484,7 @@ Wesentliche Eigenschaften:
 
 Der Sync schreibt nicht blind alles, sondern nur Properties, die im Portal auch wirklich existieren.
 
-### 11. Persistenz nach dem Run
+### 12. Persistenz nach dem Run
 
 Nach jedem Lauf werden mehrere Schichten aktualisiert:
 
@@ -610,7 +610,7 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 | `src/agents/` | Orchestrierung des eigentlichen Lead-Runs, inklusive Legacy- und Worker-v2-Pfad |
 | `src/clients/` | Adapter fuer Apollo, Exa, Azure OpenAI, Foundry, OpenAI Web Search, Diffbot und HubSpot |
 | `src/prompting/` | ONE-WARE-Playbook, Kategorieregeln, Kontexte und Outreach-Templates |
-| `src/debug/` | Debug- und Test-Lab-Logik fuer isolierte Such- und Kontaktpruefungen |
+| `src/debug/` | Debug- und Test-Lab-Logik für isolierte Such- und Kontaktprüfungen |
 | `public/hubspot-ui/` | einfache eingebettete Browser-Konsole, die der Server direkt ausliefert |
 | `hubspot-ui/` | HubSpot Developer Project mit CRM Card und Settings-Extension |
 | `data/` | persistierte Settings, Learning, Latest Run und lokale Cache-Artefakte |
@@ -632,11 +632,11 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 | `src/types.ts` | gemeinsame Vertragsflaechen fuer Requests, Ergebnisse und Persistenz |
 | `src/prompting/one-ware-playbook.ts` | Main Context, Prequalification, Execution Contexts, Templates |
 | `src/clients/apollo.ts` | Firmenbeschaffung und Apollo/Web-Fallback |
-| `src/clients/exa-search.ts` | Exa Query-Ausfuehrung, Exclude-Domain-Handling und Web-Fallback-Forschung |
-| `src/clients/azure-openai.ts` | zentraler LLM-Orchestrator fuer Query-Planung, Klassifikation, Research und Contact-Auswahl |
+| `src/clients/exa-search.ts` | Exa Query-Ausführung, Exclude-Domain-Handling und Web-Fallback-Forschung |
+| `src/clients/azure-openai.ts` | zentraler LLM-Orchestrator für Query-Planung, Klassifikation, Research und Contact-Auswahl |
 | `src/clients/foundry-agents.ts` | optionaler Agentenpfad fuer Azure AI Foundry |
 | `src/clients/openai-web-search.ts` | OpenAI Responses Web Search fuer Firmenebene |
-| `src/clients/web-search-agent.ts` | duenne Fassade ueber OpenAI Web Search |
+| `src/clients/web-search-agent.ts` | dünne Fassade über OpenAI Web Search |
 | `src/clients/hubspot.ts` | HubSpot Upsert, Contact Discovery, Associations |
 | `hubspot-ui/src/app/cards/LeadAgentCard.tsx` | HubSpot CRM Card |
 | `hubspot-ui/src/app/settings/LeadAgentSettings.tsx` | HubSpot Settings-UI |
