@@ -22,6 +22,7 @@ type LeadRunStatus = LeadRunProgress & {
   runVariant?: "legacy" | "worker_v2";
   workerMetrics?: unknown;
   debugMessages?: string[];
+  errorMessages?: string[];
 };
 
 const STALE_LEAD_RUN_THRESHOLD_MS = 90_000;
@@ -67,12 +68,13 @@ function resetLeadRunStatus(detail: string, stage: LeadRunStatus["stage"] = "idl
   leadRunStatus.workerMetrics = undefined;
   leadRunStatus.liveSearchDebug = undefined;
   leadRunStatus.debugMessages = undefined;
+  leadRunStatus.errorMessages = undefined;
   leadRunStatus.startedAt = undefined;
   leadRunStatus.finishedAt = new Date().toISOString();
   leadRunStatus.updatedAt = new Date().toISOString();
 }
 
-function applyLeadRunProgress(progress: LeadRunProgress & { runVariant?: "legacy" | "worker_v2"; workerMetrics?: unknown; debugMessages?: string[] }, stopRequested: boolean): void {
+function applyLeadRunProgress(progress: LeadRunProgress & { runVariant?: "legacy" | "worker_v2"; workerMetrics?: unknown; debugMessages?: string[]; errorMessages?: string[] }, stopRequested: boolean): void {
   if (stopRequested) {
     leadRunStatus.stage = "stopping";
     leadRunStatus.stageLabel = "Wird gestoppt";
@@ -104,6 +106,7 @@ function applyLeadRunProgress(progress: LeadRunProgress & { runVariant?: "legacy
   leadRunStatus.workerMetrics = progress.workerMetrics;
   leadRunStatus.liveSearchDebug = progress.liveSearchDebug;
   leadRunStatus.debugMessages = progress.debugMessages;
+  leadRunStatus.errorMessages = progress.errorMessages;
 }
 
 async function startManagedLeadRun(
@@ -135,6 +138,7 @@ async function startManagedLeadRun(
   leadRunStatus.workerMetrics = undefined;
   leadRunStatus.liveSearchDebug = undefined;
   leadRunStatus.debugMessages = undefined;
+  leadRunStatus.errorMessages = undefined;
   leadRunStatus.stage = "starting";
   leadRunStatus.stageLabel = variant === "worker_v2" ? "Neuer Worker-Run startet" : "Lead-Run startet";
   leadRunStatus.progressValue = 2;
@@ -244,7 +248,12 @@ function clearStaleLeadRunStatusIfNeeded(): void {
     return;
   }
 
-  if (activeLeadRunAbortController) {
+  const queueSizes = (leadRunStatus.workerMetrics && typeof leadRunStatus.workerMetrics === "object" && "queueSizes" in leadRunStatus.workerMetrics)
+    ? (leadRunStatus.workerMetrics as { queueSizes?: Record<string, unknown> }).queueSizes
+    : undefined;
+  const hasActiveWorkerQueue = Boolean(queueSizes) && Object.values(queueSizes ?? {}).some((value) => Number(value ?? 0) > 0);
+
+  if (activeLeadRunAbortController && hasActiveWorkerQueue) {
     return;
   }
 
@@ -252,6 +261,11 @@ function clearStaleLeadRunStatusIfNeeded(): void {
   const staleForMs = Number.isFinite(updatedAtMs) ? Date.now() - updatedAtMs : Number.POSITIVE_INFINITY;
   if (staleForMs < STALE_LEAD_RUN_THRESHOLD_MS) {
     return;
+  }
+
+  if (activeLeadRunAbortController) {
+    activeLeadRunAbortController.abort();
+    activeLeadRunAbortController = undefined;
   }
 
   resetLeadRunStatus(

@@ -123,6 +123,7 @@ type LeadPipelineRunOptions = {
 type DirectExaExcludeDomainSources = {
   screeningScope?: "live" | "debug";
   currentRunExcludedDomains?: string[];
+  historicalExaDomains?: string[];
 };
 
 type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache";
@@ -3706,12 +3707,18 @@ export class LeadPipelineAgent {
       return [];
     }
 
-    const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
+    const [screeningDatabase, liveExaCache] = await Promise.all([
+      this.controlPlaneStore.getCompanyScreeningDatabase(),
+      this.controlPlaneStore.getLiveExaCache()
+    ]);
     const prioritizedExcludedDomains = this.buildPrioritizedDirectExaExcludedDomains(
       screeningDatabase,
       targetCategories,
       await exaClient.loadKnownExcludedDomains(),
-      excludeDomainSources
+      {
+        ...excludeDomainSources,
+        historicalExaDomains: excludeDomainSources.historicalExaDomains ?? liveExaCache.discoveredDomains
+      }
     );
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
     const excludedDomainCategories = prioritizedExcludedDomains.localExcludedDomainCategories;
@@ -3812,6 +3819,7 @@ export class LeadPipelineAgent {
 
           if (excludeDomain) {
             excludedDomains.add(excludeDomain);
+            excludedDomainCategories.set(excludeDomain, "current_run_cache");
           }
         }
 
@@ -3920,11 +3928,53 @@ export class LeadPipelineAgent {
       pushDomain(currentRunExcludedDomains, domain, "current_run_cache");
     }
 
+    const historicalExaScores = new Map<string, number>();
+    const historicalExaDomains = excludeDomainSources.historicalExaDomains ?? [];
+    const historicalDomainCount = historicalExaDomains.length;
+    for (const [index, domain] of historicalExaDomains.entries()) {
+      const normalizedDomain = this.normalizeExcludeDomain(domain);
+      if (!normalizedDomain) {
+        continue;
+      }
+
+      const recencyWeight = Math.max(1, historicalDomainCount - index);
+      historicalExaScores.set(normalizedDomain, (historicalExaScores.get(normalizedDomain) ?? 0) + recencyWeight);
+    }
+
+    const splitPromotedDomains = (domains: string[]) => {
+      const regular: string[] = [];
+      const promoted = domains
+        .map((domain, index) => ({
+          domain,
+          index,
+          score: historicalExaScores.get(domain) ?? 0
+        }))
+        .filter((entry) => {
+          if (entry.score <= 0) {
+            regular.push(entry.domain);
+            return false;
+          }
+
+          return true;
+        })
+        .sort((left, right) => left.score - right.score || left.index - right.index)
+        .map((entry) => entry.domain);
+
+      return { regular, promoted };
+    };
+
+    const splitHubSpotDomains = splitPromotedDomains(hubSpotDomains);
+    const splitRejectedDomains = splitPromotedDomains(rejectedWebsiteDomains);
+    const splitCurrentRunDomains = splitPromotedDomains(currentRunExcludedDomains);
+
     return {
       requestExcludedDomains: [
-        ...hubSpotDomains,
-        ...rejectedWebsiteDomains,
-        ...currentRunExcludedDomains
+        ...splitHubSpotDomains.regular,
+        ...splitRejectedDomains.regular,
+        ...splitCurrentRunDomains.regular,
+        ...splitHubSpotDomains.promoted,
+        ...splitRejectedDomains.promoted,
+        ...splitCurrentRunDomains.promoted
       ],
       localExcludedDomains: new Set(seenDomains),
       localExcludedDomainCategories

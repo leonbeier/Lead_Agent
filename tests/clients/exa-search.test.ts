@@ -21,6 +21,27 @@ test("buildQueries includes localized Germany variants and official-website disc
   assert.ok(queries.some((query) => /exclude directories, marketplaces, job boards/i.test(query)));
 });
 
+test("buildQueries switches industrial end customers away from integrator wording", () => {
+  const client = new ExaSearchClient();
+  const queries = client["buildQueries"]({
+    name: "DACH Scaled Industrial End Customers",
+    persona: "Industrial end customer with own production scale and likely QC/process-automation upside",
+    industries: ["Food Production", "Consumer Goods", "Pharma Manufacturing"],
+    locations: ["Germany"],
+    keywords: ["quality control", "visual inspection", "process automation", "production line", "machine vision"],
+    employeeRanges: ["201,500"],
+    notes: "Prefer companies with visible production engineering ownership and enough scale for high-value projects. Target factory operators and manufacturers that buy and run production equipment, not machine builders, OEMs, or automation vendors.",
+    targetCategories: ["industrial_end_customer_scaled"]
+  }, 1) as string[];
+
+  assert.ok(queries.some((query) => /industrial end customers|plant operators|producers|processors/i.test(query)));
+  assert.ok(queries.some((query) => /buy and run production equipment|purchase machinery|buy and operate machinery/i.test(query)));
+  assert.ok(queries.some((query) => /Exclude system integrators.*machine builders.*OEMs/i.test(query)));
+  assert.ok(queries.every((query) => !/Prefer official company websites of system integrators or solution providers/i.test(query)));
+  assert.ok(queries.every((query) => !/machinery manufacturers/i.test(query)));
+  assert.ok(queries.every((query) => !/Prefer official company websites of manufacturers/i.test(query)));
+});
+
 test("discoverCompanies requests 20 Exa results per query regardless of lead limit", async () => {
   const client = new ExaSearchClient();
   client.setApiKey("test-key");

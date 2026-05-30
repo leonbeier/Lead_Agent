@@ -3076,14 +3076,45 @@ export class HubSpotClient {
 
   private extractEmails(html: string, allowedDomains: Set<string>): string[] {
     const decodedHtml = this.decodeHtmlEntities(html);
+    const plainEmails = [...decodedHtml.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+      .map((match) => match[0].toLowerCase());
+    const obfuscatedEmails = this.extractObfuscatedEmails(decodedHtml);
+
     return Array.from(
       new Set(
-        [...decodedHtml.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
-          .map((match) => match[0].toLowerCase())
+        [...plainEmails, ...obfuscatedEmails]
           .filter((email) => !email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.jpeg') && !email.endsWith('.webp'))
           .filter((email) => this.isAllowedCompanyEmail(email, allowedDomains))
       )
     );
+  }
+
+  private extractObfuscatedEmails(content: string): string[] {
+    const compactContent = content
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ");
+    const matches = compactContent.matchAll(
+      /\b([a-z0-9._%+-]{1,64})\s*(?:@|\(at\)|\[at\]|\sat\s)\s*([a-z0-9-]+(?:\s*(?:\.|\(dot\)|\[dot\]|\sdot\s)\s*[a-z0-9-]+)+)\b/gi
+    );
+
+    const extracted: string[] = [];
+    for (const match of matches) {
+      const localPart = (match[1] ?? "").trim().toLowerCase();
+      const rawDomain = (match[2] ?? "").toLowerCase();
+      const normalizedDomain = rawDomain
+        .replace(/\s*(?:\(dot\)|\[dot\]|\sdot\s)\s*/gi, ".")
+        .replace(/\s+/g, "")
+        .replace(/\.+/g, ".")
+        .replace(/^\.+|\.+$/g, "");
+
+      if (!localPart || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(normalizedDomain)) {
+        continue;
+      }
+
+      extracted.push(`${localPart}@${normalizedDomain}`);
+    }
+
+    return extracted;
   }
 
   private extractPhones(html: string): string[] {

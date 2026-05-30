@@ -593,6 +593,16 @@ test("email extraction decodes HTML entity obfuscation", () => {
   assert.deepEqual(emails, ["info@geott.de"]);
 });
 
+test("email extraction resolves textual at-dot obfuscation", () => {
+  const client = new HubSpotClient();
+  const emails = client["extractEmails"](
+    "by email: info at giovannigualdi dot com",
+    new Set(["giovannigualdi.com"])
+  );
+
+  assert.deepEqual(emails, ["info@giovannigualdi.com"]);
+});
+
 test("descriptive company labels still produce domain-token aliases for LinkedIn search", () => {
   const client = new HubSpotClient();
   const aliases = client["extractCompanySearchAliases"]({

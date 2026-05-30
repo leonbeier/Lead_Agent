@@ -1798,8 +1798,8 @@ ${message.content || ""}`).join("\n\n");
             <div class="history-item">
               <strong>${escapeHtml(row.query || "Unbekannte Query")}</strong>
               <span class="mini-meta">Suchlauf: ${escapeHtml(row.filterName || "Unbekannter Filter")}</span>
-              <span class="mini-meta">Ergebnisse der Suche: ${row.rawFound || 0} · Doppelte entfernt: ${row.duplicates || 0}</span>
-              <span class="mini-meta">Ausgefiltert: HubSpot ${row.filteredByHubSpot || 0} · Aussortierte Websites ${row.filteredByRejectedWebsites || 0} · Aktueller Cache ${row.filteredByCurrentRunCache || 0}</span>
+              <span class="mini-meta">Ergebnisse der Suche: ${row.rawFound || 0} · Residual duplicates: ${row.duplicates || 0}</span>
+              <span class="mini-meta">Excluded by HubSpot: ${row.filteredByHubSpot || 0} · Excluded by Rejected Websites: ${row.filteredByRejectedWebsites || 0} · Excluded by Current Run: ${row.filteredByCurrentRunCache || 0}</span>
               <span class="mini-meta">Kategorien nach AI-Check: ${escapeHtml(summarizeQueryCategoryBreakdown(row.categoryBreakdown) || "Noch keine AI-Ergebnisse gespeichert.")}</span>
               <span class="mini-meta">Other: ${row.rejectedOther || 0}</span>
               ${Array.isArray(row.plannedQueries) && row.plannedQueries.length > 0 ? `<details><summary>Geplante Exa-Queries (${row.plannedQueries.length})</summary><pre>${escapeHtml(row.plannedQueries.join("\n\n"))}</pre></details>` : ""}
@@ -2378,6 +2378,7 @@ ${message.content || ""}`).join("\n\n");
         const excludedByHubSpot = currentQueryStats.reduce((sum, entry) => sum + Number(entry?.filteredByHubSpot ?? 0), 0);
         const excludedByRejectedWebsites = currentQueryStats.reduce((sum, entry) => sum + Number(entry?.filteredByRejectedWebsites ?? 0), 0);
         const excludedByCurrentRunCache = currentQueryStats.reduce((sum, entry) => sum + Number(entry?.filteredByCurrentRunCache ?? 0), 0);
+        const residualDuplicates = currentQueryStats.reduce((sum, entry) => sum + Number(entry?.duplicates ?? entry?.duplicatesRemoved ?? 0), 0);
         const parallelExecutionNote = runStatus.running
           ? "Innerhalb des aktiven Schritts laufen die Worker parallel; angezeigt wird hier immer nur das neueste Einzel-Update aus diesem Block."
           : undefined;
@@ -2392,10 +2393,10 @@ ${message.content || ""}`).join("\n\n");
           progressDescription: runStatus.progressDescription,
           detail: runStatus.detail,
           exaApiReturnedResults: runStatus.workerMetrics?.exaReturnedResults ?? 0,
-          exaExcludedByAllLists: runStatus.workerMetrics?.exaFilteredByExcludedDomains ?? 0,
-          exaExcludedByHubSpot: excludedByHubSpot,
-          exaExcludedByRejectedWebsites: excludedByRejectedWebsites,
-          exaExcludedByCurrentRunCache: excludedByCurrentRunCache,
+          excludedByHubSpot: excludedByHubSpot,
+          excludedByRejectedWebsites: excludedByRejectedWebsites,
+          excludedByCurrentRun: excludedByCurrentRunCache,
+          residualDuplicates,
           exaUniqueCompaniesAfterExcludes: runStatus.workerMetrics?.exaRawFound ?? 0,
           currentQualifiedCompanies: runStatus.funnel?.afterHubSpotDedup ?? runStatus.foundCandidates ?? 0,
           exaRawCompanies: runStatus.funnel?.afterCrawlerPrefilter ?? 0,

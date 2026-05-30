@@ -359,7 +359,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const consoleUrl = `${normalizedBaseUrl}/hubspot/ui?portalId=${encodeURIComponent(portalId)}&key=${encodeURIComponent(sharedKey)}`;
   const canOpenConsole = Boolean(normalizedBaseUrl && sharedKey && openIframe);
   const canFetch = Boolean(normalizedBaseUrl && sharedKey);
-  const canStart = canFetch && targetLeadCount > 0 && selectedCategories.length > 0 && !runStatus?.running;
+  const canStart = canFetch && targetLeadCount > 0 && selectedCategories.length > 0 && !runStatus?.running && !isStarting;
   const progressMax = Math.max(1, runStatus?.progressMax ?? 100);
   const progressValue = Math.min(progressMax, Math.max(0, runStatus?.progressValue ?? 0));
 
@@ -680,7 +680,8 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
       if (!response.ok || !payload.accepted) {
         if (response.status === 409) {
           setRunStatus(payload.runStatus ?? { running: true });
-          throw new Error("Lead-Run ist blockiert. Status aktualisieren oder blockierten Run freigeben.");
+          setSuccessMessage("Lead-Run laeuft bereits. Status wurde aktualisiert.");
+          return;
         }
 
         throw new Error(payload.error || "Lead-Run konnte nicht gestartet werden.");

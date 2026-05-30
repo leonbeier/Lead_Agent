@@ -59,6 +59,7 @@ interface WorkerRunProgress extends LeadRunProgress {
   runVariant: "worker_v2";
   workerMetrics: WorkerRunMetrics;
   debugMessages: string[];
+  errorMessages: string[];
 }
 
 interface QualifiedCompanyState {
@@ -346,6 +347,7 @@ export class LeadWorkerRunService {
     const standbyQualifiedStates: QualifiedCompanyState[] = [];
     const searchAggregates = new Map<string, SearchAggregate>();
     const recentDebugMessages: string[] = [];
+    const errorMessages: string[] = [];
     let liveSearchDebug: LeadRunProgress["liveSearchDebug"];
     const seenCompanyKeys = new Set<string>();
     const currentRunExcludedDomains = new Set<string>();
@@ -406,6 +408,12 @@ export class LeadWorkerRunService {
       emitProgress();
     };
 
+    const logError = (message: string) => {
+      const stamped = `${new Date().toISOString()} ${message}`;
+      errorMessages.unshift(stamped);
+      log(message);
+    };
+
     const countTotalQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed).length;
     const countHeldQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed && state.hubspotStatus !== "done").length;
     const countAssignedQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed && state.pipelineAssigned && state.hubspotStatus !== "done").length;
@@ -460,7 +468,8 @@ export class LeadWorkerRunService {
           ...metrics,
           queueSizes: { ...metrics.queueSizes }
         },
-        debugMessages: [...recentDebugMessages]
+        debugMessages: [...recentDebugMessages],
+        errorMessages: [...errorMessages]
       };
 
       options.onProgress?.(progress);
@@ -680,6 +689,32 @@ export class LeadWorkerRunService {
       emitProgress();
     };
 
+    const queueNonTargetCompanyForCreation = (company: PreCategorizedCompany, source: "seed" | "exa", searchId?: string) => {
+      const key = buildCompanyKey(company);
+      if (qualifiedStates.has(key) || standbyQualifiedStates.some((state) => state.key === key)) {
+        return;
+      }
+
+      const state: QualifiedCompanyState = {
+        key,
+        company,
+        searchId,
+        source,
+        pipelineAssigned: false,
+        contacts: [],
+        outreachStatus: "queued",
+        contactStatus: "queued",
+        hubspotStatus: "pending",
+        removed: false
+      };
+
+      qualifiedStates.set(key, state);
+      outreachQueue.enqueue(state);
+      contactQueue.enqueue(state);
+      log(`Nicht-Zieltreffer wird trotzdem angelegt: ${company.name}`);
+      emitProgress();
+    };
+
     const maybeQueueHubSpot = (state: QualifiedCompanyState) => {
       if (state.removed || state.hubspotStatus !== "pending") {
         return;
@@ -758,6 +793,7 @@ export class LeadWorkerRunService {
               this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
               updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
             }
+            queueNonTargetCompanyForCreation(categorizedCompany, "exa", item.searchId);
           } else {
             metrics.aiRejectedDifferentCategory += 1;
             if (queryStat) {
@@ -766,6 +802,7 @@ export class LeadWorkerRunService {
               this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
               updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
             }
+            queueNonTargetCompanyForCreation(categorizedCompany, "exa", item.searchId);
           }
         } catch (error) {
           metrics.aiRejectedOther += 1;
@@ -811,7 +848,7 @@ export class LeadWorkerRunService {
           state.removed = true;
           state.pipelineAssigned = false;
           metrics.outreachFailed += 1;
-          log(`Outreach fehlgeschlagen, Firma entfernt: ${state.company.name}`);
+          logError(`Outreach fehlgeschlagen, Firma entfernt: ${state.company.name}: ${error instanceof Error ? error.message : String(error)}`);
           maybePromoteStandby();
           screeningQueue.enqueue({
             type: "upsert",
@@ -856,7 +893,7 @@ export class LeadWorkerRunService {
           state.contactStatus = "failed";
           metrics.contactFailed += 1;
           state.contacts = [];
-          log(`Kontakt-Worker Fehler, HubSpot laeuft ohne Kontakte weiter: ${state.company.name}: ${error instanceof Error ? error.message : String(error)}`);
+          logError(`Kontakt-Worker Fehler, HubSpot laeuft ohne Kontakte weiter: ${state.company.name}: ${error instanceof Error ? error.message : String(error)}`);
           maybeQueueHubSpot(state);
         } finally {
           metrics.queueSizes.contactInFlight = Math.max(0, metrics.queueSizes.contactInFlight - 1);
@@ -878,6 +915,7 @@ export class LeadWorkerRunService {
 
         metrics.queueSizes.hubspotInFlight += 1;
         state.hubspotStatus = "running";
+        log(`HubSpot startet: ${state.company.name}`);
         emitProgress();
         try {
           const companySyncKey = new URL(state.company.domain?.startsWith("http") ? state.company.domain : `https://${state.company.domain ?? state.company.name}`).hostname.replace(/^www\./i, "").toLowerCase();
@@ -892,6 +930,14 @@ export class LeadWorkerRunService {
               throw new Error(`HubSpot worker timed out after ${this.hubspotTaskTimeoutMs}ms`);
             })
           ]);
+          if (syncResult.companySyncedCount === 0) {
+            const syncErrors = Array.isArray(syncResult.errors) ? syncResult.errors.filter(Boolean) : [];
+            if (syncErrors.length > 0) {
+              throw new Error(`HubSpot sync produced 0 company writes. ${syncErrors.slice(0, 3).join(" | ")}`);
+            }
+
+            throw new Error("HubSpot sync produced 0 company writes without explicit API errors.");
+          }
           state.hubspotStatus = "done";
           state.pipelineAssigned = false;
           state.completedAt = new Date().toISOString();
@@ -914,7 +960,7 @@ export class LeadWorkerRunService {
           state.removed = true;
           state.pipelineAssigned = false;
           state.hubspotError = error instanceof Error ? error.message : String(error);
-          log(`HubSpot Fehler fuer ${state.company.name}: ${state.hubspotError}`);
+          logError(`HubSpot Fehler fuer ${state.company.name}: ${state.hubspotError}`);
           maybePromoteStandby();
         } finally {
           metrics.queueSizes.hubspotInFlight = Math.max(0, metrics.queueSizes.hubspotInFlight - 1);

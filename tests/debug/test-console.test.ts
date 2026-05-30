@@ -522,7 +522,13 @@ test("runExaCompanySearch excludes only hubspot and debug rejected websites befo
   service.controlPlaneStore = {
     getTestLabExaCache: async () => ({
       queryHistory: [],
-      discoveredDomains: ["same-run-1.test", "same-run-2.test", "prior-run-exa.test"]
+      discoveredDomains: [
+        "hubspot-0.example0.com",
+        "same-run-1.test",
+        "hubspot-0.example0.com",
+        "same-run-2.test",
+        "prior-run-exa.test"
+      ]
     }),
     getCompanyScreeningDatabase: async () => ({
       records: [
@@ -572,13 +578,14 @@ test("runExaCompanySearch excludes only hubspot and debug rejected websites befo
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), false);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), false);
   assert.equal(requestPayloadDomains.includes("prior-run-exa.test"), false);
+  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), true);
   assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);
   assert.equal(requestPayloadDomains.includes("debug-rejected.test"), true);
   assert.equal(requestPayloadDomains.includes("live-rejected.test"), false);
   assert.equal(requestPayloadDomains.includes("matching-target.test"), false);
   assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
   assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
-  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
+  assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
 });
 
 test("runAiPrefilterStage honors high requested concurrency in test lab", async () => {

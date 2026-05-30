@@ -1312,10 +1312,10 @@ export class AzureOpenAIClient {
       ].join("\n"),
       excludedDomainExamples.length > 0
         ? [
-            "Known excluded websites already covered or already rejected:",
-            "These domains are already excluded in the active Exa search surface. Do not target them again. Use them as negative evidence when choosing company types, wording, and exclusion focus so the new queries avoid the same already-covered or already-rejected result families.",
-            "Treat these as root-domain exclusions. The new queries should prefer fresh official root domains rather than subpages or alternate deep links of the same sites.",
-            excludedDomainExamples.map((domain) => `* ${domain}`).join("\n")
+            "Search-surface saturation warning:",
+            "The active Exa surface already excludes many root-domain families separately. Do not restate or target those same families again.",
+            "A major failure mode is that too many results come back as the same companies on alternate subpages or deep links. Counter this by making the new queries visibly more different, more niche, and more specific in company type, capability, use case, deployment shape, and exclusion framing.",
+            "Prefer fresh official root domains or homepages from new site families rather than alternate deep links of similar already-covered websites."
           ].join("\n")
         : undefined,
       [
@@ -1412,7 +1412,12 @@ export class AzureOpenAIClient {
       "",
       `Recent query history with outcomes (last ${recentQueryHistory.length} queries, newest first):\n${this.buildExaRecentQueryHistorySummary(recentQueryHistory)}`,
       excludedDomainExamples.length > 0
-        ? `Known excluded websites already covered or already rejected:\n${excludedDomainExamples.map((domain) => `- ${domain}`).join("\n")}`
+        ? [
+            "Search-surface saturation warning:",
+            "Many root-domain families are already excluded separately in the active Exa surface.",
+            "Do not rewrite the draft toward the same site families with alternate wording.",
+            "Make the rewritten queries more niche and more visibly different so they reach fresh official root domains instead of similar companies on subpages or deep links."
+          ].join("\n")
         : undefined,
       "",
       `Draft queries to rewrite:\n${draftQueries.map((query, index) => `${index + 1}. ${query}`).join("\n")}`,

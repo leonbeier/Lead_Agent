@@ -9,6 +9,7 @@ const booleanFlag = () =>
     .transform((value) => value.toLowerCase() === "true");
 
 const envSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
   DEFAULT_MARKET: z.string().default("Europe"),
   DEFAULT_TARGET_LEADS: z.coerce.number().int().positive().default(50),
@@ -23,6 +24,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   EXA_API_KEY: z.string().optional(),
   EXA_MAX_BUDGET_USD: z.coerce.number().nonnegative().default(20),
+  EXA_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
   DIFFBOT_TOKEN: z.string().optional(),
   OPENAI_WEB_SEARCH_MODEL: z.string().default("gpt-5.4-mini"),
   OPENAI_PRE_RESEARCH_MODEL: z.string().optional(),
@@ -57,7 +59,18 @@ const envSchema = z.object({
   AZURE_RESEARCH_ENDPOINT: z.string().optional()
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.safeParse(process.env);
+
+if (!parsedEnv.success) {
+  const formattedIssues = parsedEnv.error.issues.map((issue) => {
+    const variableName = issue.path.join(".") || "<root>";
+    return `- ${variableName}: ${issue.message}`;
+  });
+
+  throw new Error(`Invalid environment configuration:\n${formattedIssues.join("\n")}`);
+}
+
+export const env = parsedEnv.data;
 
 export const openAIWebSearchModels = {
   preResearch: env.OPENAI_PRE_RESEARCH_MODEL ?? env.OPENAI_WEB_SEARCH_MODEL,

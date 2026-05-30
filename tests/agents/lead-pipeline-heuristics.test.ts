@@ -253,6 +253,7 @@ test("direct exa path can skip Azure query planning when explicitly disabled", a
   let plannerCalls = 0;
 
   agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
+  agent.controlPlaneStore.getLiveExaCache = async () => ({ entries: [], discoveredDomains: [] });
   agent.azureClient.planExaSearchQueries = async () => {
     plannerCalls += 1;
     return ["planned query"];
@@ -329,7 +330,14 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
     hubSpotDomains,
     {
       screeningScope: "live",
-      currentRunExcludedDomains: ["same-run-1.test", "duplicate.test", "same-run-2.test"]
+      currentRunExcludedDomains: ["same-run-1.test", "duplicate.test", "same-run-2.test"],
+      historicalExaDomains: [
+        "hubspot-0.example0.com",
+        "live-rejected.test",
+        "hubspot-0.example0.com",
+        "same-run-1.test",
+        "hubspot-0.example0.com"
+      ]
     }
   );
 
@@ -340,6 +348,7 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
   assert.equal(prioritized.localExcludedDomains.has("live-rejected.test"), true);
   assert.equal(prioritized.localExcludedDomains.has("debug-rejected.test"), false);
   assert.equal(prioritized.localExcludedDomains.has("matching-target.test"), false);
+  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), true);
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), true);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), true);
   assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);
@@ -347,6 +356,6 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
   assert.equal(requestPayloadDomains.includes("debug-rejected.test"), false);
   assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
   assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
-  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
+  assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
 });
 

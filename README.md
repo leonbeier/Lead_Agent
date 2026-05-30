@@ -5,6 +5,108 @@ Dieses Repo beschreibt und implementiert den kompletten ONE-WARE-Lead-Flow vom S
 1. oben ein ausfuehrlicher Ueberblick fuer Nicht-Entwickler
 2. darunter die technische Dokumentation fuer Entwickler
 
+## GitHub Copilot, lokale Entwicklung und Railway
+
+### Erkanntes Setup
+
+- Framework: Node.js + TypeScript + Express
+- Paketmanager: `npm` mit `package-lock.json`
+- Dev-Command: `npm run dev`
+- Start-Command: `npm start`
+- Build-Command: `npm run build`
+- Typecheck-Command: `npm run typecheck`
+- Test-Command: `npm test`
+- Lint: aktuell kein separates Lint-Tool konfiguriert
+- Smoke-Test: `npm run smoke`
+- Railway: Dockerfile-basiertes Build/Start-Deployment, App bindet an `PORT`
+
+### Lokales Setup
+
+```bash
+npm install
+cp .env.example .env
+```
+
+Pflege in `.env` mindestens diese Werte fuer einen lokalen Start:
+
+- `LEAD_AGENT_SHARED_KEY` mit mindestens 24 Zeichen
+- `PORT`, falls du nicht `3000` verwenden willst
+- `LEAD_AGENT_PUBLIC_BASE_URL`, wenn Links oder eingebettete UIs auf eine feste URL zeigen sollen
+
+Alle externen APIs sind optional, solange du lokal ohne Live-Credentials arbeitest oder Dry-Run-/Fallback-Pfade verwendest.
+
+### Erforderliche Umgebungsvariablen
+
+Die vollstaendige Vorlage steht in `.env.example`. Fuer GitHub Copilot, CI oder Railway sind besonders relevant:
+
+- `NODE_ENV`
+- `PORT`
+- `LEAD_AGENT_SHARED_KEY`
+- `LEAD_AGENT_PUBLIC_BASE_URL`
+- `HUBSPOT_PRIVATE_APP_TOKEN`
+- `OPENAI_API_KEY`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_API_KEY`
+- `AZURE_OPENAI_DEPLOYMENT`
+- `EXA_API_KEY`
+- `RAILWAY_TOKEN`
+- `RAILWAY_PROJECT_ID`
+
+Hinweis zur Benennung: Das Repo verwendet serverseitig `HUBSPOT_PRIVATE_APP_TOKEN`. Wenn ein externes Setup-Dokument `HUBSPOT_ACCESS_TOKEN` nennt, ist das hier nur eine plattformneutrale Alias-Bezeichnung, nicht der eigentliche Runtime-Name.
+
+### GitHub Copilot Coding Agent Setup
+
+1. Lege die benoetigten Repo- oder Environment-Secrets in GitHub an, niemals im Repo.
+2. Nutze `.env.example`, `AGENTS.md` und diese README als primäre Copilot-Kontextquellen.
+3. Erstelle fuer neue Arbeitsauftraege ein GitHub Issue und weise Copilot zu.
+4. Verwende nach Moeglichkeit reproduzierbare Commands aus dem Abschnitt "Validierung".
+
+Ein vorbereitetes Issue-Template fuer Copilot liegt unter `.github/ISSUE_TEMPLATE/copilot-coding-agent.md`.
+
+### Railway Setup
+
+- Runtime-Start: `npm start`
+- Build: `npm run build`
+- Gesundheitscheck: `GET /health`
+- Die App verwendet `PORT` direkt in `src/server.ts`.
+- Ein zusaetzliches `railway.json` wurde bewusst nicht hinzugefuegt, weil das Repo bereits erfolgreich ueber Dockerfile bzw. Railway-Build deployt.
+
+Empfohlene Railway-Variablen:
+
+- `NODE_ENV=production`
+- `PORT` wird von Railway gesetzt
+- `LEAD_AGENT_SHARED_KEY`
+- `LEAD_AGENT_PUBLIC_BASE_URL`
+- alle benoetigten API-Secrets fuer den gewuenschten Live-Pfad
+
+### HubSpot, OpenAI, Azure und Exa
+
+- HubSpot laeuft serverseitig ueber `src/clients/hubspot.ts` mit `HUBSPOT_PRIVATE_APP_TOKEN`.
+- OpenAI Web Search laeuft serverseitig ueber `src/clients/openai-web-search.ts` mit `OPENAI_API_KEY`.
+- Azure OpenAI laeuft serverseitig ueber `src/clients/azure-openai.ts` mit `AZURE_OPENAI_*`.
+- Exa laeuft serverseitig ueber `src/clients/exa-search.ts` mit `EXA_API_KEY`.
+- Im Frontend wurden keine dieser API-Secrets referenziert; einzig `LEAD_AGENT_SHARED_KEY` wird bewusst als Server-Zugriffsschutz fuer die eingebettete HubSpot-Konsole verwendet.
+
+### Validierung
+
+```bash
+npm install
+npm test
+npm run typecheck
+npm run build
+npm run smoke
+```
+
+Falls spaeter ein echtes Lint-Tool eingefuehrt wird, sollte `npm run lint` erst dann dokumentiert und in PRs verlangt werden.
+
+### Troubleshooting
+
+- Start bricht sofort ab: pruefe `LEAD_AGENT_SHARED_KEY`; der Server validiert Env-Werte jetzt mit klarer Fehlermeldung beim Start.
+- `npm run smoke` scheitert: pruefe, ob `dist/` vorher mit `npm run build` erzeugt wurde.
+- HubSpot UI laedt nicht: pruefe `LEAD_AGENT_PUBLIC_BASE_URL`, `LEAD_AGENT_SHARED_KEY` und das lokale oder HubSpot-CLI-Profil.
+- Copilot oder CI kann nicht deployen: hinterlege `RAILWAY_TOKEN` und `RAILWAY_PROJECT_ID` nur in GitHub oder Railway Secrets, nicht im Repo.
+- API-Aufrufe liefern 401, 403 oder 429: verwende Sandbox- oder Dev-Credentials und pruefe Quotas, niemals Produktionsdaten ohne explizite Freigabe.
+
 ## Gesamtueberblick fuer Nicht-Entwickler
 
 ### Was dieses System eigentlich macht
@@ -836,7 +938,7 @@ Wichtige Hinweise fuer das HubSpot-Projekt:
 - fuer produktiven Betrieb auf Railway muss `LEAD_AGENT_API_BASE_URL` als feste HTTPS-URL gesetzt werden und in den HubSpot-Projektvariablen genauso hinterlegt sein
 - `LEAD_AGENT_SHARED_KEY` schuetzt die eingebettete Konsole und alle produktiven API-Endpunkte; dieselbe Variable muss im Backend und in den HubSpot-Projektvariablen identisch gesetzt werden
 - die `permittedUrls` in `hubspot-ui/src/app/app-hsmeta.json` muessen auf eure feste oeffentliche Lead-Agent-URL zeigen
-- der alte Private-App-Token fuer das Backend ist bereits in `.env` hinterlegt
+- lokale Tokens und HubSpot-Profile duerfen nur in unversionierten Dateien wie `.env` oder `hubspot-ui/src/hsprofile.<name>.json` liegen
 - die Card und Settings-Page oeffnen dieselbe eingebettete Konsole, damit Run-Steuerung und Template-Pflege nicht doppelt gepflegt werden
 
 ## Railway-Haertung

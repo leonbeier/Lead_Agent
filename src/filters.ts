@@ -441,12 +441,12 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
   {
     name: "DACH Scaled Industrial End Customers",
     persona: "Industrial end customer with own production scale and likely QC/process-automation upside",
-    industries: ["Food Production", "Machinery", "Industrial Automation", "Automotive", "Electrical Manufacturing"],
+    industries: ["Food Production", "Consumer Goods", "Pharma Manufacturing", "Automotive Manufacturing", "Electrical Manufacturing"],
     keywords: ["quality control", "visual inspection", "process automation", "production line", "machine vision"],
     locations: ["Germany", "Austria", "Switzerland"],
     employeeRanges: ["201,500", "501,1000", "1001,5000", "5001,10000"],
     targetCategories: ["industrial_end_customer_scaled"],
-    notes: "Prefer companies with visible production engineering ownership and enough scale for high-value projects."
+    notes: "Prefer companies with visible production engineering ownership and enough scale for high-value projects. Target factory operators and manufacturers that buy and run production equipment, not machine builders, OEMs, or automation vendors."
   },
   {
     name: "Europe Camera Manufacturers",

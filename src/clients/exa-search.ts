@@ -46,7 +46,8 @@ const MAX_EXA_EXCLUDE_DOMAINS = 1200;
 const EXA_MIN_REQUEST_INTERVAL_MS = 250;
 const EXA_MAX_RETRIES = 3;
 const EXA_QUERY_CONCURRENCY = 3;
-const EXA_REQUEST_TIMEOUT_MS = 30_000;
+const EXA_REQUEST_TIMEOUT_MS = env.EXA_REQUEST_TIMEOUT_MS;
+const HUBSPOT_EXCLUDED_DOMAIN_FETCH_TIMEOUT_MS = 10_000;
 const GENERIC_COMPANY_NAMES = new Set(["home", "homepage", "startseite", "services", "solutions", "products", "company"]);
 const COMPANY_NAME_STOP_WORDS = new Set(["ai", "the", "and", "for", "with", "vision", "industrial", "automation", "machine", "marking", "robotics", "solutions", "systems", "services"]);
 export class ExaSearchClient {
@@ -291,41 +292,50 @@ export class ExaSearchClient {
     const domains = new Set<string>();
     let after: string | undefined;
 
-    do {
-      const query = new URLSearchParams({
-        limit: "100",
-        properties: "domain"
-      });
+    try {
+      do {
+        const query = new URLSearchParams({
+          limit: "100",
+          properties: "domain"
+        });
 
-      if (after) {
-        query.set("after", after);
-      }
-
-      const response = await fetch(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies?${query.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${env.HUBSPOT_PRIVATE_APP_TOKEN}`,
-          "Content-Type": "application/json"
+        if (after) {
+          query.set("after", after);
         }
-      });
 
-      if (!response.ok) {
-        return domains;
-      }
+        const response = await fetch(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies?${query.toString()}`, {
+          headers: {
+            Authorization: `Bearer ${env.HUBSPOT_PRIVATE_APP_TOKEN}`,
+            "Content-Type": "application/json"
+          },
+          signal: AbortSignal.timeout(HUBSPOT_EXCLUDED_DOMAIN_FETCH_TIMEOUT_MS)
+        });
 
-      const payload = await response.json() as {
-        results?: Array<{ properties?: Record<string, string | null> }>;
-        paging?: { next?: { after?: string } };
-      };
-
-      for (const company of payload.results ?? []) {
-        const value = company.properties?.domain?.trim();
-        if (value) {
-          domains.add(value);
+        if (!response.ok) {
+          return domains;
         }
-      }
 
-      after = payload.paging?.next?.after;
-    } while (after);
+        const payload = await response.json() as {
+          results?: Array<{ properties?: Record<string, string | null> }>;
+          paging?: { next?: { after?: string } };
+        };
+
+        for (const company of payload.results ?? []) {
+          const value = company.properties?.domain?.trim();
+          if (value) {
+            domains.add(value);
+          }
+        }
+
+        after = payload.paging?.next?.after;
+      } while (after);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn("ExaSearchClient.fetchKnownHubSpotDomains skipped HubSpot domain sync", {
+        message
+      });
+      return domains;
+    }
 
     return domains;
   }
@@ -383,15 +393,19 @@ export class ExaSearchClient {
     const primaryKeywords = keywords.slice(0, 3);
     const semanticFocus = this.buildSemanticSearchFocus(filter, compactPersona, primaryKeywords);
     const applicationAngles = this.buildApplicationAngles(filter);
+    const primaryCategory = filter.targetCategories?.[0];
     const queryPool = locationVariants.flatMap((location) => {
-      const primaryQueries = [
-        `${location} companies that provide ${semanticFocus}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
-        `${location} system integrators and solution providers that deliver ${semanticFocus} for customer projects. Prefer official company websites and exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
-        `${location} industrial automation and machine vision companies that deliver turnkey inspection or vision integration projects. Prefer official company websites of integrators or solution providers, not directories, news pages, PDFs, or component vendors.`
-      ];
+      const primaryQueries = primaryCategory === "industrial_end_customer_scaled"
+        ? this.buildIndustrialEndCustomerPrimaryQueries(location, filter, semanticFocus)
+        : [
+            `${location} companies that provide ${semanticFocus}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
+            `${location} system integrators and solution providers that deliver ${semanticFocus} for customer projects. Prefer official company websites and exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
+            `${location} industrial automation and machine vision companies that deliver turnkey inspection or vision integration projects. Prefer official company websites of integrators or solution providers, not directories, news pages, PDFs, or component vendors.`
+          ];
 
-      const angleQueries = applicationAngles.map((angle) =>
-        `${location} companies that provide ${semanticFocus} for ${angle}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`
+      const angleQueries = applicationAngles.map((angle) => primaryCategory === "industrial_end_customer_scaled"
+        ? this.buildIndustrialEndCustomerAngleQuery(location, filter, semanticFocus, angle)
+        : `${location} companies that provide ${semanticFocus} for ${angle}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`
       );
 
       return [...primaryQueries, ...angleQueries];
@@ -446,6 +460,10 @@ export class ExaSearchClient {
   ): string {
     const normalizedText = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
+    if (filter.targetCategories?.includes("industrial_end_customer_scaled")) {
+      return "in-house quality control, visual inspection, process automation, production-line inspection, and machine-vision adoption";
+    }
+
     if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(normalizedText)) {
       return "machine vision system integration for industrial automation, industrial image processing, optical inspection systems, camera-based quality control, robot guidance, and turnkey vision inspection solutions";
     }
@@ -461,6 +479,15 @@ export class ExaSearchClient {
 
   private buildApplicationAngles(filter: ApolloOrganizationFilter): string[] {
     const normalizedText = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
+
+    if (filter.targetCategories?.includes("industrial_end_customer_scaled")) {
+      return [
+        "quality control and visual quality inspection on production lines",
+        "inline inspection, defect detection, and yield improvement",
+        "packaging, sorting, and verification in factory operations",
+        "process monitoring, traceability, and production optimization"
+      ];
+    }
 
     if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(normalizedText)) {
       return [
@@ -487,6 +514,32 @@ export class ExaSearchClient {
       "automation projects",
       "production monitoring"
     ];
+  }
+
+  private buildIndustrialEndCustomerPrimaryQueries(
+    location: string,
+    filter: ApolloOrganizationFilter,
+    semanticFocus: string
+  ): string[] {
+    const industries = filter.industries.slice(0, 3).join(", ");
+    const industryFocus = industries ? `${industries} factory operators, producers, processors, and production groups` : "factory operators, producers, processors, and production groups";
+    const operatorExclusion = "Exclude system integrators, consultancies, machine builders, OEMs, automation vendors, directories, marketplaces, job boards, news articles, PDFs, and component vendors.";
+
+    return [
+      `${location} ${industryFocus} with own production operations and likely need for ${semanticFocus}. Prefer official company websites of industrial end customers, factories, processing plants, production groups, or plant operators that buy and run production equipment. ${operatorExclusion}`,
+      `${location} industrial end customers running factories or production lines in ${industries || "manufacturing"} with visible quality control, visual inspection, or process automation needs. Prefer official websites of factory operators, producers, processors, or production groups that operate plants and purchase machinery for their own production, not system integrators, machine builders, OEMs, resellers, or directories.`,
+      `${location} scaled industrial end customers with internal QC, inspection, or production-automation upside across ${industries || "manufacturing"}. Prefer official company websites of factory operators, producers, processors, and production groups using production lines in-house. ${operatorExclusion}`
+    ];
+  }
+
+  private buildIndustrialEndCustomerAngleQuery(
+    location: string,
+    filter: ApolloOrganizationFilter,
+    semanticFocus: string,
+    angle: string
+  ): string {
+    const industries = filter.industries.slice(0, 2).join(" and ") || "manufacturing";
+    return `${location} industrial end customers in ${industries} with own production lines and need for ${angle}, ${semanticFocus}. Prefer official company websites of factories, plant operators, producers, processors, and production groups that buy and operate machinery in-house. Exclude system integrators, consultancies, machine builders, OEMs, directories, marketplaces, job boards, news articles, PDFs, and component vendors.`;
   }
 
   private buildLocationVariants(location: string): string[] {

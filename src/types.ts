@@ -525,6 +525,7 @@ export interface LeadRunProgress {
       categoryBreakdown: Partial<Record<LeadCategory, number>>;
     }>;
   };
+  errorMessages?: string[];
   updatedAt: string;
 }
 

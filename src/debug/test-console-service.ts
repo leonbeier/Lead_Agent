@@ -523,7 +523,8 @@ export class DebugConsoleService {
       request.targetCategories,
       hubSpotExcludedDomains,
       {
-        screeningScope: "debug"
+        screeningScope: "debug",
+        historicalExaDomains: testLabCache.discoveredDomains
       }
     );
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
