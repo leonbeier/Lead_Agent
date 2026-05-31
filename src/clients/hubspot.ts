@@ -98,6 +98,8 @@ const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
+const MIN_CONTACTS_PER_COMPANY_TARGET = 2;
+const MAX_CONTACTS_PER_COMPANY_TARGET = 5;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
 const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
 const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 12000;
@@ -482,8 +484,28 @@ export class HubSpotClient {
           companyWriteSucceeded = true;
 
           const selectedContacts = contactsByCompany.get(this.getCompanyKey(company)) ?? [];
+          const normalizedSelectedContacts = this.prepareHubSpotContacts(selectedContacts);
+          let contactsToSync = normalizedSelectedContacts;
+
+          if (contactsToSync.length < MIN_CONTACTS_PER_COMPANY_TARGET) {
+            const officialWebsiteContacts = this.prepareHubSpotContacts(
+              await this.discoverOfficialWebsiteSearchContacts(company).catch(() => [] as PublicContactCandidate[])
+            );
+            contactsToSync = this.prepareHubSpotContacts(
+              this.mergeDiscoveredContacts(contactsToSync, officialWebsiteContacts)
+            );
+          }
+
+          contactsToSync = contactsToSync.slice(0, MAX_CONTACTS_PER_COMPANY_TARGET);
+
+          if (contactsToSync.length < MIN_CONTACTS_PER_COMPANY_TARGET) {
+            errors.push(
+              `${company.name}: only ${contactsToSync.length} reachable contact(s) after fallback enrichment (target ${MIN_CONTACTS_PER_COMPANY_TARGET}-${MAX_CONTACTS_PER_COMPANY_TARGET}).`
+            );
+          }
+
           const contactResults = await this.mapWithConcurrency(
-            selectedContacts.map((publicContact) => async () => {
+            contactsToSync.map((publicContact) => async () => {
               try {
                 const syncedContact = await this.upsertContact(publicContact, contactProperties, syncedCompany.id);
                 if (!syncedContact) {
@@ -590,10 +612,11 @@ export class HubSpotClient {
     brief: ResearchBrief | undefined,
     availableProperties: Set<string>
   ): Promise<HubSpotObjectResponse> {
+    const sanitizedCompany = this.sanitizeCompanyForHubSpot(company);
     const extractedAddress = await this.extractCompanyAddress(company).catch(() => null);
 
     const properties = this.pickAvailableProperties(
-      this.buildRawCompanyProperties(company, brief, extractedAddress),
+      this.buildRawCompanyProperties(sanitizedCompany, brief, extractedAddress),
       availableProperties
     );
 
@@ -601,7 +624,7 @@ export class HubSpotClient {
       throw new Error("No writable company properties are available for the record.");
     }
 
-    const existingCompany = await this.findExistingCompany(company);
+    const existingCompany = await this.findExistingCompany(sanitizedCompany);
     if (existingCompany) {
       return this.requestJson<HubSpotObjectResponse>(
         `${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies/${existingCompany.id}`,
@@ -716,6 +739,38 @@ export class HubSpotClient {
       firstName,
       lastName,
       jobTitle
+    };
+  }
+
+  private prepareHubSpotContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
+    const normalized = contacts
+      .map((contact) => this.normalizeContactForHubSpot(contact))
+      .filter((contact): contact is PublicContactCandidate => Boolean(contact))
+      .filter((contact) => !this.shouldSkipHubSpotContact(contact));
+
+    return this.collapseDuplicateMailboxContacts(normalized)
+      .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left));
+  }
+
+  private sanitizeCompanyForHubSpot(company: PreCategorizedCompany): PreCategorizedCompany {
+    const normalizedDomain = this.normalizeDomain(company.domain);
+    const domain = normalizedDomain && normalizedDomain !== "example.com"
+      ? normalizedDomain
+      : undefined;
+    const cleanedName = this.toSingleLineText(company.name)?.trim();
+    const fallbackName = domain
+      ? this.toTitleCase(domain.split(".")[0] ?? "")
+      : undefined;
+    const name = cleanedName || fallbackName;
+
+    if (!name) {
+      throw new Error("Company has neither a valid name nor a valid domain for HubSpot upsert.");
+    }
+
+    return {
+      ...company,
+      name,
+      domain
     };
   }
 
@@ -3826,12 +3881,17 @@ export class HubSpotClient {
     outreachLanguage: ResearchBrief["outreachLanguage"]
   ): string {
     const salutation = this.buildSuggestedSalutation(contact, normalizeOutreachLanguage(outreachLanguage, "en"));
+    const salutationWithoutPunctuation = salutation.replace(/[,:]$/g, "");
 
     return message
       .replace(/^Hallo Herr\/Frau \[Name\],?/m, salutation)
       .replace(/^Hello Mr\.\/Ms\. \[Name\],?/m, salutation)
-      .replace(/Herr\/Frau \[Name\]/g, salutation.replace(/[,:]$/g, ""))
-      .replace(/Mr\.\/Ms\. \[Name\]/g, salutation.replace(/[,:]$/g, ""))
+      .replace(/Herr\/Frau \[Name\]/g, salutationWithoutPunctuation)
+      .replace(/Mr\.\/Ms\. \[Name\]/g, salutationWithoutPunctuation)
+      .replace(/^Hallo Herr\/Frau\s+[^,\n]+,?/gim, salutation)
+      .replace(/^Hello Mr\.\/Ms\.\s+[^,\n]+,?/gim, salutation)
+      .replace(/\bHerr\/Frau\s+[A-Za-z\u00C0-\u024F'’\-]+\b/g, salutationWithoutPunctuation)
+      .replace(/\bMr\.\/Ms\.\s+[A-Za-z\u00C0-\u024F'’\-]+\b/g, salutationWithoutPunctuation)
       .replace(/\[Name\]/g, this.formatContactDisplayName(contact))
       .replace(/\[Your Name\] from ONE WARE/g, "ONE WARE")
       .replace(/\[Ihr Name\] von ONE WARE hier/g, "ONE WARE hier")
@@ -3881,6 +3941,10 @@ export class HubSpotClient {
 
     const normalized = trimmed.toLowerCase();
     if (["info", "contact", "hello", "support", "sales", "office", "team", "service", "admin", "mail"].includes(normalized)) {
+      return false;
+    }
+
+    if (/^herr\/?frau\b/i.test(normalized) || /^mr\.?\/?ms\.?\b/i.test(normalized)) {
       return false;
     }
 
