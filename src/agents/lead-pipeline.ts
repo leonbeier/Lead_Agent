@@ -1325,7 +1325,7 @@ export class LeadPipelineAgent {
     let expansionSearchMode = companySearchMode;
     let apolloExpansionPage = useWebSearchCompanyDiscovery || dryRun
       ? 1
-      : await this.controlPlaneStore.getApolloSearchCursor(filter);
+      : await this.controlPlaneStore.getSearchCursor(filter);
     const probeFetch = await this.fetchAvailableSearchSample(
       filter,
       earlyStopReviewCount,
@@ -4331,7 +4331,7 @@ export class LeadPipelineAgent {
     }
 
     if (!useWebSearch && !dryRun) {
-      await this.controlPlaneStore.updateApolloSearchCursor(filter, nextPage);
+      await this.controlPlaneStore.updateSearchCursor(filter, nextPage);
     }
 
     return {

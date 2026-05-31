@@ -70,7 +70,7 @@ export class FoundryAgentsClient {
       ].filter(Boolean).join("\n\n"));
 
       const parsed = JSON.parse(content) as { filters?: OrganizationFilter[] };
-      const filters = (parsed.filters ?? []).filter((filter) => this.isValidApolloFilter(filter));
+      const filters = (parsed.filters ?? []).filter((filter) => this.isValidOrganizationFilter(filter));
 
       return filters.length > 0 ? filters : baseFilters;
     } catch {
@@ -501,7 +501,7 @@ export class FoundryAgentsClient {
     ];
   }
 
-  private isValidApolloFilter(filter: OrganizationFilter | undefined): filter is OrganizationFilter {
+  private isValidOrganizationFilter(filter: OrganizationFilter | undefined): filter is OrganizationFilter {
     return Boolean(
       filter &&
         filter.name &&

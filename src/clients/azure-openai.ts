@@ -587,7 +587,7 @@ export class AzureOpenAIClient {
 
       const parsed = this.parseJsonObject<{ filters?: OrganizationFilter[] }>(content);
       const filters = (parsed.filters ?? [])
-        .map((filter) => this.normalizeApolloFilter(filter))
+        .map((filter) => this.normalizeOrganizationFilter(filter))
         .filter((filter): filter is OrganizationFilter => Boolean(filter));
 
       return filters.length > 0 ? filters : baseFilters;
@@ -1713,7 +1713,7 @@ export class AzureOpenAIClient {
       );
 
       const parsed = this.parseJsonObject<{ filter?: OrganizationFilter }>(content);
-      const normalizedFilter = this.normalizeApolloFilter(parsed.filter);
+      const normalizedFilter = this.normalizeOrganizationFilter(parsed.filter);
 
       if (!normalizedFilter) {
         return null;
@@ -3582,7 +3582,7 @@ export class AzureOpenAIClient {
     ].join(" | ");
   }
 
-  private normalizeApolloFilter(filter: OrganizationFilter | undefined): OrganizationFilter | null {
+  private normalizeOrganizationFilter(filter: OrganizationFilter | undefined): OrganizationFilter | null {
     if (!filter) {
       return null;
     }
