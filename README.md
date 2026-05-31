@@ -575,7 +575,7 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 | `src/filters.ts` | deterministische Basisfilter |
 | `src/types.ts` | gemeinsame Vertragsflaechen fuer Requests, Ergebnisse und Persistenz |
 | `src/prompting/one-ware-playbook.ts` | Main Context, Prequalification, Execution Contexts, Templates |
-| `src/clients/apollo.ts` | Firmenbeschaffung ueber Web Scraper und AI Agent (Delegator) |
+| `src/clients/company-search.ts` | Firmenbeschaffung ueber Web Scraper und AI Agent |
 | `src/clients/azure-openai.ts` | zentraler LLM-Orchestrator fuer Chat-basierte Stufen |
 | `src/clients/foundry-agents.ts` | optionaler Agentenpfad fuer Azure AI Foundry |
 | `src/clients/openai-web-search.ts` | OpenAI Responses Web Search fuer Firmenebene |

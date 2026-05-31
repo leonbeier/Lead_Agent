@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { env } from "../config";
 import { buildSuggestedFilters, extractExplicitMarketLocality, isGermanyFocusedMarket } from "../filters";
-import { ApolloClient } from "../clients/apollo";
+import { CompanySearchClient } from "../clients/company-search";
 import { AzureOpenAIClient } from "../clients/azure-openai";
 import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
@@ -219,7 +219,7 @@ const COMMON_COMPOUND_TLDS = new Set([
 ]);
 
 export class LeadPipelineAgent {
-  private readonly apolloClient = new ApolloClient();
+  private readonly apolloClient = new CompanySearchClient();
 
   private readonly azureClient = new AzureOpenAIClient();
 
