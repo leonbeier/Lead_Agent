@@ -762,10 +762,19 @@ export class HubSpotClient {
       ? normalizedDomain
       : undefined;
     const cleanedName = this.toSingleLineText(company.name)?.trim();
-    const fallbackName = domain
-      ? this.toTitleCase(domain.split(".")[0] ?? "")
+    const domainToken = domain?.split(".")[0]?.trim();
+    const fallbackName = domainToken
+      ? this.toTitleCase(domainToken)
       : undefined;
-    const name = cleanedName || fallbackName;
+    const legalEntityFromEvidence = this.extractLegalEntityCompanyNameFromEvidence([
+      cleanedName,
+      company.shortDescription,
+      company.sourceFilter
+    ].filter(Boolean).join(" | "));
+    const preferredCleanedName = cleanedName && !this.isWeakCompanyName(cleanedName, domainToken)
+      ? cleanedName
+      : undefined;
+    const name = this.toSingleLineText(legalEntityFromEvidence ?? preferredCleanedName ?? fallbackName)?.trim();
 
     if (!name) {
       throw new Error("Company has neither a valid name nor a valid domain for HubSpot upsert.");
@@ -776,6 +785,67 @@ export class HubSpotClient {
       name,
       domain
     };
+  }
+
+  private extractLegalEntityCompanyNameFromEvidence(evidence: string): string | undefined {
+    const cleanedEvidence = this.toSingleLineText(evidence)?.trim();
+    if (!cleanedEvidence) {
+      return undefined;
+    }
+
+    const legalEntityPattern = /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9&.'’\-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9&.'’\-]+){0,5}\s+(?:GmbH|mbH|AG|UG|KG|OHG|SE|Ltd|LLC|Inc))\b/g;
+    const matches = Array.from(cleanedEvidence.matchAll(legalEntityPattern))
+      .map((match) => match[1]?.trim())
+      .filter((value): value is string => Boolean(value));
+
+    if (matches.length === 0) {
+      return undefined;
+    }
+
+    const best = matches.sort((left, right) => right.length - left.length)[0];
+    return this.toSingleLineText(best)?.trim();
+  }
+
+  private isWeakCompanyName(name: string, domainToken?: string): boolean {
+    const normalized = name
+      .toLowerCase()
+      .replace(/[^a-z0-9äöüß\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) {
+      return true;
+    }
+
+    const tokens = normalized.split(" ").filter(Boolean);
+    const tokenCount = tokens.length;
+    const hasLegalSuffix = /\b(gmbh|mbh|ag|ug|kg|ohg|se|ltd|llc|inc)\b/i.test(normalized);
+    const normalizedDomainToken = domainToken?.toLowerCase();
+
+    if (normalized.length < 3) {
+      return true;
+    }
+
+    if (this.looksLikeDescriptiveCompanyLabel(name)) {
+      return true;
+    }
+
+    if (/^(ai|company|unternehmen|business|solutions|technology|tech|software|services|group)$/.test(normalized)) {
+      return true;
+    }
+
+    if (/^(web\s+development\s+company\b|ai\s+company\b|company\s+in\b)/i.test(normalized)) {
+      return true;
+    }
+
+    if (!hasLegalSuffix && tokenCount >= 6) {
+      return true;
+    }
+
+    if (tokenCount === 1 && normalized.length <= 3 && normalizedDomainToken && normalized !== normalizedDomainToken) {
+      return true;
+    }
+
+    return false;
   }
 
   private getNormalizedLinkedInReference(contact: Pick<PublicContactCandidate, "linkedinUrl" | "sourceUrl">): string | undefined {

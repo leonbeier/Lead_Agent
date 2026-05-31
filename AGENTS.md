@@ -123,4 +123,10 @@ A task is done only when:
 - Only companies whose post-AI category matches one of the currently selected target categories may be created or synced in HubSpot. Non-matching companies must stay in the rejected/screening list and must not enter the outreach, contact, or HubSpot write path.
 - When live Exa quality is poor, tune the Exa query-generation step and feed prior Exa query or history outcomes into the AI query planner; do not relax or retune the downstream AI screening or category logic just to improve hit rates.
 - Do not solve bad company/contact data quality by adding blanket suppression filters as a first response. Investigate root cause first (crawl gaps, extraction quality, timeouts, AI selection quality, write-path errors) and prefer preserving valid records while improving extraction and selection quality.
+- Treat these as bad hits that must not be accepted as successful outreach records:
+	- Company names that are generic/noise labels (for example `Ai`, `Company`, `Web Development Company in Germany`) instead of a plausible legal or brand entity name.
+	- Contacts with no usable channel after normalization (no email, no phone, no personal LinkedIn profile).
+	- Company-LinkedIn-only placeholders (`linkedin.com/company/...`) being treated as person contacts.
+	- Mailbox-only contacts that have neither a person name nor a role signal and are not needed as explicit fallback evidence.
+	- Runs reported as successful without writing at least one high-quality contact path for the batch (personal LinkedIn or clearly named reachable contact).
 - When running `hs project upload` in this repo and the CLI shows the profile picker with `leon [146645418]` preselected, press Enter immediately to accept the default profile.
