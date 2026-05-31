@@ -197,6 +197,7 @@ const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
+const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(60_000, env.EXA_REQUEST_TIMEOUT_MS);
 
 function summarizeContactChannels(contacts: PublicContactCandidate[]): string {
   const byLabel = new Map<string, number>();
@@ -1073,80 +1074,97 @@ export class LeadWorkerRunService {
           let plannedDefaultQueries: string[] | undefined;
           let plannedPromptMessages: Array<{ role: string; content: string }> | undefined;
 
-          const rawCompanies = await this.leadPipelineAgent.discoverDirectExaCompaniesForExecution(
-            filter,
-            targetCategories,
-            exaQueryCount,
-            {
-              screeningScope: "live",
-              currentRunExcludedDomains: Array.from(currentRunExcludedDomains)
-            },
-            {
-              dryRun: request.dryRun,
-              learning,
-              mainContext: request.mainContext,
-              searchStrategyContext: request.searchStrategyContext,
-              recentQueryHistory: Array.from(currentRunQueryHistory.values()),
-              prequalification: request.prequalification,
-              forcedQueries: usingPendingQueryPlan ? forcedQueries : undefined,
-              plannedQueryMetadata: usingPendingQueryPlan
-                ? {
-                    defaultQueries: pendingPlan?.defaultQueries,
-                    plannedQueries: pendingPlan?.plannedQueries,
-                    promptMessages: pendingPlan?.promptMessages
+          let exaTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const exaTimeoutPromise = new Promise<never>((_, reject) => {
+            exaTimeoutHandle = setTimeout(() => {
+              reject(new Error(`Exa discovery timed out after ${DEFAULT_EXA_DISCOVERY_TIMEOUT_MS}ms`));
+            }, DEFAULT_EXA_DISCOVERY_TIMEOUT_MS);
+          });
+
+          let rawCompanies: CompanySample[];
+          try {
+            rawCompanies = await Promise.race<CompanySample[]>([
+              this.leadPipelineAgent.discoverDirectExaCompaniesForExecution(
+                filter,
+                targetCategories,
+                exaQueryCount,
+                {
+                  screeningScope: "live",
+                  currentRunExcludedDomains: Array.from(currentRunExcludedDomains)
+                },
+                {
+                  dryRun: request.dryRun,
+                  learning,
+                  mainContext: request.mainContext,
+                  searchStrategyContext: request.searchStrategyContext,
+                  recentQueryHistory: Array.from(currentRunQueryHistory.values()),
+                  prequalification: request.prequalification,
+                  forcedQueries: usingPendingQueryPlan ? forcedQueries : undefined,
+                  plannedQueryMetadata: usingPendingQueryPlan
+                    ? {
+                        defaultQueries: pendingPlan?.defaultQueries,
+                        plannedQueries: pendingPlan?.plannedQueries,
+                        promptMessages: pendingPlan?.promptMessages
+                      }
+                    : undefined
+                },
+                (update) => {
+                  const previousReturnedResults = aggregate.returnedResults ?? 0;
+                  const previousFilteredByExcludedDomains = aggregate.filteredByExcludedDomains ?? 0;
+                  const previousExecutedQueries = aggregate.executedQueries;
+                  plannedDefaultQueries = update.defaultQueries;
+                  plannedPromptMessages = update.promptMessages;
+                  aggregate.executedQueries = update.executedQueries;
+                  metrics.exaRequests += Math.max(0, update.executedQueries - previousExecutedQueries);
+                  aggregate.rawFound = update.rawCompaniesFound;
+                  const queryStat = getOrCreateQueryStat(aggregate, update.query);
+                  queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
+                  queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
+                  queryStat.filteredByHubSpot = update.filteredByHubSpot;
+                  queryStat.filteredByRejectedWebsites = update.filteredByRejectedWebsites;
+                  queryStat.filteredByCurrentRunCache = update.filteredByCurrentRunCache;
+                  aggregate.queryTexts.push(update.query);
+                  aggregate.plannedQueries = update.plannedQueries;
+                  aggregate.promptMessages = update.promptMessages;
+                  aggregate.excludedDomains = update.excludedDomains;
+                  aggregate.returnedResults = update.returnedResults;
+                  aggregate.filteredByExcludedDomains = update.filteredByExcludedDomains;
+                  aggregate.duplicatesRemoved = update.duplicatesRemoved;
+                  updateLiveSearchDebug(aggregate, {
+                    filterName: update.filterName,
+                    defaultQueries: update.defaultQueries,
+                    plannedQueries: update.plannedQueries,
+                    promptMessages: update.promptMessages,
+                    lastExecutedQuery: update.query,
+                    excludedDomains: update.excludedDomains,
+                    executedQueries: update.executedQueries,
+                    totalQueries: update.totalQueries,
+                    returnedResults: update.returnedResults,
+                    filteredByExcludedDomains: update.filteredByExcludedDomains,
+                    filteredByHubSpot: update.filteredByHubSpot,
+                    filteredByRejectedWebsites: update.filteredByRejectedWebsites,
+                    filteredByCurrentRunCache: update.filteredByCurrentRunCache,
+                    duplicatesRemoved: update.duplicatesRemoved,
+                    rawCompaniesFound: update.rawCompaniesFound
+                  });
+                  if (!currentRunQueryHistory.has(update.query)) {
+                    currentRunQueryHistory.set(update.query, {
+                      query: update.query,
+                      timestamp: new Date().toISOString(),
+                      foundCategoryBreakdown: createEmptyCategoryBreakdown()
+                    });
                   }
-                : undefined
-            },
-            (update) => {
-              const previousReturnedResults = aggregate.returnedResults ?? 0;
-              const previousFilteredByExcludedDomains = aggregate.filteredByExcludedDomains ?? 0;
-              const previousExecutedQueries = aggregate.executedQueries;
-              plannedDefaultQueries = update.defaultQueries;
-              plannedPromptMessages = update.promptMessages;
-              aggregate.executedQueries = update.executedQueries;
-              metrics.exaRequests += Math.max(0, update.executedQueries - previousExecutedQueries);
-              aggregate.rawFound = update.rawCompaniesFound;
-              const queryStat = getOrCreateQueryStat(aggregate, update.query);
-              queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
-              queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
-              queryStat.filteredByHubSpot = update.filteredByHubSpot;
-              queryStat.filteredByRejectedWebsites = update.filteredByRejectedWebsites;
-              queryStat.filteredByCurrentRunCache = update.filteredByCurrentRunCache;
-              aggregate.queryTexts.push(update.query);
-              aggregate.plannedQueries = update.plannedQueries;
-              aggregate.promptMessages = update.promptMessages;
-              aggregate.excludedDomains = update.excludedDomains;
-              aggregate.returnedResults = update.returnedResults;
-              aggregate.filteredByExcludedDomains = update.filteredByExcludedDomains;
-              aggregate.duplicatesRemoved = update.duplicatesRemoved;
-              updateLiveSearchDebug(aggregate, {
-                filterName: update.filterName,
-                defaultQueries: update.defaultQueries,
-                plannedQueries: update.plannedQueries,
-                promptMessages: update.promptMessages,
-                lastExecutedQuery: update.query,
-                excludedDomains: update.excludedDomains,
-                executedQueries: update.executedQueries,
-                totalQueries: update.totalQueries,
-                returnedResults: update.returnedResults,
-                filteredByExcludedDomains: update.filteredByExcludedDomains,
-                filteredByHubSpot: update.filteredByHubSpot,
-                filteredByRejectedWebsites: update.filteredByRejectedWebsites,
-                filteredByCurrentRunCache: update.filteredByCurrentRunCache,
-                duplicatesRemoved: update.duplicatesRemoved,
-                rawCompaniesFound: update.rawCompaniesFound
-              });
-              if (!currentRunQueryHistory.has(update.query)) {
-                currentRunQueryHistory.set(update.query, {
-                  query: update.query,
-                  timestamp: new Date().toISOString(),
-                  foundCategoryBreakdown: createEmptyCategoryBreakdown()
-                });
-              }
-              historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...aggregate.queryTexts] } });
-              emitProgress();
+                  historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...aggregate.queryTexts] } });
+                  emitProgress();
+                }
+              ),
+              exaTimeoutPromise
+            ]);
+          } finally {
+            if (exaTimeoutHandle) {
+              clearTimeout(exaTimeoutHandle);
             }
-          );
+          }
 
           if (usingPendingQueryPlan) {
             const remainingQueries = pendingPlan?.remainingQueries.slice(forcedQueries.length) ?? [];
@@ -1235,10 +1253,12 @@ export class LeadWorkerRunService {
           emitProgress();
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          if (this.isExaCreditsExhaustedError(errorMessage)) {
-            stopReason = stopReason || "exa_credits_exhausted";
+          if (this.isExaCreditsExhaustedError(errorMessage) || this.isExaTemporarilyUnavailableError(errorMessage)) {
+            stopReason = stopReason || (this.isExaCreditsExhaustedError(errorMessage)
+              ? "exa_credits_exhausted"
+              : "exa_search_unavailable");
             stopping = true;
-            log(`Exa-Credits aufgebraucht. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
+            log(`Exa-Suche gestoppt. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
             stopAiQueue();
             break;
           }
@@ -1505,6 +1525,15 @@ export class LeadWorkerRunService {
     return normalized.includes("no_more_credits")
       || normalized.includes("exceeded your credits limit")
       || (normalized.includes("exa") && normalized.includes("credits"));
+  }
+
+  private isExaTemporarilyUnavailableError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes("exa discovery timed out")
+      || (normalized.includes("exa") && normalized.includes("operation was aborted"))
+      || (normalized.includes("exa") && normalized.includes("timed out"))
+      || (normalized.includes("exa") && normalized.includes("429"))
+      || (normalized.includes("exa") && normalized.includes("503"));
   }
 }
 

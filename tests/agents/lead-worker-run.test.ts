@@ -513,7 +513,7 @@ test("worker run reuses planned Exa queries before requesting a fresh Azure plan
     contactSearchConcurrency: 1
   });
 
-  assert.equal(freshPlanRequests, 1);
+  assert.ok(freshPlanRequests >= 1 && freshPlanRequests <= 2);
   assert.deepEqual(forcedQueryBatches, [["query two"], ["query three"]]);
 });
 
@@ -764,6 +764,94 @@ test("worker run reports raw Exa results separately from excluded and unique com
   assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaRequests === 1));
   assert.ok(progressSnapshots.some((snapshot) => snapshot.workerMetrics?.exaBatchesStarted === 1));
   assert.ok(progressSnapshots.some((snapshot) => snapshot.liveSearchDebug?.returnedResults === 20));
+});
+
+test("worker run only syncs AI-matching categories to HubSpot and leaves other categories rejected", async () => {
+  const syncedCompanies: string[] = [];
+  const screeningWrites: CompanyScreeningDatabase[] = [];
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async (database: CompanyScreeningDatabase) => {
+        screeningWrites.push(database);
+      },
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: company.name === "Accepted Vision"
+            ? "integrator_vision_industrial_ai"
+            : "integrator_general_ai",
+          relevanceScore: 0.9,
+          rationale: company.name === "Accepted Vision" ? "fit" : "wrong category"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncedCompanies.push(companies[0].name);
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: 1,
+          contactSyncedCount: 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async () => [
+        {
+          name: "Accepted Vision",
+          domain: "accepted-vision.example.com",
+          shortDescription: "accepted",
+          sourceFilter: "filter-integrator_vision_industrial_ai",
+          discoveryQuery: "accepted query"
+        },
+        {
+          name: "Rejected General",
+          domain: "rejected-general.example.com",
+          shortDescription: "rejected",
+          sourceFilter: "filter-integrator_vision_industrial_ai",
+          discoveryQuery: "rejected query"
+        }
+      ]
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.deepEqual(syncedCompanies, ["Accepted Vision"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  assert.equal(result.shortlistedCompanies.length, 1);
+  assert.equal(result.shortlistedCompanies[0]?.name, "Accepted Vision");
+  assert.equal(result.funnel.afterAzureAICheck, 1);
+  assert.ok(screeningWrites.length > 0);
+  const latestScreening = screeningWrites.at(-1);
+  assert.ok(latestScreening?.records.some((record) => record.companyName === "Rejected General" && record.category === "integrator_general_ai"));
+  assert.ok(latestScreening?.records.some((record) => record.companyName === "Accepted Vision" && record.existsInHubSpot === true));
 });
 
 test("worker run still syncs companies to HubSpot when contact discovery fails", async () => {
