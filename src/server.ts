@@ -252,8 +252,11 @@ function clearStaleLeadRunStatusIfNeeded(): void {
     ? (leadRunStatus.workerMetrics as { queueSizes?: Record<string, unknown> }).queueSizes
     : undefined;
   const hasActiveWorkerQueue = Boolean(queueSizes) && Object.values(queueSizes ?? {}).some((value) => Number(value ?? 0) > 0);
+  const isLegacyRun = leadRunStatus.runVariant === "legacy";
 
-  if (activeLeadRunAbortController && hasActiveWorkerQueue) {
+  // Legacy runs do not publish worker queue metrics; as long as the active run controller exists,
+  // keep the run alive and avoid stale auto-release.
+  if (activeLeadRunAbortController && (hasActiveWorkerQueue || isLegacyRun)) {
     return;
   }
 
