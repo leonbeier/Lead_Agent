@@ -1315,6 +1315,8 @@ export class LeadWorkerRunService {
           break;
         }
 
+        // Keep the run status fresh while waiting on external worker calls.
+        emitProgress();
         await delay(SEARCH_IDLE_MS);
       }
 
