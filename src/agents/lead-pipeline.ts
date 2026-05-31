@@ -73,6 +73,7 @@ const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
 const DIRECT_EXA_FILTER_CONCURRENCY = 3;
 const DIRECT_EXA_QUERY_CONCURRENCY = 3;
+const RESEARCH_BRIEF_TIMEOUT_MS = 90_000;
 const APOLLO_EMAIL_ENRICH_CONCURRENCY = 4;
 const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
 const FALLBACK_REPLENISHMENT_LOCATIONS = ["Berlin", "Munich", "Hamburg", "Cologne", "Stuttgart", "DACH", "Austria", "Switzerland"];
@@ -465,9 +466,13 @@ export class LeadPipelineAgent {
         : await this.mapWithConcurrency(
             pendingCompanies.map((company) => async () => ({
               companyKey: this.getCompanyKey(company),
-              brief: await this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
-                includeWebResearch: request.runDeepResearch !== false
-              })
+              brief: await this.withTimeout(
+                this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
+                  includeWebResearch: request.runDeepResearch !== false
+                }),
+                RESEARCH_BRIEF_TIMEOUT_MS,
+                this.buildResearchBriefTimeoutFallback(company, mainContext)
+              )
             })),
             this.outreachPrepConcurrency
           );
@@ -4777,6 +4782,63 @@ export class LeadPipelineAgent {
 
   private hasNonGenericReachableContact(contacts: PublicContactCandidate[]): boolean {
     return contacts.some((contact) => Boolean(contact.email || contact.phone) && !this.isGenericFallbackContact(contact));
+  }
+
+  private buildResearchBriefTimeoutFallback(
+    company: PreCategorizedCompany,
+    mainContext?: string
+  ): ResearchBrief {
+    const likelyGermanSpeaking = ["germany", "austria", "switzerland", "de", "at", "ch"].includes(
+      company.country?.trim().toLowerCase() ?? ""
+    ) || /\.(de|at|ch)$/i.test(company.domain ?? "");
+    const outreachLanguage = likelyGermanSpeaking ? "de" as const : "en" as const;
+
+    return {
+      companyName: company.name,
+      website: company.domain,
+      appliedAgentContext: mainContext,
+      isFallback: true,
+      stillQualified: true,
+      qualificationDecisionReason: company.rationale,
+      overview: `${company.name} remains qualified based on ${company.shortDescription.toLowerCase()}.`,
+      qualificationSummary: company.rationale,
+      qualifyingSignals: [
+        `Category fit: ${company.category}`,
+        `Source filter: ${company.sourceFilter}`
+      ],
+      riskFlags: ["Research brief timed out and was replaced with a minimal fallback summary."],
+      likelyGermanSpeaking,
+      outreachLanguage,
+      rankings: {
+        customer: company.category === "industrial_end_customer_scaled" ? 7 : 6,
+        serviceProvider: company.category.startsWith("integrator_") ? 8 : 3,
+        partner: company.category.startsWith("integrator_") ? 7 : 3
+      },
+      businessPotentialEUR: company.category === "industrial_end_customer_scaled" ? 20000 : 18000,
+      businessPotentialReasoning: "Research timeout fallback used. Validate commercial fit manually before outreach.",
+      targetIndustry: company.category === "industrial_end_customer_scaled" ? "Industrial Manufacturing" : "Industrial Automation",
+      productsOffered: company.shortDescription,
+      recommendedTemplateKey: company.category,
+      personalizationRule: "Use only verified factual hooks from the company description and domain.",
+      linkedInAngle: "Check whether faster, lower-friction Vision-AI delivery would matter for current projects.",
+      linkedInConnectionRequest: outreachLanguage === "de"
+        ? "Kurze Frage: Ist Vision AI fuer aktuelle Projekte oder Qualitaetskontrolle bei Ihnen relevant?"
+        : "Quick question: is vision AI relevant for current projects or quality control on your side?",
+      emailAngle: "Keep the outreach factual and mention reduced trial-and-error only if relevant.",
+      phoneAngle: "Lead with the operational bottleneck and verify relevance first.",
+      linkedInMessage: outreachLanguage === "de"
+        ? "Kurze Frage: Ist Vision AI fuer aktuelle Projekte oder Qualitaetskontrolle bei Ihnen relevant? Wenn ja, koennte ONE WARE die Umsetzung deutlich planbarer machen."
+        : "Quick question: is vision AI relevant for current projects or quality control on your side? If yes, ONE WARE may make delivery much more predictable.",
+      emailSubject: outreachLanguage === "de"
+        ? "Vision-AI-Projekte planbarer umsetzen"
+        : "Make vision-AI projects more predictable",
+      emailBody: outreachLanguage === "de"
+        ? "Hallo [Name],\n\nwir sehen oft, dass Vision-AI-Projekte an Datenqualitaet, Iterationen und Lieferaufwand haengen bleiben. Wenn das bei Ihnen relevant ist, kann ONE WARE helfen, Modelle schneller und planbarer produktionsreif zu bekommen.\n\nWaere ein kurzer Austausch sinnvoll?\n\nMit freundlichen Gruessen\n[Ihr Name]"
+        : "Hello [Name],\n\nwe often see vision-AI projects slow down because of data quality, repeated iteration, and delivery overhead. If that is relevant for you, ONE WARE may help get models production-ready faster and with more predictable effort.\n\nWould a short exchange make sense?\n\nBest regards,\n[Your Name]",
+      phoneScript: outreachLanguage === "de"
+        ? "Hallo Herr/Frau [Name], hier ist [Ihr Name] von ONE WARE. Ich wollte kurz fragen, ob Vision AI oder automatisierte Qualitaetskontrolle aktuell ein Thema ist. Wenn ja, koennte unsere Software helfen, Projekte schneller produktionsreif zu bekommen."
+        : "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. I wanted to ask whether vision AI or automated quality control is currently relevant. If yes, our software may help get projects production-ready faster."
+    };
   }
 
   private mergeContactCandidates(

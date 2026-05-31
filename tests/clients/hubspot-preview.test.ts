@@ -193,10 +193,49 @@ test("previewHubSpotSync keeps generic company mailboxes when the email is usabl
 
   assert.equal(preview.contacts[0]?.skipped, false);
   assert.equal(preview.contacts[0]?.properties.email, "info@sample-automation.de");
+  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
   assert.equal(preview.contacts[1]?.properties.firstname, "Martin");
   assert.equal(preview.contacts[1]?.properties.jobtitle, "Managing Director");
   assert.equal(preview.contacts[1]?.properties.hs_linkedin_url, "https://www.linkedin.com/in/martin-minsel");
   assert.match(preview.contacts[1]?.outreachNote ?? "", /LinkedIn Outreach/);
+});
+
+test("previewHubSpotSync prefers legal-entity evidence over descriptive page-title company labels", async () => {
+  const client = new HubSpotClient();
+
+  const preview = await client.previewHubSpotSync(
+    {
+      ...buildSampleCompany(),
+      name: "Web Development Company in Germany",
+      domain: "https://softment.com",
+      shortDescription: "Delivery-led software and AI implementation partner.",
+      rationale: "Legal entity evidence is Softment GmbH from the supplied research brief."
+    },
+    {
+      ...buildSampleBrief(),
+      companyName: "Softment GmbH",
+      overview: "Softment GmbH is a Germany-based delivery-led software and AI implementation partner.",
+      qualificationSummary: "Softment GmbH executes client delivery projects."
+    },
+    [],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.companyProperties.name, "Softment GmbH");
+  assert.equal(preview.companyProperties.domain, "softment.com");
+});
+
+test("extractMultipleNamesFromManagementLine ignores management sentence fragments", () => {
+  const client = new HubSpotClient();
+
+  assert.deepEqual(
+    client["extractMultipleNamesFromManagementLine"]("Management ist verantwortlich langfristigen Unternehmensziele durchzusetzen"),
+    []
+  );
+  assert.deepEqual(
+    client["extractMultipleNamesFromManagementLine"]("Geschäftsführung: Max Mustermann"),
+    [{ firstName: "Max", lastName: "Mustermann", jobTitle: "Managing Director" }]
+  );
 });
 
 test("previewHubSpotSync still skips low-value noreply mailboxes without person identity", async () => {
@@ -280,7 +319,7 @@ test("previewHubSpotSync clears false names on generic mailbox contacts without 
   );
 
   assert.equal(preview.contacts[0]?.skipped, false);
-  assert.equal(preview.contacts[0]?.properties.firstname, "info@sample-automation.de");
+  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
   assert.equal(preview.contacts[0]?.properties.lastname, undefined);
   assert.equal(preview.contacts[0]?.properties.jobtitle, undefined);
   assert.equal(preview.contacts[0]?.properties.email, "info@sample-automation.de");
@@ -813,6 +852,67 @@ test("browser fallback is used when direct website fetch is blocked", async () =
   }
 });
 
+test("browser fallback ignores HTTPS errors for certificate-broken contact pages", async () => {
+  const client = new HubSpotClient();
+  let receivedNewPageOptions: Record<string, unknown> | null = null;
+
+  client["launchBrowserForWebTasks"] = async () => ({
+    newPage: async (options: Record<string, unknown>) => {
+      receivedNewPageOptions = options;
+      return {
+        goto: async () => undefined,
+        waitForLoadState: async () => undefined,
+        content: async () => "<html><body><a href=\"mailto:info@sample-automation.de\">info@sample-automation.de</a></body></html>"
+      };
+    },
+    close: async () => undefined
+  });
+
+  const html = await client["fetchHtmlWithBrowser"]("https://expired.example.com/kontakt");
+
+  assert.match(html ?? "", /info@sample-automation\.de/i);
+  assert.equal(receivedNewPageOptions?.ignoreHTTPSErrors, true);
+});
+
+test("fetchHtml retries TLS failures with a certificate-tolerant dispatcher before browser fallback", async () => {
+  const client = new HubSpotClient();
+  const originalFetch = globalThis.fetch;
+  let fetchCallCount = 0;
+  let browserFallbackCalled = false;
+
+  client["fetchHtmlWithBrowser"] = async () => {
+    browserFallbackCalled = true;
+    return "<html><body>browser fallback</body></html>";
+  };
+
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit & { dispatcher?: unknown }) => {
+    fetchCallCount += 1;
+    if (fetchCallCount === 1) {
+      const error = new TypeError("fetch failed");
+      (error as TypeError & { cause?: { code?: string } }).cause = { code: "ERR_TLS_CERT_ALTNAME_INVALID" };
+      throw error;
+    }
+
+    assert.ok(init?.dispatcher);
+    return new Response("<html><body><a href=\"mailto:tls@sample-automation.de\">tls@sample-automation.de</a></body></html>", {
+      status: 200,
+      headers: {
+        "content-type": "text/html"
+      }
+    }) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
+  }) as typeof fetch;
+
+  try {
+    const html = await client["fetchHtml"]("https://tls-broken.example.com");
+
+    assert.match(html ?? "", /tls@sample-automation\.de/i);
+    assert.equal(browserFallbackCalled, false);
+    assert.equal(fetchCallCount, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("browser fallback is not triggered for plain 404 pages", async () => {
   const client = new HubSpotClient();
   const originalFetch = globalThis.fetch;
@@ -913,6 +1013,19 @@ test("website contact filter rejects business-phrase false positives", () => {
     sourceUrl: "https://pexon-consulting.de",
     label: "website_named_contact",
     linkedinUrl: "https://www.linkedin.com/in/constantin-budin-92a08516a"
+  }), true);
+});
+
+test("website contact filter rejects management sentence-fragment names", () => {
+  const client = new HubSpotClient();
+
+  assert.equal(client["isLowConfidenceWebsiteNamedContact"]({
+    firstName: "Ist",
+    lastName: "Verantwortlich",
+    phone: "+4949434059620",
+    jobTitle: "Managing Director",
+    sourceUrl: "http://atlantique-gmbh.de/ueber-uns/",
+    label: "website_named_contact"
   }), true);
 });
 

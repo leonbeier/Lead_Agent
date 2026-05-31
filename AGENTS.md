@@ -6,6 +6,39 @@ You are an autonomous coding agent working on this repository.
 
 Do not stop after changing files. Always install, run, build, test, validate, debug, and rerun checks before opening or updating a pull request.
 
+## Required workflow
+
+Follow this order every time unless the user explicitly asks for a different process:
+
+1. Reproduce the problem and identify the real root cause.
+2. Fix the smallest root-cause slice. Do not look for workaround paths around the bug.
+3. Validate locally as hard as possible before changing environments. Prefer focused tests first, then broader build/typecheck/test validation.
+4. Keep changes minimal. Do not add heuristic or filter-based patches unless the user explicitly requests them. Prefer Azure AI / Foundry / agent-based automation over new manual heuristics when automation is the intended path.
+5. Deploy the verified fix to Railway when the task requires live behavior.
+6. Commit the verified fix to GitHub when the user asks for it.
+7. Test the deployed behavior, inspect failures, and repeat the same loop until the live issue is actually resolved.
+
+Do not skip directly to deployment or broad workaround changes before local reproduction, root-cause identification, and local validation are done.
+
+## Filter and deduplication rules
+
+**Do not bypass or weaken filters.** The system is intentionally designed with:
+
+- HubSpot deduplication (to avoid duplicate sync writes)
+- Screening database cache (to remember prior rejections)
+- Query history exclusion (to discover new companies each run, not repeat old ones)
+- Exa excluded domains lists (to avoid known bad sources)
+
+**Do not workaround these filters by:**
+- Removing HubSpot domain dedup logic
+- Allowing cached rejected companies back in
+- Ignoring query history to re-use old searches
+- Bypassing excluded domain lists
+
+These are features, not bugs. If a run produces fewer than expected results, investigate the real root cause (timeouts, AI qualification rigor, contact discovery gaps) rather than disabling filters. Use Azure AI and data inspection to improve quality, not heuristic shortcuts.
+
+Do not look for side doors around the actual problem. That includes trying to bypass HubSpot duplicate checks, re-allow previously screened-out companies, ignore current search history, or skip Exa excluded websites just to force more output. Each run is supposed to generate fresh queries and respect excluded websites so the result set stays new and non-duplicative.
+
 ## Local reproduction
 
 Before making changes:

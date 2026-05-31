@@ -313,7 +313,8 @@ export class HubSpotClient {
     const extractedAddress = options.includeAddressLookup
       ? (options.extractedAddress ?? await this.extractCompanyAddress(company))
       : null;
-    const companyProperties = this.stripUndefinedProperties(this.buildRawCompanyProperties(company, brief, extractedAddress));
+    const sanitizedCompany = this.sanitizeCompanyForHubSpot(company, brief);
+    const companyProperties = this.stripUndefinedProperties(this.buildRawCompanyProperties(sanitizedCompany, brief, extractedAddress));
 
     const contactPreviews = contacts.map((contact) => {
       const normalizedContact = this.normalizeContactForHubSpot(contact);
@@ -341,7 +342,7 @@ export class HubSpotClient {
         skipped: false,
         normalizedContact,
         properties: this.stripUndefinedProperties(this.buildRawContactProperties(normalizedContact)),
-        outreachNote: brief ? this.buildCombinedOutreachNote(company, normalizedContact, brief) : undefined
+        outreachNote: brief ? this.buildCombinedOutreachNote(sanitizedCompany, normalizedContact, brief) : undefined
       } satisfies HubSpotContactPreview;
     });
 
@@ -616,7 +617,7 @@ export class HubSpotClient {
     brief: ResearchBrief | undefined,
     availableProperties: Set<string>
   ): Promise<HubSpotObjectResponse> {
-    const sanitizedCompany = this.sanitizeCompanyForHubSpot(company);
+    const sanitizedCompany = this.sanitizeCompanyForHubSpot(company, brief);
     const extractedAddress = await this.extractCompanyAddress(company).catch(() => null);
 
     const properties = this.pickAvailableProperties(
@@ -731,7 +732,7 @@ export class HubSpotClient {
     }
 
     // Keep a visible identifier in HubSpot when no person name is available.
-    if (!firstName && !lastName && email && !this.isLowValueMailbox(email)) {
+    if (!firstName && !lastName && email && !this.isLowValueMailbox(email) && !this.isGenericMailbox(email)) {
       firstName = email;
     }
 
@@ -756,7 +757,7 @@ export class HubSpotClient {
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left));
   }
 
-  private sanitizeCompanyForHubSpot(company: PreCategorizedCompany): PreCategorizedCompany {
+  private sanitizeCompanyForHubSpot(company: PreCategorizedCompany, brief?: ResearchBrief): PreCategorizedCompany {
     const normalizedDomain = this.normalizeDomain(company.domain);
     const domain = normalizedDomain && normalizedDomain !== "example.com"
       ? normalizedDomain
@@ -768,6 +769,10 @@ export class HubSpotClient {
       : undefined;
     const legalEntityFromEvidence = this.extractLegalEntityCompanyNameFromEvidence([
       cleanedName,
+      brief?.companyName,
+      brief?.overview,
+      brief?.qualificationSummary,
+      company.rationale,
       company.shortDescription,
       company.sourceFilter
     ].filter(Boolean).join(" | "));
@@ -2551,6 +2556,15 @@ export class HubSpotClient {
       return false;
     }
 
+    const rawNameTokens = [contact.firstName, contact.lastName]
+      .filter((value): value is string => Boolean(value))
+      .flatMap((value) => value.split(/\s+/))
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+    if (rawNameTokens.some((token) => !this.isLikelyPersonNameToken(token))) {
+      return true;
+    }
+
     const hasName = Boolean(contact.firstName && contact.lastName);
     if (!hasName) {
       return true;
@@ -2903,13 +2917,7 @@ export class HubSpotClient {
       .split(/,|;|\bund\b|&/i)
       .map((value) => value.replace(/\b(Prof\.?|Dr\.?|Dipl\.?-?Ing\.?|M\.Sc\.?|B\.Sc\.?|Management)\b/gi, " ").replace(/\s+/g, " ").trim())
       .map((value) => {
-        const parsedName = this.extractNameFromLine(value)
-          ?? this.extractNameFromLine(
-            value
-              .split(/\s+/)
-              .slice(-2)
-              .join(" ")
-          );
+        const parsedName = this.extractNameFromLine(value);
         if (!parsedName) {
           return null;
         }
@@ -3590,6 +3598,13 @@ export class HubSpotClient {
       "learning",
       "smart",
       "factory",
+      "ist",
+      "sind",
+      "management",
+      "verantwortlich",
+      "langfristigen",
+      "unternehmensziele",
+      "durchzusetzen",
       "mes",
       "erp",
       "group",
@@ -3620,6 +3635,20 @@ export class HubSpotClient {
     return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
   }
 
+  private isTlsValidationError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const causeCode = typeof (error as Error & { cause?: { code?: string } }).cause?.code === "string"
+      ? (error as Error & { cause?: { code?: string } }).cause?.code
+      : undefined;
+
+    return causeCode === "UNABLE_TO_VERIFY_LEAF_SIGNATURE"
+      || causeCode === "ERR_TLS_CERT_ALTNAME_INVALID"
+      || /certificate|tls/i.test(error.message);
+  }
+
   private async fetchHtml(url: string): Promise<string | null> {
     try {
       const response = await fetch(url, {
@@ -3640,8 +3669,29 @@ export class HubSpotClient {
         status: response.status,
         responseLength: html.trim().length
       });
-    } catch {
-      // Fall through to browser fetch below.
+    } catch (error) {
+      if (this.isTlsValidationError(error)) {
+        try {
+          const undici = await import("undici");
+          const dispatcher = new undici.Agent({
+            connect: { rejectUnauthorized: false }
+          } as any);
+          const tlsBypassResponse = await fetch(url, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; LeadAgent/1.0; +https://leadagent-production-4555.up.railway.app)"
+            },
+            redirect: "follow",
+            signal: AbortSignal.timeout(10000),
+            dispatcher: dispatcher as any
+          } as any);
+          const tlsBypassHtml = await tlsBypassResponse.text();
+          if (!this.shouldRetryHtmlFetchInBrowser(tlsBypassResponse.status, tlsBypassHtml)) {
+            return tlsBypassResponse.ok ? tlsBypassHtml : null;
+          }
+        } catch {
+          // Fall through to browser fetch below.
+        }
+      }
     }
 
     return this.fetchHtmlWithBrowser(url);
@@ -3699,6 +3749,7 @@ export class HubSpotClient {
       try {
         const page = await browser.newPage({
           locale: "de-DE",
+          ignoreHTTPSErrors: true,
           userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
         });
 
