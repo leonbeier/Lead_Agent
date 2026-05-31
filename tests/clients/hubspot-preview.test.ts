@@ -795,6 +795,22 @@ test("existing generic mailbox contacts clear stale person job titles during cle
   });
 });
 
+test("existing contacts clear placeholder unknown job titles during cleanup", () => {
+  const client = new HubSpotClient();
+  const cleanup = client["buildExistingContactCleanupProperties"]({
+    id: "contact-4b",
+    properties: {
+      firstname: "Jennifer",
+      lastname: "Heinz",
+      jobtitle: "Unknown"
+    }
+  }, new Set(["jobtitle"]));
+
+  assert.deepEqual(cleanup, {
+    jobtitle: ""
+  });
+});
+
 test("descriptive company labels reject LinkedIn hits that do not mention the domain token", () => {
   const client = new HubSpotClient();
   const relevant = client["isRelevantCompanyHit"](

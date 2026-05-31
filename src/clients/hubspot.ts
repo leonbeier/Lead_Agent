@@ -2708,7 +2708,7 @@ export class HubSpotClient {
       return undefined;
     }
 
-    if (/^(ihre?r?\s+ansprechpartner|ansprechpartner|contact person|your contact|kontaktperson)$/i.test(trimmed)) {
+    if (/^(ihre?r?\s+ansprechpartner|ansprechpartner|contact person|your contact|kontaktperson|unknown|n\/?a|none)$/i.test(trimmed)) {
       return undefined;
     }
 
