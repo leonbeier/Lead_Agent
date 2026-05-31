@@ -151,16 +151,15 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   agent.controlPlaneStore.recordSearchHistory = async () => {};
   agent.controlPlaneStore.writeLatestLeadRun = async () => {};
   agent.azureClient.buildResearchBrief = async () => researchBrief;
-  agent.collectPublicContacts = async () => new Map([["robofunktion.example", [{
-    email: "info@robofunktion.example",
-    phone: "+49 30 123456",
-    sourceUrl: qualifiedCompany.domain,
-    label: "public_generic_mailbox",
-    jobTitle: "General contact"
-  }]]]);
-  agent.collectApolloContacts = async () => {
+  agent.collectPublicContacts = async () => {
     stopRequested = true;
-    return new Map();
+    return new Map([["robofunktion.example", [{
+      email: "info@robofunktion.example",
+      phone: "+49 30 123456",
+      sourceUrl: qualifiedCompany.domain,
+      label: "public_generic_mailbox",
+      jobTitle: "General contact"
+    }]]]);
   };
   agent.hubspotClient.syncQualifiedCompanies = async (companies: PreCategorizedCompany[]) => {
     syncCalls += 1;
@@ -197,55 +196,6 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.stopped, true);
   assert.equal(result.hubspotSync.companySyncedCount, 1);
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
-});
-
-test("apollo contact fallback errors do not abort collection", async () => {
-  const agent = new LeadPipelineAgent() as any;
-  const company: PreCategorizedCompany = {
-    name: "Fallback Systems GmbH",
-    domain: "https://fallback-systems.example",
-    country: "Germany",
-    shortDescription: "Industrial software integration.",
-    sourceFilter: "Debug filter",
-    category: "integrator_general_ai",
-    relevanceScore: 74,
-    rationale: "Strong delivery fit."
-  };
-
-  agent.apolloClient.searchContactsForCompany = async () => {
-    throw new Error("Apollo timed out");
-  };
-
-  const result = await agent.collectApolloContacts(
-    [company],
-    [{
-      companyName: company.name,
-      overview: "Overview",
-      qualificationSummary: "Qualified.",
-      qualifyingSignals: [],
-      riskFlags: [],
-      likelyGermanSpeaking: true,
-      outreachLanguage: "de",
-      rankings: { customer: 0, serviceProvider: 0, partner: 0 },
-      businessPotentialEUR: 0,
-      businessPotentialReasoning: "",
-      targetIndustry: "",
-      productsOffered: "",
-      recommendedTemplateKey: "integrator_general_ai_template",
-      personalizationRule: "",
-      linkedInAngle: "",
-      emailAngle: "",
-      phoneAngle: "",
-      linkedInMessage: "",
-      emailSubject: "",
-      emailBody: "",
-      phoneScript: ""
-    }],
-    false,
-    ""
-  );
-
-  assert.deepEqual(result.get("fallback-systems.example"), []);
 });
 
 test("direct exa path can skip Azure query planning when explicitly disabled", async () => {

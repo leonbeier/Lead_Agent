@@ -73,8 +73,7 @@ const settingsSchema = z.object({
   mainContext: z.string().max(12000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
   searchStrategyPreset: z.enum(["default", "optimized_vision_integrators"]).optional(),
-  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
-  creditLessMode: z.boolean(),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
   prequalification: z.object({
     mainContext: z.string().max(6000).optional(),
     categoryContexts: z.object({
@@ -250,8 +249,7 @@ const leadCategorySchema = z.enum([
 
 const searchHistoryEntrySchema = z.object({
   timestamp: z.string().min(1),
-  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
-  filterName: z.string().min(1),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
   filterSnapshot: z.object({
     persona: z.string().min(1),
     industries: z.array(z.string().min(1)),
@@ -730,7 +728,7 @@ export class ControlPlaneStore {
       ...defaultSettings,
       ...settings,
       companySearchMode: normalizedCompanySearchMode,
-      creditLessMode: normalizedCompanySearchMode !== "apollo_search",
+      creditLessMode: true,
       prequalification: normalizedPrequalification,
       executionContexts: normalizedExecutionContexts,
       targetCategories: normalizedTargetCategories,
@@ -742,16 +740,12 @@ export class ControlPlaneStore {
   async updateSettings(input: Partial<LeadAgentSettings>): Promise<LeadAgentSettings> {
     const currentSettings = await this.getSettings();
     const parsedInput = settingsUpdateSchema.parse(input);
-    const normalizedCompanySearchMode = parsedInput.companySearchMode ?? (
-      typeof parsedInput.creditLessMode === "boolean"
-        ? (parsedInput.creditLessMode ? "internet_research" : "apollo_search")
-        : currentSettings.companySearchMode
-    );
+    const normalizedCompanySearchMode = parsedInput.companySearchMode ?? currentSettings.companySearchMode;
     const nextSettings = settingsSchema.parse({
       ...currentSettings,
       ...parsedInput,
       companySearchMode: normalizedCompanySearchMode,
-      creditLessMode: normalizedCompanySearchMode !== "apollo_search"
+      creditLessMode: true
     });
 
     await writeJsonFile(settingsPath, nextSettings);

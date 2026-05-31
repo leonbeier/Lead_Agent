@@ -1,6 +1,5 @@
 import { azureOpenAICostConfig, env, readiness } from "../config";
 import {
-  ApolloContactCandidate,
   ApolloOrganizationFilter,
   AzureUsageCost,
   ExaQueryHistoryInsight,
@@ -370,61 +369,6 @@ export class AzureOpenAIClient {
 
     const result = compacted.join(" ").trim() || segments.join(" ").replace(/\s+/g, " ").trim();
     return result.length <= maxLength ? result : `${result.slice(0, maxLength - 3)}...`;
-  }
-
-  async chooseApolloContacts(
-    company: PreCategorizedCompany,
-    candidates: ApolloContactCandidate[],
-    dryRun: boolean,
-    mainContext?: string,
-    brief?: ResearchBrief
-  ): Promise<ApolloContactCandidate[]> {
-    const rankedCandidates = this.rankApolloContacts(candidates).slice(0, 12);
-    if (rankedCandidates.length <= 5 || dryRun || !readiness.azureConfigured) {
-      return rankedCandidates.slice(0, 5);
-    }
-
-    try {
-      const content = await this.runChat([
-        {
-          role: "system",
-          content: `${buildMainContextBlock(mainContext)}\n\nTask: Select the best two or three Apollo contacts for outbound outreach. Prefer decision-makers and operational owners who can sponsor or own industrial AI, machine vision, automation, digitalization, engineering, operations, manufacturing, or innovation projects. Favor CEO, CTO, COO, Founder, Owner, Managing Director, Managing Partner, Head of Automation, Head of Engineering, Head of Operations, Head of Production, Head of Manufacturing, Head of Digitalization, and similar roles. Prefer a balanced stakeholder set when possible: one executive sponsor plus one operational or technical owner, optionally a third relevant stakeholder. Avoid HR, recruiting, finance, legal, support, marketing, SDR/BDR, and generic sales contacts unless no stronger option exists. Return strict JSON with {\"selectedPersonIds\":[\"...\"],\"reason\":\"...\"}.`
-        },
-        {
-          role: "user",
-          content: [
-            `Company: ${company.name}`,
-            company.domain ? `Domain: ${company.domain}` : undefined,
-            `Category: ${company.category}`,
-            brief?.qualificationSummary ? `Qualification summary: ${brief.qualificationSummary}` : undefined,
-            `Apollo candidates JSON: ${JSON.stringify(rankedCandidates)}`
-          ].filter(Boolean).join("\n\n")
-        }
-      ], { maxTokens: 160 });
-
-      const parsed = this.parseJsonObject<{ selectedPersonIds?: string[] }>(content);
-      const selected = rankedCandidates.filter((candidate) => (parsed.selectedPersonIds ?? []).includes(candidate.personId));
-      const minimumSelectedCount = Math.min(5, rankedCandidates.length);
-      if (selected.length >= minimumSelectedCount) {
-        return selected.slice(0, 5);
-      }
-
-      const augmentedSelection = [...selected];
-      for (const candidate of rankedCandidates) {
-        if (augmentedSelection.some((existing) => existing.personId === candidate.personId)) {
-          continue;
-        }
-
-        augmentedSelection.push(candidate);
-        if (augmentedSelection.length >= minimumSelectedCount) {
-          break;
-        }
-      }
-
-      return augmentedSelection.slice(0, 5);
-    } catch {
-      return rankedCandidates.slice(0, 5);
-    }
   }
 
   async choosePublicContacts(
@@ -3618,52 +3562,6 @@ export class AzureOpenAIClient {
       });
 
     return modeSections.length > 0 ? modeSections.join("\n\n") : undefined;
-  }
-
-  private rankApolloContacts(candidates: ApolloContactCandidate[]): ApolloContactCandidate[] {
-    return [...candidates].sort((left, right) => this.getApolloContactRank(right) - this.getApolloContactRank(left));
-  }
-
-  private getApolloContactRank(candidate: ApolloContactCandidate): number {
-    const title = candidate.title?.toLowerCase() ?? "";
-    const seniority = candidate.seniority?.toLowerCase() ?? "";
-    const departmentText = `${candidate.departments?.join(" ") ?? ""} ${candidate.functions?.join(" ") ?? ""}`.toLowerCase();
-
-    let score = 0;
-
-    if (/\b(ceo|cto|coo|founder|owner|geschäftsführer|managing director|managing partner|general manager)\b/.test(title)) {
-      score += 12;
-    }
-
-    if (/\b(head|director|lead|vp|manager)\b/.test(title) || /\b(head|director|vp|c_suite|founder|owner|manager)\b/.test(seniority)) {
-      score += 7;
-    }
-
-    if (/automation|innovation|engineering|operations|production|manufacturing|digital|vision|inspection|factory|quality|plant/.test(title)) {
-      score += 6;
-    }
-
-    if (/partner|account manager|business development|business developer|technology manager|technical manager|solutions|solution/.test(title)) {
-      score += 6;
-    }
-
-    if (/engineering|operations|innovation|it|product|manufacturing|quality|automation/.test(departmentText)) {
-      score += 4;
-    }
-
-    if (/partner|alliances|business development|business developer|account management|technology|solutions/.test(departmentText)) {
-      score += 3;
-    }
-
-    if (/hr|recruit|finance|legal|marketing|support|sales development|sdr|bdr|account executive/.test(`${title} ${departmentText}`)) {
-      score -= 12;
-    }
-
-    if (candidate.hasEmail) {
-      score += 2;
-    }
-
-    return score;
   }
 
   private formatFilterSnapshot(snapshot: {

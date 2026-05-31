@@ -73,7 +73,6 @@ const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
 const DIRECT_EXA_FILTER_CONCURRENCY = 3;
 const DIRECT_EXA_QUERY_CONCURRENCY = 3;
-const APOLLO_EMAIL_ENRICH_CONCURRENCY = 4;
 const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
 const FALLBACK_REPLENISHMENT_LOCATIONS = ["Berlin", "Munich", "Hamburg", "Cologne", "Stuttgart", "DACH", "Austria", "Switzerland"];
 const FALLBACK_REPLENISHMENT_KEYWORDS = ["computer vision", "machine vision", "bildverarbeitung", "industrial ai", "inspection automation", "vision systems"];
@@ -251,7 +250,7 @@ export class LeadPipelineAgent {
     const dryRun = request.dryRun ?? true;
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
     const disableHubSpotDeduplication = request.disableHubSpotDeduplication ?? false;
-    const companySearchMode = request.companySearchMode ?? (request.creditLessMode ? "internet_research" : "apollo_search");
+    const companySearchMode = request.companySearchMode ?? "internet_research";
     this.apolloClient.setExaApiKey(request.exaApiKey);
     this.apolloClient.setDiffbotToken(request.diffbotToken);
     this.apolloClient.setExaSearchPayloadOptions({
@@ -273,7 +272,7 @@ export class LeadPipelineAgent {
     this.aiPrefilterConcurrency = this.resolveConcurrency(request.aiPrefilterConcurrency, AZURE_WORKER_CONCURRENCY);
     this.outreachPrepConcurrency = this.resolveConcurrency(request.outreachPrepConcurrency, AZURE_WORKER_CONCURRENCY);
     this.contactSearchConcurrency = this.resolveConcurrency(request.contactSearchConcurrency, CONTACT_DISCOVERY_CONCURRENCY);
-    const useWebSearchCompanyDiscovery = companySearchMode !== "apollo_search";
+    const useWebSearchCompanyDiscovery = true;
     const targetCategories = this.getActiveTargetCategories(request.targetCategories);
     const mainContext = request.mainContext ?? request.agentContext;
     const learning = await this.controlPlaneStore.getLearning();
@@ -480,31 +479,13 @@ export class LeadPipelineAgent {
       const pendingResearchBriefs = syncEligibleCompanies
         .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
         .filter((brief): brief is ResearchBrief => Boolean(brief));
-      emitSyncPreparationProgress(56, `Website-Kontakte und Apollo-Kontakte werden jetzt parallel fuer ${syncEligibleCompanies.length} Firmen vorbereitet.`);
+      emitSyncPreparationProgress(56, `Website-Kontakte werden jetzt fuer ${syncEligibleCompanies.length} Firmen vorbereitet.`);
 
-      const [publicContacts, apolloContactsRaw] = await Promise.all([
-        this.collectPublicContacts(syncEligibleCompanies, dryRun),
-        this.collectApolloContacts(syncEligibleCompanies, pendingResearchBriefs, dryRun, mainContext)
-      ]);
-
-      const apolloContacts = new Map(
-        syncEligibleCompanies.map((company) => {
-          const companyKey = this.getCompanyKey(company);
-          const existingContacts = publicContacts.get(companyKey) ?? [];
-          return [
-            companyKey,
-            this.hasNonGenericReachableContact(existingContacts)
-              ? []
-              : (apolloContactsRaw.get(companyKey) ?? [])
-          ] as const;
-        })
-      );
-
-      const mergedContacts = this.mergeContactCandidates(apolloContacts, publicContacts);
+      const publicContacts = await this.collectPublicContacts(syncEligibleCompanies, dryRun);
 
       for (const company of syncEligibleCompanies) {
         const companyKey = this.getCompanyKey(company);
-        contactCandidatesByCompany.set(companyKey, mergedContacts.get(companyKey) ?? []);
+        contactCandidatesByCompany.set(companyKey, publicContacts.get(companyKey) ?? []);
       }
 
       const syncResult = await this.hubspotClient.syncQualifiedCompanies(
@@ -512,7 +493,7 @@ export class LeadPipelineAgent {
         syncEligibleCompanies
           .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
           .filter((brief): brief is ResearchBrief => Boolean(brief)),
-        mergedContacts,
+        publicContacts,
         !syncToHubSpot,
         ({ completedCompanies, totalCompanies, companyName }) => {
           const completionCount = incrementalHubspotSync.companySyncedCount + completedCompanies;
@@ -775,7 +756,7 @@ export class LeadPipelineAgent {
       nextFilterIndex: 0
     }));
     let filterReplenishmentRounds = 0;
-    const useHeuristicFilterOrchestration = companySearchMode === "apollo_search";
+    const useHeuristicFilterOrchestration = false;
 
     while (!hasReachedRequestedTarget() && !shouldFinishEarly()) {
       const remainingTargetCount = Math.max(1, request.targetLeadCount - getTargetProgressCount());
@@ -889,7 +870,7 @@ export class LeadPipelineAgent {
         );
 
         emitFilterProgress(
-          `Direkter Lauf fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}.`
+          `Direkter Lauf fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle Web.`
         );
 
         await flushQualifiedCompanies(shortlistedCompanies.slice(shortlistLengthBeforeProbe), shortlistedCompanies.length);
@@ -1037,7 +1018,7 @@ export class LeadPipelineAgent {
           );
 
           emitFilterProgress(
-            `Probe fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle ${candidate.useWebSearchForExpansion ? "Web" : "Apollo"}, Weiterlauf ab ${earlyStopMinRelevantCount} relevanten Treffern.`
+            `Probe fuer "${candidate.filter.name}": ${candidate.initialRelevant.length}/${candidate.categorizedInitialSample.length} relevant (${Math.round(candidate.initialEvaluation.relevanceRatio * 100)}%), Rohmenge ${candidate.sampleDiagnostics.fetchedSampleCount}, nach Cache/Vorfilter ${candidate.sampleDiagnostics.eligibleSampleCount}, Quelle Web, Weiterlauf ab ${earlyStopMinRelevantCount} relevanten Treffern.`
           );
         }
 
@@ -1332,7 +1313,7 @@ export class LeadPipelineAgent {
     emitFilterProgress: (detail: string) => void
   ): Promise<ProbedFilterCandidate> {
     const reviewedCompanies: PreCategorizedCompany[] = [];
-    const probeSourceLabel = this.getDiscoverySourceLabel(useWebSearchCompanyDiscovery ? companySearchMode : "apollo_search");
+    const probeSourceLabel = this.getDiscoverySourceLabel(companySearchMode);
     const exaQueryPreview = this.buildExaQueryPreview(filter);
     const rawSearchProbeMessage = `Starte rohe Exa-Suche fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}${exaQueryPreview ? `, Exa-Query \"${exaQueryPreview}\"` : ""}. Es werden bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} roh gesammelt und danach von der KI kategorisiert.`;
     const filterProbeMessage = `Teste Filter "${filter.name}" fuer ${this.describeLeadCategory(activeCategory)}. Quelle ${probeSourceLabel}, Region ${filter.locations.join(", ") || "unbekannt"}, Keywords ${filter.keywords.slice(0, 4).join(", ") || "keine"}. Probe mit bis zu ${useWebSearchCompanyDiscovery ? webRawProbeCount : earlyStopReviewCount} ${useWebSearchCompanyDiscovery ? "Web-Sites" : "Firmen"} startet.`;
@@ -2138,7 +2119,7 @@ export class LeadPipelineAgent {
     const normalizedDescription = company.shortDescription.trim().toLowerCase();
     const hasPlaceholderDescription =
       normalizedDescription.length === 0 ||
-      normalizedDescription.includes("no verified public company description was returned by apollo");
+      normalizedDescription.includes("no verified public company description");
     const normalizedCountry = company.country?.trim().toLowerCase();
     const industrialSignals = [
       "industrial",
@@ -3223,7 +3204,7 @@ export class LeadPipelineAgent {
             expansionBatchSize,
             Boolean(request.dryRun),
             page,
-            request.companySearchMode ?? (request.creditLessMode ? "internet_research" : "apollo_search"),
+            request.companySearchMode ?? "internet_research",
             true,
             request.disableHubSpotDeduplication ?? false,
             request.syncToHubSpot ?? !(request.dryRun ?? true),
@@ -3594,7 +3575,7 @@ export class LeadPipelineAgent {
       return "Open Web";
     }
 
-    return "Apollo";
+    return "Web Search";
   }
 
   private applyExplicitLocalityFilter(
@@ -4732,40 +4713,6 @@ export class LeadPipelineAgent {
           [] as PublicContactCandidate[]
         )
       ] as const),
-      this.contactSearchConcurrency
-    );
-
-    return new Map(entries);
-  }
-
-  private async collectApolloContacts(
-    companies: PreCategorizedCompany[],
-    researchBriefs: import("../types").ResearchBrief[],
-    dryRun: boolean,
-    mainContext?: string
-  ): Promise<Map<string, PublicContactCandidate[]>> {
-    if (dryRun) {
-      return new Map();
-    }
-
-    const entries = await this.mapWithConcurrency(
-      companies.map((company) => async () => {
-        try {
-          const brief = researchBriefs.find((entry) => entry.companyName === company.name);
-          const apolloCandidates = await this.apolloClient.searchContactsForCompany(company, 20);
-          const selectedCandidates = await this.azureClient.chooseApolloContacts(company, apolloCandidates, dryRun, mainContext, brief);
-          const enrichedContacts = (await this.mapWithConcurrency(
-            selectedCandidates.map((candidate) => async () => this.apolloClient.enrichContactEmail(candidate, company)),
-            Math.min(APOLLO_EMAIL_ENRICH_CONCURRENCY, Math.max(1, selectedCandidates.length))
-          ))
-            .filter((contact): contact is PublicContactCandidate => Boolean(contact))
-            .filter((contact, index, allContacts) => allContacts.findIndex((existing) => existing.email === contact.email) === index);
-
-          return [this.getCompanyKey(company), enrichedContacts] as const;
-        } catch {
-          return [this.getCompanyKey(company), [] as PublicContactCandidate[]] as const;
-        }
-      }),
       this.contactSearchConcurrency
     );
 

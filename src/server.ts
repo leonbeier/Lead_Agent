@@ -721,7 +721,7 @@ app.put("/api/control/settings", async (request, response, next) => {
   }
 });
 
-app.get("/api/apollo/filter-presets", (_request, response) => {
+app.get("/api/filter-presets", (_request, response) => {
   response.json({
     filters: defaultApolloFilters
   });
