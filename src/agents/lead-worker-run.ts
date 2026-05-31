@@ -2,6 +2,7 @@ import { ControlPlaneStore } from "../control-plane.js";
 import { DebugConsoleService } from "../debug/test-console-service.js";
 import { HubSpotClient } from "../clients/hubspot.js";
 import { LeadPipelineAgent } from "./lead-pipeline.js";
+import { env } from "../config.js";
 import type {
   ApolloOrganizationFilter,
   CompanySample,
@@ -195,7 +196,34 @@ const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
-const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = 180_000;
+const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
+
+function summarizeContactChannels(contacts: PublicContactCandidate[]): string {
+  const byLabel = new Map<string, number>();
+  let withEmail = 0;
+  let withPhone = 0;
+  let withLinkedIn = 0;
+
+  for (const contact of contacts) {
+    byLabel.set(contact.label, (byLabel.get(contact.label) ?? 0) + 1);
+    if (contact.email) {
+      withEmail += 1;
+    }
+    if (contact.phone) {
+      withPhone += 1;
+    }
+    if (contact.linkedinUrl) {
+      withLinkedIn += 1;
+    }
+  }
+
+  const labelSummary = Array.from(byLabel.entries())
+    .sort((left, right) => right[1] - left[1])
+    .map(([label, count]) => `${label}:${count}`)
+    .join(", ");
+
+  return `channels(email=${withEmail}, phone=${withPhone}, linkedin=${withLinkedIn}) labels[${labelSummary || "none"}]`;
+}
 
 function createEmptyCategoryBreakdown(): Record<LeadCategory, number> {
   return {
@@ -690,28 +718,7 @@ export class LeadWorkerRunService {
     };
 
     const queueNonTargetCompanyForCreation = (company: PreCategorizedCompany, source: "seed" | "exa", searchId?: string) => {
-      const key = buildCompanyKey(company);
-      if (qualifiedStates.has(key) || standbyQualifiedStates.some((state) => state.key === key)) {
-        return;
-      }
-
-      const state: QualifiedCompanyState = {
-        key,
-        company,
-        searchId,
-        source,
-        pipelineAssigned: false,
-        contacts: [],
-        outreachStatus: "queued",
-        contactStatus: "queued",
-        hubspotStatus: "pending",
-        removed: false
-      };
-
-      qualifiedStates.set(key, state);
-      outreachQueue.enqueue(state);
-      contactQueue.enqueue(state);
-      log(`Nicht-Zieltreffer wird trotzdem angelegt: ${company.name}`);
+      log(`Nicht-Zieltreffer wird aussortiert: ${company.name} (${company.category})`);
       emitProgress();
     };
 
@@ -876,18 +883,30 @@ export class LeadWorkerRunService {
         state.contactStatus = "running";
         emitProgress();
         try {
-          const contactDebug = await Promise.race<ContactDebugResult>([
-            this.debugConsoleService.discoverContactsForExecution(state.company, {
-              selectedContactsTimeoutMs: 120_000
-            }),
-            delay(this.contactTaskTimeoutMs).then(() => {
-              throw new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`);
-            })
-          ]);
+          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              reject(new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`));
+            }, this.contactTaskTimeoutMs);
+          });
+
+          let contactDebug: ContactDebugResult;
+          try {
+            contactDebug = await Promise.race<ContactDebugResult>([
+              this.debugConsoleService.discoverContactsForExecution(state.company, {
+                selectedContactsTimeoutMs: 120_000
+              }),
+              timeoutPromise
+            ]);
+          } finally {
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle);
+            }
+          }
           state.contacts = contactDebug.selectedContacts ?? [];
           state.contactStatus = "done";
           metrics.contactCompleted += 1;
-          log(`Kontakte fertig: ${state.company.name} (${state.contacts.length})`);
+          log(`Kontakte fertig: ${state.company.name} (${state.contacts.length}) ${summarizeContactChannels(state.contacts)}`);
           maybeQueueHubSpot(state);
         } catch (error) {
           state.contactStatus = "failed";
@@ -915,21 +934,33 @@ export class LeadWorkerRunService {
 
         metrics.queueSizes.hubspotInFlight += 1;
         state.hubspotStatus = "running";
-        log(`HubSpot startet: ${state.company.name}`);
+        log(`HubSpot startet: ${state.company.name} | ${summarizeContactChannels(state.contacts)}`);
         emitProgress();
         try {
           const companySyncKey = new URL(state.company.domain?.startsWith("http") ? state.company.domain : `https://${state.company.domain ?? state.company.name}`).hostname.replace(/^www\./i, "").toLowerCase();
-          const syncResult = await Promise.race([
-            this.hubSpotClient.syncQualifiedCompanies(
-              [state.company],
-              state.researchBrief ? [state.researchBrief] : [],
-              new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
-              Boolean(request.dryRun || request.syncToHubSpot === false)
-            ),
-            delay(this.hubspotTaskTimeoutMs).then(() => {
-              throw new Error(`HubSpot worker timed out after ${this.hubspotTaskTimeoutMs}ms`);
-            })
-          ]);
+          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              reject(new Error(`HubSpot worker timed out after ${this.hubspotTaskTimeoutMs}ms`));
+            }, this.hubspotTaskTimeoutMs);
+          });
+
+          let syncResult;
+          try {
+            syncResult = await Promise.race([
+              this.hubSpotClient.syncQualifiedCompanies(
+                [state.company],
+                state.researchBrief ? [state.researchBrief] : [],
+                new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
+                Boolean(request.dryRun || request.syncToHubSpot === false)
+              ),
+              timeoutPromise
+            ]);
+          } finally {
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle);
+            }
+          }
           if (syncResult.companySyncedCount === 0) {
             const syncErrors = Array.isArray(syncResult.errors) ? syncResult.errors.filter(Boolean) : [];
             if (syncErrors.length > 0) {
@@ -942,6 +973,10 @@ export class LeadWorkerRunService {
           state.pipelineAssigned = false;
           state.completedAt = new Date().toISOString();
           metrics.hubspotWritten += syncResult.companySyncedCount;
+          const syncErrorCount = Array.isArray(syncResult.errors) ? syncResult.errors.length : 0;
+          if (syncErrorCount > 0) {
+            log(`HubSpot Sync Warnungen fuer ${state.company.name}: ${syncErrorCount}`);
+          }
           if (hasReachedTarget()) {
             stopping = true;
           }
@@ -953,7 +988,7 @@ export class LeadWorkerRunService {
             category: state.company.category,
             sourceFilter: state.company.sourceFilter
           });
-          log(`HubSpot fertig: ${state.company.name}`);
+          log(`HubSpot fertig: ${state.company.name} (companySynced=${syncResult.companySyncedCount}, contactSynced=${syncResult.contactSyncedCount})`);
           maybePromoteStandby();
         } catch (error) {
           state.hubspotStatus = "failed";
@@ -1198,6 +1233,17 @@ export class LeadWorkerRunService {
           }
 
           emitProgress();
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (this.isExaCreditsExhaustedError(errorMessage)) {
+            stopReason = stopReason || "exa_credits_exhausted";
+            stopping = true;
+            log(`Exa-Credits aufgebraucht. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
+            stopAiQueue();
+            break;
+          }
+
+          throw error;
         } finally {
           metrics.queueSizes.exaInFlight = Math.max(0, metrics.queueSizes.exaInFlight - 1);
           emitProgress();
@@ -1452,6 +1498,13 @@ export class LeadWorkerRunService {
       rejectedOther: queryStat.rejectedOther,
       note: existing?.note
     });
+  }
+
+  private isExaCreditsExhaustedError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes("no_more_credits")
+      || normalized.includes("exceeded your credits limit")
+      || (normalized.includes("exa") && normalized.includes("credits"));
   }
 }
 
