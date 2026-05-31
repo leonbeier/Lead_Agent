@@ -682,7 +682,7 @@ test("existing generic mailbox contacts clear non-person names during cleanup", 
   }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
 
   assert.deepEqual(cleanup, {
-    firstname: "",
+    firstname: "info@platiscan.com",
     lastname: ""
   });
 });
@@ -704,7 +704,7 @@ test("existing generic mailbox contacts clear mismatched LinkedIn urls during cl
   });
 });
 
-test("existing generic mailbox contacts keep company LinkedIn urls during cleanup", () => {
+test("existing generic mailbox contacts clear company LinkedIn urls during cleanup", () => {
   const client = new HubSpotClient();
   const cleanup = client["buildExistingContactCleanupProperties"]({
     id: "contact-2b",
@@ -714,7 +714,10 @@ test("existing generic mailbox contacts keep company LinkedIn urls during cleanu
     }
   }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
 
-  assert.deepEqual(cleanup, {});
+  assert.deepEqual(cleanup, {
+    firstname: "contact@aidolsgroup.com",
+    hs_linkedin_url: ""
+  });
 });
 
 test("existing contacts clear mailbox names derived from the company domain and generic CTA titles during cleanup", () => {
@@ -730,7 +733,7 @@ test("existing contacts clear mailbox names derived from the company domain and 
   }, new Set(["firstname", "lastname", "jobtitle"]));
 
   assert.deepEqual(cleanup, {
-    firstname: "",
+    firstname: "framaval@framaval.com",
     lastname: "",
     jobtitle: ""
   });

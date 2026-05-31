@@ -923,11 +923,13 @@ export class HubSpotClient {
     ({ firstName, lastName } = this.sanitizeEmailDerivedContactName(email, firstName, lastName));
     const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
 
-    if (
+    const shouldClearNames = (
       (fullName && this.isClearlyNonPersonLine(fullName))
       || (typeof properties.firstname === "string" && !firstName)
       || (typeof properties.lastname === "string" && !lastName)
-    ) {
+    );
+
+    if (shouldClearNames) {
       if (availableProperties.has("firstname")) {
         cleanupProperties.firstname = "";
       }
@@ -945,6 +947,19 @@ export class HubSpotClient {
       && availableProperties.has("hs_linkedin_url")
     ) {
       cleanupProperties.hs_linkedin_url = "";
+    }
+
+    if (linkedinUrl && !this.isPersonalLinkedInUrl(linkedinUrl) && availableProperties.has("hs_linkedin_url")) {
+      cleanupProperties.hs_linkedin_url = "";
+    }
+
+    if (
+      email
+      && !this.isLowValueMailbox(email)
+      && ((!firstName && !lastName) || shouldClearNames)
+      && availableProperties.has("firstname")
+    ) {
+      cleanupProperties.firstname = email;
     }
 
     if (
