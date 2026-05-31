@@ -92,7 +92,7 @@ interface BrowserSearchArticle {
 const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
-const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
+const HUBSPOT_REQUEST_TIMEOUT_MS = env.HUBSPOT_REQUEST_TIMEOUT_MS;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 30000;
@@ -687,7 +687,7 @@ export class HubSpotClient {
     const email = contact.email?.trim().toLowerCase();
     const normalizedLinkedInUrl = this.getNormalizedLinkedInReference(contact);
     const hasPersonalLinkedInUrl = this.isPersonalLinkedInUrl(normalizedLinkedInUrl);
-    const linkedinUrl = normalizedLinkedInUrl;
+    const linkedinUrl = hasPersonalLinkedInUrl ? normalizedLinkedInUrl : undefined;
     let firstName = this.normalizeNamePart(contact.firstName);
     let lastName = this.normalizeNamePart(contact.lastName);
     const phone = contact.phone?.trim();
@@ -701,6 +701,11 @@ export class HubSpotClient {
     const hasReachableChannel = Boolean(email || linkedinUrl || phone);
     if (!hasReachableChannel) {
       return null;
+    }
+
+    // Keep a visible identifier in HubSpot when no person name is available.
+    if (!firstName && !lastName && email && !this.isLowValueMailbox(email)) {
+      firstName = email;
     }
 
     return {
@@ -1366,7 +1371,7 @@ export class HubSpotClient {
         const isGenericMailbox = this.isGenericMailbox(email);
         const inferredName = isGenericMailbox
           ? {}
-          : (this.inferNameFromPageContext(page.html, email) ?? this.inferNameFromEmail(email));
+          : (this.inferNameFromPageContext(page.html, email) ?? {});
         candidates.set(email, {
           email,
           phone: existing?.phone ?? primaryPhone,
@@ -1467,8 +1472,7 @@ export class HubSpotClient {
       phone: primaryPhone,
       sourceUrl,
       label: this.isGenericMailbox(email) ? "public_generic_mailbox" : "public_named_mailbox",
-      jobTitle: this.isGenericMailbox(email) ? "General contact" : "Public contact",
-      ...(!this.isGenericMailbox(email) ? this.inferNameFromEmail(email) : {})
+      jobTitle: this.isGenericMailbox(email) ? "General contact" : "Public contact"
     }));
 
     if (emailContacts.length > 0) {
@@ -3084,9 +3088,24 @@ export class HubSpotClient {
       new Set(
         [...plainEmails, ...obfuscatedEmails]
           .filter((email) => !email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.jpeg') && !email.endsWith('.webp'))
+          .filter((email) => this.isLikelyPlaceholderMailbox(email) === false)
           .filter((email) => this.isAllowedCompanyEmail(email, allowedDomains))
       )
     );
+  }
+
+  private isLikelyPlaceholderMailbox(email: string): boolean {
+    const [localPart, domain] = email.toLowerCase().split("@");
+    if (!localPart || !domain) {
+      return true;
+    }
+
+    // Common anti-scraping placeholders used in rendered website content.
+    if (domain.startsWith("remove-this.") || domain.includes(".remove-this.")) {
+      return true;
+    }
+
+    return false;
   }
 
   private extractObfuscatedEmails(content: string): string[] {
@@ -3809,28 +3828,48 @@ export class HubSpotClient {
   private buildSuggestedSalutation(contact: PublicContactCandidate, outreachLanguage: ResearchBrief["outreachLanguage"]): string {
     const lastName = contact.lastName?.trim();
     const firstName = contact.firstName?.trim();
+    const usableFirstName = this.isSalutationNameCandidate(firstName) ? firstName : undefined;
+    const usableLastName = this.isSalutationNameCandidate(lastName) ? lastName : undefined;
 
     if (outreachLanguage === "de") {
-      if (lastName) {
-        return `Hallo Herr/Frau ${lastName},`;
+      if (usableFirstName && usableLastName) {
+        return `Hallo ${usableFirstName} ${usableLastName},`;
       }
 
-      if (firstName) {
-        return `Hallo ${firstName},`;
+      if (usableFirstName) {
+        return `Hallo ${usableFirstName},`;
       }
 
       return "Hallo,";
     }
 
-    if (firstName) {
-      return `Hello ${firstName},`;
+    if (usableFirstName && usableLastName) {
+      return `Hello ${usableFirstName} ${usableLastName},`;
     }
 
-    if (lastName) {
-      return `Hello Mr./Ms. ${lastName},`;
+    if (usableFirstName) {
+      return `Hello ${usableFirstName},`;
     }
 
     return "Hello,";
+  }
+
+  private isSalutationNameCandidate(value: string | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.includes("@")) {
+      return false;
+    }
+
+    const normalized = trimmed.toLowerCase();
+    if (["info", "contact", "hello", "support", "sales", "office", "team", "service", "admin", "mail"].includes(normalized)) {
+      return false;
+    }
+
+    return /^[a-zA-Z\u00C0-\u024F'\-\s]+$/.test(trimmed);
   }
 
   private escapeNoteHtml(value: string): string {

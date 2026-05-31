@@ -218,7 +218,7 @@ test("previewHubSpotSync still skips low-value noreply mailboxes without person 
   assert.match(preview.contacts[0]?.skipReason ?? "", /Low-value mailbox/i);
 });
 
-test("previewHubSpotSync keeps company LinkedIn URLs as a reachable fallback channel", async () => {
+test("previewHubSpotSync strips company LinkedIn URLs from contact properties", async () => {
   const client = new HubSpotClient();
   const preview = await client.previewHubSpotSync(
     buildSampleCompany(),
@@ -237,7 +237,7 @@ test("previewHubSpotSync keeps company LinkedIn URLs as a reachable fallback cha
   );
 
   assert.equal(preview.contacts[0]?.skipped, false);
-  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, "https://www.linkedin.com/company/sample-automation");
+  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, undefined);
   assert.equal(preview.contacts[0]?.properties.email, "martin@sample-automation.de");
 });
 
@@ -280,7 +280,7 @@ test("previewHubSpotSync clears false names on generic mailbox contacts without 
   );
 
   assert.equal(preview.contacts[0]?.skipped, false);
-  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
+  assert.equal(preview.contacts[0]?.properties.firstname, "info@sample-automation.de");
   assert.equal(preview.contacts[0]?.properties.lastname, undefined);
   assert.equal(preview.contacts[0]?.properties.jobtitle, undefined);
   assert.equal(preview.contacts[0]?.properties.email, "info@sample-automation.de");
@@ -307,7 +307,7 @@ test("previewHubSpotSync clears mailbox names that only mirror the company domai
 
   assert.equal(preview.contacts[0]?.skipped, false);
   assert.equal(preview.contacts[0]?.properties.email, "framaval@framaval.com");
-  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
+  assert.equal(preview.contacts[0]?.properties.firstname, "framaval@framaval.com");
   assert.equal(preview.contacts[0]?.properties.lastname, undefined);
 });
 
@@ -601,6 +601,16 @@ test("email extraction resolves textual at-dot obfuscation", () => {
   );
 
   assert.deepEqual(emails, ["info@giovannigualdi.com"]);
+});
+
+test("email extraction ignores anti-scrape remove-this placeholders", () => {
+  const client = new HubSpotClient();
+  const emails = client["extractEmails"](
+    "Kontakt: info@remove-this.rottendorf.com | real: info@rottendorf.com",
+    new Set(["rottendorf.com"])
+  );
+
+  assert.deepEqual(emails, ["info@rottendorf.com"]);
 });
 
 test("descriptive company labels still produce domain-token aliases for LinkedIn search", () => {
