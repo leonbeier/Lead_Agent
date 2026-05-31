@@ -1,6 +1,6 @@
 import { azureOpenAICostConfig, env, readiness } from "../config";
 import {
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   AzureUsageCost,
   ExaQueryHistoryInsight,
   FilterEvaluation,
@@ -518,10 +518,10 @@ export class AzureOpenAIClient {
     mainContext: string | undefined,
     searchStrategyContext: string | undefined,
     targetCategories: LeadCategory[] | undefined,
-    baseFilters: ApolloOrganizationFilter[],
+    baseFilters: OrganizationFilter[],
     dryRun: boolean,
     learning?: LeadLearningData
-  ): Promise<ApolloOrganizationFilter[]> {
+  ): Promise<OrganizationFilter[]> {
     const foundryFilters = await this.foundryAgentsClient.generateSuggestedFilters(
       market,
       customGoal,
@@ -585,10 +585,10 @@ export class AzureOpenAIClient {
         { maxTokens: 900 }
       );
 
-      const parsed = this.parseJsonObject<{ filters?: ApolloOrganizationFilter[] }>(content);
+      const parsed = this.parseJsonObject<{ filters?: OrganizationFilter[] }>(content);
       const filters = (parsed.filters ?? [])
         .map((filter) => this.normalizeApolloFilter(filter))
-        .filter((filter): filter is ApolloOrganizationFilter => Boolean(filter));
+        .filter((filter): filter is OrganizationFilter => Boolean(filter));
 
       return filters.length > 0 ? filters : baseFilters;
     } catch {
@@ -597,7 +597,7 @@ export class AzureOpenAIClient {
   }
 
   async planExaSearchQueries(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     defaultQueries: string[],
     learning: LeadLearningData | undefined,
     dryRun: boolean,
@@ -1204,7 +1204,7 @@ export class AzureOpenAIClient {
   }
 
   private buildExaPlannerUserPrompt(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     requestedLocalities: string[],
     requestedCategories: LeadCategory[],
     goodSignalsContext: string | undefined,
@@ -1308,7 +1308,7 @@ export class AzureOpenAIClient {
   }
 
   private buildExaPlannerDiversityRewritePrompt(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     requestedLocalities: string[],
     requestedCategories: LeadCategory[],
     baselineQueries: string[],
@@ -1650,7 +1650,7 @@ export class AzureOpenAIClient {
     return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
   }
 
-  private buildExaSearchFilterNarrative(filter: ApolloOrganizationFilter): string {
+  private buildExaSearchFilterNarrative(filter: OrganizationFilter): string {
     return [
       "Search filter context:",
       `- Filter name: ${filter.name}`,
@@ -1665,14 +1665,14 @@ export class AzureOpenAIClient {
   }
 
   async reviseSearchFilter(
-    failedFilter: ApolloOrganizationFilter,
+    failedFilter: OrganizationFilter,
     evaluation: FilterEvaluation,
     dryRun: boolean,
     learning?: LeadLearningData,
     market?: string,
     customGoal?: string,
     mainContext?: string
-  ): Promise<ApolloOrganizationFilter | null> {
+  ): Promise<OrganizationFilter | null> {
     if (dryRun || !readiness.azureConfigured) {
       return null;
     }
@@ -1712,7 +1712,7 @@ export class AzureOpenAIClient {
         { maxTokens: 500 }
       );
 
-      const parsed = this.parseJsonObject<{ filter?: ApolloOrganizationFilter }>(content);
+      const parsed = this.parseJsonObject<{ filter?: OrganizationFilter }>(content);
       const normalizedFilter = this.normalizeApolloFilter(parsed.filter);
 
       if (!normalizedFilter) {
@@ -3582,7 +3582,7 @@ export class AzureOpenAIClient {
     ].join(" | ");
   }
 
-  private normalizeApolloFilter(filter: ApolloOrganizationFilter | undefined): ApolloOrganizationFilter | null {
+  private normalizeApolloFilter(filter: OrganizationFilter | undefined): OrganizationFilter | null {
     if (!filter) {
       return null;
     }

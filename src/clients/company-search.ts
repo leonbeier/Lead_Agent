@@ -1,4 +1,4 @@
-import { ApolloOrganizationFilter, CompanySample, CompanySearchMode } from "../types";
+import { OrganizationFilter, CompanySample, CompanySearchMode } from "../types";
 import { DiffbotSearchClient } from "./diffbot-search";
 import { DiffbotTestDataClient } from "./diffbot-test-data";
 import { WebSearchAgent } from "./web-search-agent";
@@ -34,7 +34,7 @@ export class CompanySearchClient {
   }
 
   async fetchOrganizationSample(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     dryRun: boolean,
     page = 1,
@@ -56,7 +56,7 @@ export class CompanySearchClient {
     return this.webSearchAgent.discoverCompaniesForFilter(filter, limit, page, shouldSkipDomain, companySearchMode);
   }
 
-  private buildDryRunSample(filter: ApolloOrganizationFilter, limit: number): CompanySample[] {
+  private buildDryRunSample(filter: OrganizationFilter, limit: number): CompanySample[] {
     return Array.from({ length: limit }, (_, index) => ({
       name: `${filter.name} Prospect ${index + 1}`,
       domain: `https://example-${index + 1}.com`,
@@ -66,7 +66,7 @@ export class CompanySearchClient {
     }));
   }
 
-  private buildDryRunDescription(filter: ApolloOrganizationFilter, index: number): string {
+  private buildDryRunDescription(filter: OrganizationFilter, index: number): string {
     if (filter.name.includes("Software Integrators") && index % 6 === 0) {
       return "Generic IT consultancy focused on ERP rollouts and back-office transformation with little industrial execution depth.";
     }

@@ -3,7 +3,7 @@ import { DebugConsoleService } from "../debug/test-console-service.js";
 import { HubSpotClient } from "../clients/hubspot.js";
 import { LeadPipelineAgent } from "./lead-pipeline.js";
 import type {
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   CompanySample,
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
@@ -80,7 +80,7 @@ interface QualifiedCompanyState {
 
 interface SearchAggregate {
   id: string;
-  filter: ApolloOrganizationFilter;
+  filter: OrganizationFilter;
   page: number;
   requestedCount: number;
   executedQueries: number;

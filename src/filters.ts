@@ -1,4 +1,4 @@
-import { ApolloOrganizationFilter } from "./types";
+import { OrganizationFilter } from "./types";
 
 const GERMANY_COUNTRY_TOKENS = new Set([
   "de",
@@ -86,7 +86,7 @@ export function extractExplicitMarketLocality(market?: string): string | undefin
     .join(" ");
 }
 
-function applyExplicitMarketLocality(filter: ApolloOrganizationFilter, market?: string): ApolloOrganizationFilter {
+function applyExplicitMarketLocality(filter: OrganizationFilter, market?: string): OrganizationFilter {
   const locality = extractExplicitMarketLocality(market);
   if (!locality || !isGermanyFocusedMarket(market)) {
     return filter;
@@ -99,7 +99,7 @@ function applyExplicitMarketLocality(filter: ApolloOrganizationFilter, market?: 
   };
 }
 
-export function filterSupportsMarketScope(filter: ApolloOrganizationFilter, market?: string): boolean {
+export function filterSupportsMarketScope(filter: OrganizationFilter, market?: string): boolean {
   if (!isGermanyFocusedMarket(market)) {
     return true;
   }
@@ -107,7 +107,7 @@ export function filterSupportsMarketScope(filter: ApolloOrganizationFilter, mark
   return filter.locations.every((location) => location.trim().toLowerCase() === "germany");
 }
 
-export const defaultApolloFilters: ApolloOrganizationFilter[] = [
+export const defaultFilters: OrganizationFilter[] = [
   {
     name: "Europe Vision System Integrators",
     persona: "European system integrator delivering machine vision inspection, optical inspection, and industrial image processing projects for customers",
@@ -480,8 +480,8 @@ export const defaultApolloFilters: ApolloOrganizationFilter[] = [
   }
 ];
 
-export function buildSuggestedFilters(market?: string, customGoal?: string): ApolloOrganizationFilter[] {
-  return defaultApolloFilters.map((filter) => ({
+export function buildSuggestedFilters(market?: string, customGoal?: string): OrganizationFilter[] {
+  return defaultFilters.map((filter) => ({
     ...filter,
     notes: [filter.notes, market ? `Market focus: ${market}.` : undefined, customGoal ? `Custom goal: ${customGoal}.` : undefined]
       .filter(Boolean)

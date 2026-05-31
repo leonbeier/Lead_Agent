@@ -13,7 +13,7 @@ import {
   OutreachTemplate
 } from "./prompting/one-ware-playbook";
 import {
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
   CompanyFeedbackEntry,
@@ -687,7 +687,7 @@ export class ControlPlaneStore {
     await ensureFile(liveExaCachePath, defaultLiveExaCache);
   }
 
-  private getApolloSearchCursorKey(filter: ApolloOrganizationFilter): string {
+  private getApolloSearchCursorKey(filter: OrganizationFilter): string {
     return JSON.stringify({
       persona: filter.persona,
       industries: [...filter.industries].sort(),
@@ -992,7 +992,7 @@ export class ControlPlaneStore {
     return defaultLiveExaCache;
   }
 
-  async getApolloSearchCursor(filter: ApolloOrganizationFilter): Promise<number> {
+  async getApolloSearchCursor(filter: OrganizationFilter): Promise<number> {
     await this.ensureSeedData();
     const cursorMap = apolloSearchCursorSchema.parse(
       await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(apolloSearchCursorPath)
@@ -1001,7 +1001,7 @@ export class ControlPlaneStore {
     return cursorMap[this.getApolloSearchCursorKey(filter)]?.nextPage ?? 1;
   }
 
-  async updateApolloSearchCursor(filter: ApolloOrganizationFilter, nextPage: number): Promise<void> {
+  async updateApolloSearchCursor(filter: OrganizationFilter, nextPage: number): Promise<void> {
     await this.ensureSeedData();
     const cursorMap = apolloSearchCursorSchema.parse(
       await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(apolloSearchCursorPath)

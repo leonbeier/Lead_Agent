@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AsyncQueue, LeadWorkerRunService } from "../../src/agents/lead-worker-run";
-import type { ApolloOrganizationFilter, CompanyScreeningDatabase, LeadCategory, PublicContactCandidate, ResearchBrief } from "../../src/types";
+import type { OrganizationFilter, CompanyScreeningDatabase, LeadCategory, PublicContactCandidate, ResearchBrief } from "../../src/types";
 
-function createFilter(category: LeadCategory): ApolloOrganizationFilter {
+function createFilter(category: LeadCategory): OrganizationFilter {
   return {
     name: `filter-${category}`,
     persona: "persona",
@@ -81,7 +81,7 @@ test("worker run consumes matching live screening seeds before starting Exa", as
       }
     } as any,
     debugConsoleService: {
-      createManualCompanyForWebsite: (website: string, filter: ApolloOrganizationFilter) => ({
+      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
         name: "Seed Vision",
         domain: website,
         shortDescription: "Seed company",
@@ -354,7 +354,7 @@ test("worker run defaults to four Exa queries per batch when no explicit exaQuer
     leadPipelineAgent: {
       buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
       discoverDirectExaCompaniesForExecution: async (
-        _filter: ApolloOrganizationFilter,
+        _filter: OrganizationFilter,
         _targetCategories: LeadCategory[],
         maxQueryCount: number
       ) => {
@@ -425,7 +425,7 @@ test("worker run reuses planned Exa queries before requesting a fresh Azure plan
     leadPipelineAgent: {
       buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
       discoverDirectExaCompaniesForExecution: async (
-        filter: ApolloOrganizationFilter,
+        filter: OrganizationFilter,
         _targetCategories: LeadCategory[],
         _maxQueryCount: number,
         _excludeDomainSources: unknown,
@@ -560,7 +560,7 @@ test("worker run can search with two Exa producer workers in parallel when multi
         createFilter("integrator_general_ai")
       ],
       discoverDirectExaCompaniesForExecution: async (
-        filter: ApolloOrganizationFilter,
+        filter: OrganizationFilter,
         _targetCategories: LeadCategory[],
         _maxQueryCount: number,
         _excludeDomainSources: unknown,
@@ -679,7 +679,7 @@ test("worker run reports raw Exa results separately from excluded and unique com
     leadPipelineAgent: {
       buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
       discoverDirectExaCompaniesForExecution: async (
-        filter: ApolloOrganizationFilter,
+        filter: OrganizationFilter,
         _targetCategories: LeadCategory[],
         _maxQueryCount: number,
         _excludeDomainSources: unknown,
@@ -789,7 +789,7 @@ test("worker run still syncs companies to HubSpot when contact discovery fails",
       writeLatestLeadRun: async () => undefined
     } as any,
     debugConsoleService: {
-      createManualCompanyForWebsite: (website: string, filter: ApolloOrganizationFilter) => ({
+      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
         name: "Timeout Vision",
         domain: website,
         shortDescription: "Timeout company",
@@ -883,7 +883,7 @@ test("worker run times out a stuck HubSpot sync instead of blocking the drain fo
     } as any,
     leadPipelineAgent: {
       buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai"), createFilter("integrator_general_ai")],
-      discoverDirectExaCompaniesForExecution: async (filter: ApolloOrganizationFilter) => {
+      discoverDirectExaCompaniesForExecution: async (filter: OrganizationFilter) => {
         const filterName = filter.name;
         const nextCount = (filterCallCounts.get(filterName) ?? 0) + 1;
         filterCallCounts.set(filterName, nextCount);
@@ -964,7 +964,7 @@ test("worker run passes selected contacts to HubSpot sync under the normalized c
       writeLatestLeadRun: async () => undefined
     } as any,
     debugConsoleService: {
-      createManualCompanyForWebsite: (website: string, filter: ApolloOrganizationFilter) => ({
+      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
         name: "GeoTT",
         domain: website,
         shortDescription: "GeoTT company",

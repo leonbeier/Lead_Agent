@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { ApolloOrganizationFilter, CompanySample } from "../types";
+import { OrganizationFilter, CompanySample } from "../types";
 
 type DiffbotCsvRow = {
   name: string;
@@ -68,7 +68,7 @@ export class DiffbotTestDataClient {
   private cachedPath?: string;
 
   async fetchOrganizationSample(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page: number,
     shouldSkipDomain?: (domain: string) => boolean

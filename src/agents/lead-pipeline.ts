@@ -10,7 +10,7 @@ import { HubSpotClient } from "../clients/hubspot";
 import { ControlPlaneStore } from "../control-plane";
 import { buildDebugSearchFilter } from "../debug/test-console";
 import {
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
   CompanySample,
@@ -86,7 +86,7 @@ const WEB_SEARCH_TOP_UP_MAX_PAGES = 3;
 const MIN_USER_CONCURRENCY = 1;
 
 type ProbedFilterCandidate = {
-  filter: ApolloOrganizationFilter;
+  filter: OrganizationFilter;
   activeCategory: LeadCategory;
   reviewedCompanies: PreCategorizedCompany[];
   categorizedInitialSample: PreCategorizedCompany[];
@@ -219,7 +219,7 @@ const COMMON_COMPOUND_TLDS = new Set([
 ]);
 
 export class LeadPipelineAgent {
-  private readonly apolloClient = new CompanySearchClient();
+  private readonly companySearchClient = new CompanySearchClient();
 
   private readonly azureClient = new AzureOpenAIClient();
 
@@ -251,9 +251,9 @@ export class LeadPipelineAgent {
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
     const disableHubSpotDeduplication = request.disableHubSpotDeduplication ?? false;
     const companySearchMode = request.companySearchMode ?? "internet_research";
-    this.apolloClient.setExaApiKey(request.exaApiKey);
-    this.apolloClient.setDiffbotToken(request.diffbotToken);
-    this.apolloClient.setExaSearchPayloadOptions({
+    this.companySearchClient.setExaApiKey(request.exaApiKey);
+    this.companySearchClient.setDiffbotToken(request.diffbotToken);
+    this.companySearchClient.setExaSearchPayloadOptions({
       includeExcludeDomains: request.useExaExcludeDomains ?? true,
       includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
       maxQueryCount: request.exaQueryCount ?? 4
@@ -298,7 +298,7 @@ export class LeadPipelineAgent {
     const cachedQualifiedCompanies = request.reuseQualifiedCompanyCache === false || companySearchMode === "exa_search"
       ? []
       : this.getCachedQualifiedCompanies(targetCategories, request.market, request.targetLeadCount);
-    this.apolloClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
+    this.companySearchClient.setExaExcludedDomains(this.getCachedExcludedDiscoveryDomains(targetCategories));
     let suggestedFilters = companySearchMode === "exa_search"
       ? this.buildDirectExaSearchFilters(targetCategories, request.market)
       : this.orderFiltersByLearning(
@@ -360,7 +360,7 @@ export class LeadPipelineAgent {
     const flushedQualifiedCompanyKeys = new Set<string>();
     const getCompletionCount = () => targetSynchronizedCompanies ? incrementalHubspotSync.companySyncedCount : shortlistedCompanies.length;
     const getTargetProgressCount = () => companySearchMode === "exa_search"
-      ? this.apolloClient.getDiscoveryMetrics(companySearchMode).acceptedCompanyDomains
+      ? this.companySearchClient.getDiscoveryMetrics(companySearchMode).acceptedCompanyDomains
       : getCompletionCount();
     const hasReachedRequestedTarget = () => getTargetProgressCount() >= request.targetLeadCount;
 
@@ -393,7 +393,7 @@ export class LeadPipelineAgent {
       );
     };
 
-    this.apolloClient.resetDiscoveryMetrics(companySearchMode);
+    this.companySearchClient.resetDiscoveryMetrics(companySearchMode);
 
     const collectPreparedResearchBriefs = (companies: PreCategorizedCompany[]): ResearchBrief[] =>
       companies
@@ -597,7 +597,7 @@ export class LeadPipelineAgent {
         }),
         Math.min(DIRECT_EXA_FILTER_CONCURRENCY, Math.max(1, exaFilters.length))
       ))
-        .filter((entry): entry is { filterIndex: number; exaFilter: ApolloOrganizationFilter; primaryCategory: LeadCategory; rawCompanies: CompanySample[] } => Boolean(entry))
+        .filter((entry): entry is { filterIndex: number; exaFilter: OrganizationFilter; primaryCategory: LeadCategory; rawCompanies: CompanySample[] } => Boolean(entry))
         .sort((left, right) => left.filterIndex - right.filterIndex);
 
       for (const { filterIndex, exaFilter, primaryCategory, rawCompanies } of directExaBatches) {
@@ -1294,7 +1294,7 @@ export class LeadPipelineAgent {
   }
 
   private async probeFilterCandidate(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     activeCategory: LeadCategory,
     dryRun: boolean,
     syncToHubSpot: boolean,
@@ -1730,10 +1730,10 @@ export class LeadPipelineAgent {
     market: string | undefined,
     customGoal: string | undefined,
     targetCategories: LeadCategory[]
-  ): ApolloOrganizationFilter[] {
+  ): OrganizationFilter[] {
     const baselineFilters = buildSuggestedFilters(market, customGoal)
       .filter((filter) => this.filterSupportsTargetCategories(filter, targetCategories));
-    const filters: ApolloOrganizationFilter[] = [];
+    const filters: OrganizationFilter[] = [];
 
     for (const targetCategory of targetCategories) {
       const match = baselineFilters.find((filter) => {
@@ -1764,12 +1764,12 @@ export class LeadPipelineAgent {
   }
 
   private prioritizeFiltersForOpenCrawler(
-    filters: ApolloOrganizationFilter[],
+    filters: OrganizationFilter[],
     targetCategories: LeadCategory[],
     learning: LeadLearningData | undefined,
     market?: string,
     customGoal?: string
-  ): ApolloOrganizationFilter[] {
+  ): OrganizationFilter[] {
     const excludedNames = new Set([
       "Germany Embedded Vision Engineering Firms",
       "Benelux DACH Vision Integration Specialists",
@@ -1907,7 +1907,7 @@ export class LeadPipelineAgent {
         wantsPlatformSignals ? [...platformNames] : []
       ];
       const coveredNames = new Set<string>();
-      const coveredFilters: ApolloOrganizationFilter[] = [];
+      const coveredFilters: OrganizationFilter[] = [];
 
       for (const bucket of coverageBuckets) {
         const firstMatch = ranked.find((filter) => bucket.includes(filter.name) && !coveredNames.has(filter.name));
@@ -3146,7 +3146,7 @@ export class LeadPipelineAgent {
   private async topUpWithWebDiscovery(
     currentShortlist: PreCategorizedCompany[],
     shortlistedKeys: Set<string>,
-    filters: import("../types").ApolloOrganizationFilter[],
+    filters: import("../types").OrganizationFilter[],
     evaluations: FilterEvaluation[],
     request: LeadJobRequest,
     mainContext: string | undefined,
@@ -3296,23 +3296,23 @@ export class LeadPipelineAgent {
   }
 
   private orderFiltersByLearning(
-    filters: import("../types").ApolloOrganizationFilter[],
+    filters: import("../types").OrganizationFilter[],
     learning: LeadLearningData,
     market?: string,
     customGoal?: string
-  ): import("../types").ApolloOrganizationFilter[] {
+  ): import("../types").OrganizationFilter[] {
     return [...filters].sort(
       (left, right) => this.getFilterRank(right.name, learning, market, customGoal) - this.getFilterRank(left.name, learning, market, customGoal)
     );
   }
 
   private prioritizeFiltersForTopUp(
-    filters: import("../types").ApolloOrganizationFilter[],
+    filters: import("../types").OrganizationFilter[],
     evaluations: FilterEvaluation[],
     learning: LeadLearningData,
     market?: string,
     customGoal?: string
-  ): import("../types").ApolloOrganizationFilter[] {
+  ): import("../types").OrganizationFilter[] {
     const evaluationByName = new Map(evaluations.map((evaluation) => [evaluation.filterName, evaluation]));
 
     return [...filters].sort((left, right) => {
@@ -3380,7 +3380,7 @@ export class LeadPipelineAgent {
   }
 
   private shouldReuseLearnedFilters(
-    baselineFilters: import("../types").ApolloOrganizationFilter[],
+    baselineFilters: import("../types").OrganizationFilter[],
     learning: LeadLearningData | undefined,
     customGoal?: string,
     mainContext?: string,
@@ -3511,7 +3511,7 @@ export class LeadPipelineAgent {
 
   private getRelevantCompanies(
     companies: PreCategorizedCompany[],
-    filter: import("../types").ApolloOrganizationFilter,
+    filter: import("../types").OrganizationFilter,
     targetCategories: LeadCategory[],
     market?: string
   ): PreCategorizedCompany[] {
@@ -3522,7 +3522,7 @@ export class LeadPipelineAgent {
 
   private isCompanyInScope(
     company: Pick<PreCategorizedCompany, "country" | "domain">,
-    filter: import("../types").ApolloOrganizationFilter,
+    filter: import("../types").OrganizationFilter,
     market?: string
   ): boolean {
     const normalizedMarket = market?.trim().toLowerCase();
@@ -3624,7 +3624,7 @@ export class LeadPipelineAgent {
     };
   }
 
-  private buildDirectExaSearchFilters(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter[] {
+  private buildDirectExaSearchFilters(targetCategories: LeadCategory[], market?: string): OrganizationFilter[] {
     const requestedCategories = Array.from(new Set(targetCategories.length > 0
       ? targetCategories
       : ["machine_builder_ai_enablement" as LeadCategory])) as SelectableLeadCategory[];
@@ -3635,20 +3635,20 @@ export class LeadPipelineAgent {
         ...debugFilter,
         name: debugFilter.name.replace(/\s*\[debug(?: [^\]]+)?\]\s*$/i, "").trim(),
         notes: debugFilter.notes.replace(/\s*Debug console request for .*$/i, "").trim()
-      } satisfies ApolloOrganizationFilter;
+      } satisfies OrganizationFilter;
     });
   }
 
-  buildDirectExaFiltersForExecution(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter[] {
+  buildDirectExaFiltersForExecution(targetCategories: LeadCategory[], market?: string): OrganizationFilter[] {
     return this.buildDirectExaSearchFilters(targetCategories, market);
   }
 
-  private buildDirectExaSearchFilter(targetCategories: LeadCategory[], market?: string): ApolloOrganizationFilter {
+  private buildDirectExaSearchFilter(targetCategories: LeadCategory[], market?: string): OrganizationFilter {
     return this.buildDirectExaSearchFilters(targetCategories, market)[0];
   }
 
   private async runDirectExaCompanySearch(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     targetCategories: LeadCategory[],
     maxQueryCount: number,
     excludeDomainSources: DirectExaExcludeDomainSources = {},
@@ -3673,14 +3673,14 @@ export class LeadPipelineAgent {
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
       runtimeApiKey?: string;
-      buildQueries: (filter: ApolloOrganizationFilter, page: number) => string[];
+      buildQueries: (filter: OrganizationFilter, page: number) => string[];
       runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
       toExcludeDomain: (value: string | undefined) => string | undefined;
       normalizeUrl: (url: string | undefined) => string | undefined;
       toCanonicalCompanyDomain: (url: string) => string;
       deriveCompanyName: (domain: string, title?: string) => string;
       inferCountryFromDomain: (domain: string, result: { title?: string; highlights?: string[]; summary?: string; text?: string }, fallbackLocation?: string) => string | undefined;
-      buildDescription: (result: { title?: string; highlights?: string[]; summary?: string; text?: string }, filter: ApolloOrganizationFilter) => string;
+      buildDescription: (result: { title?: string; highlights?: string[]; summary?: string; text?: string }, filter: OrganizationFilter) => string;
       loadKnownExcludedDomains: () => Promise<Set<string>>;
     };
     const apiKey = exaClient.runtimeApiKey ?? env.EXA_API_KEY;
@@ -3834,7 +3834,7 @@ export class LeadPipelineAgent {
   }
 
   async discoverDirectExaCompaniesForExecution(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     targetCategories: LeadCategory[],
     maxQueryCount: number,
     excludeDomainSources: DirectExaExcludeDomainSources = {},
@@ -4002,7 +4002,7 @@ export class LeadPipelineAgent {
     page: number,
     requestedCount: number,
     companies: PreCategorizedCompany[],
-    filter: import("../types").ApolloOrganizationFilter,
+    filter: import("../types").OrganizationFilter,
     targetCategories: LeadCategory[],
     market: string | undefined,
     threshold: number,
@@ -4090,7 +4090,7 @@ export class LeadPipelineAgent {
     }
   }
 
-  private buildExaQueryPreview(filter: ApolloOrganizationFilter): string | undefined {
+  private buildExaQueryPreview(filter: OrganizationFilter): string | undefined {
     const query = this.exaPreviewClient.buildQueries(filter, 1)[0]?.trim();
     return query || undefined;
   }
@@ -4202,7 +4202,7 @@ export class LeadPipelineAgent {
   }
 
   private async fetchAvailableSearchSample(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     requestedCount: number,
     dryRun: boolean,
     page: number,
@@ -4265,7 +4265,7 @@ export class LeadPipelineAgent {
       }
 
       const rawSample = await this.runWithProgressHeartbeat(
-        () => this.apolloClient.fetchOrganizationSample(
+        () => this.companySearchClient.fetchOrganizationSample(
           filter,
           pageSize,
           dryRun,
@@ -4445,7 +4445,7 @@ export class LeadPipelineAgent {
       locations: [],
       employeeRanges: [],
       notes: "cached screening database"
-    } satisfies ApolloOrganizationFilter;
+    } satisfies OrganizationFilter;
 
     return this.companyScreeningDatabase.records
       .filter((record) => Boolean(record.category) && targetCategories.includes(record.category as LeadCategory))
@@ -4609,7 +4609,7 @@ export class LeadPipelineAgent {
     runId: string;
     sequence: number;
     companySearchMode: string;
-    filter: ApolloOrganizationFilter;
+    filter: OrganizationFilter;
     page: number;
     companies: CompanySample[];
   }): Promise<void> {
@@ -4824,7 +4824,7 @@ export class LeadPipelineAgent {
     afterAzureAICheck: number,
     syncedToHubSpot: number
   ): LeadRunFunnel {
-    const discoveryMetrics = this.apolloClient.getDiscoveryMetrics(companySearchMode);
+    const discoveryMetrics = this.companySearchClient.getDiscoveryMetrics(companySearchMode);
 
     return {
       crawledPages: discoveryMetrics.crawledPages,
@@ -4844,12 +4844,12 @@ export class LeadPipelineAgent {
       return false;
     }
 
-    const discoveryMetrics = this.apolloClient.getDiscoveryMetrics(companySearchMode);
+    const discoveryMetrics = this.companySearchClient.getDiscoveryMetrics(companySearchMode);
     return discoveryMetrics.crawledPages >= 24 && discoveryMetrics.acceptedCompanyDomains >= 24;
   }
 
   private async replenishExhaustedFilters(
-    existingFilters: ApolloOrganizationFilter[],
+    existingFilters: OrganizationFilter[],
     evaluations: FilterEvaluation[],
     market: string | undefined,
     customGoal: string | undefined,
@@ -4858,7 +4858,7 @@ export class LeadPipelineAgent {
     targetCategories: LeadCategory[],
     dryRun: boolean,
     learning?: LeadLearningData
-  ): Promise<ApolloOrganizationFilter[]> {
+  ): Promise<OrganizationFilter[]> {
     const existingNames = new Set(existingFilters.map((filter) => filter.name));
     const recentOutcomes = evaluations
       .slice(-12)
@@ -4898,11 +4898,11 @@ export class LeadPipelineAgent {
   }
 
   private buildFallbackReplenishmentFilters(
-    existingFilters: ApolloOrganizationFilter[],
+    existingFilters: OrganizationFilter[],
     evaluations: FilterEvaluation[],
     targetCategories: LeadCategory[],
     round: number
-  ): ApolloOrganizationFilter[] {
+  ): OrganizationFilter[] {
     const existingNames = new Set(existingFilters.map((filter) => filter.name));
     const rankedFilters = [...evaluations]
       .filter((evaluation) => evaluation.relevantCount > 0)
@@ -4914,15 +4914,15 @@ export class LeadPipelineAgent {
         return right.relevantCount - left.relevantCount;
       })
       .map((evaluation) => existingFilters.find((filter) => filter.name === evaluation.filterName))
-      .filter((filter): filter is ApolloOrganizationFilter => Boolean(filter));
+      .filter((filter): filter is OrganizationFilter => Boolean(filter));
     const fallbackSourceFilters = rankedFilters.length > 0 ? rankedFilters : existingFilters;
 
-    const fallbackFilters: ApolloOrganizationFilter[] = [];
+    const fallbackFilters: OrganizationFilter[] = [];
 
     for (const [index, filter] of fallbackSourceFilters.slice(0, 4).entries()) {
       const nextLocation = FALLBACK_REPLENISHMENT_LOCATIONS[(round + index - 1) % FALLBACK_REPLENISHMENT_LOCATIONS.length];
       if (nextLocation) {
-        const locationVariant: ApolloOrganizationFilter = {
+        const locationVariant: OrganizationFilter = {
           ...filter,
           name: `${filter.name} ${nextLocation} Variant R${round}`,
           locations: Array.from(new Set([...filter.locations, nextLocation])),
@@ -4936,7 +4936,7 @@ export class LeadPipelineAgent {
 
       const nextKeyword = FALLBACK_REPLENISHMENT_KEYWORDS[(round + index - 1) % FALLBACK_REPLENISHMENT_KEYWORDS.length];
       if (nextKeyword) {
-        const keywordVariant: ApolloOrganizationFilter = {
+        const keywordVariant: OrganizationFilter = {
           ...filter,
           name: `${filter.name} ${nextKeyword} Variant R${round}`,
           keywords: Array.from(new Set([...filter.keywords, nextKeyword])),
@@ -4976,7 +4976,7 @@ export class LeadPipelineAgent {
 
   private async finalizeLeadRun(
     request: LeadJobRequest,
-    suggestedFilters: ApolloOrganizationFilter[],
+    suggestedFilters: OrganizationFilter[],
     evaluations: FilterEvaluation[],
     shortlistedCompanies: PreCategorizedCompany[],
     researchBriefs: ResearchBrief[],
@@ -5071,7 +5071,7 @@ export class LeadPipelineAgent {
   private evaluateFilter(
     filterName: string,
     companies: PreCategorizedCompany[],
-    filter: import("../types").ApolloOrganizationFilter,
+    filter: import("../types").OrganizationFilter,
     targetCategories: LeadCategory[],
     market: string | undefined,
     initialReviewCount: number,
@@ -5112,12 +5112,12 @@ export class LeadPipelineAgent {
     return selectedCategories.length > 0 ? selectedCategories : [...RELEVANT_CATEGORIES];
   }
 
-  private filterSupportsTargetCategories(filter: ApolloOrganizationFilter, targetCategories: LeadCategory[]): boolean {
+  private filterSupportsTargetCategories(filter: OrganizationFilter, targetCategories: LeadCategory[]): boolean {
     const filterCategories = filter.targetCategories?.length ? filter.targetCategories : this.inferTargetCategories(filter.name);
     return filterCategories.some((category) => targetCategories.includes(category));
   }
 
-  private getPrimaryTargetCategoryForFilter(filter: ApolloOrganizationFilter, targetCategories: LeadCategory[]): LeadCategory | undefined {
+  private getPrimaryTargetCategoryForFilter(filter: OrganizationFilter, targetCategories: LeadCategory[]): LeadCategory | undefined {
     const filterCategories = filter.targetCategories?.length ? filter.targetCategories : this.inferTargetCategories(filter.name);
 
     for (const category of filterCategories) {
