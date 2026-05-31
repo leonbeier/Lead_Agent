@@ -487,9 +487,13 @@ export class HubSpotClient {
           const normalizedSelectedContacts = this.prepareHubSpotContacts(selectedContacts);
           let contactsToSync = normalizedSelectedContacts;
 
-          if (contactsToSync.length < MIN_CONTACTS_PER_COMPANY_TARGET) {
+          if (contactsToSync.length < MIN_CONTACTS_PER_COMPANY_TARGET && Boolean(company.domain)) {
             const officialWebsiteContacts = this.prepareHubSpotContacts(
-              await this.discoverOfficialWebsiteSearchContacts(company).catch(() => [] as PublicContactCandidate[])
+              await this.withTimeout(
+                this.discoverOfficialWebsiteSearchContacts(company).catch(() => [] as PublicContactCandidate[]),
+                8000,
+                [] as PublicContactCandidate[]
+              )
             );
             contactsToSync = this.prepareHubSpotContacts(
               this.mergeDiscoveredContacts(contactsToSync, officialWebsiteContacts)
