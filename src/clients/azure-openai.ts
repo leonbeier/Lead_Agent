@@ -665,6 +665,7 @@ export class AzureOpenAIClient {
       prequalification?: PrequalificationConfig;
       excludedDomainExamples?: string[];
       requestedTargetCategories?: LeadCategory[];
+      targetCategoryRefinement?: string;
       debugCapture?: (details: { promptMessages: Array<{ role: "system" | "user"; content: string }> }) => void;
     } = {}
   ): Promise<string[]> {
@@ -697,6 +698,7 @@ export class AzureOpenAIClient {
             filter,
             requestedLocalities,
             requestedCategories as LeadCategory[],
+            options.targetCategoryRefinement,
             goodSignalsContext,
             avoidSignalsContext,
             baselineQueries,
@@ -1263,6 +1265,7 @@ export class AzureOpenAIClient {
     filter: ApolloOrganizationFilter,
     requestedLocalities: string[],
     requestedCategories: LeadCategory[],
+    targetCategoryRefinement: string | undefined,
     goodSignalsContext: string | undefined,
     avoidSignalsContext: string | undefined,
     baselineQueries: string[],
@@ -1282,6 +1285,13 @@ export class AzureOpenAIClient {
         "This section defines the exact kind of companies you are trying to find.",
         requestedLocalities.length > 0 ? `* Required locality terms to preserve in every query: ${requestedLocalities.join(", ")}` : undefined,
         requestedCategories.length > 0 ? `* Desired target categories for this run: ${requestedCategories.join(", ")}` : undefined,
+        targetCategoryRefinement?.trim()
+          ? [
+              "* Additional narrowing instruction for this run:",
+              "  Innerhalb der gesuchten Gruppen sollen ausschliesslich folgende gesucht werden:",
+              `  ${targetCategoryRefinement.trim()}`
+            ].join("\n")
+          : undefined,
         this.buildExaSearchUndesiredCategorySummary(requestedCategories),
         "* Find official company websites for the intended target profile.",
         "* Prefer the official root domain or homepage for each company, not team pages, contact pages, docs pages, product pages, article pages, or other deep links.",

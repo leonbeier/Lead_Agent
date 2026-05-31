@@ -454,7 +454,8 @@ export class LeadWorkerRunService {
     const shouldStopNewPipelineWork = () => stopping || hasReachedTarget();
 
     const stopAiQueue = () => {
-      aiQueue.clear();
+      // Don't clear the queue - let existing items finish processing
+      // Only stop accepting new items
       aiQueue.close();
     };
 
@@ -658,7 +659,11 @@ export class LeadWorkerRunService {
     };
 
     const maybePromoteStandby = () => {
-      while (standbyQualifiedStates.length > 0 && countAssignedQualifiedStates() < targetLeadCount && !shouldStopNewPipelineWork()) {
+      // If stopping due to Exa error, promote all remaining standby companies so they still get processed
+      // instead of being silently lost
+      const promoteAll = stopping && !hasReachedTarget();
+      
+      while (standbyQualifiedStates.length > 0 && countAssignedQualifiedStates() < targetLeadCount && (promoteAll || !stopping)) {
         const nextState = standbyQualifiedStates.shift();
         if (!nextState) {
           return;
@@ -671,7 +676,7 @@ export class LeadWorkerRunService {
         nextState.pipelineAssigned = true;
         outreachQueue.enqueue(nextState);
         contactQueue.enqueue(nextState);
-        log(`Standby-Firma freigegeben: ${nextState.company.name}`);
+        log(`Standby-Firma freigegeben: ${nextState.company.name}${promoteAll ? " (forced due to search error)" : ""}`);
       }
       emitProgress();
     };
@@ -682,7 +687,8 @@ export class LeadWorkerRunService {
         return;
       }
 
-      if (shouldStopNewPipelineWork()) {
+      // Accept company even if we're stopping, but don't accept if target is reached
+      if (hasReachedTarget()) {
         return;
       }
 
@@ -713,7 +719,7 @@ export class LeadWorkerRunService {
           type: "upsert",
           record: buildScreeningRecord(company)
         });
-        log(`KI-Treffer auf Warteliste gelegt: ${company.name}`);
+        log(`KI-Treffer auf Warteliste gelegt: ${company.name} (stopping=${stopping})`);
       }
       emitProgress();
     };
@@ -1260,6 +1266,8 @@ export class LeadWorkerRunService {
             stopping = true;
             log(`Exa-Suche gestoppt. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
             stopAiQueue();
+            // Immediately promote all remaining standby companies to prevent data loss
+            maybePromoteStandby();
             break;
           }
 

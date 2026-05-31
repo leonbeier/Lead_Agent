@@ -557,6 +557,7 @@ export class DebugConsoleService {
             prequalification: settings?.prequalification,
             excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
             requestedTargetCategories: request.targetCategories,
+            targetCategoryRefinement: settings?.targetCategoryRefinement,
             debugCapture: (details) => {
               queryGenerationPromptMessages = details.promptMessages;
             }

@@ -506,6 +506,10 @@
               Gewuenschte Kundentypen
               <div id="target-categories" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px;"></div>
             </label>
+            <label style="grid-column: 1 / -1;">
+              Zusatzfilter innerhalb der Kundentypen
+              <textarea id="targetCategoryRefinement" name="targetCategoryRefinement" placeholder="Optional, z. B. im Food Produktionssektor" style="min-height: 120px;"></textarea>
+            </label>
             <section class="prequalification-shell" aria-labelledby="prequalification-heading">
               <article class="prequalification-card">
                 <div class="template-meta">
@@ -894,6 +898,7 @@
             targetLeadCount: 20,
             market: "Europe",
             companySearchMode: "exa_search",
+            targetCategoryRefinement: "",
             targetCategories: FALLBACK_SELECTABLE_CATEGORIES.slice(0, 4).map((option) => option.value),
             runDeepResearch: false,
             dryRun: false,
@@ -1112,6 +1117,7 @@
         document.getElementById("exaApiKey").value = settings.exaApiKey || "";
         document.getElementById("diffbotToken").value = settings.diffbotToken || "";
         document.getElementById("mainContext").value = settings.mainContext || "";
+        document.getElementById("targetCategoryRefinement").value = settings.targetCategoryRefinement || "";
         document.getElementById("prequalification-mainContext").value = settings.prequalification?.mainContext || settings.prequalificationContext || "";
         document.getElementById("aiPrefilterConcurrency").value = settings.aiPrefilterConcurrency || 20;
         document.getElementById("outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
@@ -1166,6 +1172,7 @@
           targetLeadCount: Number(document.getElementById("targetLeadCount").value),
           market: document.getElementById("market").value.trim(),
           mainContext: document.getElementById("mainContext").value.trim(),
+          targetCategoryRefinement: document.getElementById("targetCategoryRefinement").value.trim(),
           companySearchMode,
           creditLessMode: true,
           exaApiKey: document.getElementById("exaApiKey").value.trim() || undefined,
@@ -1206,6 +1213,7 @@
           { label: "Research", value: settings.runDeepResearch ? "aktiv" : "aus" },
           { label: "Templates", value: String(Object.keys(templates).length) },
           { label: "Main-Kontext", value: settings.mainContext ? "gesetzt" : "leer" },
+          { label: "Zusatzfilter", value: settings.targetCategoryRefinement ? "gesetzt" : "leer" },
           { label: "Vorsortierung", value: `${settings.prequalification?.mainContext ? "Haupttext" : "leer"} + ${prequalificationAddOnCount}/7` },
           { label: "Kundentypen", value: String((settings.targetCategories || []).length) },
           { label: "Letzte Treffer", value: String(latestLeadRun?.summary?.foundCandidates ?? 0) }

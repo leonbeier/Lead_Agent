@@ -132,6 +132,7 @@ type DirectExaQueryPlanningContext = {
   dryRun?: boolean;
   learning?: LeadLearningData;
   mainContext?: string;
+  targetCategoryRefinement?: string;
   searchStrategyContext?: string;
   recentQueryHistory?: ExaQueryHistoryInsight[];
   prequalification?: PrequalificationConfig;
@@ -595,6 +596,7 @@ export class LeadPipelineAgent {
             dryRun,
             learning,
             mainContext: request.mainContext,
+            targetCategoryRefinement: request.targetCategoryRefinement,
             searchStrategyContext: request.searchStrategyContext,
             useAzureQueryPlanner: request.useAzureQueryPlanner
           }, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
@@ -3744,6 +3746,7 @@ export class LeadPipelineAgent {
             prequalification: queryPlanningContext.prequalification,
             excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
             requestedTargetCategories: targetCategories,
+            targetCategoryRefinement: queryPlanningContext.targetCategoryRefinement,
             debugCapture: (details) => {
               queryGenerationPromptMessages = details.promptMessages;
               queryPlanningContext.debugCapture?.(details);
