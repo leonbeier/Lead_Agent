@@ -3977,11 +3977,15 @@ export class LeadPipelineAgent {
 
     return {
       requestExcludedDomains: [
-        ...splitHubSpotDomains.regular,
+        // Lowest priority: domains Exa has never returned — safe to drop when limit is tight
         ...splitRejectedDomains.regular,
-        ...splitCurrentRunDomains.regular,
-        ...splitHubSpotDomains.promoted,
+        ...splitHubSpotDomains.regular,
+        // Medium priority: domains Exa has returned before but are not from the current run
         ...splitRejectedDomains.promoted,
+        // High priority: domains discovered in this run — Exa just returned them and will again
+        ...splitCurrentRunDomains.regular,
+        // Highest priority: domains Exa returns most often in general
+        ...splitHubSpotDomains.promoted,
         ...splitCurrentRunDomains.promoted
       ],
       localExcludedDomains: new Set(seenDomains),

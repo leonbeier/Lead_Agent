@@ -91,6 +91,9 @@ interface SearchAggregate {
   excludedDomains?: string[];
   returnedResults?: number;
   filteredByExcludedDomains?: number;
+  filteredByHubSpot?: number;
+  filteredByRejectedWebsites?: number;
+  filteredByCurrentRunCache?: number;
   duplicatesRemoved?: number;
   rawFound: number;
   categoryBreakdown: Record<LeadCategory, number>;
@@ -1117,25 +1120,31 @@ export class LeadWorkerRunService {
                 (update) => {
                   const previousReturnedResults = aggregate.returnedResults ?? 0;
                   const previousFilteredByExcludedDomains = aggregate.filteredByExcludedDomains ?? 0;
-                  const previousExecutedQueries = aggregate.executedQueries;
-                  plannedDefaultQueries = update.defaultQueries;
-                  plannedPromptMessages = update.promptMessages;
-                  aggregate.executedQueries = update.executedQueries;
-                  metrics.exaRequests += Math.max(0, update.executedQueries - previousExecutedQueries);
-                  aggregate.rawFound = update.rawCompaniesFound;
-                  const queryStat = getOrCreateQueryStat(aggregate, update.query);
-                  queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
-                  queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
-                  queryStat.filteredByHubSpot = update.filteredByHubSpot;
-                  queryStat.filteredByRejectedWebsites = update.filteredByRejectedWebsites;
-                  queryStat.filteredByCurrentRunCache = update.filteredByCurrentRunCache;
-                  aggregate.queryTexts.push(update.query);
-                  aggregate.plannedQueries = update.plannedQueries;
-                  aggregate.promptMessages = update.promptMessages;
-                  aggregate.excludedDomains = update.excludedDomains;
-                  aggregate.returnedResults = update.returnedResults;
-                  aggregate.filteredByExcludedDomains = update.filteredByExcludedDomains;
-                  aggregate.duplicatesRemoved = update.duplicatesRemoved;
+                 const previousFilteredByHubSpot = aggregate.filteredByHubSpot ?? 0;
+                 const previousFilteredByRejectedWebsites = aggregate.filteredByRejectedWebsites ?? 0;
+                 const previousFilteredByCurrentRunCache = aggregate.filteredByCurrentRunCache ?? 0;
+                 const previousExecutedQueries = aggregate.executedQueries;
+                 plannedDefaultQueries = update.defaultQueries;
+                 plannedPromptMessages = update.promptMessages;
+                 aggregate.executedQueries = update.executedQueries;
+                 metrics.exaRequests += Math.max(0, update.executedQueries - previousExecutedQueries);
+                 aggregate.rawFound = update.rawCompaniesFound;
+                 const queryStat = getOrCreateQueryStat(aggregate, update.query);
+                 queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
+                 queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
+                 queryStat.filteredByHubSpot += Math.max(0, update.filteredByHubSpot - previousFilteredByHubSpot);
+                 queryStat.filteredByRejectedWebsites += Math.max(0, update.filteredByRejectedWebsites - previousFilteredByRejectedWebsites);
+                 queryStat.filteredByCurrentRunCache += Math.max(0, update.filteredByCurrentRunCache - previousFilteredByCurrentRunCache);
+                 aggregate.queryTexts.push(update.query);
+                 aggregate.plannedQueries = update.plannedQueries;
+                 aggregate.promptMessages = update.promptMessages;
+                 aggregate.excludedDomains = update.excludedDomains;
+                 aggregate.returnedResults = update.returnedResults;
+                 aggregate.filteredByExcludedDomains = update.filteredByExcludedDomains;
+                 aggregate.filteredByHubSpot = update.filteredByHubSpot;
+                 aggregate.filteredByRejectedWebsites = update.filteredByRejectedWebsites;
+                 aggregate.filteredByCurrentRunCache = update.filteredByCurrentRunCache;
+                 aggregate.duplicatesRemoved = update.duplicatesRemoved;
                   updateLiveSearchDebug(aggregate, {
                     filterName: update.filterName,
                     defaultQueries: update.defaultQueries,
