@@ -388,11 +388,7 @@ export class ExaSearchClient {
     ]);
   }
 
-<<<<<<< HEAD
-  buildQueries(filter: OrganizationFilter, page: number): string[] {
-=======
-  buildQueries(filter: ApolloOrganizationFilter, page: number, options: ExaQueryBuildOptions = {}): string[] {
->>>>>>> origin/main
+  buildQueries(filter: OrganizationFilter, page: number, options: ExaQueryBuildOptions = {}): string[] {
     const locations = Array.from(new Set(filter.locations.map((location) => location.trim()).filter(Boolean))).slice(0, 2);
     const effectiveLocations = locations.length > 0 ? locations : ["Germany"];
     const locationVariants = Array.from(new Set(effectiveLocations.flatMap((location) => this.buildLocationVariants(location))));
@@ -426,9 +422,6 @@ export class ExaSearchClient {
     return [...baseQueries.slice(offset), ...baseQueries.slice(0, offset)];
   }
 
-<<<<<<< HEAD
-  private buildIntentTerms(filter: OrganizationFilter): string[] {
-=======
   private buildRefinementClause(targetCategoryRefinement: string | undefined): string {
     const normalizedRefinement = targetCategoryRefinement?.trim();
     if (!normalizedRefinement) {
@@ -438,8 +431,7 @@ export class ExaSearchClient {
     return `Within the selected target categories, narrow results to: ${normalizedRefinement}.`;
   }
 
-  private buildIntentTerms(filter: ApolloOrganizationFilter): string[] {
->>>>>>> origin/main
+  private buildIntentTerms(filter: OrganizationFilter): string[] {
     const text = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (/(mes|scada|plc|ot integration|automation software|sondermaschinen)/.test(text)) {

@@ -73,11 +73,7 @@ const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
 const DIRECT_EXA_FILTER_CONCURRENCY = 3;
 const DIRECT_EXA_QUERY_CONCURRENCY = 3;
-<<<<<<< HEAD
-=======
 const RESEARCH_BRIEF_TIMEOUT_MS = 90_000;
-const APOLLO_EMAIL_ENRICH_CONCURRENCY = 4;
->>>>>>> origin/main
 const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
 const FALLBACK_REPLENISHMENT_LOCATIONS = ["Berlin", "Munich", "Hamburg", "Cologne", "Stuttgart", "DACH", "Austria", "Switzerland"];
 const FALLBACK_REPLENISHMENT_KEYWORDS = ["computer vision", "machine vision", "bildverarbeitung", "industrial ai", "inspection automation", "vision systems"];
@@ -3618,7 +3614,7 @@ export class LeadPipelineAgent {
 
   isCompanyInExecutionScope(
     company: Pick<PreCategorizedCompany, "country" | "domain">,
-    filter: import("../types").ApolloOrganizationFilter,
+    filter: import("../types").OrganizationFilter,
     market?: string
   ): boolean {
     return this.isCompanyInScope(company, filter, market);
@@ -3777,11 +3773,7 @@ export class LeadPipelineAgent {
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
       runtimeApiKey?: string;
-<<<<<<< HEAD
-      buildQueries: (filter: OrganizationFilter, page: number) => string[];
-=======
-      buildQueries: (filter: ApolloOrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
->>>>>>> origin/main
+      buildQueries: (filter: OrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
       runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
       toExcludeDomain: (value: string | undefined) => string | undefined;
       normalizeUrl: (url: string | undefined) => string | undefined;

@@ -481,11 +481,7 @@ export class DebugConsoleService {
 
   private async runExaCompanySearch(request: DebugConsoleRunRequest, filters: OrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {
     const exaClient = this.exaSearchClient as unknown as {
-<<<<<<< HEAD
-      buildQueries: (filter: OrganizationFilter, page: number) => string[];
-=======
-      buildQueries: (filter: ApolloOrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
->>>>>>> origin/main
+      buildQueries: (filter: OrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
       runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
       buildSearchPayload: (query: string, numResults: number, excludeDomains?: string[]) => unknown;
       loadKnownExcludedDomains: () => Promise<Set<string>>;

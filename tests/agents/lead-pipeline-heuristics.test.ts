@@ -198,8 +198,7 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
 
-<<<<<<< HEAD
-=======
+
 test("top-up returns immediately when stop is requested during a stuck web discovery fetch", async () => {
   const agent = new LeadPipelineAgent() as any;
   let stopRequested = false;
@@ -330,7 +329,6 @@ test("research brief timeout fallback keeps required outreach fields", () => {
   assert.ok(fallback.phoneScript.length > 0);
 });
 
->>>>>>> origin/main
 test("direct exa path can skip Azure query planning when explicitly disabled", async () => {
   const agent = new LeadPipelineAgent() as any;
   let plannerCalls = 0;
