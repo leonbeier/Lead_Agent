@@ -225,6 +225,46 @@ test("previewHubSpotSync prefers legal-entity evidence over descriptive page-tit
   assert.equal(preview.companyProperties.domain, "softment.com");
 });
 
+test("previewHubSpotSync strips navigation prefixes and restores short domain acronyms in company names", async () => {
+  const client = new HubSpotClient();
+
+  const preview = await client.previewHubSpotSync(
+    {
+      ...buildSampleCompany(),
+      name: "Leistungen Referenzen Kontakt Automatisierungstechnik-Planungs GmbH",
+      domain: "https://bat-gmbh.de",
+      shortDescription: "Automatisierungstechnik und Engineering fuer industrielle Anlagen.",
+      rationale: "Website title contains navigation labels before the legal entity name."
+    },
+    buildSampleBrief(),
+    [],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.companyProperties.name, "BAT Automatisierungstechnik-Planungs GmbH");
+  assert.equal(preview.companyProperties.domain, "bat-gmbh.de");
+});
+
+test("previewHubSpotSync falls back to the domain brand when the company name is only a domain slogan", async () => {
+  const client = new HubSpotClient();
+
+  const preview = await client.previewHubSpotSync(
+    {
+      ...buildSampleCompany(),
+      name: "KAMPSEN - PARTNER IN TASTE",
+      domain: "https://kampsen.de",
+      shortDescription: "Food ingredients and blends.",
+      rationale: "Website title uses a marketing slogan instead of the legal entity name."
+    },
+    undefined,
+    [],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.companyProperties.name, "Kampsen");
+  assert.equal(preview.companyProperties.domain, "kampsen.de");
+});
+
 test("extractMultipleNamesFromManagementLine ignores management sentence fragments", () => {
   const client = new HubSpotClient();
 
@@ -346,7 +386,7 @@ test("previewHubSpotSync clears mailbox names that only mirror the company domai
 
   assert.equal(preview.contacts[0]?.skipped, false);
   assert.equal(preview.contacts[0]?.properties.email, "framaval@framaval.com");
-  assert.equal(preview.contacts[0]?.properties.firstname, "framaval@framaval.com");
+  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
   assert.equal(preview.contacts[0]?.properties.lastname, undefined);
 });
 
@@ -426,6 +466,24 @@ test("extractPostalAddress rejects sentence-like false positives", () => {
   );
 
   assert.equal(extracted, null);
+});
+
+test("extractPostalAddress parses imprint blocks where the company heading sits above the street line", () => {
+  const client = new HubSpotClient() as unknown as {
+    extractPostalAddress: typeof HubSpotClient.prototype["extractPostalAddress"];
+  };
+
+  const extracted = client.extractPostalAddress(
+    "<h3>Kampsen GmbH &amp; Co. KG</h3><p>Alter Emsteker Weg 21<br>49661 Cloppenburg<br>Telefon +49 4471 98002-20</p>",
+    "Germany"
+  );
+
+  assert.deepEqual(extracted, {
+    address: "Alter Emsteker Weg 21",
+    city: "Cloppenburg",
+    zip: "49661",
+    country: "Germany"
+  });
 });
 
 test("extractCompanyAddressWithWebSearch rejects descriptive non-address results", async () => {
@@ -603,6 +661,8 @@ test("name extraction rejects CTA-style phrases", () => {
   assert.equal(client["extractNameFromLine"]("Aislab Technology"), null);
   assert.equal(client["extractNameFromLine"]("Wie MES"), null);
   assert.equal(client["extractNameFromLine"]("Mailen Sie Uns"), null);
+  assert.equal(client["normalizeNamePart"]("Production"), undefined);
+  assert.equal(client["normalizeNamePart"]("Engineer"), undefined);
 });
 
 test("previewHubSpotSync derives personal LinkedIn urls from sourceUrl when linkedinUrl is missing", async () => {
@@ -721,9 +781,29 @@ test("existing generic mailbox contacts clear non-person names during cleanup", 
   }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
 
   assert.deepEqual(cleanup, {
-    firstname: "info@platiscan.com",
+    firstname: "",
     lastname: ""
   });
+});
+
+test("collapseDuplicateMailboxContacts collapses unnamed mailbox contacts that share the same switchboard phone", () => {
+  const client = new HubSpotClient();
+  const deduped = client["collapseDuplicateMailboxContacts"]([
+    {
+      email: "info@bat-gmbh.de",
+      phone: "+49 3381 4104010",
+      label: "public_generic_mailbox"
+    },
+    {
+      email: "t.koschech@bat-gmbh.de",
+      phone: "+49 3381 4104010",
+      label: "public_named_mailbox"
+    }
+  ]);
+
+  assert.equal(deduped.length, 1);
+  assert.equal(deduped[0]?.email, "t.koschech@bat-gmbh.de");
+  assert.equal(deduped[0]?.phone, "+49 3381 4104010");
 });
 
 test("existing generic mailbox contacts clear mismatched LinkedIn urls during cleanup", () => {
@@ -754,7 +834,6 @@ test("existing generic mailbox contacts clear company LinkedIn urls during clean
   }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
 
   assert.deepEqual(cleanup, {
-    firstname: "contact@aidolsgroup.com",
     hs_linkedin_url: ""
   });
 });
@@ -772,7 +851,7 @@ test("existing contacts clear mailbox names derived from the company domain and 
   }, new Set(["firstname", "lastname", "jobtitle"]));
 
   assert.deepEqual(cleanup, {
-    firstname: "framaval@framaval.com",
+    firstname: "",
     lastname: "",
     jobtitle: ""
   });

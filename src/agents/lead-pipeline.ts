@@ -1177,6 +1177,15 @@ export class LeadPipelineAgent {
         );
     await flushQualifiedCompanies(toppedUpShortlist.slice(sortedShortlist.length), toppedUpShortlist.length);
 
+    if (shouldFinishEarly() && !hasReachedRequestedTarget()) {
+      return finalizeInterruptedRun(
+        toppedUpShortlist,
+        wasStopped()
+          ? "Run was stopped manually during top-up."
+          : "Run timed out during top-up."
+      );
+    }
+
     if (!hasReachedRequestedTarget() && !shouldFinishEarly() && !completionReason) {
       completionReason = `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} getesteten Filtern und ausgeschopfter Top-up-Suche mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`;
     }
@@ -1187,6 +1196,16 @@ export class LeadPipelineAgent {
       syncToHubSpot
     );
     filteredShortlist.forEach((company) => hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company)));
+
+    if (shouldFinishEarly() && !hasReachedRequestedTarget()) {
+      return finalizeInterruptedRun(
+        filteredShortlist,
+        wasStopped()
+          ? "Run was stopped manually before replenishment top-up."
+          : "Run timed out before replenishment top-up."
+      );
+    }
+
     const replenishedShortlist = hasReachedRequestedTarget()
       ? filteredShortlist
       : await this.topUpWithWebDiscovery(
@@ -3224,7 +3243,7 @@ export class LeadPipelineAgent {
         const topUpDetail = `Top-up prueft Filter "${filter.name}" auf Seite ${page}/${maxPages}. Aktuell ${toppedUp.length}/${request.targetLeadCount} Ziel-Firmen gefunden.`;
         emitTopUpProgress(topUpDetail, toppedUp.length);
         const expansionBatchSize = this.getExpansionBatchSize(remainingSlots, true);
-        const discoveredFetch = await this.runWithProgressHeartbeat(
+        const discoveredFetch = await this.runWithProgressHeartbeatUntilStop(
           () => this.fetchAvailableSearchSample(
             filter,
             expansionBatchSize,
@@ -3245,8 +3264,12 @@ export class LeadPipelineAgent {
               webSearchRawCollectionMultiplier: Math.max(2, openCrawlerTuning?.rawCollectionMultiplier ?? 0)
             }
           ),
-          () => emitTopUpProgress(topUpDetail, toppedUp.length)
+          () => emitTopUpProgress(topUpDetail, toppedUp.length),
+          shouldStop
         );
+        if (!discoveredFetch) {
+          return toppedUp;
+        }
         const discoveredCompanies = discoveredFetch.companies;
         nextPageByFilter.set(filter.name, page + 1);
 
@@ -3264,14 +3287,23 @@ export class LeadPipelineAgent {
           continue;
         }
 
-        const categorizedCompanies = await this.categorizeCompanies(
-          unseenCompanies,
-          Boolean(request.dryRun),
-          mainContext,
-          prequalification,
-          targetCategories,
-          learning
+        const categorizedCompanies = await this.runWithProgressHeartbeatUntilStop(
+          () => this.categorizeCompanies(
+            unseenCompanies,
+            Boolean(request.dryRun),
+            mainContext,
+            prequalification,
+            targetCategories,
+            learning
+          ),
+          () => emitTopUpProgress(topUpDetail, toppedUp.length),
+          shouldStop,
+          5_000,
+          250
         );
+        if (!categorizedCompanies) {
+          return toppedUp;
+        }
 
         const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, filter, targetCategories, request.market);
         const sizeBeforeAdd = toppedUp.length;
@@ -3308,6 +3340,59 @@ export class LeadPipelineAgent {
 
     try {
       return await operation();
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
+  private async runWithProgressHeartbeatUntilStop<T>(
+    operation: () => Promise<T>,
+    heartbeat: () => void,
+    shouldStop?: () => boolean,
+    intervalMs = 5_000,
+    stopPollMs = 250
+  ): Promise<T | null> {
+    if (!shouldStop) {
+      return this.runWithProgressHeartbeat(operation, heartbeat, intervalMs);
+    }
+
+    const timer = setInterval(() => {
+      heartbeat();
+    }, intervalMs);
+
+    const operationResult = operation()
+      .then((value) => ({ kind: "result" as const, value }))
+      .catch((error: unknown) => ({ kind: "error" as const, error }));
+
+    const stopResult = new Promise<{ kind: "stopped" }>((resolve) => {
+      if (shouldStop()) {
+        resolve({ kind: "stopped" });
+        return;
+      }
+
+      const stopTimer = setInterval(() => {
+        if (!shouldStop()) {
+          return;
+        }
+
+        clearInterval(stopTimer);
+        resolve({ kind: "stopped" });
+      }, stopPollMs);
+
+      void operationResult.finally(() => clearInterval(stopTimer));
+    });
+
+    try {
+      const winner = await Promise.race([operationResult, stopResult]);
+      if (winner.kind === "stopped") {
+        return null;
+      }
+
+      if (winner.kind === "error") {
+        throw winner.error;
+      }
+
+      return winner.value;
     } finally {
       clearInterval(timer);
     }
@@ -3546,6 +3631,14 @@ export class LeadPipelineAgent {
     );
   }
 
+  isCompanyInExecutionScope(
+    company: Pick<PreCategorizedCompany, "country" | "domain">,
+    filter: import("../types").ApolloOrganizationFilter,
+    market?: string
+  ): boolean {
+    return this.isCompanyInScope(company, filter, market);
+  }
+
   private isCompanyInScope(
     company: Pick<PreCategorizedCompany, "country" | "domain">,
     filter: import("../types").ApolloOrganizationFilter,
@@ -3699,7 +3792,7 @@ export class LeadPipelineAgent {
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
       runtimeApiKey?: string;
-      buildQueries: (filter: ApolloOrganizationFilter, page: number) => string[];
+      buildQueries: (filter: ApolloOrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
       runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
       toExcludeDomain: (value: string | undefined) => string | undefined;
       normalizeUrl: (url: string | undefined) => string | undefined;
@@ -3730,7 +3823,9 @@ export class LeadPipelineAgent {
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
     const excludedDomainCategories = prioritizedExcludedDomains.localExcludedDomainCategories;
 
-    const defaultQueries = exaClient.buildQueries(filter, 1);
+    const defaultQueries = exaClient.buildQueries(filter, 1, {
+      targetCategoryRefinement: queryPlanningContext.targetCategoryRefinement
+    });
     const useAzureQueryPlanner = queryPlanningContext.useAzureQueryPlanner ?? true;
     const plannerQueryCount = Math.min(defaultQueries.length, Math.max(1, maxQueryCount, 4));
     let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;

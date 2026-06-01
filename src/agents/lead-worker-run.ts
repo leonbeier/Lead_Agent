@@ -197,7 +197,7 @@ const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
-const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(60_000, env.EXA_REQUEST_TIMEOUT_MS);
+const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
 
 function summarizeContactChannels(contacts: PublicContactCandidate[]): string {
   const byLabel = new Map<string, number>();
@@ -363,6 +363,7 @@ export class LeadWorkerRunService {
       ? await this.controlPlaneStore.getLearning()
       : undefined;
     const filters = this.leadPipelineAgent.buildDirectExaFiltersForExecution(targetCategories, request.market);
+    const defaultScopeFilter = filters[0];
     const exaConcurrency = Math.min(2, Math.max(1, filters.length));
     const hubspotConcurrency = 3;
     const aiQueue = new AsyncQueue<{ company: CompanySample; searchId?: string }>();
@@ -729,6 +730,19 @@ export class LeadWorkerRunService {
       emitProgress();
     };
 
+    const isCompanyInScope = (company: Pick<PreCategorizedCompany, "country" | "domain">, filter = defaultScopeFilter): boolean => {
+      if (!filter) {
+        return true;
+      }
+
+      const scopeEvaluator = (this.leadPipelineAgent as { isCompanyInExecutionScope?: unknown } | undefined)?.isCompanyInExecutionScope;
+      if (typeof scopeEvaluator !== "function") {
+        return true;
+      }
+
+      return scopeEvaluator.call(this.leadPipelineAgent, company, filter, request.market);
+    };
+
     const maybeQueueHubSpot = (state: QualifiedCompanyState) => {
       if (state.removed || state.hubspotStatus !== "pending") {
         return;
@@ -790,8 +804,9 @@ export class LeadWorkerRunService {
           const aggregate = item.searchId ? searchAggregates.get(item.searchId) : undefined;
           const query = item.company.discoveryQuery?.trim();
           const queryStat = aggregate && query ? getOrCreateQueryStat(aggregate, query) : undefined;
+          const scopeFilter = aggregate?.filter ?? defaultScopeFilter;
 
-          if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory)) {
+          if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory) && isCompanyInScope(categorizedCompany, scopeFilter)) {
             if (queryStat) {
               queryStat.accepted += 1;
               queryStat.categoryBreakdown[categorizedCompany.category] += 1;
@@ -799,6 +814,15 @@ export class LeadWorkerRunService {
               updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
             }
             queueQualifiedCompany(categorizedCompany, "exa", item.searchId);
+          } else if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory)) {
+            metrics.aiRejectedDifferentCategory += 1;
+            if (queryStat) {
+              queryStat.rejectedDifferentCategory += 1;
+              queryStat.categoryBreakdown[categorizedCompany.category] += 1;
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
+              updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
+            }
+            log(`Nicht-Zieltreffer wird aussortiert: ${categorizedCompany.name} (out_of_scope)`);
           } else if (categorizedCompany.category === "other") {
             metrics.aiRejectedOther += 1;
             if (queryStat) {
@@ -1011,15 +1035,17 @@ export class LeadWorkerRunService {
       }
     })());
 
-    const seedRecords = screeningDatabase.records.filter((record) => {
-      if (record.existsInHubSpot) {
-        return false;
-      }
-      if (!record.category || !targetCategories.includes(record.category as SelectableLeadCategory)) {
-        return false;
-      }
-      return !record.sourceFilter?.includes("debug-stage=");
-    }).slice(0, targetLeadCount);
+    const seedRecords = request.reuseQualifiedCompanyCache === false
+      ? []
+      : screeningDatabase.records.filter((record) => {
+          if (record.existsInHubSpot) {
+            return false;
+          }
+          if (!record.category || !targetCategories.includes(record.category as SelectableLeadCategory)) {
+            return false;
+          }
+          return !record.sourceFilter?.includes("debug-stage=");
+        }).slice(0, targetLeadCount);
 
     for (const record of seedRecords) {
       const website = toCompanyWebsite(record.domain);
@@ -1038,6 +1064,10 @@ export class LeadWorkerRunService {
         relevanceScore: record.relevanceScore ?? 0.75,
         rationale: record.rationale ?? "Bereits im Live-Screening als passend klassifiziert."
       };
+      if (!isCompanyInScope(categorized, filters[0])) {
+        log(`Seed ausserhalb Markt verworfen: ${categorized.name}`);
+        continue;
+      }
       const key = buildCompanyKey(categorized);
       seenCompanyKeys.add(key);
       queueQualifiedCompany(categorized, "seed");
@@ -1434,7 +1464,7 @@ export class LeadWorkerRunService {
         syncedToHubSpot: metrics.hubspotWritten
       },
       timedOut,
-      stopped: stopping,
+      stopped: stopReason === "manually_stopped",
       completionReason: stopReason || (metrics.hubspotWritten >= targetLeadCount ? "target_reached" : "search_exhausted"),
       costs: undefined
     };
@@ -1449,7 +1479,7 @@ export class LeadWorkerRunService {
         companiesSkippedAfterEarlyStop: 0,
         funnel: result.funnel,
         timedOut,
-        stopped: stopping,
+        stopped: stopReason === "manually_stopped",
         completionReason: result.completionReason
       },
       contacts: generatedRecords,

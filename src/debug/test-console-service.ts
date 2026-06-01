@@ -15,6 +15,7 @@ export interface DebugConsoleRunRequest {
   stage: DebugConsoleStage;
   targetCategory: SelectableLeadCategory;
   targetCategories: SelectableLeadCategory[];
+  targetCategoryRefinement?: string;
   region?: string;
   companySearchMode: DebugConsoleSearchMode;
   exaQueryCount?: number;
@@ -480,7 +481,7 @@ export class DebugConsoleService {
 
   private async runExaCompanySearch(request: DebugConsoleRunRequest, filters: ApolloOrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {
     const exaClient = this.exaSearchClient as unknown as {
-      buildQueries: (filter: ApolloOrganizationFilter, page: number) => string[];
+      buildQueries: (filter: ApolloOrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
       runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
       buildSearchPayload: (query: string, numResults: number, excludeDomains?: string[]) => unknown;
       loadKnownExcludedDomains: () => Promise<Set<string>>;
@@ -537,7 +538,9 @@ export class DebugConsoleService {
 
       usedFilters.push(filter);
       const recentQueryHistory = this.buildRecentExaQueryHistory(testLabCache.queryInsights, learning);
-      const defaultQueries = exaClient.buildQueries(filter, 1);
+      const defaultQueries = exaClient.buildQueries(filter, 1, {
+        targetCategoryRefinement: request.targetCategoryRefinement ?? settings?.targetCategoryRefinement
+      });
       const remainingQueryCount = requestedQueryCount - executedQueryCount;
       const plannerQueryCount = request.useAzureQueryPlanner
         ? Math.min(defaultQueries.length, Math.max(remainingQueryCount, 4))
@@ -557,7 +560,7 @@ export class DebugConsoleService {
             prequalification: settings?.prequalification,
             excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
             requestedTargetCategories: request.targetCategories,
-            targetCategoryRefinement: settings?.targetCategoryRefinement,
+            targetCategoryRefinement: request.targetCategoryRefinement ?? settings?.targetCategoryRefinement,
             debugCapture: (details) => {
               queryGenerationPromptMessages = details.promptMessages;
             }

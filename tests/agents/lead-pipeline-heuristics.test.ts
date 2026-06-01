@@ -199,6 +199,66 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
 
+test("top-up returns immediately when stop is requested during a stuck web discovery fetch", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  let stopRequested = false;
+
+  agent.fetchAvailableSearchSample = async () => new Promise<never>(() => {});
+
+  const currentShortlist: PreCategorizedCompany[] = [{
+    name: "Robofunktion Vision GmbH",
+    domain: "https://robofunktion.example",
+    country: "Germany",
+    shortDescription: "Machine vision integration for industrial customers.",
+    sourceFilter: "Germany Vision Integrators",
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 91,
+    rationale: "Strong delivery ownership for machine vision projects."
+  }];
+
+  const filter = {
+    name: "Germany Vision Integrators",
+    persona: "Integrator",
+    industries: ["Industrial Automation"],
+    keywords: ["machine vision integrator"],
+    locations: ["Germany"],
+    employeeRanges: ["11,50"],
+    targetCategories: ["integrator_vision_industrial_ai"],
+    notes: "debug"
+  };
+
+  const topUpPromise = agent.topUpWithWebDiscovery(
+    currentShortlist,
+    new Set([agent.getCompanyKey(currentShortlist[0])]),
+    [filter],
+    [],
+    {
+      targetLeadCount: 2,
+      market: "Germany",
+      dryRun: false,
+      companySearchMode: "open_crawler_search",
+      syncToHubSpot: true,
+      disableHubSpotDeduplication: false
+    },
+    undefined,
+    undefined,
+    ["integrator_vision_industrial_ai"],
+    { filterPerformance: {}, searchHistory: [], modes: {} },
+    undefined,
+    () => {},
+    () => currentShortlist.length,
+    () => false,
+    () => stopRequested
+  );
+
+  setTimeout(() => {
+    stopRequested = true;
+  }, 20);
+
+  const toppedUp = await topUpPromise;
+  assert.deepEqual(toppedUp, currentShortlist);
+});
+
 test("apollo contact fallback errors do not abort collection", async () => {
   const agent = new LeadPipelineAgent() as any;
   const company: PreCategorizedCompany = {

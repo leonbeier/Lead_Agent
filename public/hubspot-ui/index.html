@@ -617,6 +617,10 @@
                 <span style="display: block; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--ink);">Zielkategorien</span>
                 <div id="debug-targetCategories" class="checkbox-grid"></div>
               </div>
+              <label style="grid-column: 1 / -1;">
+                Zusatzfilter innerhalb der Zielkategorien
+                <textarea id="debug-targetCategoryRefinement" name="debug-targetCategoryRefinement" placeholder="Optional nur fuer das Test-Lab, z. B. nur Lebensmittelproduktion" style="min-height: 96px;"></textarea>
+              </label>
               <label>
                 Region
                 <input id="debug-region" name="debug-region" type="text" placeholder="z. B. Germany oder Berlin, Germany" />
@@ -1126,6 +1130,7 @@
         document.getElementById("excludePreviouslyFoundExaDomains").checked = settings.excludePreviouslyFoundExaDomains !== false;
         document.getElementById("useExaCompanyCategory").checked = Boolean(settings.useExaCompanyCategory);
         document.getElementById("debug-exaQueryCount").value = settings.exaQueryCount || 1;
+        document.getElementById("debug-targetCategoryRefinement").value = settings.targetCategoryRefinement || "";
         document.getElementById("debug-aiPrefilterConcurrency").value = debugAiPrefilterConcurrency;
         document.getElementById("debug-outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
         document.getElementById("debug-contactSearchConcurrency").value = settings.contactSearchConcurrency || 20;
@@ -1966,6 +1971,9 @@ ${message.content || ""}`).join("\n\n");
         return {
           targetCategory: targetCategories[0],
           targetCategories,
+          targetCategoryRefinement: document.getElementById("debug-targetCategoryRefinement").value.trim()
+            || document.getElementById("targetCategoryRefinement").value.trim()
+            || undefined,
           region: document.getElementById("debug-region").value.trim() || undefined,
           companySearchMode: document.getElementById("debug-companySearchMode").value,
           exaQueryCount: Number(document.getElementById("debug-exaQueryCount").value) || 3,

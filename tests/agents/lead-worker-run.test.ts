@@ -125,8 +125,158 @@ test("worker run consumes matching live screening seeds before starting Exa", as
   assert.equal(result.hubspotSync.companySyncedCount, 1);
   assert.equal(result.shortlistedCompanies.length, 1);
   assert.equal(result.shortlistedCompanies[0]?.name, "Seed Vision");
+  assert.equal(result.stopped, false);
   assert.ok(screeningWrites.length > 0);
   assert.equal(latestRunWrites.at(-1)?.summary?.foundCandidates, 1);
+});
+
+test("worker run skips live screening seeds when reuseQualifiedCompanyCache is false", async () => {
+  let exaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({
+        records: [{
+          companyName: "Seed Vision",
+          normalizedName: "seed vision",
+          domain: "seed-vision.example.com",
+          normalizedDomain: "seed-vision.example.com",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.92,
+          rationale: "Already screened live",
+          sourceFilter: "live-filter"
+        }]
+      }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => ({
+        attempted: true,
+        mode: "live",
+        candidateCount: 1,
+        syncedCount: 1,
+        companySyncedCount: 1,
+        contactSyncedCount: 1
+      })
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        return [{
+          name: "Fresh Vision",
+          domain: "fresh-vision.example.com",
+          shortDescription: "Fresh company",
+          sourceFilter: "exa-filter"
+        }];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    reuseQualifiedCompanyCache: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.ok(exaCalls >= 1);
+  assert.equal(result.shortlistedCompanies[0]?.name, "Fresh Vision");
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+});
+
+test("worker run rejects out-of-market AI matches before HubSpot sync", async () => {
+  let exaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          country: "Mexico",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.91,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => {
+        throw new Error("HubSpot sync should not run for out-of-market companies");
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      isCompanyInExecutionScope: () => false,
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        if (exaCalls > 1) {
+          throw new Error("Exa search failed: 503 unavailable");
+        }
+        return [{
+          name: "Nesis Automation",
+          domain: "nesisautomation.com",
+          country: "Mexico",
+          shortDescription: "Industrial automation integrator",
+          sourceFilter: "exa-filter"
+        }];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    market: "EU",
+    syncToHubSpot: true,
+    dryRun: false,
+    reuseQualifiedCompanyCache: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.ok(exaCalls >= 1);
+  assert.equal(result.shortlistedCompanies.length, 0);
+  assert.equal(result.hubspotSync.companySyncedCount, 0);
 });
 
 test("worker run promotes standby AI matches when the active company fails downstream", async () => {

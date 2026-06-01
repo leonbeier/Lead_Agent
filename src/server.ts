@@ -457,6 +457,7 @@ const debugConsoleRequestSchema = z.object({
   stage: z.enum(["company_search", "ai_prefilter", "outreach_prep", "contact_discovery"]).default("contact_discovery"),
   targetCategory: selectableCategorySchema.optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
+  targetCategoryRefinement: z.string().max(4000).optional(),
   region: z.string().max(160).optional(),
   companySearchMode: z.enum(["exa_search", "diffbot_search"]).default("exa_search"),
   exaQueryCount: z.coerce.number().int().min(1).max(50).optional(),

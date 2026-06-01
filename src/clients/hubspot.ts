@@ -731,11 +731,6 @@ export class HubSpotClient {
       return null;
     }
 
-    // Keep a visible identifier in HubSpot when no person name is available.
-    if (!firstName && !lastName && email && !this.isLowValueMailbox(email) && !this.isGenericMailbox(email)) {
-      firstName = email;
-    }
-
     return {
       ...contact,
       email,
@@ -763,7 +758,8 @@ export class HubSpotClient {
       ? normalizedDomain
       : undefined;
     const cleanedName = this.toSingleLineText(company.name)?.trim();
-    const domainToken = domain?.split(".")[0]?.trim();
+    const domainHostToken = domain?.split(".")[0]?.trim();
+    const domainToken = domainHostToken?.replace(/-(gmbh|ag|ug|kg|ohg|se|ltd|llc|inc)$/i, "") || domainHostToken;
     const fallbackName = domainToken
       ? this.toTitleCase(domainToken)
       : undefined;
@@ -776,10 +772,12 @@ export class HubSpotClient {
       company.shortDescription,
       company.sourceFilter
     ].filter(Boolean).join(" | "));
-    const preferredCleanedName = cleanedName && !this.isWeakCompanyName(cleanedName, domainToken)
-      ? cleanedName
+    const sanitizedEvidenceName = this.sanitizeCompanyNameCandidate(legalEntityFromEvidence, domainToken);
+    const sanitizedCleanedName = this.sanitizeCompanyNameCandidate(cleanedName, domainToken);
+    const preferredCleanedName = sanitizedCleanedName && !this.isWeakCompanyName(sanitizedCleanedName, domainToken)
+      ? sanitizedCleanedName
       : undefined;
-    const name = this.toSingleLineText(legalEntityFromEvidence ?? preferredCleanedName ?? fallbackName)?.trim();
+    const name = this.toSingleLineText(sanitizedEvidenceName ?? preferredCleanedName ?? fallbackName)?.trim();
 
     if (!name) {
       throw new Error("Company has neither a valid name nor a valid domain for HubSpot upsert.");
@@ -1085,15 +1083,6 @@ export class HubSpotClient {
 
     if (linkedinUrl && !this.isPersonalLinkedInUrl(linkedinUrl) && availableProperties.has("hs_linkedin_url")) {
       cleanupProperties.hs_linkedin_url = "";
-    }
-
-    if (
-      email
-      && !this.isLowValueMailbox(email)
-      && ((!firstName && !lastName) || shouldClearNames)
-      && availableProperties.has("firstname")
-    ) {
-      cleanupProperties.firstname = email;
     }
 
     if (
@@ -1684,7 +1673,11 @@ export class HubSpotClient {
 
     for (const contact of contacts) {
       const fullName = `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim().toLowerCase();
-      const key = contact.email && this.isGenericMailbox(contact.email)
+      const normalizedPhone = this.normalizePublicContactPhone(contact.phone);
+      const hasNamedIdentity = Boolean(fullName || this.isPersonalLinkedInUrl(contact.linkedinUrl));
+      const key = !hasNamedIdentity && normalizedPhone
+        ? `mailbox-phone:${normalizedPhone}`
+        : contact.email && this.isGenericMailbox(contact.email)
         ? `generic:${contact.email.trim().toLowerCase()}`
         : (contact.linkedinUrl?.trim().toLowerCase()
           || contact.email?.trim().toLowerCase()
@@ -3044,10 +3037,57 @@ export class HubSpotClient {
       return false;
     }
 
+    if (/^(leistungen|referenzen|kontakt|services|references|contact|start|home|unternehmen)(\s+(leistungen|referenzen|kontakt|services|references|contact|start|home|unternehmen))+\b/i.test(normalized)) {
+      return true;
+    }
+
     const wordCount = normalized.split(" ").filter(Boolean).length;
     return wordCount >= 5
       && !/\b(gmbh|ag|ug|ltd|llc|inc)\b/i.test(normalized)
       && /(vision|industrial|automation|inspection|marking|software|ai|computer vision|machine vision)/i.test(normalized);
+  }
+
+  private sanitizeCompanyNameCandidate(name: string | undefined, domainToken?: string): string | undefined {
+    const cleaned = this.toSingleLineText(name)?.trim();
+    if (!cleaned) {
+      return undefined;
+    }
+
+    const stripped = cleaned.replace(/^(?:(?:leistungen|referenzen|kontakt|services|references|contact|start|home|unternehmen)\s+)+/gi, "").trim();
+    const normalizedDomainToken = domainToken?.toLowerCase();
+    const normalizedDomainSlug = normalizedDomainToken?.replace(/[^a-z0-9]/g, "");
+    const strippedHasLegalSuffix = /\b(gmbh|mbh|ag|ug|kg|ohg|se|ltd|llc|inc)\b/i.test(stripped);
+    const sloganMatch = stripped.match(/^(.+?)\s[-|:]\s(.+)$/);
+
+    if (sloganMatch && normalizedDomainToken && normalizedDomainSlug) {
+      const sloganPrefix = sloganMatch[1]?.trim();
+      const sloganSuffix = sloganMatch[2]?.trim() ?? "";
+      const normalizedSloganPrefix = sloganPrefix?.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      if (
+        normalizedSloganPrefix === normalizedDomainSlug
+        && !/\b(gmbh|mbh|ag|ug|kg|ohg|se|ltd|llc|inc)\b/i.test(sloganSuffix)
+        && sloganSuffix.split(/\s+/).filter(Boolean).length >= 2
+      ) {
+        return normalizedDomainToken.length <= 4
+          ? normalizedDomainToken.toUpperCase()
+          : this.toTitleCase(normalizedDomainToken);
+      }
+    }
+
+    if (
+      stripped !== cleaned
+      && normalizedDomainToken
+      && strippedHasLegalSuffix
+      && !stripped.toLowerCase().includes(normalizedDomainToken)
+    ) {
+      const prefix = normalizedDomainToken.length <= 4
+        ? normalizedDomainToken.toUpperCase()
+        : this.toTitleCase(normalizedDomainToken);
+      return `${prefix} ${stripped}`.trim();
+    }
+
+    return stripped;
   }
 
   private decodeHtmlEntities(value: string): string {
@@ -3408,8 +3448,7 @@ export class HubSpotClient {
   private extractPostalAddress(html: string, fallbackCountry?: string): ExtractedCompanyAddress | null {
     const plainText = html
       .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p>/gi, "\n")
-      .replace(/<\/div>/gi, "\n")
+      .replace(/<\/(?:p|div|li|h1|h2|h3|h4|h5|h6|section|article)>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
       .replace(/&nbsp;|&#160;/gi, " ")
       .replace(/&amp;/gi, "&")
@@ -3591,6 +3630,14 @@ export class HubSpotClient {
       "hardware",
       "robotics",
       "robotik",
+      "production",
+      "operations",
+      "operator",
+      "engineering",
+      "engineer",
+      "developer",
+      "manager",
+      "director",
       "industrial",
       "analytics",
       "consulting",
