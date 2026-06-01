@@ -720,6 +720,7 @@ export class OpenAIWebSearchClient {
   private looksLikeCompanyName(candidate: string, normalizedBrand: string): boolean {
     const lowered = candidate.toLowerCase();
     const normalizedCandidate = lowered.replace(/[^a-z0-9]+/g, "");
+    const normalizedWords = lowered.split(/\s+/).filter(Boolean);
     const looksLikeSlogan = /(trusted by|powered by|built for|made for|future of|designed for|engineered for|your partner|tailored for|driven by)/i.test(candidate);
     const genericNames = [
       "home",
@@ -732,7 +733,14 @@ export class OpenAIWebSearchClient {
       "weltweite qualitaetskontrollen",
       "worldwide quality controls",
       "quality controls",
-      "quality control"
+      "quality control",
+      "ai",
+      "company",
+      "unternehmen",
+      "solutions",
+      "technology",
+      "software",
+      "services"
     ];
     if (genericNames.includes(lowered)) {
       return false;
@@ -743,6 +751,18 @@ export class OpenAIWebSearchClient {
     }
 
     if (looksLikeSlogan) {
+      return false;
+    }
+
+    if (/^(web\s+development\s+company\b|ai\s+company\b|company\s+in\b)/i.test(lowered)) {
+      return false;
+    }
+
+    if (!/(gmbh|mbh|ag|kg|ug|llc|inc|ltd|corp|bv|oy|ab)$/i.test(lowered) && normalizedWords.length >= 5) {
+      return false;
+    }
+
+    if (normalizedBrand && normalizedCandidate !== normalizedBrand && normalizedWords.length >= 4) {
       return false;
     }
 

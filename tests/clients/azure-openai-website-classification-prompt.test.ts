@@ -28,4 +28,7 @@ test("website classification prompt includes all vision integrator categories", 
   assert.match(systemPrompt, /integrator_vision_ai_consulting:/);
   assert.match(systemPrompt, /integrator_vision_ai_freelancer:/);
   assert.match(systemPrompt, /machine vision|computer vision|industrial inspection AI/i);
+  assert.match(systemPrompt, /Fraunhofer-style institutes|research institutes|universities|labs/i);
+  assert.match(systemPrompt, /publicly funded competence centers are not integrators or customer delivery partners/i);
+  assert.match(systemPrompt, /Fraunhofer-style institute, university lab, or research center/i);
 });

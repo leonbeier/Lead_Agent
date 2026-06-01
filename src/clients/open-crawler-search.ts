@@ -957,6 +957,13 @@ export class OpenCrawlerSearchClient {
 
   private isServiceLedFilter(filter: OrganizationFilter): boolean {
     const text = [filter.name, filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
+    const visionFocusedFilter = /(machine vision|computer vision|visual inspection|optical inspection|industrial image processing|bildverarbeitung|aoi|embedded vision|inspection ai)/i.test(text);
+    const serviceSoftwareFilter = /(industrial software|manufacturing software|smart factory|mes|scada|plc|ot integration|automation software|software engineering|produktionssoftware)/i.test(text);
+
+    if (visionFocusedFilter && !serviceSoftwareFilter) {
+      return false;
+    }
+
     return /(integrator|system integration|systemintegrator|engineering services|solution provider|turnkey|customer-specific|commissioning|sondermaschinenbau|automation partner)/i.test(text);
   }
 

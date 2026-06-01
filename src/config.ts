@@ -19,6 +19,8 @@ const envSchema = z.object({
   HUBSPOT_CLIENT_ID: z.string().optional(),
   HUBSPOT_CLIENT_SECRET: z.string().optional(),
   HUBSPOT_BASE_URL: z.string().url().default("https://api.hubapi.com"),
+  HUBSPOT_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  WORKER_HUBSPOT_TASK_TIMEOUT_MS: z.coerce.number().int().positive().default(360_000),
   OPENAI_API_KEY: z.string().optional(),
   EXA_API_KEY: z.string().optional(),
   EXA_MAX_BUDGET_USD: z.coerce.number().nonnegative().default(20),

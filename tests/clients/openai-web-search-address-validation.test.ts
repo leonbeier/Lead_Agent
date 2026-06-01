@@ -105,3 +105,29 @@ test("findCompanyAddress keeps structured addresses even when the model marks th
   assert.equal(result?.city, "Berlin");
   assert.equal(result?.zip, "10115");
 });
+
+test("deriveCompanyName falls back to the domain brand when the summary starts with a descriptive SEO headline", () => {
+  const client = new OpenAIWebSearchClient() as unknown as {
+    deriveCompanyName: typeof OpenAIWebSearchClient.prototype["deriveCompanyName"];
+  };
+
+  const derived = client.deriveCompanyName(
+    "https://softment.com",
+    "Web Development Company in Germany | Softment | Softment"
+  );
+
+  assert.equal(derived, "Softment");
+});
+
+test("deriveCompanyName falls back to the domain brand when the summary is only a generic short label", () => {
+  const client = new OpenAIWebSearchClient() as unknown as {
+    deriveCompanyName: typeof OpenAIWebSearchClient.prototype["deriveCompanyName"];
+  };
+
+  const derived = client.deriveCompanyName(
+    "https://griphhy.com",
+    "Ai | AI Automation for Growing Businesses"
+  );
+
+  assert.equal(derived, "Griphhy");
+});

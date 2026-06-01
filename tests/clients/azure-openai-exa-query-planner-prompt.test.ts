@@ -220,3 +220,41 @@ test("Exa query planner prompt uses the new ONE WARE system and structured user 
     readiness.azureConfigured = previousAzureConfigured;
   }
 });
+
+test("Exa query planner falls back to baseline queries when Azure planning times out", async () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
+    runChat: () => Promise<string>;
+  };
+  const previousAzureConfigured = readiness.azureConfigured;
+
+  readiness.azureConfigured = true;
+
+  try {
+    azureClient.runChat = async () => new Promise<string>(() => undefined);
+
+    const queries = await azureClient.planExaSearchQueries(
+      {
+        name: "Vision Integrators Germany",
+        persona: "Operations leaders",
+        industries: ["Manufacturing"],
+        keywords: ["machine vision", "industrial image processing"],
+        locations: ["Germany"],
+        employeeRanges: ["11-50"],
+        targetCategories: ["integrator_vision_industrial_ai"],
+        notes: "Find machine-vision-focused industrial integrators in Germany."
+      },
+      ["baseline query", "second baseline query"],
+      undefined,
+      false,
+      undefined,
+      undefined,
+      2,
+      { plannerTimeoutMs: 1 }
+    );
+
+    assert.deepEqual(queries, ["baseline query", "second baseline query"]);
+  } finally {
+    readiness.azureConfigured = previousAzureConfigured;
+  }
+});

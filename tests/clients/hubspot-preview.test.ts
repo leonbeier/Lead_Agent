@@ -193,10 +193,89 @@ test("previewHubSpotSync keeps generic company mailboxes when the email is usabl
 
   assert.equal(preview.contacts[0]?.skipped, false);
   assert.equal(preview.contacts[0]?.properties.email, "info@sample-automation.de");
+  assert.equal(preview.contacts[0]?.properties.firstname, undefined);
   assert.equal(preview.contacts[1]?.properties.firstname, "Martin");
   assert.equal(preview.contacts[1]?.properties.jobtitle, "Managing Director");
   assert.equal(preview.contacts[1]?.properties.hs_linkedin_url, "https://www.linkedin.com/in/martin-minsel");
   assert.match(preview.contacts[1]?.outreachNote ?? "", /LinkedIn Outreach/);
+});
+
+test("previewHubSpotSync prefers legal-entity evidence over descriptive page-title company labels", async () => {
+  const client = new HubSpotClient();
+
+  const preview = await client.previewHubSpotSync(
+    {
+      ...buildSampleCompany(),
+      name: "Web Development Company in Germany",
+      domain: "https://softment.com",
+      shortDescription: "Delivery-led software and AI implementation partner.",
+      rationale: "Legal entity evidence is Softment GmbH from the supplied research brief."
+    },
+    {
+      ...buildSampleBrief(),
+      companyName: "Softment GmbH",
+      overview: "Softment GmbH is a Germany-based delivery-led software and AI implementation partner.",
+      qualificationSummary: "Softment GmbH executes client delivery projects."
+    },
+    [],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.companyProperties.name, "Softment GmbH");
+  assert.equal(preview.companyProperties.domain, "softment.com");
+});
+
+test("previewHubSpotSync strips navigation prefixes and restores short domain acronyms in company names", async () => {
+  const client = new HubSpotClient();
+
+  const preview = await client.previewHubSpotSync(
+    {
+      ...buildSampleCompany(),
+      name: "Leistungen Referenzen Kontakt Automatisierungstechnik-Planungs GmbH",
+      domain: "https://bat-gmbh.de",
+      shortDescription: "Automatisierungstechnik und Engineering fuer industrielle Anlagen.",
+      rationale: "Website title contains navigation labels before the legal entity name."
+    },
+    buildSampleBrief(),
+    [],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.companyProperties.name, "BAT Automatisierungstechnik-Planungs GmbH");
+  assert.equal(preview.companyProperties.domain, "bat-gmbh.de");
+});
+
+test("previewHubSpotSync falls back to the domain brand when the company name is only a domain slogan", async () => {
+  const client = new HubSpotClient();
+
+  const preview = await client.previewHubSpotSync(
+    {
+      ...buildSampleCompany(),
+      name: "KAMPSEN - PARTNER IN TASTE",
+      domain: "https://kampsen.de",
+      shortDescription: "Food ingredients and blends.",
+      rationale: "Website title uses a marketing slogan instead of the legal entity name."
+    },
+    undefined,
+    [],
+    { includeAddressLookup: false }
+  );
+
+  assert.equal(preview.companyProperties.name, "Kampsen");
+  assert.equal(preview.companyProperties.domain, "kampsen.de");
+});
+
+test("extractMultipleNamesFromManagementLine ignores management sentence fragments", () => {
+  const client = new HubSpotClient();
+
+  assert.deepEqual(
+    client["extractMultipleNamesFromManagementLine"]("Management ist verantwortlich langfristigen Unternehmensziele durchzusetzen"),
+    []
+  );
+  assert.deepEqual(
+    client["extractMultipleNamesFromManagementLine"]("Geschäftsführung: Max Mustermann"),
+    [{ firstName: "Max", lastName: "Mustermann", jobTitle: "Managing Director" }]
+  );
 });
 
 test("previewHubSpotSync still skips low-value noreply mailboxes without person identity", async () => {
@@ -218,7 +297,7 @@ test("previewHubSpotSync still skips low-value noreply mailboxes without person 
   assert.match(preview.contacts[0]?.skipReason ?? "", /Low-value mailbox/i);
 });
 
-test("previewHubSpotSync keeps company LinkedIn URLs as a reachable fallback channel", async () => {
+test("previewHubSpotSync strips company LinkedIn URLs from contact properties", async () => {
   const client = new HubSpotClient();
   const preview = await client.previewHubSpotSync(
     buildSampleCompany(),
@@ -237,7 +316,7 @@ test("previewHubSpotSync keeps company LinkedIn URLs as a reachable fallback cha
   );
 
   assert.equal(preview.contacts[0]?.skipped, false);
-  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, "https://www.linkedin.com/company/sample-automation");
+  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, undefined);
   assert.equal(preview.contacts[0]?.properties.email, "martin@sample-automation.de");
 });
 
@@ -387,6 +466,24 @@ test("extractPostalAddress rejects sentence-like false positives", () => {
   );
 
   assert.equal(extracted, null);
+});
+
+test("extractPostalAddress parses imprint blocks where the company heading sits above the street line", () => {
+  const client = new HubSpotClient() as unknown as {
+    extractPostalAddress: typeof HubSpotClient.prototype["extractPostalAddress"];
+  };
+
+  const extracted = client.extractPostalAddress(
+    "<h3>Kampsen GmbH &amp; Co. KG</h3><p>Alter Emsteker Weg 21<br>49661 Cloppenburg<br>Telefon +49 4471 98002-20</p>",
+    "Germany"
+  );
+
+  assert.deepEqual(extracted, {
+    address: "Alter Emsteker Weg 21",
+    city: "Cloppenburg",
+    zip: "49661",
+    country: "Germany"
+  });
 });
 
 test("extractCompanyAddressWithWebSearch rejects descriptive non-address results", async () => {
@@ -564,6 +661,8 @@ test("name extraction rejects CTA-style phrases", () => {
   assert.equal(client["extractNameFromLine"]("Aislab Technology"), null);
   assert.equal(client["extractNameFromLine"]("Wie MES"), null);
   assert.equal(client["extractNameFromLine"]("Mailen Sie Uns"), null);
+  assert.equal(client["normalizeNamePart"]("Production"), undefined);
+  assert.equal(client["normalizeNamePart"]("Engineer"), undefined);
 });
 
 test("previewHubSpotSync derives personal LinkedIn urls from sourceUrl when linkedinUrl is missing", async () => {
@@ -601,6 +700,16 @@ test("email extraction resolves textual at-dot obfuscation", () => {
   );
 
   assert.deepEqual(emails, ["info@giovannigualdi.com"]);
+});
+
+test("email extraction ignores anti-scrape remove-this placeholders", () => {
+  const client = new HubSpotClient();
+  const emails = client["extractEmails"](
+    "Kontakt: info@remove-this.rottendorf.com | real: info@rottendorf.com",
+    new Set(["rottendorf.com"])
+  );
+
+  assert.deepEqual(emails, ["info@rottendorf.com"]);
 });
 
 test("descriptive company labels still produce domain-token aliases for LinkedIn search", () => {
@@ -677,6 +786,26 @@ test("existing generic mailbox contacts clear non-person names during cleanup", 
   });
 });
 
+test("collapseDuplicateMailboxContacts collapses unnamed mailbox contacts that share the same switchboard phone", () => {
+  const client = new HubSpotClient();
+  const deduped = client["collapseDuplicateMailboxContacts"]([
+    {
+      email: "info@bat-gmbh.de",
+      phone: "+49 3381 4104010",
+      label: "public_generic_mailbox"
+    },
+    {
+      email: "t.koschech@bat-gmbh.de",
+      phone: "+49 3381 4104010",
+      label: "public_named_mailbox"
+    }
+  ]);
+
+  assert.equal(deduped.length, 1);
+  assert.equal(deduped[0]?.email, "t.koschech@bat-gmbh.de");
+  assert.equal(deduped[0]?.phone, "+49 3381 4104010");
+});
+
 test("existing generic mailbox contacts clear mismatched LinkedIn urls during cleanup", () => {
   const client = new HubSpotClient();
   const cleanup = client["buildExistingContactCleanupProperties"]({
@@ -694,7 +823,7 @@ test("existing generic mailbox contacts clear mismatched LinkedIn urls during cl
   });
 });
 
-test("existing generic mailbox contacts keep company LinkedIn urls during cleanup", () => {
+test("existing generic mailbox contacts clear company LinkedIn urls during cleanup", () => {
   const client = new HubSpotClient();
   const cleanup = client["buildExistingContactCleanupProperties"]({
     id: "contact-2b",
@@ -704,7 +833,9 @@ test("existing generic mailbox contacts keep company LinkedIn urls during cleanu
     }
   }, new Set(["firstname", "lastname", "hs_linkedin_url"]));
 
-  assert.deepEqual(cleanup, {});
+  assert.deepEqual(cleanup, {
+    hs_linkedin_url: ""
+  });
 });
 
 test("existing contacts clear mailbox names derived from the company domain and generic CTA titles during cleanup", () => {
@@ -735,6 +866,22 @@ test("existing generic mailbox contacts clear stale person job titles during cle
       firstname: "",
       lastname: "",
       jobtitle: "Managing Director"
+    }
+  }, new Set(["jobtitle"]));
+
+  assert.deepEqual(cleanup, {
+    jobtitle: ""
+  });
+});
+
+test("existing contacts clear placeholder unknown job titles during cleanup", () => {
+  const client = new HubSpotClient();
+  const cleanup = client["buildExistingContactCleanupProperties"]({
+    id: "contact-4b",
+    properties: {
+      firstname: "Jennifer",
+      lastname: "Heinz",
+      jobtitle: "Unknown"
     }
   }, new Set(["jobtitle"]));
 
@@ -795,6 +942,67 @@ test("browser fallback is used when direct website fetch is blocked", async () =
   try {
     const html = await client["fetchHtml"]("https://pexon-consulting.de");
     assert.match(html ?? "", /info@pexon-consulting\.de/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("browser fallback ignores HTTPS errors for certificate-broken contact pages", async () => {
+  const client = new HubSpotClient();
+  let receivedNewPageOptions: Record<string, unknown> | null = null;
+
+  client["launchBrowserForWebTasks"] = async () => ({
+    newPage: async (options: Record<string, unknown>) => {
+      receivedNewPageOptions = options;
+      return {
+        goto: async () => undefined,
+        waitForLoadState: async () => undefined,
+        content: async () => "<html><body><a href=\"mailto:info@sample-automation.de\">info@sample-automation.de</a></body></html>"
+      };
+    },
+    close: async () => undefined
+  });
+
+  const html = await client["fetchHtmlWithBrowser"]("https://expired.example.com/kontakt");
+
+  assert.match(html ?? "", /info@sample-automation\.de/i);
+  assert.equal(receivedNewPageOptions?.ignoreHTTPSErrors, true);
+});
+
+test("fetchHtml retries TLS failures with a certificate-tolerant dispatcher before browser fallback", async () => {
+  const client = new HubSpotClient();
+  const originalFetch = globalThis.fetch;
+  let fetchCallCount = 0;
+  let browserFallbackCalled = false;
+
+  client["fetchHtmlWithBrowser"] = async () => {
+    browserFallbackCalled = true;
+    return "<html><body>browser fallback</body></html>";
+  };
+
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit & { dispatcher?: unknown }) => {
+    fetchCallCount += 1;
+    if (fetchCallCount === 1) {
+      const error = new TypeError("fetch failed");
+      (error as TypeError & { cause?: { code?: string } }).cause = { code: "ERR_TLS_CERT_ALTNAME_INVALID" };
+      throw error;
+    }
+
+    assert.ok(init?.dispatcher);
+    return new Response("<html><body><a href=\"mailto:tls@sample-automation.de\">tls@sample-automation.de</a></body></html>", {
+      status: 200,
+      headers: {
+        "content-type": "text/html"
+      }
+    }) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
+  }) as typeof fetch;
+
+  try {
+    const html = await client["fetchHtml"]("https://tls-broken.example.com");
+
+    assert.match(html ?? "", /tls@sample-automation\.de/i);
+    assert.equal(browserFallbackCalled, false);
+    assert.equal(fetchCallCount, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -900,6 +1108,19 @@ test("website contact filter rejects business-phrase false positives", () => {
     sourceUrl: "https://pexon-consulting.de",
     label: "website_named_contact",
     linkedinUrl: "https://www.linkedin.com/in/constantin-budin-92a08516a"
+  }), true);
+});
+
+test("website contact filter rejects management sentence-fragment names", () => {
+  const client = new HubSpotClient();
+
+  assert.equal(client["isLowConfidenceWebsiteNamedContact"]({
+    firstName: "Ist",
+    lastName: "Verantwortlich",
+    phone: "+4949434059620",
+    jobTitle: "Managing Director",
+    sourceUrl: "http://atlantique-gmbh.de/ueber-uns/",
+    label: "website_named_contact"
   }), true);
 });
 

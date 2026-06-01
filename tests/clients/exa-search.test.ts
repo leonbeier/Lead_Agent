@@ -42,6 +42,24 @@ test("buildQueries switches industrial end customers away from integrator wordin
   assert.ok(queries.every((query) => !/Prefer official company websites of manufacturers/i.test(query)));
 });
 
+test("buildQueries appends the target-category refinement to baseline Exa queries", () => {
+  const client = new ExaSearchClient();
+  const queries = client["buildQueries"]({
+    name: "Relevant Industry Integrators",
+    persona: "industrial software and automation integrator",
+    industries: ["Food Production"],
+    locations: ["Germany"],
+    keywords: ["mes", "scada", "quality control"],
+    notes: "Find integrators with customer projects.",
+    targetCategories: ["integrator_relevant_focus"]
+  }, 1, {
+    targetCategoryRefinement: "Nur Firmen die Lebensmittel produzieren"
+  }) as string[];
+
+  assert.ok(queries.length > 0);
+  assert.ok(queries.every((query) => /Within the selected target categories, narrow results to: Nur Firmen die Lebensmittel produzieren\./i.test(query)));
+});
+
 test("discoverCompanies requests 20 Exa results per query regardless of lead limit", async () => {
   const client = new ExaSearchClient();
   client.setApiKey("test-key");
@@ -251,5 +269,40 @@ test("inferCountryFromDomain keeps Germany only when there is domain or snippet 
       "Germany"
     ),
     undefined
+  );
+});
+
+test("inferCountryFromDomain recognizes additional European country TLDs", () => {
+  const client = new ExaSearchClient();
+  const inferCountryFromDomain = client["inferCountryFromDomain"].bind(client) as (
+    domain: string,
+    result: { title?: string; highlights?: string[]; summary?: string; text?: string },
+    fallbackLocation?: string
+  ) => string | undefined;
+
+  assert.equal(
+    inferCountryFromDomain(
+      "https://nexusautomation.it",
+      {
+        title: "Nexus Automation",
+        summary: "Industrial automation systems in Vicenza, Italy",
+        text: "Vicenza Italy"
+      },
+      "Belgium"
+    ),
+    "Italy"
+  );
+
+  assert.equal(
+    inferCountryFromDomain(
+      "https://profigram.hu",
+      {
+        title: "Profigram",
+        summary: "Automation engineering in Budapest, Hungary",
+        text: "Budapest Hungary"
+      },
+      "Belgium"
+    ),
+    "Hungary"
   );
 });

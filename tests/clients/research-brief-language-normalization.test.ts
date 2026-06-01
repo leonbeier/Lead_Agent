@@ -132,7 +132,7 @@ test("HubSpot outreach personalization normalizes German language labels", () =>
     "German" as ResearchBrief["outreachLanguage"]
   );
 
-  assert.equal(personalized, "Hallo Herr/Frau Minsel, hier ist ONE WARE.");
+  assert.equal(personalized, "Hallo Martin Minsel, hier ist ONE WARE.");
 });
 
 test("Foundry buildResearchBrief includes explicit English target language guidance and normalizes the result", async (t) => {

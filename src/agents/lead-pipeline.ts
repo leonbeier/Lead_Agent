@@ -73,6 +73,11 @@ const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
 const DIRECT_EXA_FILTER_CONCURRENCY = 3;
 const DIRECT_EXA_QUERY_CONCURRENCY = 3;
+<<<<<<< HEAD
+=======
+const RESEARCH_BRIEF_TIMEOUT_MS = 90_000;
+const APOLLO_EMAIL_ENRICH_CONCURRENCY = 4;
+>>>>>>> origin/main
 const DEFAULT_MAX_RUNTIME_MS = 3 * 60 * 60 * 1000;
 const FALLBACK_REPLENISHMENT_LOCATIONS = ["Berlin", "Munich", "Hamburg", "Cologne", "Stuttgart", "DACH", "Austria", "Switzerland"];
 const FALLBACK_REPLENISHMENT_KEYWORDS = ["computer vision", "machine vision", "bildverarbeitung", "industrial ai", "inspection automation", "vision systems"];
@@ -131,6 +136,7 @@ type DirectExaQueryPlanningContext = {
   dryRun?: boolean;
   learning?: LeadLearningData;
   mainContext?: string;
+  targetCategoryRefinement?: string;
   searchStrategyContext?: string;
   recentQueryHistory?: ExaQueryHistoryInsight[];
   prequalification?: PrequalificationConfig;
@@ -463,9 +469,13 @@ export class LeadPipelineAgent {
         : await this.mapWithConcurrency(
             pendingCompanies.map((company) => async () => ({
               companyKey: this.getCompanyKey(company),
-              brief: await this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
-                includeWebResearch: request.runDeepResearch !== false
-              })
+              brief: await this.withTimeout(
+                this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
+                  includeWebResearch: request.runDeepResearch !== false
+                }),
+                RESEARCH_BRIEF_TIMEOUT_MS,
+                this.buildResearchBriefTimeoutFallback(company, mainContext)
+              )
             })),
             this.outreachPrepConcurrency
           );
@@ -576,6 +586,7 @@ export class LeadPipelineAgent {
             dryRun,
             learning,
             mainContext: request.mainContext,
+            targetCategoryRefinement: request.targetCategoryRefinement,
             searchStrategyContext: request.searchStrategyContext,
             useAzureQueryPlanner: request.useAzureQueryPlanner
           }, ({ executedQueries, totalQueries, query, rawCompaniesFound }) => {
@@ -1151,6 +1162,15 @@ export class LeadPipelineAgent {
         );
     await flushQualifiedCompanies(toppedUpShortlist.slice(sortedShortlist.length), toppedUpShortlist.length);
 
+    if (shouldFinishEarly() && !hasReachedRequestedTarget()) {
+      return finalizeInterruptedRun(
+        toppedUpShortlist,
+        wasStopped()
+          ? "Run was stopped manually during top-up."
+          : "Run timed out during top-up."
+      );
+    }
+
     if (!hasReachedRequestedTarget() && !shouldFinishEarly() && !completionReason) {
       completionReason = `Die Suche endete nach ${evaluations.length}/${suggestedFilters.length} getesteten Filtern und ausgeschopfter Top-up-Suche mit ${incrementalHubspotSync.companySyncedCount} synchronisierten Firmen bei ${toppedUpShortlist.length} qualifizierten Treffern.`;
     }
@@ -1161,6 +1181,16 @@ export class LeadPipelineAgent {
       syncToHubSpot
     );
     filteredShortlist.forEach((company) => hubSpotDedupQualifiedKeys.add(this.getCompanyKey(company)));
+
+    if (shouldFinishEarly() && !hasReachedRequestedTarget()) {
+      return finalizeInterruptedRun(
+        filteredShortlist,
+        wasStopped()
+          ? "Run was stopped manually before replenishment top-up."
+          : "Run timed out before replenishment top-up."
+      );
+    }
+
     const replenishedShortlist = hasReachedRequestedTarget()
       ? filteredShortlist
       : await this.topUpWithWebDiscovery(
@@ -3198,7 +3228,7 @@ export class LeadPipelineAgent {
         const topUpDetail = `Top-up prueft Filter "${filter.name}" auf Seite ${page}/${maxPages}. Aktuell ${toppedUp.length}/${request.targetLeadCount} Ziel-Firmen gefunden.`;
         emitTopUpProgress(topUpDetail, toppedUp.length);
         const expansionBatchSize = this.getExpansionBatchSize(remainingSlots, true);
-        const discoveredFetch = await this.runWithProgressHeartbeat(
+        const discoveredFetch = await this.runWithProgressHeartbeatUntilStop(
           () => this.fetchAvailableSearchSample(
             filter,
             expansionBatchSize,
@@ -3219,8 +3249,12 @@ export class LeadPipelineAgent {
               webSearchRawCollectionMultiplier: Math.max(2, openCrawlerTuning?.rawCollectionMultiplier ?? 0)
             }
           ),
-          () => emitTopUpProgress(topUpDetail, toppedUp.length)
+          () => emitTopUpProgress(topUpDetail, toppedUp.length),
+          shouldStop
         );
+        if (!discoveredFetch) {
+          return toppedUp;
+        }
         const discoveredCompanies = discoveredFetch.companies;
         nextPageByFilter.set(filter.name, page + 1);
 
@@ -3238,14 +3272,23 @@ export class LeadPipelineAgent {
           continue;
         }
 
-        const categorizedCompanies = await this.categorizeCompanies(
-          unseenCompanies,
-          Boolean(request.dryRun),
-          mainContext,
-          prequalification,
-          targetCategories,
-          learning
+        const categorizedCompanies = await this.runWithProgressHeartbeatUntilStop(
+          () => this.categorizeCompanies(
+            unseenCompanies,
+            Boolean(request.dryRun),
+            mainContext,
+            prequalification,
+            targetCategories,
+            learning
+          ),
+          () => emitTopUpProgress(topUpDetail, toppedUp.length),
+          shouldStop,
+          5_000,
+          250
         );
+        if (!categorizedCompanies) {
+          return toppedUp;
+        }
 
         const relevantCompanies = this.getRelevantCompanies(categorizedCompanies, filter, targetCategories, request.market);
         const sizeBeforeAdd = toppedUp.length;
@@ -3282,6 +3325,59 @@ export class LeadPipelineAgent {
 
     try {
       return await operation();
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
+  private async runWithProgressHeartbeatUntilStop<T>(
+    operation: () => Promise<T>,
+    heartbeat: () => void,
+    shouldStop?: () => boolean,
+    intervalMs = 5_000,
+    stopPollMs = 250
+  ): Promise<T | null> {
+    if (!shouldStop) {
+      return this.runWithProgressHeartbeat(operation, heartbeat, intervalMs);
+    }
+
+    const timer = setInterval(() => {
+      heartbeat();
+    }, intervalMs);
+
+    const operationResult = operation()
+      .then((value) => ({ kind: "result" as const, value }))
+      .catch((error: unknown) => ({ kind: "error" as const, error }));
+
+    const stopResult = new Promise<{ kind: "stopped" }>((resolve) => {
+      if (shouldStop()) {
+        resolve({ kind: "stopped" });
+        return;
+      }
+
+      const stopTimer = setInterval(() => {
+        if (!shouldStop()) {
+          return;
+        }
+
+        clearInterval(stopTimer);
+        resolve({ kind: "stopped" });
+      }, stopPollMs);
+
+      void operationResult.finally(() => clearInterval(stopTimer));
+    });
+
+    try {
+      const winner = await Promise.race([operationResult, stopResult]);
+      if (winner.kind === "stopped") {
+        return null;
+      }
+
+      if (winner.kind === "error") {
+        throw winner.error;
+      }
+
+      return winner.value;
     } finally {
       clearInterval(timer);
     }
@@ -3520,6 +3616,14 @@ export class LeadPipelineAgent {
     );
   }
 
+  isCompanyInExecutionScope(
+    company: Pick<PreCategorizedCompany, "country" | "domain">,
+    filter: import("../types").ApolloOrganizationFilter,
+    market?: string
+  ): boolean {
+    return this.isCompanyInScope(company, filter, market);
+  }
+
   private isCompanyInScope(
     company: Pick<PreCategorizedCompany, "country" | "domain">,
     filter: import("../types").OrganizationFilter,
@@ -3673,7 +3777,11 @@ export class LeadPipelineAgent {
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
       runtimeApiKey?: string;
+<<<<<<< HEAD
       buildQueries: (filter: OrganizationFilter, page: number) => string[];
+=======
+      buildQueries: (filter: ApolloOrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
+>>>>>>> origin/main
       runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
       toExcludeDomain: (value: string | undefined) => string | undefined;
       normalizeUrl: (url: string | undefined) => string | undefined;
@@ -3704,7 +3812,9 @@ export class LeadPipelineAgent {
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
     const excludedDomainCategories = prioritizedExcludedDomains.localExcludedDomainCategories;
 
-    const defaultQueries = exaClient.buildQueries(filter, 1);
+    const defaultQueries = exaClient.buildQueries(filter, 1, {
+      targetCategoryRefinement: queryPlanningContext.targetCategoryRefinement
+    });
     const useAzureQueryPlanner = queryPlanningContext.useAzureQueryPlanner ?? true;
     const plannerQueryCount = Math.min(defaultQueries.length, Math.max(1, maxQueryCount, 4));
     let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;
@@ -3725,6 +3835,7 @@ export class LeadPipelineAgent {
             prequalification: queryPlanningContext.prequalification,
             excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
             requestedTargetCategories: targetCategories,
+            targetCategoryRefinement: queryPlanningContext.targetCategoryRefinement,
             debugCapture: (details) => {
               queryGenerationPromptMessages = details.promptMessages;
               queryPlanningContext.debugCapture?.(details);
@@ -4721,6 +4832,63 @@ export class LeadPipelineAgent {
 
   private hasNonGenericReachableContact(contacts: PublicContactCandidate[]): boolean {
     return contacts.some((contact) => Boolean(contact.email || contact.phone) && !this.isGenericFallbackContact(contact));
+  }
+
+  private buildResearchBriefTimeoutFallback(
+    company: PreCategorizedCompany,
+    mainContext?: string
+  ): ResearchBrief {
+    const likelyGermanSpeaking = ["germany", "austria", "switzerland", "de", "at", "ch"].includes(
+      company.country?.trim().toLowerCase() ?? ""
+    ) || /\.(de|at|ch)$/i.test(company.domain ?? "");
+    const outreachLanguage = likelyGermanSpeaking ? "de" as const : "en" as const;
+
+    return {
+      companyName: company.name,
+      website: company.domain,
+      appliedAgentContext: mainContext,
+      isFallback: true,
+      stillQualified: true,
+      qualificationDecisionReason: company.rationale,
+      overview: `${company.name} remains qualified based on ${company.shortDescription.toLowerCase()}.`,
+      qualificationSummary: company.rationale,
+      qualifyingSignals: [
+        `Category fit: ${company.category}`,
+        `Source filter: ${company.sourceFilter}`
+      ],
+      riskFlags: ["Research brief timed out and was replaced with a minimal fallback summary."],
+      likelyGermanSpeaking,
+      outreachLanguage,
+      rankings: {
+        customer: company.category === "industrial_end_customer_scaled" ? 7 : 6,
+        serviceProvider: company.category.startsWith("integrator_") ? 8 : 3,
+        partner: company.category.startsWith("integrator_") ? 7 : 3
+      },
+      businessPotentialEUR: company.category === "industrial_end_customer_scaled" ? 20000 : 18000,
+      businessPotentialReasoning: "Research timeout fallback used. Validate commercial fit manually before outreach.",
+      targetIndustry: company.category === "industrial_end_customer_scaled" ? "Industrial Manufacturing" : "Industrial Automation",
+      productsOffered: company.shortDescription,
+      recommendedTemplateKey: company.category,
+      personalizationRule: "Use only verified factual hooks from the company description and domain.",
+      linkedInAngle: "Check whether faster, lower-friction Vision-AI delivery would matter for current projects.",
+      linkedInConnectionRequest: outreachLanguage === "de"
+        ? "Kurze Frage: Ist Vision AI fuer aktuelle Projekte oder Qualitaetskontrolle bei Ihnen relevant?"
+        : "Quick question: is vision AI relevant for current projects or quality control on your side?",
+      emailAngle: "Keep the outreach factual and mention reduced trial-and-error only if relevant.",
+      phoneAngle: "Lead with the operational bottleneck and verify relevance first.",
+      linkedInMessage: outreachLanguage === "de"
+        ? "Kurze Frage: Ist Vision AI fuer aktuelle Projekte oder Qualitaetskontrolle bei Ihnen relevant? Wenn ja, koennte ONE WARE die Umsetzung deutlich planbarer machen."
+        : "Quick question: is vision AI relevant for current projects or quality control on your side? If yes, ONE WARE may make delivery much more predictable.",
+      emailSubject: outreachLanguage === "de"
+        ? "Vision-AI-Projekte planbarer umsetzen"
+        : "Make vision-AI projects more predictable",
+      emailBody: outreachLanguage === "de"
+        ? "Hallo [Name],\n\nwir sehen oft, dass Vision-AI-Projekte an Datenqualitaet, Iterationen und Lieferaufwand haengen bleiben. Wenn das bei Ihnen relevant ist, kann ONE WARE helfen, Modelle schneller und planbarer produktionsreif zu bekommen.\n\nWaere ein kurzer Austausch sinnvoll?\n\nMit freundlichen Gruessen\n[Ihr Name]"
+        : "Hello [Name],\n\nwe often see vision-AI projects slow down because of data quality, repeated iteration, and delivery overhead. If that is relevant for you, ONE WARE may help get models production-ready faster and with more predictable effort.\n\nWould a short exchange make sense?\n\nBest regards,\n[Your Name]",
+      phoneScript: outreachLanguage === "de"
+        ? "Hallo Herr/Frau [Name], hier ist [Ihr Name] von ONE WARE. Ich wollte kurz fragen, ob Vision AI oder automatisierte Qualitaetskontrolle aktuell ein Thema ist. Wenn ja, koennte unsere Software helfen, Projekte schneller produktionsreif zu bekommen."
+        : "Hello Mr./Ms. [Name], this is [Your Name] from ONE WARE. I wanted to ask whether vision AI or automated quality control is currently relevant. If yes, our software may help get projects production-ready faster."
+    };
   }
 
   private mergeContactCandidates(

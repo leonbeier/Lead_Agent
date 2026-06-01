@@ -62,6 +62,7 @@ type SettingsPayload = {
   settings?: {
     targetLeadCount?: number;
     market?: string;
+    targetCategoryRefinement?: string;
     targetCategories?: string[];
     companySearchMode?: "internet_research" | "open_crawler_search" | "apollo_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
     syncToHubSpot?: boolean;
@@ -303,6 +304,7 @@ function normalizeSidebarSearchMode(
 function buildSidebarSettingsPayload(input: {
   targetLeadCount: number;
   market: string;
+  targetCategoryRefinement: string;
   selectedCategories: string[];
   companySearchMode: SidebarSearchMode;
   syncToHubSpot: boolean;
@@ -317,6 +319,7 @@ function buildSidebarSettingsPayload(input: {
   return {
     targetLeadCount: Math.max(input.targetLeadCount, SIDEBAR_DEFAULT_TARGET_LEADS),
     market: input.market,
+    targetCategoryRefinement: input.targetCategoryRefinement.trim(),
     targetCategories: input.selectedCategories,
     companySearchMode: input.companySearchMode,
     syncToHubSpot: input.syncToHubSpot,
@@ -339,6 +342,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const [targetLeadCount, setTargetLeadCount] = React.useState<number>(SIDEBAR_DEFAULT_TARGET_LEADS);
   const [market, setMarket] = React.useState<string>("Europe");
   const [companySearchMode, setCompanySearchMode] = React.useState<SidebarSearchMode>("exa_search");
+  const [targetCategoryRefinement, setTargetCategoryRefinement] = React.useState<string>("");
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
   const [latestFoundCandidates, setLatestFoundCandidates] = React.useState<number | null>(null);
   const [runStatus, setRunStatus] = React.useState<RunStatusPayload["runStatus"]>({ running: false });
@@ -415,6 +419,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const currentSettingsPayload = React.useMemo(() => buildSidebarSettingsPayload({
     targetLeadCount,
     market,
+    targetCategoryRefinement,
     selectedCategories,
     companySearchMode,
     syncToHubSpot,
@@ -437,6 +442,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
     outreachPrepConcurrency,
     selectedCategories,
     syncToHubSpot,
+    targetCategoryRefinement,
     targetLeadCount
   ]);
 
@@ -486,6 +492,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         setTargetLeadCount(Math.max(settingsPayload.settings?.targetLeadCount ?? SIDEBAR_DEFAULT_TARGET_LEADS, SIDEBAR_DEFAULT_TARGET_LEADS));
         setMarket(settingsPayload.settings?.market ?? "Europe");
         setCompanySearchMode(normalizeSidebarSearchMode(settingsPayload.settings?.companySearchMode));
+        setTargetCategoryRefinement(settingsPayload.settings?.targetCategoryRefinement ?? "");
         setSyncToHubSpot(settingsPayload.settings?.syncToHubSpot ?? true);
         setExaQueryCount(settingsPayload.settings?.exaQueryCount ?? SIDEBAR_DEFAULT_EXA_QUERY_COUNT);
         setExaApiKey(settingsPayload.settings?.exaApiKey ?? "");
@@ -498,6 +505,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         lastSavedSettingsRef.current = JSON.stringify(buildSidebarSettingsPayload({
           targetLeadCount: Math.max(settingsPayload.settings?.targetLeadCount ?? SIDEBAR_DEFAULT_TARGET_LEADS, SIDEBAR_DEFAULT_TARGET_LEADS),
           market: settingsPayload.settings?.market ?? "Europe",
+          targetCategoryRefinement: settingsPayload.settings?.targetCategoryRefinement ?? "",
           selectedCategories: settingsPayload.settings?.targetCategories ?? [],
           companySearchMode: normalizeSidebarSearchMode(settingsPayload.settings?.companySearchMode),
           syncToHubSpot: settingsPayload.settings?.syncToHubSpot ?? true,
@@ -659,6 +667,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         body: {
           targetLeadCount,
           market,
+          targetCategoryRefinement: targetCategoryRefinement.trim() || undefined,
           targetCategories: selectedCategories,
           companySearchMode,
           creditLessMode: true,
@@ -994,6 +1003,14 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
             {category.label}
           </Checkbox>
         ))}
+        <TextArea
+          label="Zusatzfilter innerhalb der Kundentypen"
+          name="targetCategoryRefinement"
+          value={targetCategoryRefinement}
+          onChange={setTargetCategoryRefinement}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+          placeholder="Optional, z. B. im Food Produktionssektor"
+        />
       </Flex>
       <ButtonRow disableDropdown={true}>
         <LoadingButton

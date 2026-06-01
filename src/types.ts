@@ -145,6 +145,7 @@ export interface LeadAgentSettings {
   targetLeadCount: number;
   market: string;
   mainContext?: string;
+  targetCategoryRefinement?: string;
   searchStrategyContext?: string;
   searchStrategyPreset?: SearchStrategyPreset;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
@@ -419,6 +420,7 @@ export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
   mainContext?: string;
+  targetCategoryRefinement?: string;
   searchStrategyContext?: string;
   searchStrategyPreset?: SearchStrategyPreset;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;

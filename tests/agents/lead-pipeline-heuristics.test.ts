@@ -198,6 +198,139 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
 
+<<<<<<< HEAD
+=======
+test("top-up returns immediately when stop is requested during a stuck web discovery fetch", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  let stopRequested = false;
+
+  agent.fetchAvailableSearchSample = async () => new Promise<never>(() => {});
+
+  const currentShortlist: PreCategorizedCompany[] = [{
+    name: "Robofunktion Vision GmbH",
+    domain: "https://robofunktion.example",
+    country: "Germany",
+    shortDescription: "Machine vision integration for industrial customers.",
+    sourceFilter: "Germany Vision Integrators",
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 91,
+    rationale: "Strong delivery ownership for machine vision projects."
+  }];
+
+  const filter = {
+    name: "Germany Vision Integrators",
+    persona: "Integrator",
+    industries: ["Industrial Automation"],
+    keywords: ["machine vision integrator"],
+    locations: ["Germany"],
+    employeeRanges: ["11,50"],
+    targetCategories: ["integrator_vision_industrial_ai"],
+    notes: "debug"
+  };
+
+  const topUpPromise = agent.topUpWithWebDiscovery(
+    currentShortlist,
+    new Set([agent.getCompanyKey(currentShortlist[0])]),
+    [filter],
+    [],
+    {
+      targetLeadCount: 2,
+      market: "Germany",
+      dryRun: false,
+      companySearchMode: "open_crawler_search",
+      syncToHubSpot: true,
+      disableHubSpotDeduplication: false
+    },
+    undefined,
+    undefined,
+    ["integrator_vision_industrial_ai"],
+    { filterPerformance: {}, searchHistory: [], modes: {} },
+    undefined,
+    () => {},
+    () => currentShortlist.length,
+    () => false,
+    () => stopRequested
+  );
+
+  setTimeout(() => {
+    stopRequested = true;
+  }, 20);
+
+  const toppedUp = await topUpPromise;
+  assert.deepEqual(toppedUp, currentShortlist);
+});
+
+test("apollo contact fallback errors do not abort collection", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  const company: PreCategorizedCompany = {
+    name: "Fallback Systems GmbH",
+    domain: "https://fallback-systems.example",
+    country: "Germany",
+    shortDescription: "Industrial software integration.",
+    sourceFilter: "Debug filter",
+    category: "integrator_general_ai",
+    relevanceScore: 74,
+    rationale: "Strong delivery fit."
+  };
+
+  agent.apolloClient.searchContactsForCompany = async () => {
+    throw new Error("Apollo timed out");
+  };
+
+  const result = await agent.collectApolloContacts(
+    [company],
+    [{
+      companyName: company.name,
+      overview: "Overview",
+      qualificationSummary: "Qualified.",
+      qualifyingSignals: [],
+      riskFlags: [],
+      likelyGermanSpeaking: true,
+      outreachLanguage: "de",
+      rankings: { customer: 0, serviceProvider: 0, partner: 0 },
+      businessPotentialEUR: 0,
+      businessPotentialReasoning: "",
+      targetIndustry: "",
+      productsOffered: "",
+      recommendedTemplateKey: "integrator_general_ai_template",
+      personalizationRule: "",
+      linkedInAngle: "",
+      emailAngle: "",
+      phoneAngle: "",
+      linkedInMessage: "",
+      emailSubject: "",
+      emailBody: "",
+      phoneScript: ""
+    }],
+    false,
+    ""
+  );
+
+  assert.deepEqual(result.get("fallback-systems.example"), []);
+});
+
+test("research brief timeout fallback keeps required outreach fields", () => {
+  const agent = new LeadPipelineAgent() as any;
+
+  const fallback = agent.buildResearchBriefTimeoutFallback({
+    name: "Fallback Systems GmbH",
+    domain: "https://fallback-systems.de",
+    country: "Germany",
+    shortDescription: "Industrial software and automation integration.",
+    sourceFilter: "Debug filter",
+    category: "integrator_relevant_focus",
+    relevanceScore: 74,
+    rationale: "Strong delivery fit."
+  }, "Main context") as ResearchBrief;
+
+  assert.equal(fallback.isFallback, true);
+  assert.equal(fallback.outreachLanguage, "de");
+  assert.match(fallback.emailSubject, /Vision|planbarer/i);
+  assert.ok(fallback.linkedInMessage.length > 0);
+  assert.ok(fallback.phoneScript.length > 0);
+});
+
+>>>>>>> origin/main
 test("direct exa path can skip Azure query planning when explicitly disabled", async () => {
   const agent = new LeadPipelineAgent() as any;
   let plannerCalls = 0;

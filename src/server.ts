@@ -252,8 +252,11 @@ function clearStaleLeadRunStatusIfNeeded(): void {
     ? (leadRunStatus.workerMetrics as { queueSizes?: Record<string, unknown> }).queueSizes
     : undefined;
   const hasActiveWorkerQueue = Boolean(queueSizes) && Object.values(queueSizes ?? {}).some((value) => Number(value ?? 0) > 0);
+  const isLegacyRun = leadRunStatus.runVariant === "legacy";
 
-  if (activeLeadRunAbortController && hasActiveWorkerQueue) {
+  // Legacy runs do not publish worker queue metrics; as long as the active run controller exists,
+  // keep the run alive and avoid stale auto-release.
+  if (activeLeadRunAbortController && (hasActiveWorkerQueue || isLegacyRun)) {
     return;
   }
 
@@ -367,6 +370,7 @@ const leadJobSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000),
   market: z.string().optional(),
   mainContext: z.string().max(12000).optional(),
+  targetCategoryRefinement: z.string().max(4000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
   searchStrategyPreset: z.enum(["default", "optimized_vision_integrators"]).optional(),
   companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]).optional(),
@@ -401,6 +405,7 @@ const settingsUpdateSchema = z.object({
   targetLeadCount: z.coerce.number().int().positive().max(1000).optional(),
   market: z.string().min(1).optional(),
   mainContext: z.string().max(12000).optional(),
+  targetCategoryRefinement: z.string().max(4000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
   searchStrategyPreset: z.enum(["default", "optimized_vision_integrators"]).optional(),
   companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]).optional(),
@@ -450,6 +455,7 @@ const debugConsoleRequestSchema = z.object({
   stage: z.enum(["company_search", "ai_prefilter", "outreach_prep", "contact_discovery"]).default("contact_discovery"),
   targetCategory: selectableCategorySchema.optional(),
   targetCategories: z.array(selectableCategorySchema).min(1).optional(),
+  targetCategoryRefinement: z.string().max(4000).optional(),
   region: z.string().max(160).optional(),
   companySearchMode: z.enum(["exa_search", "diffbot_search"]).default("exa_search"),
   exaQueryCount: z.coerce.number().int().min(1).max(50).optional(),
@@ -527,6 +533,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     targetLeadCount: body.targetLeadCount ?? settings.targetLeadCount ?? env.DEFAULT_TARGET_LEADS,
     market: body.market ?? settings.market ?? env.DEFAULT_MARKET,
     mainContext: body.mainContext ?? settings.mainContext,
+    targetCategoryRefinement: body.targetCategoryRefinement ?? settings.targetCategoryRefinement,
     searchStrategyContext: body.searchStrategyContext ?? presetSearchStrategyContext ?? settings.searchStrategyContext,
     searchStrategyPreset,
     companySearchMode,
