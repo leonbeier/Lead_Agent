@@ -56,7 +56,9 @@ const envSchema = z.object({
     .string()
     .transform((value) => value.toLowerCase() === "true")
     .default("false"),
-  AZURE_RESEARCH_ENDPOINT: z.string().optional()
+  AZURE_RESEARCH_ENDPOINT: z.string().optional(),
+  APOLLO_API_KEY: z.string().optional(),
+  APOLLO_BASE_URL: z.string().url().default("https://api.apollo.io/api/v1")
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -101,6 +103,7 @@ export const azureOpenAICostConfig = {
 
 export const readiness = {
   sharedKeyConfigured: Boolean(env.LEAD_AGENT_SHARED_KEY),
+  apolloConfigured: Boolean(env.APOLLO_API_KEY),
   hubspotConfigured: Boolean(env.HUBSPOT_PRIVATE_APP_TOKEN),
   hubspotOAuthConfigured: Boolean(env.HUBSPOT_CLIENT_ID && env.HUBSPOT_CLIENT_SECRET),
   openAIWebSearchConfigured: Boolean(env.OPENAI_WEB_SEARCH_ENABLED && env.OPENAI_API_KEY),

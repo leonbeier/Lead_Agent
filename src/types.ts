@@ -13,7 +13,7 @@ export type LeadCategory =
 
 export type SelectableLeadCategory = Exclude<LeadCategory, "irrelevant" | "other">;
 
-export type CompanySearchMode = "internet_research" | "open_crawler_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
+export type CompanySearchMode = "internet_research" | "open_crawler_search" | "apollo_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
 export type SearchStrategyPreset = "default" | "optimized_vision_integrators";
 
 export interface EditablePrequalificationCategoryContext {
@@ -131,6 +131,21 @@ export interface PublicContactCandidate {
   linkedinConnectionCount?: number;
   sourceQuery?: string;
   sourceSnippet?: string;
+}
+
+export interface ApolloContactCandidate {
+  personId: string;
+  firstName?: string;
+  lastName?: string;
+  name: string;
+  title?: string;
+  seniority?: string;
+  departments?: string[];
+  functions?: string[];
+  organizationId?: string;
+  organizationName?: string;
+  linkedinUrl?: string;
+  hasEmail?: boolean;
 }
 
 export interface AzureUsageCost {
