@@ -34,7 +34,7 @@ export interface PrequalificationConfig {
   categoryContexts?: Partial<Record<SelectableLeadCategory, EditablePrequalificationCategoryContext>>;
 }
 
-export interface ApolloOrganizationFilter {
+export interface OrganizationFilter {
   name: string;
   persona: string;
   industries: string[];
@@ -533,7 +533,7 @@ export interface LeadRunProgress {
 
 export interface LeadJobResult {
   requested: LeadJobRequest;
-  suggestedFilters: ApolloOrganizationFilter[];
+  suggestedFilters: OrganizationFilter[];
   evaluations: FilterEvaluation[];
   shortlistedCompanies: PreCategorizedCompany[];
   researchBriefs: ResearchBrief[];

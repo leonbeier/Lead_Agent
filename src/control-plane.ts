@@ -13,7 +13,7 @@ import {
   OutreachTemplate
 } from "./prompting/one-ware-playbook";
 import {
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
   CompanyFeedbackEntry,
@@ -49,7 +49,7 @@ const templatesPath = path.join(dataDirectory, "outreach-templates.json");
 const learningPath = path.join(dataDirectory, "lead-agent-learning.json");
 const latestLeadRunPath = path.join(dataDirectory, "latest-lead-run.json");
 const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-review.json");
-const apolloSearchCursorPath = path.join(dataDirectory, "apollo-search-cursors.json");
+const searchCursorPath = path.join(dataDirectory, "search-cursors.json");
 const companyScreeningDatabasePath = path.join(dataDirectory, "company-screening-database.json");
 const testLabExaCachePath = path.join(dataDirectory, "testlab-exa-cache.json");
 const liveExaCachePath = path.join(dataDirectory, "live-exa-cache.json");
@@ -74,8 +74,7 @@ const settingsSchema = z.object({
   targetCategoryRefinement: z.string().max(4000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
   searchStrategyPreset: z.enum(["default", "optimized_vision_integrators"]).optional(),
-  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
-  creditLessMode: z.boolean(),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
   prequalification: z.object({
     mainContext: z.string().max(6000).optional(),
     categoryContexts: z.object({
@@ -251,8 +250,7 @@ const leadCategorySchema = z.enum([
 
 const searchHistoryEntrySchema = z.object({
   timestamp: z.string().min(1),
-  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
-  filterName: z.string().min(1),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]),
   filterSnapshot: z.object({
     persona: z.string().min(1),
     industries: z.array(z.string().min(1)),
@@ -367,7 +365,7 @@ const latestLeadRunSchema = z.object({
   }).optional()
 });
 
-const apolloSearchCursorSchema = z.record(z.object({
+const searchCursorSchema = z.record(z.object({
   nextPage: z.number().int().positive(),
   updatedAt: z.string().min(1)
 }));
@@ -685,13 +683,13 @@ export class ControlPlaneStore {
     await ensureFile(learningPath, defaultLearning);
     await ensureFile(latestLeadRunPath, defaultLatestLeadRun);
     await ensureFile(latestOutreachReviewPath, defaultLatestLeadRun);
-    await ensureFile(apolloSearchCursorPath, {});
+    await ensureFile(searchCursorPath, {});
     await ensureFile(companyScreeningDatabasePath, defaultCompanyScreeningDatabase);
     await ensureFile(testLabExaCachePath, defaultTestLabExaCache);
     await ensureFile(liveExaCachePath, defaultLiveExaCache);
   }
 
-  private getApolloSearchCursorKey(filter: ApolloOrganizationFilter): string {
+  private getSearchCursorKey(filter: OrganizationFilter): string {
     return JSON.stringify({
       persona: filter.persona,
       industries: [...filter.industries].sort(),
@@ -732,7 +730,7 @@ export class ControlPlaneStore {
       ...defaultSettings,
       ...settings,
       companySearchMode: normalizedCompanySearchMode,
-      creditLessMode: normalizedCompanySearchMode !== "apollo_search",
+      creditLessMode: true,
       prequalification: normalizedPrequalification,
       executionContexts: normalizedExecutionContexts,
       targetCategories: normalizedTargetCategories,
@@ -744,16 +742,12 @@ export class ControlPlaneStore {
   async updateSettings(input: Partial<LeadAgentSettings>): Promise<LeadAgentSettings> {
     const currentSettings = await this.getSettings();
     const parsedInput = settingsUpdateSchema.parse(input);
-    const normalizedCompanySearchMode = parsedInput.companySearchMode ?? (
-      typeof parsedInput.creditLessMode === "boolean"
-        ? (parsedInput.creditLessMode ? "internet_research" : "apollo_search")
-        : currentSettings.companySearchMode
-    );
+    const normalizedCompanySearchMode = parsedInput.companySearchMode ?? currentSettings.companySearchMode;
     const nextSettings = settingsSchema.parse({
       ...currentSettings,
       ...parsedInput,
       companySearchMode: normalizedCompanySearchMode,
-      creditLessMode: normalizedCompanySearchMode !== "apollo_search"
+      creditLessMode: true
     });
 
     await writeJsonFile(settingsPath, nextSettings);
@@ -1000,27 +994,27 @@ export class ControlPlaneStore {
     return defaultLiveExaCache;
   }
 
-  async getApolloSearchCursor(filter: ApolloOrganizationFilter): Promise<number> {
+  async getSearchCursor(filter: OrganizationFilter): Promise<number> {
     await this.ensureSeedData();
-    const cursorMap = apolloSearchCursorSchema.parse(
-      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(apolloSearchCursorPath)
+    const cursorMap = searchCursorSchema.parse(
+      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(searchCursorPath)
     );
 
-    return cursorMap[this.getApolloSearchCursorKey(filter)]?.nextPage ?? 1;
+    return cursorMap[this.getSearchCursorKey(filter)]?.nextPage ?? 1;
   }
 
-  async updateApolloSearchCursor(filter: ApolloOrganizationFilter, nextPage: number): Promise<void> {
+  async updateSearchCursor(filter: OrganizationFilter, nextPage: number): Promise<void> {
     await this.ensureSeedData();
-    const cursorMap = apolloSearchCursorSchema.parse(
-      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(apolloSearchCursorPath)
+    const cursorMap = searchCursorSchema.parse(
+      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(searchCursorPath)
     );
 
-    cursorMap[this.getApolloSearchCursorKey(filter)] = {
+    cursorMap[this.getSearchCursorKey(filter)] = {
       nextPage: Math.max(1, nextPage),
       updatedAt: new Date().toISOString()
     };
 
-    await writeJsonFile(apolloSearchCursorPath, cursorMap);
+    await writeJsonFile(searchCursorPath, cursorMap);
   }
 
   async recordCompanyFeedback(input: Omit<CompanyFeedbackEntry, "createdAt">): Promise<LeadLearningData> {

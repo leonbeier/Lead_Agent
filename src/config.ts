@@ -15,8 +15,6 @@ const envSchema = z.object({
   DEFAULT_TARGET_LEADS: z.coerce.number().int().positive().default(50),
   LEAD_AGENT_SHARED_KEY: z.string().min(24),
   LEAD_AGENT_PUBLIC_BASE_URL: z.string().url().optional(),
-  APOLLO_API_KEY: z.string().optional(),
-  APOLLO_BASE_URL: z.string().url().default("https://api.apollo.io/api/v1"),
   HUBSPOT_PRIVATE_APP_TOKEN: z.string().optional(),
   HUBSPOT_CLIENT_ID: z.string().optional(),
   HUBSPOT_CLIENT_SECRET: z.string().optional(),
@@ -58,7 +56,9 @@ const envSchema = z.object({
     .string()
     .transform((value) => value.toLowerCase() === "true")
     .default("false"),
-  AZURE_RESEARCH_ENDPOINT: z.string().optional()
+  AZURE_RESEARCH_ENDPOINT: z.string().optional(),
+  APOLLO_API_KEY: z.string().optional(),
+  APOLLO_BASE_URL: z.string().url().default("https://api.apollo.io/api/v1")
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

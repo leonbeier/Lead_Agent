@@ -199,12 +199,13 @@ Der Nutzen liegt vor allem in drei Bereichen:
 
 ### Welche Rolle die externen Systeme spielen
 
-Aus fachlicher Sicht arbeiten vier externe Bausteine zusammen:
+Aus fachlicher Sicht arbeiten drei externe Bausteine zusammen:
 
-- Apollo fuer die Firmensuche, wenn der normale Live-Pfad verfuegbar ist
-- OpenAI Web Search fuer Unternehmensrecherche und als Ausweichpfad, wenn Apollo nicht genutzt wird
+- Web Scraper und AI Agent fuer die Firmensuche und Kontaktfindung ueber oeffentliche Quellen
 - Azure OpenAI oder Azure AI Foundry fuer die intelligenten Bewertungs- und Research-Schritte
 - HubSpot als Steuerungs-, Anzeige- und Zielsystem fuer Ergebnisse
+
+Fuer die Kontaktfindung gilt: Zuerst werden oeffentliche Firmenseiten gecrawlt und mit einem AI Agent ausgewertet. Anschliessend wird eine Browser-Suche mit LinkedIn-Filter eingesetzt, um relevante Personen auf LinkedIn fuer die jeweilige Firma zu finden.
 
 Fuer Nicht-Entwickler ist vor allem wichtig: Diese Systeme werden nicht isoliert benutzt, sondern als zusammenhaengender Entscheidungsprozess.
 
@@ -318,24 +319,20 @@ Danach kann die Pipeline die Filters erweitern oder umsortieren:
 
 Das Learning beeinflusst also nicht nur Reporting, sondern die Reihenfolge der Filterbearbeitung direkt.
 
-### 4. Firmenquelle: Apollo zuerst, Web Search als Fallback
+### 4. Firmenquelle: Web Scraper und AI Agent
 
-Die Firmenbeschaffung laeuft ueber `ApolloClient.fetchOrganizationSample()` in `src/clients/apollo.ts`.
+Die Firmenbeschaffung laeuft ausschliesslich ueber den `WebSearchAgent` in `src/clients/web-search-agent.ts`.
 
 Der Pfad wird zur Laufzeit so entschieden:
 
 1. `dryRun=true`
    - es werden synthetische Firmensamples erzeugt
    - keine externe API wird aufgerufen
-2. `creditLessMode=true` oder kein `APOLLO_API_KEY`
-   - direkte Firmenfindung ueber `WebSearchAgent`
-   - intern `OpenAIWebSearchClient.discoverCompanies()`
-3. normaler Live-Pfad
-   - Apollo `mixed_companies/search`
-   - falls noetig Fallback auf `organizations/search`
-   - bei Credit-Problemen ebenfalls Fallback auf Web Search
+2. normaler Live-Pfad
+   - Firmenfindung ueber Web Scraper und AI Agent (`OpenAIWebSearchClient`, `OpenCrawlerSearchClient`, `ExaSearchClient`)
+   - je nach `companySearchMode` wird `internet_research`, `open_crawler_search` oder `exa_search` verwendet
 
-Zusaetzlich werden duerftige Apollo-Beschreibungen mit `summarizeCompany()` nachangereichert, ebenfalls ueber den OpenAI-Web-Search-Pfad.
+Duerftige Beschreibungen werden mit `summarizeCompany()` nachangereichert, ebenfalls ueber den Web-Search-Pfad.
 
 ### 5. Prequalification: lokale Regeln vor LLM vor Segment-Filterung
 
@@ -388,7 +385,7 @@ Dabei greifen mehrere Sicherungen:
 - falls nach dem Hauptlauf zu wenig Kandidaten uebrig sind, fuellt `topUpWithWebDiscovery()` mit Web-Search-Ergebnissen auf
 - vor dem finalen Ergebnis werden bestehende HubSpot-Domains entfernt
 
-Die Shortlist ist also das Ergebnis aus Probe + Expansion + Web Top-Up + CRM-Dedupe, nicht nur aus einem einzigen Apollo-Call.
+Die Shortlist ist also das Ergebnis aus Probe + Expansion + Web Top-Up + CRM-Dedupe.
 
 ### 8. Research und Outreach-Ableitung
 
@@ -425,17 +422,18 @@ Der Output enthaelt unter anderem:
 
 ### 9. Contact Discovery
 
-Nach der Firmenauswahl sammelt die Pipeline oeffentlich sichtbare Kontakte. Diese Logik sitzt nicht in einem separaten People-Provider, sondern direkt im `HubSpotClient`.
+Nach der Firmenauswahl sammelt die Pipeline oeffentlich sichtbare Kontakte. Diese Logik sitzt direkt im `HubSpotClient`.
 
-`findPublicContacts()` arbeitet so:
+Die Kontaktfindung laeuft in zwei Stufen:
 
-1. Root-Domain der Firma normalisieren
-2. relevante Seiten wie `contact`, `kontakt`, `impressum`, `about`, `team`, `management` crawlen
-3. oeffentliche Firmen-E-Mails und Telefonnummern extrahieren
-4. nur Domain-passende Firmenmails behalten
-5. Low-Value- oder generische Mailboxen abwerten
+1. **Web Scraper**: `findPublicContacts()` crawlt die Firmenseite
+   - Root-Domain der Firma normalisieren
+   - relevante Seiten wie `contact`, `kontakt`, `impressum`, `about`, `team`, `management` crawlen
+   - oeffentliche Firmen-E-Mails und Telefonnummern extrahieren
+   - nur Domain-passende Firmenmails behalten
+   - Low-Value- oder generische Mailboxen abwerten
 
-In `creditLessMode` wird diese Stufe bewusst uebersprungen.
+2. **Browser-Suche mit LinkedIn-Filter**: Ein AI Agent fuehrt anschliessend Browser-Suchen mit `site:linkedin.com/in` durch, um Personen auf LinkedIn fuer die jeweilige Firma zu finden. Dabei werden Entscheidungstraeger priorisiert (CEO, CTO, Head of Engineering usw.).
 
 ### 10. HubSpot-Sync
 
@@ -533,10 +531,9 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 | API / Dienst | Datei | Aufgabe | Wann aktiv |
 | --- | --- | --- | --- |
 | Express | `src/server.ts` | HTTP-API, UI-Auslieferung, Shared-Key-Schutz | immer |
-| Apollo API | `src/clients/apollo.ts` | Firmensamples fuer Filter | wenn `dryRun=false`, `creditLessMode=false` und `APOLLO_API_KEY` vorhanden |
-| OpenAI Responses Web Search | `src/clients/openai-web-search.ts` | Firmenfindung ohne Apollo, Firmen-Summary, Research-Evidence | wenn `OPENAI_WEB_SEARCH_ENABLED=true` und `OPENAI_API_KEY` vorhanden |
+| OpenAI Responses Web Search | `src/clients/openai-web-search.ts` | Firmenfindung, Kontaktfindung, Firmen-Summary, Research-Evidence | wenn `OPENAI_WEB_SEARCH_ENABLED=true` und `OPENAI_API_KEY` vorhanden |
 | Azure OpenAI | `src/clients/azure-openai.ts` | Filterstrategie, Klassifikation, Research-Briefs, Filterrevision | wenn `AZURE_OPENAI_API_KEY` und `AZURE_OPENAI_ENDPOINT` vorhanden |
-| Azure AI Foundry Agents | `src/clients/foundry-agents.ts` | optionale Agenten fuer Filter, Qualification und Research | wenn `FOUNDRY_PROJECT_ENDPOINT` gesetzt und jeweilige `FOUNDRY_USE_AGENT_*` Flags aktiv sind |
+| Azure AI Foundry Agents | `src/clients/foundry-agents.ts` | optionale Agenten fuer Filter, Qualification, Research und Kontaktfindung | wenn `FOUNDRY_PROJECT_ENDPOINT` gesetzt und jeweilige `FOUNDRY_USE_AGENT_*` Flags aktiv sind |
 | HubSpot CRM API | `src/clients/hubspot.ts` | Company/Contact Upsert und Association | wenn `HUBSPOT_PRIVATE_APP_TOKEN` vorhanden und Sync nicht im Dry-Run ist |
 
 ### Tatsaechliche Fallback-Ketten
@@ -544,9 +541,7 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 ### Firmenfindung
 
 1. Dry-Run-Sample
-2. Apollo Live
-3. Apollo Endpoint-Fallback
-4. OpenAI Web Search
+2. Web Scraper und AI Agent (internet_research, open_crawler_search oder exa_search)
 
 ### Filterstrategie
 
@@ -580,7 +575,7 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 | `src/filters.ts` | deterministische Basisfilter |
 | `src/types.ts` | gemeinsame Vertragsflaechen fuer Requests, Ergebnisse und Persistenz |
 | `src/prompting/one-ware-playbook.ts` | Main Context, Prequalification, Execution Contexts, Templates |
-| `src/clients/apollo.ts` | Firmenbeschaffung und Apollo/Web-Fallback |
+| `src/clients/company-search.ts` | Firmenbeschaffung ueber Web Scraper und AI Agent |
 | `src/clients/azure-openai.ts` | zentraler LLM-Orchestrator fuer Chat-basierte Stufen |
 | `src/clients/foundry-agents.ts` | optionaler Agentenpfad fuer Azure AI Foundry |
 | `src/clients/openai-web-search.ts` | OpenAI Responses Web Search fuer Firmenebene |
@@ -614,7 +609,7 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 
 ### Templates und Kontexte
 
-- `GET /api/apollo/filter-presets`
+- `GET /api/filter-presets`
 - `GET /api/outreach/templates`
 - `PUT /api/outreach/templates/:key`
 - `GET /api/outreach/contexts`
@@ -638,11 +633,6 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 - `LEAD_AGENT_PUBLIC_BASE_URL`
 - `DEFAULT_MARKET`
 - `DEFAULT_TARGET_LEADS`
-
-### Apollo
-
-- `APOLLO_API_KEY`
-- `APOLLO_BASE_URL`
 
 ### OpenAI Web Search
 
@@ -676,9 +666,9 @@ Historische Filterperformance und frueheres Feedback werden in mehreren KI-Stufe
 
 1. `dryRun=true` bedeutet nicht nur "kein HubSpot Sync", sondern schaltet praktisch alle externen Live-Pfade auf Mock/Fallback um.
 2. `runDeepResearch=false` bedeutet nicht "kein Research", sondern "Research ohne Web-Evidence".
-3. `creditLessMode=true` verschiebt die Firmenfindung weg von Apollo hin zu OpenAI Web Search.
+3. `creditLessMode` ist ein Legacyfeld und hat keine Funktion mehr; die Firmenfindung laeuft immer ueber Web Scraper und AI Agent.
 4. Learning beeinflusst Priorisierung und Prompting, nicht nur das Reporting.
-5. Contact Discovery passiert im aktuellen Code ueber oeffentlich sichtbare Firmenseiten, nicht ueber einen separaten Contact-Provider.
+5. Contact Discovery laeuft in zwei Stufen: zuerst Web Scraper ueber oeffentliche Firmenseiten, dann Browser-Suche mit LinkedIn-Filter.
 6. Der HubSpot-Sync ist property-aware und schreibt nur Felder, die im Zielportal existieren.
 
 ### Lokal starten
@@ -734,24 +724,24 @@ Die README oben bildet jetzt den tatsaechlichen Codepfad ab. Fuer neue Features 
 
 Der Workflow ist in vier Stufen aufgeteilt:
 
-1. Apollo Filter Agent: erzeugt und testet Filter-Sets fuer relevante Firmenlisten.
-2. Pre-Categorization Agent: bewertet 50er-Samples und looped mit neuen Filterideen zurueck nach Apollo.
+1. Filter Agent: erzeugt und testet Filter-Sets fuer relevante Firmenlisten.
+2. Pre-Categorization Agent: bewertet 50er-Samples und looped mit neuen Filterideen zurueck.
 3. Deep Research Agent: erstellt Firmen-Overview, finale Qualifikation und Outreach-Vorbereitung fuer LinkedIn, E-Mail und Telefon.
 4. HubSpot Sync Agent: schreibt qualifizierte Ergebnisse in HubSpot.
 
 ## Was schon vorbereitet ist
 
 - Express API fuer Triggering aus HubSpot oder einem internen Operator-UI
-- vordefinierte Apollo Filter-Presets fuer eure ICP-Hypothesen
+- vordefinierte Filter-Presets fuer eure ICP-Hypothesen
 - Kategorien fuer die Qualifikation
 - ein zentraler One-WARE-Prompt- und Template-Layer fuer Qualifizierung und Outreach
 - orchestrierte Pipeline mit Dry-Run-Modus ohne API-Keys
-- vorbereitete Stellen fuer Apollo-, Azure- und HubSpot-Clients
+- vorbereitete Stellen fuer Azure- und HubSpot-Clients
 
 ## Beispielablauf
 
 1. HubSpot oder ein internes UI sendet `targetLeadCount`, `market`, optionale `prequalificationContext` und `targetCategories` an `POST /api/hubspot/workflow-trigger`.
-2. Das Backend erzeugt passende Apollo Filter-Vorschlaege.
+2. Das Backend erzeugt passende Filter-Vorschlaege.
 3. Fuer jedes Filter-Set werden erst 5 bis 15 Firmen schnell angeprueft; nur bei gutem Signal wird bis 50 erweitert.
 4. Eine Vorqualifikation zaehlt relevante Kategorien, bricht schwache Filter frueh ab und bewertet die Filterqualitaet.
 5. Die besten Filter-Sets werden fuer Deep Research und Outreach Preparation priorisiert.
@@ -773,7 +763,7 @@ Der Workflow ist in vier Stufen aufgeteilt:
 
 - `GET /health`
 - `GET /api/config/readiness`
-- `GET /api/apollo/filter-presets`
+- `GET /api/filter-presets`
 - `GET /api/control-plane/bootstrap`
 - `GET /api/control/settings`
 - `PUT /api/control/settings`
@@ -829,18 +819,17 @@ curl -X POST http://localhost:3000/api/hubspot/workflow-trigger \
 
 ## Was ich von dir spaeter brauche
 
-- Apollo API key
 - HubSpot private app token
 - Azure OpenAI endpoint, key und deployment name
 - optional: Foundry project endpoint fuer agentische Filteroptimierung, Vorqualifikation und Deep Research mit Web Search oder Bing Grounding
 - optional: Foundry Bing connection name, wenn statt allgemeinem Web Search die neue Grounding-with-Bing-Resource verwendet werden soll
-- optional: OpenAI API key fuer firmenbezogene Web Search im credit-less Unternehmensmodus
+- optional: OpenAI API key fuer Web-basierte Firmenbeschaffung und Kontaktfindung
 
 ## Foundry Agent Setup
 
 Das Repo unterstuetzt jetzt optional drei rollenbasierte Foundry-Agents auf der bestehenden Pipeline:
 
-1. Filter Strategy Agent: optimiert Apollo-Filters fuer euren ICP.
+1. Filter Strategy Agent: optimiert Suchfilter fuer euren ICP.
 2. Pre-Qualification Agent: vorsortiert Firmen strenger nach Delivery-Fit, Geografie und Konkurrenzsignal.
 3. Deep Research Agent: nutzt Web Search oder Grounding with Bing Search fuer Firmenrecherche und Outreach-Hooks.
 
@@ -864,13 +853,13 @@ Wenn `FOUNDRY_BING_CONNECTION_NAME` gesetzt ist, verwendet der Deep Research Age
 
 ## Firmen-Web-Search
 
-Wenn Apollo fuer Unternehmenssuche nicht verfuegbar ist oder im `creditLessMode` gearbeitet wird, nutzt die Pipeline jetzt den OpenAI-Responses-Web-Search-Pfad fuer reine Firmendaten.
+Die Pipeline nutzt ausschliesslich den OpenAI-Responses-Web-Search-Pfad fuer Firmendaten und Kontaktfindung.
 
 Wichtige Regeln:
 
 1. Es werden nur organisationsbezogene Daten uebergeben, zum Beispiel Firmenname, Website, Land, Kurzbeschreibung, Kategorie und Filterdefinitionen.
 2. Es werden keine personenbezogenen Daten an OpenAI-Web-Search geschickt, also keine Namen, E-Mails, Telefonnummern oder Profil-URLs von Personen.
-3. Kontaktanreicherung bleibt am Ende bei Apollo und laeuft nicht ueber OpenAI-Web-Search.
+3. Kontaktfindung laeuft zuerst ueber Web-Scraper der Firmenseite, dann ueber Browser-Suche mit LinkedIn-Filter.
 
 Relevante Umgebungsvariablen:
 
@@ -887,7 +876,7 @@ Wichtige Betriebshinweise:
 
 Ihr koennt jetzt pro Run einen freien `agentContext` mitsenden. Dieser Text wird in drei Phasen verwendet:
 
-1. fuer die Optimierung der Apollo-Filter
+1. fuer die Optimierung der Suchfilter
 2. fuer die Vorsortierung der Firmen
 3. fuer die Deep-Research- und Outreach-Vorbereitung
 

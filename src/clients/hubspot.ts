@@ -1,5 +1,4 @@
 import { env, readiness } from "../config";
-import { ApolloClient } from "./apollo";
 import { AzureOpenAIClient } from "./azure-openai";
 import { FoundryAgentsClient } from "./foundry-agents";
 import { OpenAIWebSearchClient } from "./openai-web-search";
@@ -220,8 +219,6 @@ const COMMON_COMPOUND_TLDS = new Set([
 export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
   private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();
-
-  private readonly apolloClient = new ApolloClient();
 
   private readonly azureOpenAIClient = new AzureOpenAIClient();
 
@@ -3115,17 +3112,6 @@ export class HubSpotClient {
       if (extractedAddress && this.isPlausibleCompanyAddress(extractedAddress)) {
         return extractedAddress;
       }
-    }
-
-    const apolloAddress = await this.apolloClient.getOrganizationAddress(company).catch(() => null);
-    if (apolloAddress) {
-      return {
-        address: apolloAddress.address,
-        city: apolloAddress.city,
-        zip: apolloAddress.zip,
-        state: apolloAddress.state,
-        country: this.normalizeCountryName(apolloAddress.country) ?? company.country
-      };
     }
 
     return this.extractCompanyAddressWithWebSearch(company).catch(() => null);

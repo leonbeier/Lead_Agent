@@ -151,16 +151,15 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   agent.controlPlaneStore.recordSearchHistory = async () => {};
   agent.controlPlaneStore.writeLatestLeadRun = async () => {};
   agent.azureClient.buildResearchBrief = async () => researchBrief;
-  agent.collectPublicContacts = async () => new Map([["robofunktion.example", [{
-    email: "info@robofunktion.example",
-    phone: "+49 30 123456",
-    sourceUrl: qualifiedCompany.domain,
-    label: "public_generic_mailbox",
-    jobTitle: "General contact"
-  }]]]);
-  agent.collectApolloContacts = async () => {
+  agent.collectPublicContacts = async () => {
     stopRequested = true;
-    return new Map();
+    return new Map([["robofunktion.example", [{
+      email: "info@robofunktion.example",
+      phone: "+49 30 123456",
+      sourceUrl: qualifiedCompany.domain,
+      label: "public_generic_mailbox",
+      jobTitle: "General contact"
+    }]]]);
   };
   agent.hubspotClient.syncQualifiedCompanies = async (companies: PreCategorizedCompany[]) => {
     syncCalls += 1;
@@ -198,6 +197,7 @@ test("stopped direct exa runs still sync already qualified companies", async () 
   assert.equal(result.hubspotSync.companySyncedCount, 1);
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
+
 
 test("top-up returns immediately when stop is requested during a stuck web discovery fetch", async () => {
   const agent = new LeadPipelineAgent() as any;

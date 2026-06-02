@@ -5,7 +5,7 @@ import { z } from "zod";
 import { env, readiness } from "./config";
 import { ControlPlaneStore } from "./control-plane";
 import { DebugConsoleService } from "./debug/test-console-service";
-import { defaultApolloFilters } from "./filters";
+import { defaultFilters } from "./filters";
 import { LeadPipelineAgent } from "./agents/lead-pipeline";
 import { LeadWorkerRunService } from "./agents/lead-worker-run";
 import { CATEGORY_EXECUTION_CONTEXT } from "./prompting/one-ware-playbook";
@@ -373,8 +373,7 @@ const leadJobSchema = z.object({
   targetCategoryRefinement: z.string().max(4000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
   searchStrategyPreset: z.enum(["default", "optimized_vision_integrators"]).optional(),
-  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]).optional(),
-  creditLessMode: z.boolean().optional(),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]).optional(),
   prequalification: prequalificationConfigSchema.optional(),
   prequalificationContext: z.string().max(4000).optional(),
   executionContexts: executionContextsSchema.optional(),
@@ -394,11 +393,11 @@ const leadJobSchema = z.object({
   outreachPrepConcurrency: z.coerce.number().int().min(1).optional(),
   contactSearchConcurrency: z.coerce.number().int().min(1).optional(),
   disableHubSpotDeduplication: z.boolean().optional(),
+  maxRuntimeMs: z.coerce.number().int().min(60_000).max(10_800_000).optional(),
   earlyStopEnabled: z.boolean().optional(),
   earlyStopReviewCount: z.coerce.number().int().min(5).max(30).optional(),
   earlyStopThreshold: z.coerce.number().min(0).max(1).optional(),
   earlyStopMinRelevantCount: z.coerce.number().int().min(0).max(30).optional(),
-  maxRuntimeMs: z.coerce.number().int().min(60_000).max(10_800_000).optional(),
   openCrawlerTuning: openCrawlerTuningSchema.optional()
 });
 
@@ -409,8 +408,7 @@ const settingsUpdateSchema = z.object({
   targetCategoryRefinement: z.string().max(4000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
   searchStrategyPreset: z.enum(["default", "optimized_vision_integrators"]).optional(),
-  companySearchMode: z.enum(["internet_research", "open_crawler_search", "apollo_search", "exa_search", "diffbot_search", "diffbot_test_data"]).optional(),
-  creditLessMode: z.boolean().optional(),
+  companySearchMode: z.enum(["internet_research", "open_crawler_search", "exa_search", "diffbot_search", "diffbot_test_data"]).optional(),
   prequalification: prequalificationConfigSchema.optional(),
   prequalificationContext: z.string().max(4000).optional(),
   executionContexts: executionContextsSchema.optional(),
@@ -519,11 +517,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
   const legacyPrequalificationContext = typeof body.prequalificationContext === "string"
     ? body.prequalificationContext
     : settings.prequalificationContext;
-  const companySearchMode = body.companySearchMode === "internet_research" || body.companySearchMode === "open_crawler_search" || body.companySearchMode === "apollo_search" || body.companySearchMode === "exa_search" || body.companySearchMode === "diffbot_search" || body.companySearchMode === "diffbot_test_data"
-    ? body.companySearchMode
-    : typeof body.creditLessMode === "boolean"
-      ? (body.creditLessMode ? "internet_research" : "apollo_search")
-      : settings.companySearchMode;
+  const companySearchMode = body.companySearchMode ?? settings.companySearchMode;
   const prequalification = (body.prequalification ?? settings.prequalification) ??
     (legacyPrequalificationContext ? { mainContext: legacyPrequalificationContext } : undefined);
   const earlyStopEnabled = companySearchMode === "exa_search"
@@ -543,7 +537,7 @@ async function buildLeadJobPayload(body: Record<string, unknown>) {
     searchStrategyContext: body.searchStrategyContext ?? presetSearchStrategyContext ?? settings.searchStrategyContext,
     searchStrategyPreset,
     companySearchMode,
-    creditLessMode: companySearchMode !== "apollo_search",
+    creditLessMode: true,
     prequalification,
     prequalificationContext: legacyPrequalificationContext,
     executionContexts: body.executionContexts ?? settings.executionContexts,
@@ -728,9 +722,9 @@ app.put("/api/control/settings", async (request, response, next) => {
   }
 });
 
-app.get("/api/apollo/filter-presets", (_request, response) => {
+app.get("/api/filter-presets", (_request, response) => {
   response.json({
-    filters: defaultApolloFilters
+    filters: defaultFilters
   });
 });
 

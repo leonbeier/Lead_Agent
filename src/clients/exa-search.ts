@@ -1,5 +1,5 @@
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
+import { OrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 import { OpenAIWebSearchClient } from "./openai-web-search";
 
 interface SearchEvidence {
@@ -120,7 +120,7 @@ export class ExaSearchClient {
   }
 
   async discoverCompanies(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page = 1,
     shouldSkipDomain?: (domain: string) => boolean
@@ -388,7 +388,7 @@ export class ExaSearchClient {
     ]);
   }
 
-  buildQueries(filter: ApolloOrganizationFilter, page: number, options: ExaQueryBuildOptions = {}): string[] {
+  buildQueries(filter: OrganizationFilter, page: number, options: ExaQueryBuildOptions = {}): string[] {
     const locations = Array.from(new Set(filter.locations.map((location) => location.trim()).filter(Boolean))).slice(0, 2);
     const effectiveLocations = locations.length > 0 ? locations : ["Germany"];
     const locationVariants = Array.from(new Set(effectiveLocations.flatMap((location) => this.buildLocationVariants(location))));
@@ -431,7 +431,7 @@ export class ExaSearchClient {
     return `Within the selected target categories, narrow results to: ${normalizedRefinement}.`;
   }
 
-  private buildIntentTerms(filter: ApolloOrganizationFilter): string[] {
+  private buildIntentTerms(filter: OrganizationFilter): string[] {
     const text = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (/(mes|scada|plc|ot integration|automation software|sondermaschinen)/.test(text)) {
@@ -449,7 +449,7 @@ export class ExaSearchClient {
     return ["customer projects", "implementation", "engineering services", "system integrator"];
   }
 
-  private buildDiscoveryTerms(filter: ApolloOrganizationFilter): string[] {
+  private buildDiscoveryTerms(filter: OrganizationFilter): string[] {
     const text = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(text)) {
@@ -468,7 +468,7 @@ export class ExaSearchClient {
   }
 
   private buildSemanticSearchFocus(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     compactPersona: string,
     primaryKeywords: string[]
   ): string {
@@ -491,7 +491,7 @@ export class ExaSearchClient {
       .join(", ") || "industrial AI and automation integration services";
   }
 
-  private buildApplicationAngles(filter: ApolloOrganizationFilter): string[] {
+  private buildApplicationAngles(filter: OrganizationFilter): string[] {
     const normalizedText = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (filter.targetCategories?.includes("industrial_end_customer_scaled")) {
@@ -532,7 +532,7 @@ export class ExaSearchClient {
 
   private buildIndustrialEndCustomerPrimaryQueries(
     location: string,
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     semanticFocus: string
   ): string[] {
     const industries = filter.industries.slice(0, 3).join(", ");
@@ -548,7 +548,7 @@ export class ExaSearchClient {
 
   private buildIndustrialEndCustomerAngleQuery(
     location: string,
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     semanticFocus: string,
     angle: string
   ): string {
@@ -604,7 +604,7 @@ export class ExaSearchClient {
       .trim();
   }
 
-  private buildDescription(result: ExaSearchResult, filter: ApolloOrganizationFilter): string {
+  private buildDescription(result: ExaSearchResult, filter: OrganizationFilter): string {
     const highlights = result.highlights?.slice(0, 3).join(" | ");
     const title = result.title?.trim();
     return [title, highlights, result.summary?.trim(), result.text?.trim(), filter.persona]

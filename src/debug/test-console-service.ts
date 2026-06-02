@@ -6,7 +6,7 @@ import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { WebSearchAgent } from "../clients/web-search-agent";
 import { ControlPlaneStore } from "../control-plane";
-import { ApolloOrganizationFilter, CompanySample, ExaQueryHistoryInsight, LeadCategory, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
+import { OrganizationFilter, CompanySample, ExaQueryHistoryInsight, LeadCategory, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
 import { buildDebugSearchFilter, DebugConsoleSearchMode, normalizeManualWebsites } from "./test-console";
 
 export type DebugConsoleStage = "company_search" | "ai_prefilter" | "outreach_prep" | "contact_discovery";
@@ -34,7 +34,7 @@ export interface DebugConsoleRunRequest {
 export interface DebugConsoleRunResult {
   stage: DebugConsoleStage;
   requested: DebugConsoleRunRequest;
-  filter: ApolloOrganizationFilter;
+  filter: OrganizationFilter;
   companySearch: DebugConsoleCompanySearchResult | null;
   aiPrefilter: DebugConsoleAiPrefilterResult | null;
   outreachPrep: DebugConsoleOutreachPrepResult | null;
@@ -70,7 +70,7 @@ export interface DebugConsoleSearchQueryResult {
 
 export interface DebugConsoleCompanySearchResult {
   backend: DebugConsoleSearchMode;
-  usedFilters: ApolloOrganizationFilter[];
+  usedFilters: OrganizationFilter[];
   generatedSearches: DebugConsoleSearchQueryResult[];
   discoveredCompanies: CompanySample[];
 }
@@ -160,7 +160,7 @@ export class DebugConsoleService {
 
   private readonly defaultContactSearchConcurrency = 8;
 
-  createManualCompanyForWebsite(website: string, filter: ApolloOrganizationFilter): CompanySample {
+  createManualCompanyForWebsite(website: string, filter: OrganizationFilter): CompanySample {
     return this.buildManualCompany(website, filter);
   }
 
@@ -225,7 +225,7 @@ export class DebugConsoleService {
 
   private async runCompanySearchStage(
     request: DebugConsoleRunRequest,
-    filters: ApolloOrganizationFilter[]
+    filters: OrganizationFilter[]
   ): Promise<DebugConsoleCompanySearchResult> {
     if (request.companySearchMode === "diffbot_search") {
       return this.runDiffbotCompanySearch(filters, request.limit);
@@ -236,7 +236,7 @@ export class DebugConsoleService {
 
   private async runAiPrefilterStage(
     request: DebugConsoleRunRequest,
-    filter: ApolloOrganizationFilter
+    filter: OrganizationFilter
   ): Promise<DebugConsoleAiPrefilterResult> {
     const companies = this.buildWebsiteCompanies(request, filter);
     const aiPrefilterConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? this.defaultAiPrefilterConcurrency);
@@ -254,7 +254,7 @@ export class DebugConsoleService {
 
   private async runOutreachPrepStage(
     request: DebugConsoleRunRequest,
-    filter: ApolloOrganizationFilter
+    filter: OrganizationFilter
   ): Promise<DebugConsoleOutreachPrepResult> {
     const companies = this.buildWebsiteCompanies(request, filter);
     const analyzedWebsites = await this.mapWithConcurrency(
@@ -269,7 +269,7 @@ export class DebugConsoleService {
 
   private async runContactDiscoveryStage(
     request: DebugConsoleRunRequest,
-    filter: ApolloOrganizationFilter
+    filter: OrganizationFilter
   ): Promise<DebugConsoleContactDiscoveryResult> {
     const companies = this.buildWebsiteCompanies(request, filter);
     const analyzedWebsites = await this.mapWithConcurrency(
@@ -456,7 +456,7 @@ export class DebugConsoleService {
     }
   }
 
-  private buildManualCompany(website: string, filter: ApolloOrganizationFilter): CompanySample {
+  private buildManualCompany(website: string, filter: OrganizationFilter): CompanySample {
     const hostname = new URL(website).hostname.replace(/^www\./i, "");
     const label = hostname.split(".")[0] ?? hostname;
 
@@ -473,15 +473,15 @@ export class DebugConsoleService {
     };
   }
 
-  private buildWebsiteCompanies(request: DebugConsoleRunRequest, filter: ApolloOrganizationFilter): CompanySample[] {
+  private buildWebsiteCompanies(request: DebugConsoleRunRequest, filter: OrganizationFilter): CompanySample[] {
     return normalizeManualWebsites(request.websites)
       .map((website) => this.buildManualCompany(website, filter))
       .slice(0, request.limit);
   }
 
-  private async runExaCompanySearch(request: DebugConsoleRunRequest, filters: ApolloOrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {
+  private async runExaCompanySearch(request: DebugConsoleRunRequest, filters: OrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {
     const exaClient = this.exaSearchClient as unknown as {
-      buildQueries: (filter: ApolloOrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
+      buildQueries: (filter: OrganizationFilter, page: number, options?: { targetCategoryRefinement?: string }) => string[];
       runSearch: (apiKey: string, query: string, numResults: number, excludeDomains?: string[]) => Promise<{ results?: Array<{ title?: string; url?: string; highlights?: string[]; summary?: string; text?: string }> }>;
       buildSearchPayload: (query: string, numResults: number, excludeDomains?: string[]) => unknown;
       loadKnownExcludedDomains: () => Promise<Set<string>>;
@@ -490,7 +490,7 @@ export class DebugConsoleService {
       toCanonicalCompanyDomain: (url: string) => string;
       deriveCompanyName: (domain: string, title?: string) => string;
       inferCountryFromDomain: (domain: string, result: { title?: string; highlights?: string[]; summary?: string; text?: string }, fallbackLocation?: string) => string | undefined;
-      buildDescription: (result: { title?: string; highlights?: string[]; summary?: string; text?: string }, filter: ApolloOrganizationFilter) => string;
+      buildDescription: (result: { title?: string; highlights?: string[]; summary?: string; text?: string }, filter: OrganizationFilter) => string;
     };
     const apiKey = (this.exaSearchClient as unknown as { runtimeApiKey?: string }).runtimeApiKey ?? env.EXA_API_KEY;
     if (!apiKey) {
@@ -506,7 +506,7 @@ export class DebugConsoleService {
     const discoveredCompanies: CompanySample[] = [];
     const requestedCompanyCount = Math.max(limit, 20);
     const requestedQueryCount = Math.max(1, request.exaQueryCount ?? 4);
-    const usedFilters: ApolloOrganizationFilter[] = [];
+    const usedFilters: OrganizationFilter[] = [];
     const [settings, learning] = request.useAzureQueryPlanner
       ? await Promise.all([
         this.controlPlaneStore.getSettings(),
@@ -648,7 +648,7 @@ export class DebugConsoleService {
     };
   }
 
-  private buildSimulatedTestLabQueryInsight(query: string, filter: ApolloOrganizationFilter): ExaQueryHistoryInsight {
+  private buildSimulatedTestLabQueryInsight(query: string, filter: OrganizationFilter): ExaQueryHistoryInsight {
     const weightedCategories: LeadCategory[] = [];
     const queryText = query.toLowerCase();
     const addCategory = (category: LeadCategory, weight = 1) => {
@@ -734,9 +734,9 @@ export class DebugConsoleService {
       .slice(0, 50);
   }
 
-  private async runDiffbotCompanySearch(filters: ApolloOrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {
+  private async runDiffbotCompanySearch(filters: OrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {
     const diffbotClient = this.diffbotSearchClient as unknown as {
-      buildQuery: (filter: ApolloOrganizationFilter) => string;
+      buildQuery: (filter: OrganizationFilter) => string;
       runtimeToken?: string;
       creditsExhausted?: boolean;
     };
@@ -778,7 +778,7 @@ export class DebugConsoleService {
     };
   }
 
-  private async resolveSearchFilters(request: DebugConsoleRunRequest): Promise<ApolloOrganizationFilter[]> {
+  private async resolveSearchFilters(request: DebugConsoleRunRequest): Promise<OrganizationFilter[]> {
     const preview = await this.leadPipelineAgent.preview({
       targetLeadCount: Math.max(1, request.limit),
       market: request.region,

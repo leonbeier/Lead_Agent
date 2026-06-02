@@ -4,7 +4,7 @@ import { HubSpotClient } from "../clients/hubspot.js";
 import { LeadPipelineAgent } from "./lead-pipeline.js";
 import { env } from "../config.js";
 import type {
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   CompanySample,
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
@@ -81,7 +81,7 @@ interface QualifiedCompanyState {
 
 interface SearchAggregate {
   id: string;
-  filter: ApolloOrganizationFilter;
+  filter: OrganizationFilter;
   page: number;
   requestedCount: number;
   executedQueries: number;

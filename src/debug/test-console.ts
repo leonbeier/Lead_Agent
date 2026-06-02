@@ -1,5 +1,5 @@
-import { defaultApolloFilters } from "../filters";
-import { ApolloOrganizationFilter, SelectableLeadCategory } from "../types";
+import { defaultFilters } from "../filters";
+import { OrganizationFilter, SelectableLeadCategory } from "../types";
 
 const REGION_ALIASES: Record<string, string> = {
   DE: "Germany",
@@ -27,8 +27,8 @@ export interface DebugConsoleRequestInput {
 export function buildDebugSearchFilter(
   targetCategory: SelectableLeadCategory,
   region?: string,
-  filters: ApolloOrganizationFilter[] = defaultApolloFilters
-): ApolloOrganizationFilter {
+  filters: OrganizationFilter[] = defaultFilters
+): OrganizationFilter {
   const categoryMatches = filters.filter((filter) => filter.targetCategories?.includes(targetCategory));
   if (categoryMatches.length === 0) {
     throw new Error(`No default filter exists for category ${targetCategory}.`);
