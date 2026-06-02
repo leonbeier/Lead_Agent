@@ -2,8 +2,9 @@ import { ControlPlaneStore } from "../control-plane.js";
 import { DebugConsoleService } from "../debug/test-console-service.js";
 import { HubSpotClient } from "../clients/hubspot.js";
 import { LeadPipelineAgent } from "./lead-pipeline.js";
+import { env } from "../config.js";
 import type {
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   CompanySample,
   CompanyScreeningDatabase,
   CompanyScreeningRecord,
@@ -80,7 +81,7 @@ interface QualifiedCompanyState {
 
 interface SearchAggregate {
   id: string;
-  filter: ApolloOrganizationFilter;
+  filter: OrganizationFilter;
   page: number;
   requestedCount: number;
   executedQueries: number;
@@ -195,7 +196,35 @@ const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
-const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = 180_000;
+const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
+const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
+
+function summarizeContactChannels(contacts: PublicContactCandidate[]): string {
+  const byLabel = new Map<string, number>();
+  let withEmail = 0;
+  let withPhone = 0;
+  let withLinkedIn = 0;
+
+  for (const contact of contacts) {
+    byLabel.set(contact.label, (byLabel.get(contact.label) ?? 0) + 1);
+    if (contact.email) {
+      withEmail += 1;
+    }
+    if (contact.phone) {
+      withPhone += 1;
+    }
+    if (contact.linkedinUrl) {
+      withLinkedIn += 1;
+    }
+  }
+
+  const labelSummary = Array.from(byLabel.entries())
+    .sort((left, right) => right[1] - left[1])
+    .map(([label, count]) => `${label}:${count}`)
+    .join(", ");
+
+  return `channels(email=${withEmail}, phone=${withPhone}, linkedin=${withLinkedIn}) labels[${labelSummary || "none"}]`;
+}
 
 function createEmptyCategoryBreakdown(): Record<LeadCategory, number> {
   return {
@@ -334,6 +363,7 @@ export class LeadWorkerRunService {
       ? await this.controlPlaneStore.getLearning()
       : undefined;
     const filters = this.leadPipelineAgent.buildDirectExaFiltersForExecution(targetCategories, request.market);
+    const defaultScopeFilter = filters[0];
     const exaConcurrency = Math.min(2, Math.max(1, filters.length));
     const hubspotConcurrency = 3;
     const aiQueue = new AsyncQueue<{ company: CompanySample; searchId?: string }>();
@@ -425,7 +455,8 @@ export class LeadWorkerRunService {
     const shouldStopNewPipelineWork = () => stopping || hasReachedTarget();
 
     const stopAiQueue = () => {
-      aiQueue.clear();
+      // Don't clear the queue - let existing items finish processing
+      // Only stop accepting new items
       aiQueue.close();
     };
 
@@ -629,7 +660,11 @@ export class LeadWorkerRunService {
     };
 
     const maybePromoteStandby = () => {
-      while (standbyQualifiedStates.length > 0 && countAssignedQualifiedStates() < targetLeadCount && !shouldStopNewPipelineWork()) {
+      // If stopping due to Exa error, promote all remaining standby companies so they still get processed
+      // instead of being silently lost
+      const promoteAll = stopping && !hasReachedTarget();
+      
+      while (standbyQualifiedStates.length > 0 && countAssignedQualifiedStates() < targetLeadCount && (promoteAll || !stopping)) {
         const nextState = standbyQualifiedStates.shift();
         if (!nextState) {
           return;
@@ -642,7 +677,7 @@ export class LeadWorkerRunService {
         nextState.pipelineAssigned = true;
         outreachQueue.enqueue(nextState);
         contactQueue.enqueue(nextState);
-        log(`Standby-Firma freigegeben: ${nextState.company.name}`);
+        log(`Standby-Firma freigegeben: ${nextState.company.name}${promoteAll ? " (forced due to search error)" : ""}`);
       }
       emitProgress();
     };
@@ -653,7 +688,8 @@ export class LeadWorkerRunService {
         return;
       }
 
-      if (shouldStopNewPipelineWork()) {
+      // Accept company even if we're stopping, but don't accept if target is reached
+      if (hasReachedTarget()) {
         return;
       }
 
@@ -684,35 +720,27 @@ export class LeadWorkerRunService {
           type: "upsert",
           record: buildScreeningRecord(company)
         });
-        log(`KI-Treffer auf Warteliste gelegt: ${company.name}`);
+        log(`KI-Treffer auf Warteliste gelegt: ${company.name} (stopping=${stopping})`);
       }
       emitProgress();
     };
 
     const queueNonTargetCompanyForCreation = (company: PreCategorizedCompany, source: "seed" | "exa", searchId?: string) => {
-      const key = buildCompanyKey(company);
-      if (qualifiedStates.has(key) || standbyQualifiedStates.some((state) => state.key === key)) {
-        return;
+      log(`Nicht-Zieltreffer wird aussortiert: ${company.name} (${company.category})`);
+      emitProgress();
+    };
+
+    const isCompanyInScope = (company: Pick<PreCategorizedCompany, "country" | "domain">, filter = defaultScopeFilter): boolean => {
+      if (!filter) {
+        return true;
       }
 
-      const state: QualifiedCompanyState = {
-        key,
-        company,
-        searchId,
-        source,
-        pipelineAssigned: false,
-        contacts: [],
-        outreachStatus: "queued",
-        contactStatus: "queued",
-        hubspotStatus: "pending",
-        removed: false
-      };
+      const scopeEvaluator = (this.leadPipelineAgent as { isCompanyInExecutionScope?: unknown } | undefined)?.isCompanyInExecutionScope;
+      if (typeof scopeEvaluator !== "function") {
+        return true;
+      }
 
-      qualifiedStates.set(key, state);
-      outreachQueue.enqueue(state);
-      contactQueue.enqueue(state);
-      log(`Nicht-Zieltreffer wird trotzdem angelegt: ${company.name}`);
-      emitProgress();
+      return scopeEvaluator.call(this.leadPipelineAgent, company, filter, request.market);
     };
 
     const maybeQueueHubSpot = (state: QualifiedCompanyState) => {
@@ -776,8 +804,9 @@ export class LeadWorkerRunService {
           const aggregate = item.searchId ? searchAggregates.get(item.searchId) : undefined;
           const query = item.company.discoveryQuery?.trim();
           const queryStat = aggregate && query ? getOrCreateQueryStat(aggregate, query) : undefined;
+          const scopeFilter = aggregate?.filter ?? defaultScopeFilter;
 
-          if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory)) {
+          if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory) && isCompanyInScope(categorizedCompany, scopeFilter)) {
             if (queryStat) {
               queryStat.accepted += 1;
               queryStat.categoryBreakdown[categorizedCompany.category] += 1;
@@ -785,6 +814,15 @@ export class LeadWorkerRunService {
               updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
             }
             queueQualifiedCompany(categorizedCompany, "exa", item.searchId);
+          } else if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory)) {
+            metrics.aiRejectedDifferentCategory += 1;
+            if (queryStat) {
+              queryStat.rejectedDifferentCategory += 1;
+              queryStat.categoryBreakdown[categorizedCompany.category] += 1;
+              this.updateRecentLiveQueryHistory(currentRunQueryHistory, query, queryStat);
+              updateLiveSearchDebug(aggregate, query ? { lastExecutedQuery: query } : {});
+            }
+            log(`Nicht-Zieltreffer wird aussortiert: ${categorizedCompany.name} (out_of_scope)`);
           } else if (categorizedCompany.category === "other") {
             metrics.aiRejectedOther += 1;
             if (queryStat) {
@@ -876,18 +914,30 @@ export class LeadWorkerRunService {
         state.contactStatus = "running";
         emitProgress();
         try {
-          const contactDebug = await Promise.race<ContactDebugResult>([
-            this.debugConsoleService.discoverContactsForExecution(state.company, {
-              selectedContactsTimeoutMs: 120_000
-            }),
-            delay(this.contactTaskTimeoutMs).then(() => {
-              throw new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`);
-            })
-          ]);
+          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              reject(new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`));
+            }, this.contactTaskTimeoutMs);
+          });
+
+          let contactDebug: ContactDebugResult;
+          try {
+            contactDebug = await Promise.race<ContactDebugResult>([
+              this.debugConsoleService.discoverContactsForExecution(state.company, {
+                selectedContactsTimeoutMs: 120_000
+              }),
+              timeoutPromise
+            ]);
+          } finally {
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle);
+            }
+          }
           state.contacts = contactDebug.selectedContacts ?? [];
           state.contactStatus = "done";
           metrics.contactCompleted += 1;
-          log(`Kontakte fertig: ${state.company.name} (${state.contacts.length})`);
+          log(`Kontakte fertig: ${state.company.name} (${state.contacts.length}) ${summarizeContactChannels(state.contacts)}`);
           maybeQueueHubSpot(state);
         } catch (error) {
           state.contactStatus = "failed";
@@ -915,21 +965,33 @@ export class LeadWorkerRunService {
 
         metrics.queueSizes.hubspotInFlight += 1;
         state.hubspotStatus = "running";
-        log(`HubSpot startet: ${state.company.name}`);
+        log(`HubSpot startet: ${state.company.name} | ${summarizeContactChannels(state.contacts)}`);
         emitProgress();
         try {
           const companySyncKey = new URL(state.company.domain?.startsWith("http") ? state.company.domain : `https://${state.company.domain ?? state.company.name}`).hostname.replace(/^www\./i, "").toLowerCase();
-          const syncResult = await Promise.race([
-            this.hubSpotClient.syncQualifiedCompanies(
-              [state.company],
-              state.researchBrief ? [state.researchBrief] : [],
-              new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
-              Boolean(request.dryRun || request.syncToHubSpot === false)
-            ),
-            delay(this.hubspotTaskTimeoutMs).then(() => {
-              throw new Error(`HubSpot worker timed out after ${this.hubspotTaskTimeoutMs}ms`);
-            })
-          ]);
+          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              reject(new Error(`HubSpot worker timed out after ${this.hubspotTaskTimeoutMs}ms`));
+            }, this.hubspotTaskTimeoutMs);
+          });
+
+          let syncResult;
+          try {
+            syncResult = await Promise.race([
+              this.hubSpotClient.syncQualifiedCompanies(
+                [state.company],
+                state.researchBrief ? [state.researchBrief] : [],
+                new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
+                Boolean(request.dryRun || request.syncToHubSpot === false)
+              ),
+              timeoutPromise
+            ]);
+          } finally {
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle);
+            }
+          }
           if (syncResult.companySyncedCount === 0) {
             const syncErrors = Array.isArray(syncResult.errors) ? syncResult.errors.filter(Boolean) : [];
             if (syncErrors.length > 0) {
@@ -942,6 +1004,10 @@ export class LeadWorkerRunService {
           state.pipelineAssigned = false;
           state.completedAt = new Date().toISOString();
           metrics.hubspotWritten += syncResult.companySyncedCount;
+          const syncErrorCount = Array.isArray(syncResult.errors) ? syncResult.errors.length : 0;
+          if (syncErrorCount > 0) {
+            log(`HubSpot Sync Warnungen fuer ${state.company.name}: ${syncErrorCount}`);
+          }
           if (hasReachedTarget()) {
             stopping = true;
           }
@@ -953,7 +1019,7 @@ export class LeadWorkerRunService {
             category: state.company.category,
             sourceFilter: state.company.sourceFilter
           });
-          log(`HubSpot fertig: ${state.company.name}`);
+          log(`HubSpot fertig: ${state.company.name} (companySynced=${syncResult.companySyncedCount}, contactSynced=${syncResult.contactSyncedCount})`);
           maybePromoteStandby();
         } catch (error) {
           state.hubspotStatus = "failed";
@@ -969,15 +1035,17 @@ export class LeadWorkerRunService {
       }
     })());
 
-    const seedRecords = screeningDatabase.records.filter((record) => {
-      if (record.existsInHubSpot) {
-        return false;
-      }
-      if (!record.category || !targetCategories.includes(record.category as SelectableLeadCategory)) {
-        return false;
-      }
-      return !record.sourceFilter?.includes("debug-stage=");
-    }).slice(0, targetLeadCount);
+    const seedRecords = request.reuseQualifiedCompanyCache === false
+      ? []
+      : screeningDatabase.records.filter((record) => {
+          if (record.existsInHubSpot) {
+            return false;
+          }
+          if (!record.category || !targetCategories.includes(record.category as SelectableLeadCategory)) {
+            return false;
+          }
+          return !record.sourceFilter?.includes("debug-stage=");
+        }).slice(0, targetLeadCount);
 
     for (const record of seedRecords) {
       const website = toCompanyWebsite(record.domain);
@@ -996,6 +1064,10 @@ export class LeadWorkerRunService {
         relevanceScore: record.relevanceScore ?? 0.75,
         rationale: record.rationale ?? "Bereits im Live-Screening als passend klassifiziert."
       };
+      if (!isCompanyInScope(categorized, filters[0])) {
+        log(`Seed ausserhalb Markt verworfen: ${categorized.name}`);
+        continue;
+      }
       const key = buildCompanyKey(categorized);
       seenCompanyKeys.add(key);
       queueQualifiedCompany(categorized, "seed");
@@ -1038,80 +1110,97 @@ export class LeadWorkerRunService {
           let plannedDefaultQueries: string[] | undefined;
           let plannedPromptMessages: Array<{ role: string; content: string }> | undefined;
 
-          const rawCompanies = await this.leadPipelineAgent.discoverDirectExaCompaniesForExecution(
-            filter,
-            targetCategories,
-            exaQueryCount,
-            {
-              screeningScope: "live",
-              currentRunExcludedDomains: Array.from(currentRunExcludedDomains)
-            },
-            {
-              dryRun: request.dryRun,
-              learning,
-              mainContext: request.mainContext,
-              searchStrategyContext: request.searchStrategyContext,
-              recentQueryHistory: Array.from(currentRunQueryHistory.values()),
-              prequalification: request.prequalification,
-              forcedQueries: usingPendingQueryPlan ? forcedQueries : undefined,
-              plannedQueryMetadata: usingPendingQueryPlan
-                ? {
-                    defaultQueries: pendingPlan?.defaultQueries,
-                    plannedQueries: pendingPlan?.plannedQueries,
-                    promptMessages: pendingPlan?.promptMessages
+          let exaTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const exaTimeoutPromise = new Promise<never>((_, reject) => {
+            exaTimeoutHandle = setTimeout(() => {
+              reject(new Error(`Exa discovery timed out after ${DEFAULT_EXA_DISCOVERY_TIMEOUT_MS}ms`));
+            }, DEFAULT_EXA_DISCOVERY_TIMEOUT_MS);
+          });
+
+          let rawCompanies: CompanySample[];
+          try {
+            rawCompanies = await Promise.race<CompanySample[]>([
+              this.leadPipelineAgent.discoverDirectExaCompaniesForExecution(
+                filter,
+                targetCategories,
+                exaQueryCount,
+                {
+                  screeningScope: "live",
+                  currentRunExcludedDomains: Array.from(currentRunExcludedDomains)
+                },
+                {
+                  dryRun: request.dryRun,
+                  learning,
+                  mainContext: request.mainContext,
+                  searchStrategyContext: request.searchStrategyContext,
+                  recentQueryHistory: Array.from(currentRunQueryHistory.values()),
+                  prequalification: request.prequalification,
+                  forcedQueries: usingPendingQueryPlan ? forcedQueries : undefined,
+                  plannedQueryMetadata: usingPendingQueryPlan
+                    ? {
+                        defaultQueries: pendingPlan?.defaultQueries,
+                        plannedQueries: pendingPlan?.plannedQueries,
+                        promptMessages: pendingPlan?.promptMessages
+                      }
+                    : undefined
+                },
+                (update) => {
+                  const previousReturnedResults = aggregate.returnedResults ?? 0;
+                  const previousFilteredByExcludedDomains = aggregate.filteredByExcludedDomains ?? 0;
+                  const previousExecutedQueries = aggregate.executedQueries;
+                  plannedDefaultQueries = update.defaultQueries;
+                  plannedPromptMessages = update.promptMessages;
+                  aggregate.executedQueries = update.executedQueries;
+                  metrics.exaRequests += Math.max(0, update.executedQueries - previousExecutedQueries);
+                  aggregate.rawFound = update.rawCompaniesFound;
+                  const queryStat = getOrCreateQueryStat(aggregate, update.query);
+                  queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
+                  queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
+                  queryStat.filteredByHubSpot = update.filteredByHubSpot;
+                  queryStat.filteredByRejectedWebsites = update.filteredByRejectedWebsites;
+                  queryStat.filteredByCurrentRunCache = update.filteredByCurrentRunCache;
+                  aggregate.queryTexts.push(update.query);
+                  aggregate.plannedQueries = update.plannedQueries;
+                  aggregate.promptMessages = update.promptMessages;
+                  aggregate.excludedDomains = update.excludedDomains;
+                  aggregate.returnedResults = update.returnedResults;
+                  aggregate.filteredByExcludedDomains = update.filteredByExcludedDomains;
+                  aggregate.duplicatesRemoved = update.duplicatesRemoved;
+                  updateLiveSearchDebug(aggregate, {
+                    filterName: update.filterName,
+                    defaultQueries: update.defaultQueries,
+                    plannedQueries: update.plannedQueries,
+                    promptMessages: update.promptMessages,
+                    lastExecutedQuery: update.query,
+                    excludedDomains: update.excludedDomains,
+                    executedQueries: update.executedQueries,
+                    totalQueries: update.totalQueries,
+                    returnedResults: update.returnedResults,
+                    filteredByExcludedDomains: update.filteredByExcludedDomains,
+                    filteredByHubSpot: update.filteredByHubSpot,
+                    filteredByRejectedWebsites: update.filteredByRejectedWebsites,
+                    filteredByCurrentRunCache: update.filteredByCurrentRunCache,
+                    duplicatesRemoved: update.duplicatesRemoved,
+                    rawCompaniesFound: update.rawCompaniesFound
+                  });
+                  if (!currentRunQueryHistory.has(update.query)) {
+                    currentRunQueryHistory.set(update.query, {
+                      query: update.query,
+                      timestamp: new Date().toISOString(),
+                      foundCategoryBreakdown: createEmptyCategoryBreakdown()
+                    });
                   }
-                : undefined
-            },
-            (update) => {
-              const previousReturnedResults = aggregate.returnedResults ?? 0;
-              const previousFilteredByExcludedDomains = aggregate.filteredByExcludedDomains ?? 0;
-              const previousExecutedQueries = aggregate.executedQueries;
-              plannedDefaultQueries = update.defaultQueries;
-              plannedPromptMessages = update.promptMessages;
-              aggregate.executedQueries = update.executedQueries;
-              metrics.exaRequests += Math.max(0, update.executedQueries - previousExecutedQueries);
-              aggregate.rawFound = update.rawCompaniesFound;
-              const queryStat = getOrCreateQueryStat(aggregate, update.query);
-              queryStat.returnedResults += Math.max(0, update.returnedResults - previousReturnedResults);
-              queryStat.filteredByExcludedDomains += Math.max(0, update.filteredByExcludedDomains - previousFilteredByExcludedDomains);
-              queryStat.filteredByHubSpot = update.filteredByHubSpot;
-              queryStat.filteredByRejectedWebsites = update.filteredByRejectedWebsites;
-              queryStat.filteredByCurrentRunCache = update.filteredByCurrentRunCache;
-              aggregate.queryTexts.push(update.query);
-              aggregate.plannedQueries = update.plannedQueries;
-              aggregate.promptMessages = update.promptMessages;
-              aggregate.excludedDomains = update.excludedDomains;
-              aggregate.returnedResults = update.returnedResults;
-              aggregate.filteredByExcludedDomains = update.filteredByExcludedDomains;
-              aggregate.duplicatesRemoved = update.duplicatesRemoved;
-              updateLiveSearchDebug(aggregate, {
-                filterName: update.filterName,
-                defaultQueries: update.defaultQueries,
-                plannedQueries: update.plannedQueries,
-                promptMessages: update.promptMessages,
-                lastExecutedQuery: update.query,
-                excludedDomains: update.excludedDomains,
-                executedQueries: update.executedQueries,
-                totalQueries: update.totalQueries,
-                returnedResults: update.returnedResults,
-                filteredByExcludedDomains: update.filteredByExcludedDomains,
-                filteredByHubSpot: update.filteredByHubSpot,
-                filteredByRejectedWebsites: update.filteredByRejectedWebsites,
-                filteredByCurrentRunCache: update.filteredByCurrentRunCache,
-                duplicatesRemoved: update.duplicatesRemoved,
-                rawCompaniesFound: update.rawCompaniesFound
-              });
-              if (!currentRunQueryHistory.has(update.query)) {
-                currentRunQueryHistory.set(update.query, {
-                  query: update.query,
-                  timestamp: new Date().toISOString(),
-                  foundCategoryBreakdown: createEmptyCategoryBreakdown()
-                });
-              }
-              historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...aggregate.queryTexts] } });
-              emitProgress();
+                  historyQueue.enqueue({ type: "upsert-search", aggregate: { ...aggregate, queryTexts: [...aggregate.queryTexts] } });
+                  emitProgress();
+                }
+              ),
+              exaTimeoutPromise
+            ]);
+          } finally {
+            if (exaTimeoutHandle) {
+              clearTimeout(exaTimeoutHandle);
             }
-          );
+          }
 
           if (usingPendingQueryPlan) {
             const remainingQueries = pendingPlan?.remainingQueries.slice(forcedQueries.length) ?? [];
@@ -1198,6 +1287,21 @@ export class LeadWorkerRunService {
           }
 
           emitProgress();
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (this.isExaCreditsExhaustedError(errorMessage) || this.isExaTemporarilyUnavailableError(errorMessage)) {
+            stopReason = stopReason || (this.isExaCreditsExhaustedError(errorMessage)
+              ? "exa_credits_exhausted"
+              : "exa_search_unavailable");
+            stopping = true;
+            log(`Exa-Suche gestoppt. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
+            stopAiQueue();
+            // Immediately promote all remaining standby companies to prevent data loss
+            maybePromoteStandby();
+            break;
+          }
+
+          throw error;
         } finally {
           metrics.queueSizes.exaInFlight = Math.max(0, metrics.queueSizes.exaInFlight - 1);
           emitProgress();
@@ -1249,6 +1353,8 @@ export class LeadWorkerRunService {
           break;
         }
 
+        // Keep the run status fresh while waiting on external worker calls.
+        emitProgress();
         await delay(SEARCH_IDLE_MS);
       }
 
@@ -1358,7 +1464,7 @@ export class LeadWorkerRunService {
         syncedToHubSpot: metrics.hubspotWritten
       },
       timedOut,
-      stopped: stopping,
+      stopped: stopReason === "manually_stopped",
       completionReason: stopReason || (metrics.hubspotWritten >= targetLeadCount ? "target_reached" : "search_exhausted"),
       costs: undefined
     };
@@ -1373,7 +1479,7 @@ export class LeadWorkerRunService {
         companiesSkippedAfterEarlyStop: 0,
         funnel: result.funnel,
         timedOut,
-        stopped: stopping,
+        stopped: stopReason === "manually_stopped",
         completionReason: result.completionReason
       },
       contacts: generatedRecords,
@@ -1452,6 +1558,22 @@ export class LeadWorkerRunService {
       rejectedOther: queryStat.rejectedOther,
       note: existing?.note
     });
+  }
+
+  private isExaCreditsExhaustedError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes("no_more_credits")
+      || normalized.includes("exceeded your credits limit")
+      || (normalized.includes("exa") && normalized.includes("credits"));
+  }
+
+  private isExaTemporarilyUnavailableError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes("exa discovery timed out")
+      || (normalized.includes("exa") && normalized.includes("operation was aborted"))
+      || (normalized.includes("exa") && normalized.includes("timed out"))
+      || (normalized.includes("exa") && normalized.includes("429"))
+      || (normalized.includes("exa") && normalized.includes("503"));
   }
 }
 

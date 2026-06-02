@@ -1,5 +1,5 @@
 import { env } from "../config";
-import { ApolloOrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
+import { OrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 import { OpenAIWebSearchClient } from "./openai-web-search";
 
 type DiffbotResponse = {
@@ -66,7 +66,7 @@ export class DiffbotSearchClient {
   }
 
   async discoverCompanies(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page = 1,
     shouldSkipDomain?: (domain: string) => boolean
@@ -146,7 +146,7 @@ export class DiffbotSearchClient {
     return this.fallbackResearchClient.crawlCompanyWebsite(domain);
   }
 
-  private buildQuery(filter: ApolloOrganizationFilter): string {
+  private buildQuery(filter: OrganizationFilter): string {
     const countries = filter.locations.slice(0, 12).map(quoteTerm).join(", ");
     const keywords = filter.keywords.slice(0, 10).map(quoteTerm).join(", ");
     const industries = filter.industries.slice(0, 6).map(quoteTerm).join(", ");

@@ -1,5 +1,5 @@
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
+import { OrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 import { OpenAIWebSearchClient } from "./openai-web-search";
 
 interface SearchEvidence {
@@ -38,6 +38,10 @@ type ExaSearchPayloadOptions = {
   includeExcludeDomains?: boolean;
   includeCompanyCategoryFilter?: boolean;
   maxQueryCount?: number;
+};
+
+type ExaQueryBuildOptions = {
+  targetCategoryRefinement?: string;
 };
 
 const EXA_ENDPOINT = "https://api.exa.ai/search";
@@ -116,7 +120,7 @@ export class ExaSearchClient {
   }
 
   async discoverCompanies(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page = 1,
     shouldSkipDomain?: (domain: string) => boolean
@@ -384,7 +388,7 @@ export class ExaSearchClient {
     ]);
   }
 
-  buildQueries(filter: ApolloOrganizationFilter, page: number): string[] {
+  buildQueries(filter: OrganizationFilter, page: number, options: ExaQueryBuildOptions = {}): string[] {
     const locations = Array.from(new Set(filter.locations.map((location) => location.trim()).filter(Boolean))).slice(0, 2);
     const effectiveLocations = locations.length > 0 ? locations : ["Germany"];
     const locationVariants = Array.from(new Set(effectiveLocations.flatMap((location) => this.buildLocationVariants(location))));
@@ -394,6 +398,7 @@ export class ExaSearchClient {
     const semanticFocus = this.buildSemanticSearchFocus(filter, compactPersona, primaryKeywords);
     const applicationAngles = this.buildApplicationAngles(filter);
     const primaryCategory = filter.targetCategories?.[0];
+    const refinementClause = this.buildRefinementClause(options.targetCategoryRefinement);
     const queryPool = locationVariants.flatMap((location) => {
       const primaryQueries = primaryCategory === "industrial_end_customer_scaled"
         ? this.buildIndustrialEndCustomerPrimaryQueries(location, filter, semanticFocus)
@@ -408,7 +413,7 @@ export class ExaSearchClient {
         : `${location} companies that provide ${semanticFocus} for ${angle}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`
       );
 
-      return [...primaryQueries, ...angleQueries];
+      return [...primaryQueries, ...angleQueries].map((query) => refinementClause ? `${query} ${refinementClause}` : query);
     }).filter(Boolean);
 
     const baseQueries = Array.from(new Set(queryPool));
@@ -417,7 +422,16 @@ export class ExaSearchClient {
     return [...baseQueries.slice(offset), ...baseQueries.slice(0, offset)];
   }
 
-  private buildIntentTerms(filter: ApolloOrganizationFilter): string[] {
+  private buildRefinementClause(targetCategoryRefinement: string | undefined): string {
+    const normalizedRefinement = targetCategoryRefinement?.trim();
+    if (!normalizedRefinement) {
+      return "";
+    }
+
+    return `Within the selected target categories, narrow results to: ${normalizedRefinement}.`;
+  }
+
+  private buildIntentTerms(filter: OrganizationFilter): string[] {
     const text = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (/(mes|scada|plc|ot integration|automation software|sondermaschinen)/.test(text)) {
@@ -435,7 +449,7 @@ export class ExaSearchClient {
     return ["customer projects", "implementation", "engineering services", "system integrator"];
   }
 
-  private buildDiscoveryTerms(filter: ApolloOrganizationFilter): string[] {
+  private buildDiscoveryTerms(filter: OrganizationFilter): string[] {
     const text = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(text)) {
@@ -454,7 +468,7 @@ export class ExaSearchClient {
   }
 
   private buildSemanticSearchFocus(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     compactPersona: string,
     primaryKeywords: string[]
   ): string {
@@ -477,7 +491,7 @@ export class ExaSearchClient {
       .join(", ") || "industrial AI and automation integration services";
   }
 
-  private buildApplicationAngles(filter: ApolloOrganizationFilter): string[] {
+  private buildApplicationAngles(filter: OrganizationFilter): string[] {
     const normalizedText = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (filter.targetCategories?.includes("industrial_end_customer_scaled")) {
@@ -518,7 +532,7 @@ export class ExaSearchClient {
 
   private buildIndustrialEndCustomerPrimaryQueries(
     location: string,
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     semanticFocus: string
   ): string[] {
     const industries = filter.industries.slice(0, 3).join(", ");
@@ -534,7 +548,7 @@ export class ExaSearchClient {
 
   private buildIndustrialEndCustomerAngleQuery(
     location: string,
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     semanticFocus: string,
     angle: string
   ): string {
@@ -590,7 +604,7 @@ export class ExaSearchClient {
       .trim();
   }
 
-  private buildDescription(result: ExaSearchResult, filter: ApolloOrganizationFilter): string {
+  private buildDescription(result: ExaSearchResult, filter: OrganizationFilter): string {
     const highlights = result.highlights?.slice(0, 3).join(" | ");
     const title = result.title?.trim();
     return [title, highlights, result.summary?.trim(), result.text?.trim(), filter.persona]
@@ -692,6 +706,34 @@ export class ExaSearchClient {
       return "Belgium";
     }
 
+    if (hostname.endsWith(".it")) {
+      return "Italy";
+    }
+
+    if (hostname.endsWith(".fr")) {
+      return "France";
+    }
+
+    if (hostname.endsWith(".hu")) {
+      return "Hungary";
+    }
+
+    if (hostname.endsWith(".es")) {
+      return "Spain";
+    }
+
+    if (hostname.endsWith(".pt")) {
+      return "Portugal";
+    }
+
+    if (hostname.endsWith(".pl")) {
+      return "Poland";
+    }
+
+    if (hostname.endsWith(".cz")) {
+      return "Czech Republic";
+    }
+
     const evidence = [
       result.title,
       ...(result.highlights ?? []),
@@ -725,6 +767,21 @@ export class ExaSearchClient {
     const belgianEvidence = [" belgium", " belgique", " belgië", " antwerp", " brussels", " gent", " ghent"];
     if (belgianEvidence.some((token) => evidence.includes(token.trim()))) {
       return "Belgium";
+    }
+
+    const italianEvidence = [" italy", " italia", " milan", " milano", " turin", " torino", " vicenza", " bologna"];
+    if (italianEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "Italy";
+    }
+
+    const frenchEvidence = [" france", " français", " francaise", " paris", " lyon", " toulouse", " aix-en-provence"];
+    if (frenchEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "France";
+    }
+
+    const hungarianEvidence = [" hungary", " magyarország", " budapest", " debrecen", " szeged"];
+    if (hungarianEvidence.some((token) => evidence.includes(token.trim()))) {
+      return "Hungary";
     }
 
     if (fallbackLocation) {

@@ -34,7 +34,7 @@ export interface PrequalificationConfig {
   categoryContexts?: Partial<Record<SelectableLeadCategory, EditablePrequalificationCategoryContext>>;
 }
 
-export interface ApolloOrganizationFilter {
+export interface OrganizationFilter {
   name: string;
   persona: string;
   industries: string[];
@@ -160,6 +160,7 @@ export interface LeadAgentSettings {
   targetLeadCount: number;
   market: string;
   mainContext?: string;
+  targetCategoryRefinement?: string;
   searchStrategyContext?: string;
   searchStrategyPreset?: SearchStrategyPreset;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
@@ -434,6 +435,7 @@ export interface LeadJobRequest {
   targetLeadCount: number;
   market?: string;
   mainContext?: string;
+  targetCategoryRefinement?: string;
   searchStrategyContext?: string;
   searchStrategyPreset?: SearchStrategyPreset;
   executionContexts?: Partial<Record<SelectableLeadCategory, EditableExecutionContext>>;
@@ -531,7 +533,7 @@ export interface LeadRunProgress {
 
 export interface LeadJobResult {
   requested: LeadJobRequest;
-  suggestedFilters: ApolloOrganizationFilter[];
+  suggestedFilters: OrganizationFilter[];
   evaluations: FilterEvaluation[];
   shortlistedCompanies: PreCategorizedCompany[];
   researchBriefs: ResearchBrief[];

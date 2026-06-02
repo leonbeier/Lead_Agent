@@ -1,4 +1,4 @@
-import { ApolloOrganizationFilter, CompanySample, CompanySearchMode, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
+import { OrganizationFilter, CompanySample, CompanySearchMode, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 import { DiffbotSearchClient } from "./diffbot-search";
 import { ExaSearchClient } from "./exa-search";
 import { OpenCrawlerDiscoveryMetrics, OpenCrawlerSearchClient } from "./open-crawler-search";
@@ -73,7 +73,7 @@ export class WebSearchAgent {
   }
 
   async discoverCompaniesForFilter(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page = 1,
     shouldSkipDomain?: (domain: string) => boolean,

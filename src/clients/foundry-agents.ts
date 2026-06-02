@@ -1,7 +1,7 @@
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import { env, readiness } from "../config";
-import { ApolloOrganizationFilter, LeadCategory, LeadLearningData, normalizeOutreachLanguage, PreCategorizedCompany, PrequalificationConfig, PublicContactCandidate, ResearchBrief, StoredFilterSnapshot } from "../types";
+import { OrganizationFilter, LeadCategory, LeadLearningData, normalizeOutreachLanguage, PreCategorizedCompany, PrequalificationConfig, PublicContactCandidate, ResearchBrief, StoredFilterSnapshot } from "../types";
 import {
   ONE_WARE_PROMPT_CONTEXT,
   TARGET_REGIONS,
@@ -50,10 +50,10 @@ export class FoundryAgentsClient {
     agentContext: string | undefined,
     searchStrategyContext: string | undefined,
     targetCategories: LeadCategory[] | undefined,
-    baseFilters: ApolloOrganizationFilter[],
+    baseFilters: OrganizationFilter[],
     dryRun: boolean,
     learning?: LeadLearningData
-  ): Promise<ApolloOrganizationFilter[]> {
+  ): Promise<OrganizationFilter[]> {
     if (dryRun || !readiness.foundryConfigured || !env.FOUNDRY_USE_AGENT_FILTERS) {
       return baseFilters;
     }
@@ -69,8 +69,8 @@ export class FoundryAgentsClient {
         this.buildLearningContextForSearchStrategy(learning)
       ].filter(Boolean).join("\n\n"));
 
-      const parsed = JSON.parse(content) as { filters?: ApolloOrganizationFilter[] };
-      const filters = (parsed.filters ?? []).filter((filter) => this.isValidApolloFilter(filter));
+      const parsed = JSON.parse(content) as { filters?: OrganizationFilter[] };
+      const filters = (parsed.filters ?? []).filter((filter) => this.isValidOrganizationFilter(filter));
 
       return filters.length > 0 ? filters : baseFilters;
     } catch {
@@ -501,7 +501,7 @@ export class FoundryAgentsClient {
     ];
   }
 
-  private isValidApolloFilter(filter: ApolloOrganizationFilter | undefined): filter is ApolloOrganizationFilter {
+  private isValidOrganizationFilter(filter: OrganizationFilter | undefined): filter is OrganizationFilter {
     return Boolean(
       filter &&
         filter.name &&

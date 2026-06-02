@@ -490,6 +490,69 @@ test("runExaCompanySearch avoids repeating the exact previous query when Azure r
   assert.deepEqual(executedQueries, ["fresh default two"]);
 });
 
+test("runExaCompanySearch passes the Test Lab target-category refinement into the Azure planner", async () => {
+  const service = new DebugConsoleService() as any;
+  const plannerCalls: Array<{ targetCategoryRefinement?: string }> = [];
+
+  service.exaSearchClient = {
+    runtimeApiKey: "test-api-key",
+    buildQueries: () => ["default query"],
+    runSearch: async () => ({ results: [] }),
+    buildSearchPayload: (query: string) => ({ query }),
+    loadKnownExcludedDomains: async () => new Set<string>(),
+    toExcludeDomain: (value?: string) => value,
+    normalizeUrl: (url?: string) => url,
+    toCanonicalCompanyDomain: (url: string) => url,
+    deriveCompanyName: (domain: string) => domain,
+    inferCountryFromDomain: () => "Germany",
+    buildDescription: () => "Mock description"
+  };
+
+  service.azureOpenAIClient = {
+    planExaSearchQueries: async (
+      _filter: unknown,
+      _defaultQueries: string[],
+      _learning: unknown,
+      _dryRun: boolean,
+      _mainContext: string | undefined,
+      _searchStrategyContext: string | undefined,
+      _maxQueryCount: number,
+      options: { targetCategoryRefinement?: string }
+    ) => {
+      plannerCalls.push({ targetCategoryRefinement: options.targetCategoryRefinement });
+      return ["default query"];
+    }
+  };
+
+  service.controlPlaneStore = {
+    getSettings: async () => ({
+      targetCategoryRefinement: "saved refinement"
+    }),
+    getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+    getTestLabExaCache: async () => ({ queryHistory: [], discoveredDomains: [] }),
+    getCompanyScreeningDatabase: async () => ({ records: [] }),
+    writeTestLabExaCache: async () => undefined
+  };
+
+  await service.runExaCompanySearch(
+    {
+      stage: "company_search",
+      targetCategory: "integrator_vision_industrial_ai",
+      targetCategories: ["integrator_vision_industrial_ai"],
+      targetCategoryRefinement: "only food production plants",
+      companySearchMode: "exa_search",
+      exaQueryCount: 1,
+      limit: 20,
+      useAzureQueryPlanner: true
+    },
+    [buildDebugSearchFilter("integrator_vision_industrial_ai", "Germany")],
+    20
+  );
+
+  assert.equal(plannerCalls.length, 1);
+  assert.equal(plannerCalls[0]?.targetCategoryRefinement, "only food production plants");
+});
+
 test("runExaCompanySearch excludes only hubspot and debug rejected websites before adding current-request domains", async () => {
   const service = new DebugConsoleService() as any;
   const hubSpotDomains = Array.from({ length: 1300 }, (_, index) => `hubspot-${index}.example${index}.com`);

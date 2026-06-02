@@ -1,5 +1,5 @@
 import { env, openAIWebSearchModels, readiness } from "../config";
-import { ApolloOrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
+import { OrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 
 interface SearchEvidence {
   context: string;
@@ -63,7 +63,7 @@ const COMMON_COMPOUND_TLDS = new Set([
 
 export class OpenAIWebSearchClient {
   async discoverCompanies(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page = 1,
     shouldSkipDomain?: (domain: string) => boolean
@@ -105,7 +105,7 @@ export class OpenAIWebSearchClient {
   }
 
   private async discoverCompaniesFromKeywordSearch(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page: number,
     shouldSkipDomain?: (domain: string) => boolean
@@ -174,7 +174,7 @@ export class OpenAIWebSearchClient {
 
   private async searchCandidateUrls(
     query: string,
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     shouldSkipDomain?: (domain: string) => boolean
   ): Promise<string[]> {
     const duckDuckGoUrls = await this.searchDuckDuckGo(query, shouldSkipDomain);
@@ -232,7 +232,7 @@ export class OpenAIWebSearchClient {
     }
   }
 
-  private buildKeywordQueries(filter: ApolloOrganizationFilter, page: number): string[] {
+  private buildKeywordQueries(filter: OrganizationFilter, page: number): string[] {
     const location = filter.locations[0] ?? "Germany";
     const keywordVariants = filter.keywords.slice(0, 8);
     const serviceSuffixes = [
@@ -266,7 +266,7 @@ export class OpenAIWebSearchClient {
     return [...baseQueries, ...targetedQueries];
   }
 
-  private buildSourcePageQueries(filter: ApolloOrganizationFilter, page: number): string[] {
+  private buildSourcePageQueries(filter: OrganizationFilter, page: number): string[] {
     const location = filter.locations[0] ?? "Germany";
     const keywordVariants = filter.keywords.slice(0, 6);
     const sourceSuffixes = [
@@ -331,7 +331,7 @@ export class OpenAIWebSearchClient {
 
   private async searchWithOpenAIWebFallback(
     query: string,
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     shouldSkipDomain?: (domain: string) => boolean
   ): Promise<string[]> {
     try {
@@ -416,7 +416,7 @@ export class OpenAIWebSearchClient {
   }
 
   private async discoverCompaniesFromSourcePages(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page: number,
     shouldSkipDomain?: (domain: string) => boolean
@@ -491,7 +491,7 @@ export class OpenAIWebSearchClient {
     return companies;
   }
 
-  private async discoverSourcePages(filter: ApolloOrganizationFilter, page: number): Promise<SourcePageCandidate[]> {
+  private async discoverSourcePages(filter: OrganizationFilter, page: number): Promise<SourcePageCandidate[]> {
     const pages: SourcePageCandidate[] = [];
     const seenUrls = new Set<string>();
     const queries = this.buildSourcePageQueries(filter, page).slice(0, 4);
@@ -720,6 +720,7 @@ export class OpenAIWebSearchClient {
   private looksLikeCompanyName(candidate: string, normalizedBrand: string): boolean {
     const lowered = candidate.toLowerCase();
     const normalizedCandidate = lowered.replace(/[^a-z0-9]+/g, "");
+    const normalizedWords = lowered.split(/\s+/).filter(Boolean);
     const looksLikeSlogan = /(trusted by|powered by|built for|made for|future of|designed for|engineered for|your partner|tailored for|driven by)/i.test(candidate);
     const genericNames = [
       "home",
@@ -732,7 +733,14 @@ export class OpenAIWebSearchClient {
       "weltweite qualitaetskontrollen",
       "worldwide quality controls",
       "quality controls",
-      "quality control"
+      "quality control",
+      "ai",
+      "company",
+      "unternehmen",
+      "solutions",
+      "technology",
+      "software",
+      "services"
     ];
     if (genericNames.includes(lowered)) {
       return false;
@@ -743,6 +751,18 @@ export class OpenAIWebSearchClient {
     }
 
     if (looksLikeSlogan) {
+      return false;
+    }
+
+    if (/^(web\s+development\s+company\b|ai\s+company\b|company\s+in\b)/i.test(lowered)) {
+      return false;
+    }
+
+    if (!/(gmbh|mbh|ag|kg|ug|llc|inc|ltd|corp|bv|oy|ab)$/i.test(lowered) && normalizedWords.length >= 5) {
+      return false;
+    }
+
+    if (normalizedBrand && normalizedCandidate !== normalizedBrand && normalizedWords.length >= 4) {
       return false;
     }
 
@@ -1535,7 +1555,7 @@ export class OpenAIWebSearchClient {
 
   private normalizeCompany(
     company: { name?: string; domain?: string; country?: string; shortDescription?: string; whyRelevant?: string },
-    filter: ApolloOrganizationFilter
+    filter: OrganizationFilter
   ): CompanySample | null {
     const rawName = company.name?.trim();
     const domain = this.normalizeUrl(company.domain);

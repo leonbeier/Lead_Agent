@@ -1,4 +1,4 @@
-import { ApolloOrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
+import { OrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 
 interface SearchEvidence {
   context: string;
@@ -348,7 +348,7 @@ export class OpenCrawlerSearchClient {
   }
 
   async discoverCompanies(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page = 1,
     shouldSkipDomain?: (domain: string) => boolean
@@ -543,7 +543,7 @@ export class OpenCrawlerSearchClient {
     return Array.from(new Set(queries));
   }
 
-  private getSearchLocations(filter: ApolloOrganizationFilter, page: number, maxLocations = 3): string[] {
+  private getSearchLocations(filter: OrganizationFilter, page: number, maxLocations = 3): string[] {
     const locations = Array.from(new Set(filter.locations.map((location) => location.trim()).filter(Boolean)));
     if (locations.length === 0) {
       return ["Germany"];
@@ -610,7 +610,7 @@ export class OpenCrawlerSearchClient {
     };
   }
 
-  private async crawlDomainWithRetry(domain: string | undefined, filter?: ApolloOrganizationFilter): Promise<DomainCrawlResult | null> {
+  private async crawlDomainWithRetry(domain: string | undefined, filter?: OrganizationFilter): Promise<DomainCrawlResult | null> {
     for (let attempt = 0; attempt < WEBSITE_CRAWL_RETRY_ATTEMPTS; attempt += 1) {
       const crawl = await this.crawlDomain(domain, filter);
       if (crawl) {
@@ -625,7 +625,7 @@ export class OpenCrawlerSearchClient {
     return null;
   }
 
-  private buildSeedQueries(filter: ApolloOrganizationFilter, page: number): string[] {
+  private buildSeedQueries(filter: OrganizationFilter, page: number): string[] {
     const serviceLedFilter = this.isServiceLedFilter(filter);
     const integrationPhrases = [
       "system integrator",
@@ -684,7 +684,7 @@ export class OpenCrawlerSearchClient {
     return Array.from(new Set(queries));
   }
 
-  private buildSourcePageQueries(filter: ApolloOrganizationFilter, page: number): string[] {
+  private buildSourcePageQueries(filter: OrganizationFilter, page: number): string[] {
     const serviceLedFilter = this.isServiceLedFilter(filter);
     const queries: string[] = [];
 
@@ -866,7 +866,7 @@ export class OpenCrawlerSearchClient {
   }
 
   private async discoverSourcePages(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     page: number,
     shouldSkipDomain?: (domain: string) => boolean
   ): Promise<SourcePageCandidate[]> {
@@ -903,7 +903,7 @@ export class OpenCrawlerSearchClient {
     return pages.slice(0, maxSourcePages);
   }
 
-  private buildCuratedSourcePages(filter: ApolloOrganizationFilter): SourcePageCandidate[] {
+  private buildCuratedSourcePages(filter: OrganizationFilter): SourcePageCandidate[] {
     const location = (filter.locations[0] ?? "Germany").toLowerCase();
     const pages: SourcePageCandidate[] = [];
     const serviceLedFilter = this.isServiceLedFilter(filter);
@@ -955,15 +955,22 @@ export class OpenCrawlerSearchClient {
     return pages;
   }
 
-  private isServiceLedFilter(filter: ApolloOrganizationFilter): boolean {
+  private isServiceLedFilter(filter: OrganizationFilter): boolean {
     const text = [filter.name, filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
+    const visionFocusedFilter = /(machine vision|computer vision|visual inspection|optical inspection|industrial image processing|bildverarbeitung|aoi|embedded vision|inspection ai)/i.test(text);
+    const serviceSoftwareFilter = /(industrial software|manufacturing software|smart factory|mes|scada|plc|ot integration|automation software|software engineering|produktionssoftware)/i.test(text);
+
+    if (visionFocusedFilter && !serviceSoftwareFilter) {
+      return false;
+    }
+
     return /(integrator|system integration|systemintegrator|engineering services|solution provider|turnkey|customer-specific|commissioning|sondermaschinenbau|automation partner)/i.test(text);
   }
 
   private combineSourcePages(
     discoveredSourcePages: SourcePageCandidate[],
     curatedSourcePages: SourcePageCandidate[],
-    filter: ApolloOrganizationFilter
+    filter: OrganizationFilter
   ): SourcePageCandidate[] {
     const combined: SourcePageCandidate[] = [];
     const seenUrls = new Set<string>();
@@ -1001,7 +1008,7 @@ export class OpenCrawlerSearchClient {
 
   private async scrapeCandidateDomainsFromSourcePage(
     sourceUrl: string,
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     shouldSkipDomain?: (domain: string) => boolean
   ): Promise<string[]> {
     const serviceLedFilter = this.isServiceLedFilter(filter);
@@ -1107,7 +1114,7 @@ export class OpenCrawlerSearchClient {
     return Array.from(discoveredDomains);
   }
 
-  private async crawlDomain(domain: string | undefined, filter?: ApolloOrganizationFilter): Promise<DomainCrawlResult | null> {
+  private async crawlDomain(domain: string | undefined, filter?: OrganizationFilter): Promise<DomainCrawlResult | null> {
     const normalizedDomain = this.normalizeUrl(domain);
     if (!normalizedDomain) {
       return null;
@@ -1452,7 +1459,7 @@ export class OpenCrawlerSearchClient {
     return totalScore >= DEEP_DIVE_MIN_SCORE && (integratorCount === 0 || (positiveCount >= 2 && totalScore < HIGH_CONFIDENCE_SCORE));
   }
 
-  private meetsAcceptanceCriteria(crawl: DomainCrawlResult, filter?: ApolloOrganizationFilter): boolean {
+  private meetsAcceptanceCriteria(crawl: DomainCrawlResult, filter?: OrganizationFilter): boolean {
     if (crawl.totalScore < MIN_ACCEPT_SCORE) {
       return false;
     }

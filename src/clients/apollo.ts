@@ -1,5 +1,5 @@
 import { env, readiness } from "../config";
-import { ApolloContactCandidate, ApolloOrganizationFilter, CompanySample, CompanySearchMode, PreCategorizedCompany, PublicContactCandidate } from "../types";
+import { ApolloContactCandidate, OrganizationFilter, CompanySample, CompanySearchMode, PreCategorizedCompany, PublicContactCandidate } from "../types";
 import { DiffbotSearchClient } from "./diffbot-search";
 import { DiffbotTestDataClient } from "./diffbot-test-data";
 import { WebSearchAgent } from "./web-search-agent";
@@ -55,7 +55,7 @@ export class ApolloClient {
   }
 
   async fetchOrganizationSample(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     dryRun: boolean,
     page = 1,
@@ -310,7 +310,7 @@ export class ApolloClient {
   }
 
   private async searchOrganizationsWithoutCredits(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     limit: number,
     page: number,
     shouldSkipDomain?: (domain: string) => boolean,
@@ -584,7 +584,7 @@ export class ApolloClient {
     return /^(info|sales|office|kontakt|contact|hello|team|support|service|mail|privacy|datenschutz|legal|career|careers|jobs|bewerbung|hr|people|invoice|billing)@/i.test(email);
   }
 
-  private buildDryRunSample(filter: ApolloOrganizationFilter, limit: number): CompanySample[] {
+  private buildDryRunSample(filter: OrganizationFilter, limit: number): CompanySample[] {
     return Array.from({ length: limit }, (_, index) => ({
       name: `${filter.name} Prospect ${index + 1}`,
       domain: `https://example-${index + 1}.com`,
@@ -594,7 +594,7 @@ export class ApolloClient {
     }));
   }
 
-  private buildDryRunDescription(filter: ApolloOrganizationFilter, index: number): string {
+  private buildDryRunDescription(filter: OrganizationFilter, index: number): string {
     if (filter.name.includes("Software Integrators") && index % 6 === 0) {
       return "Generic IT consultancy focused on ERP rollouts and back-office transformation with little industrial execution depth.";
     }

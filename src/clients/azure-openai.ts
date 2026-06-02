@@ -1,7 +1,6 @@
 import { azureOpenAICostConfig, env, readiness } from "../config";
 import {
-  ApolloContactCandidate,
-  ApolloOrganizationFilter,
+  OrganizationFilter,
   AzureUsageCost,
   ExaQueryHistoryInsight,
   FilterEvaluation,
@@ -44,6 +43,7 @@ interface BuildResearchBriefOptions {
 const MAX_AZURE_RETRIES = 6;
 const AZURE_RETRY_DELAYS_MS = [2000, 4000, 8000, 12000, 20000, 30000];
 const AZURE_REQUEST_TIMEOUT_MS = 60000;
+const EXA_QUERY_PLANNER_TIMEOUT_MS = 45000;
 const CLASSIFIER_DEPLOYMENT = env.AZURE_OPENAI_CLASSIFIER_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT;
 const COMPANY_CLASSIFIER_INPUT_LIMIT = 700;
 const WEBSITE_CLASSIFIER_INPUT_LIMIT = 2200;
@@ -372,61 +372,6 @@ export class AzureOpenAIClient {
     return result.length <= maxLength ? result : `${result.slice(0, maxLength - 3)}...`;
   }
 
-  async chooseApolloContacts(
-    company: PreCategorizedCompany,
-    candidates: ApolloContactCandidate[],
-    dryRun: boolean,
-    mainContext?: string,
-    brief?: ResearchBrief
-  ): Promise<ApolloContactCandidate[]> {
-    const rankedCandidates = this.rankApolloContacts(candidates).slice(0, 12);
-    if (rankedCandidates.length <= 5 || dryRun || !readiness.azureConfigured) {
-      return rankedCandidates.slice(0, 5);
-    }
-
-    try {
-      const content = await this.runChat([
-        {
-          role: "system",
-          content: `${buildMainContextBlock(mainContext)}\n\nTask: Select the best two or three Apollo contacts for outbound outreach. Prefer decision-makers and operational owners who can sponsor or own industrial AI, machine vision, automation, digitalization, engineering, operations, manufacturing, or innovation projects. Favor CEO, CTO, COO, Founder, Owner, Managing Director, Managing Partner, Head of Automation, Head of Engineering, Head of Operations, Head of Production, Head of Manufacturing, Head of Digitalization, and similar roles. Prefer a balanced stakeholder set when possible: one executive sponsor plus one operational or technical owner, optionally a third relevant stakeholder. Avoid HR, recruiting, finance, legal, support, marketing, SDR/BDR, and generic sales contacts unless no stronger option exists. Return strict JSON with {\"selectedPersonIds\":[\"...\"],\"reason\":\"...\"}.`
-        },
-        {
-          role: "user",
-          content: [
-            `Company: ${company.name}`,
-            company.domain ? `Domain: ${company.domain}` : undefined,
-            `Category: ${company.category}`,
-            brief?.qualificationSummary ? `Qualification summary: ${brief.qualificationSummary}` : undefined,
-            `Apollo candidates JSON: ${JSON.stringify(rankedCandidates)}`
-          ].filter(Boolean).join("\n\n")
-        }
-      ], { maxTokens: 160 });
-
-      const parsed = this.parseJsonObject<{ selectedPersonIds?: string[] }>(content);
-      const selected = rankedCandidates.filter((candidate) => (parsed.selectedPersonIds ?? []).includes(candidate.personId));
-      const minimumSelectedCount = Math.min(5, rankedCandidates.length);
-      if (selected.length >= minimumSelectedCount) {
-        return selected.slice(0, 5);
-      }
-
-      const augmentedSelection = [...selected];
-      for (const candidate of rankedCandidates) {
-        if (augmentedSelection.some((existing) => existing.personId === candidate.personId)) {
-          continue;
-        }
-
-        augmentedSelection.push(candidate);
-        if (augmentedSelection.length >= minimumSelectedCount) {
-          break;
-        }
-      }
-
-      return augmentedSelection.slice(0, 5);
-    } catch {
-      return rankedCandidates.slice(0, 5);
-    }
-  }
-
   async choosePublicContacts(
     company: Pick<PreCategorizedCompany, "name" | "domain" | "country" | "category">,
     candidates: PublicContactCandidate[],
@@ -574,10 +519,10 @@ export class AzureOpenAIClient {
     mainContext: string | undefined,
     searchStrategyContext: string | undefined,
     targetCategories: LeadCategory[] | undefined,
-    baseFilters: ApolloOrganizationFilter[],
+    baseFilters: OrganizationFilter[],
     dryRun: boolean,
     learning?: LeadLearningData
-  ): Promise<ApolloOrganizationFilter[]> {
+  ): Promise<OrganizationFilter[]> {
     const foundryFilters = await this.foundryAgentsClient.generateSuggestedFilters(
       market,
       customGoal,
@@ -641,10 +586,10 @@ export class AzureOpenAIClient {
         { maxTokens: 900 }
       );
 
-      const parsed = this.parseJsonObject<{ filters?: ApolloOrganizationFilter[] }>(content);
+      const parsed = this.parseJsonObject<{ filters?: OrganizationFilter[] }>(content);
       const filters = (parsed.filters ?? [])
-        .map((filter) => this.normalizeApolloFilter(filter))
-        .filter((filter): filter is ApolloOrganizationFilter => Boolean(filter));
+        .map((filter) => this.normalizeOrganizationFilter(filter))
+        .filter((filter): filter is OrganizationFilter => Boolean(filter));
 
       return filters.length > 0 ? filters : baseFilters;
     } catch {
@@ -653,7 +598,7 @@ export class AzureOpenAIClient {
   }
 
   async planExaSearchQueries(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     defaultQueries: string[],
     learning: LeadLearningData | undefined,
     dryRun: boolean,
@@ -665,6 +610,8 @@ export class AzureOpenAIClient {
       prequalification?: PrequalificationConfig;
       excludedDomainExamples?: string[];
       requestedTargetCategories?: LeadCategory[];
+      targetCategoryRefinement?: string;
+      plannerTimeoutMs?: number;
       debugCapture?: (details: { promptMessages: Array<{ role: "system" | "user"; content: string }> }) => void;
     } = {}
   ): Promise<string[]> {
@@ -697,6 +644,7 @@ export class AzureOpenAIClient {
             filter,
             requestedLocalities,
             requestedCategories as LeadCategory[],
+            options.targetCategoryRefinement,
             goodSignalsContext,
             avoidSignalsContext,
             baselineQueries,
@@ -708,15 +656,21 @@ export class AzureOpenAIClient {
         }
       ];
       options.debugCapture?.({ promptMessages });
+      const plannerTimeoutMs = Math.max(1, options.plannerTimeoutMs ?? EXA_QUERY_PLANNER_TIMEOUT_MS);
 
-      const content = await this.runChat(promptMessages, { maxTokens: 700 });
+      const content = await this.runChatWithTimeout(
+        promptMessages,
+        { maxTokens: 700 },
+        plannerTimeoutMs,
+        "Exa query planner"
+      );
 
       const parsed = this.parseJsonObject<{ queries?: string[] }>(content);
       const plannedQueries = Array.from(new Set((parsed.queries ?? []).map((query) => query.trim()).filter(Boolean)));
       const initialQueries = plannedQueries.length > 0 ? plannedQueries.slice(0, targetQueryCount) : baselineQueries;
 
       if (initialQueries.length > 1 && this.exaQueriesNeedDiversification(initialQueries, requestedLocalities, baselineQueries)) {
-        const rewrittenContent = await this.runChat(
+        const rewrittenContent = await this.runChatWithTimeout(
           [
             promptMessages[0],
             {
@@ -733,7 +687,9 @@ export class AzureOpenAIClient {
               )
             }
           ],
-          { maxTokens: 700 }
+          { maxTokens: 700 },
+          plannerTimeoutMs,
+          "Exa query planner diversity rewrite"
         );
 
         const rewrittenParsed = this.parseJsonObject<{ queries?: string[] }>(rewrittenContent);
@@ -1260,9 +1216,10 @@ export class AzureOpenAIClient {
   }
 
   private buildExaPlannerUserPrompt(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     requestedLocalities: string[],
     requestedCategories: LeadCategory[],
+    targetCategoryRefinement: string | undefined,
     goodSignalsContext: string | undefined,
     avoidSignalsContext: string | undefined,
     baselineQueries: string[],
@@ -1282,6 +1239,13 @@ export class AzureOpenAIClient {
         "This section defines the exact kind of companies you are trying to find.",
         requestedLocalities.length > 0 ? `* Required locality terms to preserve in every query: ${requestedLocalities.join(", ")}` : undefined,
         requestedCategories.length > 0 ? `* Desired target categories for this run: ${requestedCategories.join(", ")}` : undefined,
+        targetCategoryRefinement?.trim()
+          ? [
+              "* Additional narrowing instruction for this run:",
+              "  Innerhalb der gesuchten Gruppen sollen ausschliesslich folgende gesucht werden:",
+              `  ${targetCategoryRefinement.trim()}`
+            ].join("\n")
+          : undefined,
         this.buildExaSearchUndesiredCategorySummary(requestedCategories),
         "* Find official company websites for the intended target profile.",
         "* Prefer the official root domain or homepage for each company, not team pages, contact pages, docs pages, product pages, article pages, or other deep links.",
@@ -1364,7 +1328,7 @@ export class AzureOpenAIClient {
   }
 
   private buildExaPlannerDiversityRewritePrompt(
-    filter: ApolloOrganizationFilter,
+    filter: OrganizationFilter,
     requestedLocalities: string[],
     requestedCategories: LeadCategory[],
     baselineQueries: string[],
@@ -1706,7 +1670,7 @@ export class AzureOpenAIClient {
     return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
   }
 
-  private buildExaSearchFilterNarrative(filter: ApolloOrganizationFilter): string {
+  private buildExaSearchFilterNarrative(filter: OrganizationFilter): string {
     return [
       "Search filter context:",
       `- Filter name: ${filter.name}`,
@@ -1721,14 +1685,14 @@ export class AzureOpenAIClient {
   }
 
   async reviseSearchFilter(
-    failedFilter: ApolloOrganizationFilter,
+    failedFilter: OrganizationFilter,
     evaluation: FilterEvaluation,
     dryRun: boolean,
     learning?: LeadLearningData,
     market?: string,
     customGoal?: string,
     mainContext?: string
-  ): Promise<ApolloOrganizationFilter | null> {
+  ): Promise<OrganizationFilter | null> {
     if (dryRun || !readiness.azureConfigured) {
       return null;
     }
@@ -1768,8 +1732,8 @@ export class AzureOpenAIClient {
         { maxTokens: 500 }
       );
 
-      const parsed = this.parseJsonObject<{ filter?: ApolloOrganizationFilter }>(content);
-      const normalizedFilter = this.normalizeApolloFilter(parsed.filter);
+      const parsed = this.parseJsonObject<{ filter?: OrganizationFilter }>(content);
+      const normalizedFilter = this.normalizeOrganizationFilter(parsed.filter);
 
       if (!normalizedFilter) {
         return null;
@@ -3452,6 +3416,24 @@ export class AzureOpenAIClient {
     return content;
   }
 
+  private async runChatWithTimeout(messages: ChatMessage[], options: RunChatOptions, timeoutMs: number, label: string): Promise<string> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.runChat(messages, options),
+        new Promise<string>((_, reject) => {
+          timeoutHandle = setTimeout(() => {
+            reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
   private enforceCostBudget(): void {
     const maxCostUsd = azureOpenAICostConfig.maxCostUsd;
     if (maxCostUsd <= 0) {
@@ -3523,13 +3505,13 @@ export class AzureOpenAIClient {
     const compactWebsiteContext = [
       "# Website Task\nClassify the company only from its own crawled website pages.",
       "# Website Decision Rules\nIf the website mainly sells external customer project delivery, choose an integrator category. If it mainly sells its own shipped software product or diagnostic plugin, choose machine_builder_ai_enablement. If it mainly sells a platform or runtime where customers deploy apps, modules, agents, or workflows, choose software_platform_embedding.",
-      "# Website Specific Reminders\nA certified PACS/viewer-integrated medical plugin is machine_builder_ai_enablement. A runtime, turnkey appliance, or app-lifecycle platform for OEM digital services is software_platform_embedding even if PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration is mentioned. If the product lets customers launch industrial apps without building the integration stack themselves, prefer software_platform_embedding. A closed municipal or route-planning platform stays other unless customers clearly build on top of it. Broad engineering or MBSE-style capability pages without explicit AI, automation, MES/SCADA, inspection, or embeddable product/platform proof should stay other.",
+      "# Website Specific Reminders\nA certified PACS/viewer-integrated medical plugin is machine_builder_ai_enablement. A runtime, turnkey appliance, or app-lifecycle platform for OEM digital services is software_platform_embedding even if PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration is mentioned. If the product lets customers launch industrial apps without building the integration stack themselves, prefer software_platform_embedding. A closed municipal or route-planning platform stays other unless customers clearly build on top of it. Broad engineering or MBSE-style capability pages without explicit AI, automation, MES/SCADA, inspection, or embeddable product/platform proof should stay other. Research institutes, Fraunhofer-style institutes, universities, labs, clusters, and publicly funded competence centers are not integrators or customer delivery partners unless the website clearly sells commercial external implementation services as the main business model.",
       "# Output Reminder\nChoose the closest archetype across all categories. Do not prefer integrators when the fit path is ambiguous."
     ].join("\n\n");
 
     const fullWebsiteContext = [
       compactWebsiteContext,
-      "# Website Examples\nExample 1: a company that develops certified radiology AI software integrated as plug-ins into PACS or viewer workstations is machine_builder_ai_enablement.\nExample 2: a vendor that packages digital services as apps, deploys them across many customer sites via a runtime or turnkey appliance, and manages updates or monetization is software_platform_embedding.\nExample 3: a municipal operations cloud for waste, winter service, or route planning with rollout help but no open extension surface is other.\nExample 4: a general engineering services site with MBSE, requirements engineering, or hardware/software development pages but no explicit fit-path proof is other."
+      "# Website Examples\nExample 1: a company that develops certified radiology AI software integrated as plug-ins into PACS or viewer workstations is machine_builder_ai_enablement.\nExample 2: a vendor that packages digital services as apps, deploys them across many customer sites via a runtime or turnkey appliance, and manages updates or monetization is software_platform_embedding.\nExample 3: a municipal operations cloud for waste, winter service, or route planning with rollout help but no open extension surface is other.\nExample 4: a general engineering services site with MBSE, requirements engineering, or hardware/software development pages but no explicit fit-path proof is other.\nExample 5: a Fraunhofer-style institute, university lab, or research center with projects, publications, grants, consortium work, or transfer activities but no clear commercial implementation-service offering is irrelevant or other, not an integrator."
     ].join("\n\n");
 
     return [
@@ -3620,52 +3602,6 @@ export class AzureOpenAIClient {
     return modeSections.length > 0 ? modeSections.join("\n\n") : undefined;
   }
 
-  private rankApolloContacts(candidates: ApolloContactCandidate[]): ApolloContactCandidate[] {
-    return [...candidates].sort((left, right) => this.getApolloContactRank(right) - this.getApolloContactRank(left));
-  }
-
-  private getApolloContactRank(candidate: ApolloContactCandidate): number {
-    const title = candidate.title?.toLowerCase() ?? "";
-    const seniority = candidate.seniority?.toLowerCase() ?? "";
-    const departmentText = `${candidate.departments?.join(" ") ?? ""} ${candidate.functions?.join(" ") ?? ""}`.toLowerCase();
-
-    let score = 0;
-
-    if (/\b(ceo|cto|coo|founder|owner|geschäftsführer|managing director|managing partner|general manager)\b/.test(title)) {
-      score += 12;
-    }
-
-    if (/\b(head|director|lead|vp|manager)\b/.test(title) || /\b(head|director|vp|c_suite|founder|owner|manager)\b/.test(seniority)) {
-      score += 7;
-    }
-
-    if (/automation|innovation|engineering|operations|production|manufacturing|digital|vision|inspection|factory|quality|plant/.test(title)) {
-      score += 6;
-    }
-
-    if (/partner|account manager|business development|business developer|technology manager|technical manager|solutions|solution/.test(title)) {
-      score += 6;
-    }
-
-    if (/engineering|operations|innovation|it|product|manufacturing|quality|automation/.test(departmentText)) {
-      score += 4;
-    }
-
-    if (/partner|alliances|business development|business developer|account management|technology|solutions/.test(departmentText)) {
-      score += 3;
-    }
-
-    if (/hr|recruit|finance|legal|marketing|support|sales development|sdr|bdr|account executive/.test(`${title} ${departmentText}`)) {
-      score -= 12;
-    }
-
-    if (candidate.hasEmail) {
-      score += 2;
-    }
-
-    return score;
-  }
-
   private formatFilterSnapshot(snapshot: {
     persona: string;
     industries: string[];
@@ -3684,7 +3620,7 @@ export class AzureOpenAIClient {
     ].join(" | ");
   }
 
-  private normalizeApolloFilter(filter: ApolloOrganizationFilter | undefined): ApolloOrganizationFilter | null {
+  private normalizeOrganizationFilter(filter: OrganizationFilter | undefined): OrganizationFilter | null {
     if (!filter) {
       return null;
     }
