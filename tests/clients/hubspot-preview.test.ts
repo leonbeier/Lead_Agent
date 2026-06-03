@@ -125,6 +125,32 @@ test("previewHubSpotSync includes resolved address fields when address lookup is
   assert.equal(preview.companyProperties.country, "Germany");
 });
 
+test("extractEmails normalizes bracketed obfuscated mailbox addresses", () => {
+  const client = new HubSpotClient();
+  const emails = client["extractEmails"](`
+    <html>
+      <body>
+        <p>Kontakt: info[at]ceeltec.de</p>
+      </body>
+    </html>
+  `, new Set(["ceeltec.de"]));
+
+  assert.deepEqual(emails, ["info@ceeltec.de"]);
+});
+
+test("extractPhones captures local-format phone numbers in contact contexts", () => {
+  const client = new HubSpotClient();
+  const phones = client["extractPhones"](`
+    <html>
+      <body>
+        <p>Telefon: 07821 / 9972-30</p>
+      </body>
+    </html>
+  `);
+
+  assert.deepEqual(phones, ["07821 / 9972-30"]);
+});
+
 test("previewHubSpotSync prefers a legal entity name resolved from official pages", async () => {
   const client = new HubSpotClient();
   client["extractCompanyAddress"] = async () => ({

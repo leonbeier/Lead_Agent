@@ -2764,6 +2764,13 @@ export class HubSpotClient {
       .replace(/&#x([0-9a-f]+);?/gi, (_match, codePoint) => String.fromCodePoint(Number.parseInt(codePoint, 16)));
   }
 
+  private normalizeObfuscatedContactText(value: string): string {
+    return this.decodeHtmlEntities(value)
+      .replace(/([A-Z0-9._%+-]+)\s*(?:\[|\(|\{)\s*(?:at|ät)\s*(?:\]|\)|\})\s*([A-Z0-9.-]+\.[A-Z]{2,})/gi, "$1@$2")
+      .replace(/([A-Z0-9._%+-]+)\s+(?:at|ät)\s+([A-Z0-9.-]+\.[A-Z]{2,})/gi, "$1@$2")
+      .replace(/\s*@\s*/g, "@");
+  }
+
   private async extractCompanyAddress(company: PreCategorizedCompany): Promise<ExtractedCompanyAddress | null> {
     if (!company.domain) {
       return this.extractCompanyAddressWithWebSearch(company);
@@ -2992,7 +2999,7 @@ export class HubSpotClient {
   private extractVisibleEmailsForAi(html: string): string[] {
     return Array.from(
       new Set(
-        [...this.decodeHtmlEntities(html).matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+        [...this.normalizeObfuscatedContactText(html).matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
           .map((match) => match[0].toLowerCase())
           .filter((email) => !email.endsWith(".png") && !email.endsWith(".jpg") && !email.endsWith(".jpeg") && !email.endsWith(".webp"))
       )
@@ -3122,7 +3129,7 @@ export class HubSpotClient {
   }
 
   private extractEmails(html: string, allowedDomains: Set<string>): string[] {
-    const decodedHtml = this.decodeHtmlEntities(html);
+    const decodedHtml = this.normalizeObfuscatedContactText(html);
     return Array.from(
       new Set(
         [...decodedHtml.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
@@ -3134,9 +3141,10 @@ export class HubSpotClient {
   }
 
   private extractPhones(html: string): string[] {
+    const decodedHtml = this.decodeHtmlEntities(html);
     const telLinks = Array.from(
       new Set(
-        [...html.matchAll(/href=["']tel:([^"']+)["']/gi)]
+        [...decodedHtml.matchAll(/href=["']tel:([^"']+)["']/gi)]
           .map((match) => decodeURIComponent(match[1]).replace(/\s+/g, " ").trim())
           .filter((phone) => phone.replace(/\D/g, "").length >= 8)
       )
@@ -3147,13 +3155,13 @@ export class HubSpotClient {
 
     return Array.from(
       new Set(
-        [...html.matchAll(/(?:\+|00)[0-9][0-9\s()\/-]{6,}[0-9]/g)]
+        [...decodedHtml.matchAll(/(?:\+|00)?[0-9][0-9\s()\/-]{6,}[0-9]/g)]
           .map((match) => {
             const phone = match[0].replace(/\s+/g, " ").trim();
-            const context = html.slice(Math.max(0, match.index - 60), Math.min(html.length, (match.index ?? 0) + phone.length + 60));
+            const context = decodedHtml.slice(Math.max(0, (match.index ?? 0) - 60), Math.min(decodedHtml.length, (match.index ?? 0) + phone.length + 60));
             return { phone, context };
           })
-          .filter(({ phone, context }) => phone.replace(/\D/g, "").length >= 10 && /(tel|telefon|phone|mobile|mobil|call|kontakt|contact)/i.test(context))
+          .filter(({ phone, context }) => phone.replace(/\D/g, "").length >= 8 && /(tel|telefon|phone|mobile|mobil|call|kontakt|contact)/i.test(context))
           .map(({ phone }) => phone)
       )
     );
