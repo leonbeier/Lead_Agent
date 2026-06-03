@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { env, readiness } from "./config";
-import { ControlPlaneStore } from "./control-plane";
+import { ControlPlaneStore, getLeadAgentRuntimeDataDirectory } from "./control-plane";
 import { DebugConsoleService } from "./debug/test-console-service";
 import { defaultFilters } from "./filters";
 import { LeadPipelineAgent } from "./agents/lead-pipeline";
@@ -989,5 +989,6 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 export function startServer(): void {
   app.listen(env.PORT, "0.0.0.0", () => {
     console.log(`Lead Agent listening on 0.0.0.0:${env.PORT}`);
+    console.log(`Lead Agent runtime data dir: ${getLeadAgentRuntimeDataDirectory()}`);
   });
 }

@@ -402,6 +402,8 @@ export class ExaSearchClient {
     const queryPool = locationVariants.flatMap((location) => {
       const primaryQueries = primaryCategory === "industrial_end_customer_scaled"
         ? this.buildIndustrialEndCustomerPrimaryQueries(location, filter, semanticFocus)
+        : primaryCategory === "machine_builder_ai_enablement"
+          ? this.buildMachineBuilderPrimaryQueries(location, filter, semanticFocus)
         : [
             `${location} companies that provide ${semanticFocus}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
             `${location} system integrators and solution providers that deliver ${semanticFocus} for customer projects. Prefer official company websites and exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
@@ -410,6 +412,8 @@ export class ExaSearchClient {
 
       const angleQueries = applicationAngles.map((angle) => primaryCategory === "industrial_end_customer_scaled"
         ? this.buildIndustrialEndCustomerAngleQuery(location, filter, semanticFocus, angle)
+        : primaryCategory === "machine_builder_ai_enablement"
+          ? this.buildMachineBuilderAngleQuery(location, filter, semanticFocus, angle)
         : `${location} companies that provide ${semanticFocus} for ${angle}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`
       );
 
@@ -478,6 +482,10 @@ export class ExaSearchClient {
       return "in-house quality control, visual inspection, process automation, production-line inspection, and machine-vision adoption";
     }
 
+    if (filter.targetCategories?.includes("machine_builder_ai_enablement")) {
+      return "machine builders, OEMs, and automation equipment suppliers that can add AI-enabled inspection, quality control, machine vision, or smart automation options to customer machines";
+    }
+
     if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(normalizedText)) {
       return "machine vision system integration for industrial automation, industrial image processing, optical inspection systems, camera-based quality control, robot guidance, and turnkey vision inspection solutions";
     }
@@ -500,6 +508,15 @@ export class ExaSearchClient {
         "inline inspection, defect detection, and yield improvement",
         "packaging, sorting, and verification in factory operations",
         "process monitoring, traceability, and production optimization"
+      ];
+    }
+
+    if (filter.targetCategories?.includes("machine_builder_ai_enablement")) {
+      return [
+        "AI inspection modules and visual quality control on production machines",
+        "retrofit-ready machine vision, sensing, and smart automation options",
+        "OEM equipment with inline inspection, sorting, or verification add-ons",
+        "customer-specific machinery upgrades for traceability and process optimization"
       ];
     }
 
@@ -554,6 +571,32 @@ export class ExaSearchClient {
   ): string {
     const industries = filter.industries.slice(0, 2).join(" and ") || "manufacturing";
     return `${location} industrial end customers in ${industries} with own production lines and need for ${angle}, ${semanticFocus}. Prefer official company websites of factories, plant operators, producers, processors, and production groups that buy and operate machinery in-house. Exclude system integrators, consultancies, machine builders, OEMs, directories, marketplaces, job boards, news articles, PDFs, and component vendors.`;
+  }
+
+  private buildMachineBuilderPrimaryQueries(
+    location: string,
+    filter: OrganizationFilter,
+    semanticFocus: string
+  ): string[] {
+    const industries = filter.industries.slice(0, 3).join(", ");
+    const industryFocus = industries ? `${industries} machine builders, OEMs, and equipment suppliers` : "machine builders, OEMs, and automation equipment suppliers";
+    const exclusion = "Exclude distributors, job boards, directories, generic component resellers, news articles, PDFs, and pure software consultancies with no machinery or equipment delivery.";
+
+    return [
+      `${location} ${industryFocus} that provide ${semanticFocus}. Prefer official company websites of machine builders and OEMs that sell customer-facing machinery or automation equipment. ${exclusion}`,
+      `${location} machine builders and OEMs offering automation equipment, inspection systems, or production machines with upgrade potential for AI, vision, or quality-control options. Prefer official company websites. ${exclusion}`,
+      `${location} special machinery builders, OEMs, and industrial equipment suppliers serving manufacturers with modular automation, inspection, or smart-machine options. Prefer official company websites, not directories or component catalogs.`
+    ];
+  }
+
+  private buildMachineBuilderAngleQuery(
+    location: string,
+    filter: OrganizationFilter,
+    semanticFocus: string,
+    angle: string
+  ): string {
+    const industries = filter.industries.slice(0, 2).join(" and ") || "industrial automation and machinery";
+    return `${location} machine builders, OEMs, and automation equipment suppliers in ${industries} with ${angle}. Prefer official company websites of machinery vendors and OEMs serving manufacturing customers. Exclude directories, job boards, marketplaces, generic component vendors, news articles, PDFs, and pure consultancies. Focus on firms that deliver customer machines or equipment, not only software services.`;
   }
 
   private buildLocationVariants(location: string): string[] {

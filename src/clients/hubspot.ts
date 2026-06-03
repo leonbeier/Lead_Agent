@@ -1,4 +1,5 @@
 import { env, readiness } from "../config";
+import { ApolloClient } from "./apollo";
 import { AzureOpenAIClient } from "./azure-openai";
 import { FoundryAgentsClient } from "./foundry-agents";
 import { OpenAIWebSearchClient } from "./openai-web-search";
@@ -230,6 +231,7 @@ export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
   private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();
   private readonly officialWebsiteProfileCache = new Map<string, Promise<OfficialWebsiteCompanyProfile | null>>();
+  private readonly apolloClient = new ApolloClient();
 
   private readonly azureOpenAIClient = new AzureOpenAIClient();
 
@@ -2941,6 +2943,10 @@ export class HubSpotClient {
     const normalizedLegalEntityName = this.normalizeCompanyComparisonValue(legalEntityName);
     const normalizedShortName = this.normalizeCompanyComparisonValue(company.name);
     return normalizedLegalEntityName !== normalizedShortName || /\b(gmbh|mbh|ag|kg|kgaa|llc|inc|corp|corporation|limited|ltd|oy|ab|as|srl|spa|bv|nv)\b/i.test(companyName);
+  }
+
+  private isPlausibleCompanyAddress(address: ExtractedCompanyAddress): boolean {
+    return Boolean(address.address || (address.city && address.zip));
   }
 
   private extractInternalLinksForAi(rootUrl: string, html: string): Array<{ url: string; anchorText: string }> {

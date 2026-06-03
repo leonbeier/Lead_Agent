@@ -128,6 +128,25 @@ export const defaultFilters: OrganizationFilter[] = [
     notes: "Europe-wide ICP. Target delivery-oriented machine-vision and inspection integrators with explicit customer project ownership across the selected countries."
   },
   {
+    name: "Europe Industrial Automation Integration Partners",
+    persona: "European industrial automation and software integration partner delivering PLC, SCADA, MES, OT, and customer-specific implementation projects for manufacturers",
+    industries: ["Industrial Automation", "Industrial Software", "System Integration", "Machinery"],
+    keywords: [
+      "industrial automation integrator",
+      "plc scada mes integration",
+      "ot integration",
+      "manufacturing software implementation",
+      "systemintegration automation",
+      "production software engineering",
+      "industrial digitalization",
+      "customer-specific automation projects"
+    ],
+    locations: ["Europe"],
+    employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
+    targetCategories: ["integrator_relevant_focus"],
+    notes: "Europe-wide discovery for delivery-led industrial automation, OT, and production software implementation partners. Prefer project businesses with customer integration ownership over broad AI consultancies or product-only vendors."
+  },
+  {
     name: "Europe Industrial Inspection Engineering Firms",
     persona: "European engineering and software service provider delivering AOI, inline inspection, industrial image processing, or computer vision projects for industrial customers",
     industries: ["Industrial Automation", "Industrial Software", "System Integration", "Electronics"],

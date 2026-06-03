@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ExaSearchClient } from "../../src/clients/exa-search";
+import { buildDebugSearchFilter } from "../../src/debug/test-console";
 
 test("buildQueries includes localized Germany variants and official-website discovery angles", () => {
   const client = new ExaSearchClient();
@@ -58,6 +59,31 @@ test("buildQueries appends the target-category refinement to baseline Exa querie
 
   assert.ok(queries.length > 0);
   assert.ok(queries.every((query) => /Within the selected target categories, narrow results to: Nur Firmen die Lebensmittel produzieren\./i.test(query)));
+});
+
+test("buildDebugSearchFilter picks the dedicated Europe automation filter for integrator_relevant_focus", () => {
+  const filter = buildDebugSearchFilter("integrator_relevant_focus", "Europe");
+
+  assert.equal(filter.name, "Europe Industrial Automation Integration Partners [debug Europe]");
+  assert.deepEqual(filter.targetCategories, ["integrator_relevant_focus"]);
+});
+
+test("buildQueries uses machine-builder specific language for machine_builder_ai_enablement", () => {
+  const client = new ExaSearchClient();
+  const queries = client["buildQueries"]({
+    name: "DACH Machine Builders For AI Options",
+    persona: "Machine builder or OEM that can offer AI options, fixtures, or AI-ready integrations to customers",
+    industries: ["Machinery", "Industrial Automation", "Electrical Manufacturing"],
+    locations: ["Europe"],
+    keywords: ["special machinery", "oem", "inspection systems", "automation equipment", "production machines"],
+    employeeRanges: ["51,200"],
+    notes: "Prefer builders with modular products and clear customer integration pathways.",
+    targetCategories: ["machine_builder_ai_enablement"]
+  }, 1) as string[];
+
+  assert.ok(queries.some((query) => /machine builders|OEMs|automation equipment suppliers/i.test(query)));
+  assert.ok(queries.some((query) => /customer machines|production machines|special machinery builders/i.test(query)));
+  assert.ok(queries.every((query) => !/turnkey vision inspection solutions/i.test(query)));
 });
 
 test("discoverCompanies requests 20 Exa results per query regardless of lead limit", async () => {

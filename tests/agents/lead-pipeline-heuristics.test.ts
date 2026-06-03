@@ -440,3 +440,55 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
   assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
 });
 
+test("direct exa path feeds freshly discovered domains into later Exa queries", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  const excludeDomainSnapshots: string[][] = [];
+
+  agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
+  agent.controlPlaneStore.getLiveExaCache = async () => ({ entries: [], discoveredDomains: [] });
+  agent.exaPreviewClient = {
+    runtimeApiKey: "exa-test-key",
+    buildQueries: () => ["query one", "query two"],
+    runSearch: async (_apiKey: string, query: string, _numResults: number, excludeDomains: string[] = []) => {
+      excludeDomainSnapshots.push([...excludeDomains]);
+
+      if (query === "query one") {
+        return {
+          results: [{ url: "https://fresh-domain.example/about", title: "Fresh Domain" }]
+        };
+      }
+
+      return { results: [] };
+    },
+    toExcludeDomain: (value: string | undefined) => value ? new URL(value).hostname.replace(/^www\./, "") : undefined,
+    normalizeUrl: (value: string | undefined) => value ? new URL(value).origin : undefined,
+    toCanonicalCompanyDomain: (value: string) => value,
+    deriveCompanyName: () => "Fresh Domain",
+    inferCountryFromDomain: () => "Germany",
+    buildDescription: () => "fresh",
+    loadKnownExcludedDomains: async () => new Set<string>()
+  };
+
+  const discovered = await agent.runDirectExaCompanySearch(
+    {
+      name: "Germany Vision Integrators",
+      persona: "Integrator",
+      industries: ["Industrial Automation"],
+      keywords: ["machine vision integrator"],
+      locations: ["Germany"],
+      employeeRanges: ["11,50"],
+      targetCategories: ["integrator_vision_industrial_ai"],
+      notes: "live"
+    },
+    ["integrator_vision_industrial_ai"],
+    2,
+    { screeningScope: "live" },
+    { useAzureQueryPlanner: false }
+  );
+
+  assert.equal(discovered.length, 1);
+  assert.equal(excludeDomainSnapshots.length, 2);
+  assert.equal(excludeDomainSnapshots[0]?.includes("fresh-domain.example"), false);
+  assert.equal(excludeDomainSnapshots[1]?.includes("fresh-domain.example"), true);
+});
+

@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { CacheDatabaseStore } from "./cache-database";
@@ -43,21 +43,94 @@ const selectableCategorySchema = z.enum([
   "software_platform_embedding"
 ]);
 
-const dataDirectory = path.join(process.cwd(), "data");
-const settingsPath = path.join(dataDirectory, "lead-agent-settings.json");
-const templatesPath = path.join(dataDirectory, "outreach-templates.json");
-const learningPath = path.join(dataDirectory, "lead-agent-learning.json");
-const latestLeadRunPath = path.join(dataDirectory, "latest-lead-run.json");
-const latestOutreachReviewPath = path.join(dataDirectory, "latest-outreach-review.json");
-const searchCursorPath = path.join(dataDirectory, "search-cursors.json");
-const companyScreeningDatabasePath = path.join(dataDirectory, "company-screening-database.json");
-const testLabExaCachePath = path.join(dataDirectory, "testlab-exa-cache.json");
-const liveExaCachePath = path.join(dataDirectory, "live-exa-cache.json");
-const cacheDatabaseDirectory = process.env.LEAD_AGENT_CACHE_DIR?.trim()
-  ? path.resolve(process.env.LEAD_AGENT_CACHE_DIR.trim())
-  : path.join(dataDirectory, "cache-db");
-const liveCacheDatabasePath = path.join(cacheDatabaseDirectory, "live-run-cache.sqlite");
-const debugCacheDatabasePath = path.join(cacheDatabaseDirectory, "testlab-cache.sqlite");
+const DEFAULT_RUNTIME_DATA_DIRECTORY = "/data";
+
+export interface LeadAgentDataPaths {
+  runtimeDataDirectory: string;
+  seedDataDirectory: string;
+  settingsPath: string;
+  templatesPath: string;
+  learningPath: string;
+  latestLeadRunPath: string;
+  latestOutreachReviewPath: string;
+  apolloSearchCursorPath: string;
+  companyScreeningDatabasePath: string;
+  testLabExaCachePath: string;
+  liveExaCachePath: string;
+  cacheDatabaseDirectory: string;
+  liveCacheDatabasePath: string;
+  debugCacheDatabasePath: string;
+  seedSettingsPath: string;
+  seedTemplatesPath: string;
+  seedLearningPath: string;
+  seedLatestLeadRunPath: string;
+  seedLatestOutreachReviewPath: string;
+  seedApolloSearchCursorPath: string;
+  seedCompanyScreeningDatabasePath: string;
+  seedTestLabExaCachePath: string;
+  seedLiveExaCachePath: string;
+  seedCacheDatabaseDirectory: string;
+  seedLiveCacheDatabasePath: string;
+  seedDebugCacheDatabasePath: string;
+}
+
+export function resolveLeadAgentDataPaths(options: {
+  cwd?: string;
+  dataDirEnv?: string;
+  cacheDirEnv?: string;
+  hasMountedDataDir?: boolean;
+} = {}): LeadAgentDataPaths {
+  const cwd = options.cwd ?? process.cwd();
+  const seedDataDirectory = path.join(cwd, "data");
+  const explicitRuntimeDataDirectory = options.dataDirEnv?.trim();
+  const runtimeDataDirectory = explicitRuntimeDataDirectory
+    ? path.resolve(explicitRuntimeDataDirectory)
+    : (options.hasMountedDataDir ?? existsSync(DEFAULT_RUNTIME_DATA_DIRECTORY))
+      ? DEFAULT_RUNTIME_DATA_DIRECTORY
+      : seedDataDirectory;
+  const cacheDatabaseDirectory = options.cacheDirEnv?.trim()
+    ? path.resolve(options.cacheDirEnv.trim())
+    : path.join(runtimeDataDirectory, "cache-db");
+  const seedCacheDatabaseDirectory = path.join(seedDataDirectory, "cache-db");
+
+  return {
+    runtimeDataDirectory,
+    seedDataDirectory,
+    settingsPath: path.join(runtimeDataDirectory, "lead-agent-settings.json"),
+    templatesPath: path.join(runtimeDataDirectory, "outreach-templates.json"),
+    learningPath: path.join(runtimeDataDirectory, "lead-agent-learning.json"),
+    latestLeadRunPath: path.join(runtimeDataDirectory, "latest-lead-run.json"),
+    latestOutreachReviewPath: path.join(runtimeDataDirectory, "latest-outreach-review.json"),
+    apolloSearchCursorPath: path.join(runtimeDataDirectory, "apollo-search-cursors.json"),
+    companyScreeningDatabasePath: path.join(runtimeDataDirectory, "company-screening-database.json"),
+    testLabExaCachePath: path.join(runtimeDataDirectory, "testlab-exa-cache.json"),
+    liveExaCachePath: path.join(runtimeDataDirectory, "live-exa-cache.json"),
+    cacheDatabaseDirectory,
+    liveCacheDatabasePath: path.join(cacheDatabaseDirectory, "live-run-cache.sqlite"),
+    debugCacheDatabasePath: path.join(cacheDatabaseDirectory, "testlab-cache.sqlite"),
+    seedSettingsPath: path.join(seedDataDirectory, "lead-agent-settings.json"),
+    seedTemplatesPath: path.join(seedDataDirectory, "outreach-templates.json"),
+    seedLearningPath: path.join(seedDataDirectory, "lead-agent-learning.json"),
+    seedLatestLeadRunPath: path.join(seedDataDirectory, "latest-lead-run.json"),
+    seedLatestOutreachReviewPath: path.join(seedDataDirectory, "latest-outreach-review.json"),
+    seedApolloSearchCursorPath: path.join(seedDataDirectory, "apollo-search-cursors.json"),
+    seedCompanyScreeningDatabasePath: path.join(seedDataDirectory, "company-screening-database.json"),
+    seedTestLabExaCachePath: path.join(seedDataDirectory, "testlab-exa-cache.json"),
+    seedLiveExaCachePath: path.join(seedDataDirectory, "live-exa-cache.json"),
+    seedCacheDatabaseDirectory,
+    seedLiveCacheDatabasePath: path.join(seedCacheDatabaseDirectory, "live-run-cache.sqlite"),
+    seedDebugCacheDatabasePath: path.join(seedCacheDatabaseDirectory, "testlab-cache.sqlite")
+  };
+}
+
+const controlPlanePaths = resolveLeadAgentDataPaths({
+  dataDirEnv: process.env.LEAD_AGENT_DATA_DIR,
+  cacheDirEnv: process.env.LEAD_AGENT_CACHE_DIR
+});
+
+export function getLeadAgentRuntimeDataDirectory(): string {
+  return controlPlanePaths.runtimeDataDirectory;
+}
 
 const openCrawlerTuningSchema = z.object({
   probeCount: z.number().int().min(1).max(200).optional(),
@@ -70,6 +143,7 @@ const openCrawlerTuningSchema = z.object({
 const settingsSchema = z.object({
   targetLeadCount: z.number().int().positive().max(1000),
   market: z.string().min(1),
+  creditLessMode: z.boolean(),
   mainContext: z.string().max(12000).optional(),
   targetCategoryRefinement: z.string().max(4000).optional(),
   searchStrategyContext: z.string().max(12000).optional(),
@@ -370,6 +444,8 @@ const searchCursorSchema = z.record(z.object({
   updatedAt: z.string().min(1)
 }));
 
+const apolloSearchCursorSchema = searchCursorSchema;
+
 const companyScreeningRecordSchema = z.object({
   companyName: z.string().min(1),
   normalizedName: z.string().min(1),
@@ -566,13 +642,30 @@ const suggestedControls = [
   "personalization strictness"
 ];
 
-async function ensureFile<T>(filePath: string, defaultValue: T): Promise<void> {
+async function ensureFile<T>(filePath: string, defaultValue: T, seedPath: string = filePath): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 
   try {
     await fs.access(filePath);
   } catch {
+    if (filePath !== seedPath && existsSync(seedPath)) {
+      await fs.copyFile(seedPath, filePath);
+      return;
+    }
+
     await fs.writeFile(filePath, `${JSON.stringify(defaultValue, null, 2)}\n`, "utf8");
+  }
+}
+
+async function ensureSeededCacheDatabase(filePath: string, seedPath: string): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+
+  try {
+    await fs.access(filePath);
+  } catch {
+    if (filePath !== seedPath && existsSync(seedPath)) {
+      await fs.copyFile(seedPath, filePath);
+    }
   }
 }
 
@@ -607,8 +700,8 @@ async function writeJsonFile<T>(filePath: string, value: T): Promise<void> {
 }
 
 export class ControlPlaneStore {
-  private readonly liveCacheDatabase = new CacheDatabaseStore(liveCacheDatabasePath);
-  private readonly debugCacheDatabase = new CacheDatabaseStore(debugCacheDatabasePath);
+  private readonly liveCacheDatabase = new CacheDatabaseStore(controlPlanePaths.liveCacheDatabasePath);
+  private readonly debugCacheDatabase = new CacheDatabaseStore(controlPlanePaths.debugCacheDatabasePath);
 
   private normalizeLegacyCategory(category: string | undefined): string | undefined {
     if (category === "integrator_vision_ai_consulting_freelancer") {
@@ -678,15 +771,17 @@ export class ControlPlaneStore {
   }
 
   private async ensureSeedData(): Promise<void> {
-    await ensureFile(settingsPath, defaultSettings);
-    await ensureFile(templatesPath, OUTREACH_TEMPLATES);
-    await ensureFile(learningPath, defaultLearning);
-    await ensureFile(latestLeadRunPath, defaultLatestLeadRun);
-    await ensureFile(latestOutreachReviewPath, defaultLatestLeadRun);
-    await ensureFile(searchCursorPath, {});
-    await ensureFile(companyScreeningDatabasePath, defaultCompanyScreeningDatabase);
-    await ensureFile(testLabExaCachePath, defaultTestLabExaCache);
-    await ensureFile(liveExaCachePath, defaultLiveExaCache);
+    await ensureFile(controlPlanePaths.settingsPath, defaultSettings, controlPlanePaths.seedSettingsPath);
+    await ensureFile(controlPlanePaths.templatesPath, OUTREACH_TEMPLATES, controlPlanePaths.seedTemplatesPath);
+    await ensureFile(controlPlanePaths.learningPath, defaultLearning, controlPlanePaths.seedLearningPath);
+    await ensureFile(controlPlanePaths.latestLeadRunPath, defaultLatestLeadRun, controlPlanePaths.seedLatestLeadRunPath);
+    await ensureFile(controlPlanePaths.latestOutreachReviewPath, defaultLatestLeadRun, controlPlanePaths.seedLatestOutreachReviewPath);
+    await ensureFile(controlPlanePaths.apolloSearchCursorPath, {}, controlPlanePaths.seedApolloSearchCursorPath);
+    await ensureFile(controlPlanePaths.companyScreeningDatabasePath, defaultCompanyScreeningDatabase, controlPlanePaths.seedCompanyScreeningDatabasePath);
+    await ensureFile(controlPlanePaths.testLabExaCachePath, defaultTestLabExaCache, controlPlanePaths.seedTestLabExaCachePath);
+    await ensureFile(controlPlanePaths.liveExaCachePath, defaultLiveExaCache, controlPlanePaths.seedLiveExaCachePath);
+    await ensureSeededCacheDatabase(controlPlanePaths.liveCacheDatabasePath, controlPlanePaths.seedLiveCacheDatabasePath);
+    await ensureSeededCacheDatabase(controlPlanePaths.debugCacheDatabasePath, controlPlanePaths.seedDebugCacheDatabasePath);
   }
 
   private getSearchCursorKey(filter: OrganizationFilter): string {
@@ -703,7 +798,7 @@ export class ControlPlaneStore {
 
   async getSettings(): Promise<LeadAgentSettings> {
     await this.ensureSeedData();
-    const settings = await readJsonFile<Partial<LeadAgentSettings> & { prequalificationContext?: string }>(settingsPath);
+    const settings = await readJsonFile<Partial<LeadAgentSettings> & { prequalificationContext?: string }>(controlPlanePaths.settingsPath);
     const normalizedCompanySearchMode = settings.companySearchMode ?? defaultSettings.companySearchMode;
 
     const normalizedPrequalification = {
@@ -750,13 +845,13 @@ export class ControlPlaneStore {
       creditLessMode: true
     });
 
-    await writeJsonFile(settingsPath, nextSettings);
+    await writeJsonFile(controlPlanePaths.settingsPath, nextSettings);
     return nextSettings;
   }
 
   async getTemplates(): Promise<Record<string, OutreachTemplate>> {
     await this.ensureSeedData();
-    const templates = await readJsonFile<Record<string, OutreachTemplate>>(templatesPath);
+    const templates = await readJsonFile<Record<string, OutreachTemplate>>(controlPlanePaths.templatesPath);
     const mergedTemplates = Object.fromEntries(
       Object.entries(OUTREACH_TEMPLATES).map(([key, template]) => [
         key,
@@ -780,7 +875,7 @@ export class ControlPlaneStore {
     const missingCurrentKeys = expectedTemplateKeys.some((key) => !persistedTemplateKeys.includes(key));
 
     if (hasLegacyKeys || missingCurrentKeys) {
-      await writeJsonFile(templatesPath, sanitizedTemplates);
+      await writeJsonFile(controlPlanePaths.templatesPath, sanitizedTemplates);
     }
 
     return sanitizedTemplates;
@@ -788,7 +883,7 @@ export class ControlPlaneStore {
 
   async getLearning(): Promise<LeadLearningData> {
     await this.ensureSeedData();
-    const learning = await readJsonFile<Partial<LeadLearningData>>(learningPath);
+    const learning = await readJsonFile<Partial<LeadLearningData>>(controlPlanePaths.learningPath);
     const normalizedSearchHistoryByMode = Object.fromEntries(
       Object.entries(learning.searchHistoryByMode ?? {}).map(([mode, modeLearning]) => [
         mode,
@@ -819,7 +914,7 @@ export class ControlPlaneStore {
 
   async getLatestLeadRun(): Promise<LatestLeadRunRecord> {
     await this.ensureSeedData();
-    const latestLeadRun = await readJsonFile<LatestLeadRunRecord>(latestLeadRunPath);
+    const latestLeadRun = await readJsonFile<LatestLeadRunRecord>(controlPlanePaths.latestLeadRunPath);
     return latestLeadRunSchema.parse({
       ...latestLeadRun,
       contacts: latestLeadRun.contacts.map((contact) => ({
@@ -996,8 +1091,8 @@ export class ControlPlaneStore {
 
   async getSearchCursor(filter: OrganizationFilter): Promise<number> {
     await this.ensureSeedData();
-    const cursorMap = searchCursorSchema.parse(
-      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(searchCursorPath)
+    const cursorMap = apolloSearchCursorSchema.parse(
+      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(controlPlanePaths.apolloSearchCursorPath)
     );
 
     return cursorMap[this.getSearchCursorKey(filter)]?.nextPage ?? 1;
@@ -1005,8 +1100,8 @@ export class ControlPlaneStore {
 
   async updateSearchCursor(filter: OrganizationFilter, nextPage: number): Promise<void> {
     await this.ensureSeedData();
-    const cursorMap = searchCursorSchema.parse(
-      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(searchCursorPath)
+    const cursorMap = apolloSearchCursorSchema.parse(
+      await readJsonFile<Record<string, { nextPage: number; updatedAt: string }>>(controlPlanePaths.apolloSearchCursorPath)
     );
 
     cursorMap[this.getSearchCursorKey(filter)] = {
@@ -1014,7 +1109,7 @@ export class ControlPlaneStore {
       updatedAt: new Date().toISOString()
     };
 
-    await writeJsonFile(searchCursorPath, cursorMap);
+    await writeJsonFile(controlPlanePaths.apolloSearchCursorPath, cursorMap);
   }
 
   async recordCompanyFeedback(input: Omit<CompanyFeedbackEntry, "createdAt">): Promise<LeadLearningData> {
@@ -1039,7 +1134,7 @@ export class ControlPlaneStore {
       ].slice(0, 200)
     };
 
-    await writeJsonFile(learningPath, nextLearning);
+    await writeJsonFile(controlPlanePaths.learningPath, nextLearning);
     return nextLearning;
   }
 
@@ -1077,7 +1172,7 @@ export class ControlPlaneStore {
       filterPerformance
     };
 
-    await writeJsonFile(learningPath, {
+    await writeJsonFile(controlPlanePaths.learningPath, {
       ...learning,
       filterPerformance: {},
       searchHistory: [],
@@ -1111,7 +1206,7 @@ export class ControlPlaneStore {
       }
     };
 
-    await writeJsonFile(learningPath, nextLearning);
+    await writeJsonFile(controlPlanePaths.learningPath, nextLearning);
     return nextLearning;
   }
 
@@ -1127,7 +1222,7 @@ export class ControlPlaneStore {
       searchHistoryByMode
     };
 
-    await writeJsonFile(learningPath, nextLearning);
+    await writeJsonFile(controlPlanePaths.learningPath, nextLearning);
     return this.getLearning();
   }
 
@@ -1171,7 +1266,7 @@ export class ControlPlaneStore {
 
     await this.ensureSeedData();
     const database = await readJsonFileWithRecovery<Partial<CompanyScreeningDatabase>>(
-      companyScreeningDatabasePath,
+      controlPlanePaths.companyScreeningDatabasePath,
       defaultCompanyScreeningDatabase
     );
     const records = (database.records ?? [])
@@ -1196,14 +1291,14 @@ export class ControlPlaneStore {
     await this.ensureSeedData();
 
     if (scope === "live") {
-      const cache = await readJsonFileWithRecovery<Partial<LiveExaCache>>(liveExaCachePath, defaultLiveExaCache);
+      const cache = await readJsonFileWithRecovery<Partial<LiveExaCache>>(controlPlanePaths.liveExaCachePath, defaultLiveExaCache);
       cacheDatabase.writeLiveExaCache(liveExaCacheSchema.parse({
         ...defaultLiveExaCache,
         ...cache
       }));
     } else {
       const cache = await readJsonFileWithRecovery<{ queryHistory?: string[]; queryInsights?: ExaQueryHistoryInsight[]; discoveredDomains?: string[] }>(
-        testLabExaCachePath,
+        controlPlanePaths.testLabExaCachePath,
         defaultTestLabExaCache
       );
       cacheDatabase.writeTestLabExaCache(testLabExaCacheSchema.parse({
@@ -1239,8 +1334,8 @@ export class ControlPlaneStore {
 
   async writeLatestLeadRun(record: LatestLeadRunRecord): Promise<void> {
     await this.ensureSeedData();
-    await writeJsonFile(latestLeadRunPath, record);
-    await writeJsonFile(latestOutreachReviewPath, record);
+    await writeJsonFile(controlPlanePaths.latestLeadRunPath, record);
+    await writeJsonFile(controlPlanePaths.latestOutreachReviewPath, record);
   }
 
   private normalizeCompanyScreeningRecords(records: CompanyScreeningRecord[]): CompanyScreeningRecord[] {
@@ -1286,7 +1381,7 @@ export class ControlPlaneStore {
       [key]: nextTemplate
     };
 
-    await writeJsonFile(templatesPath, nextTemplates);
+    await writeJsonFile(controlPlanePaths.templatesPath, nextTemplates);
     return nextTemplate;
   }
 

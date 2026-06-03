@@ -673,7 +673,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           creditLessMode: true,
           dryRun: false,
           syncToHubSpot,
-          reuseQualifiedCompanyCache: false,
+          reuseQualifiedCompanyCache: true,
           exaQueryCount,
           exaApiKey: exaApiKey.trim() || undefined,
           diffbotToken: diffbotToken.trim() || undefined,
