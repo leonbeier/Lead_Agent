@@ -3,11 +3,12 @@ import path from "node:path";
 
 import { env } from "../config";
 import { buildSuggestedFilters, extractExplicitMarketLocality, isGermanyFocusedMarket } from "../filters";
+import { ApolloClient } from "../clients/apollo";
 import { CompanySearchClient } from "../clients/company-search";
 import { AzureOpenAIClient } from "../clients/azure-openai";
 import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
-import { ControlPlaneStore } from "../control-plane";
+import { ControlPlaneStore, getLeadAgentRuntimeDataDirectory } from "../control-plane";
 import { buildDebugSearchFilter } from "../debug/test-console";
 import {
   OrganizationFilter,
@@ -101,10 +102,10 @@ type ProbedFilterCandidate = {
 
 type SearchSampleDiagnostics = {
   fetchedSampleCount: number;
+  eligibleSampleCount: number;
   filteredByPriorFeedbackCount: number;
   filteredByCacheCount: number;
   filteredByHubSpotCount: number;
-  eligibleSampleCount: number;
   discoveryQueries: string[];
 };
 
@@ -180,6 +181,10 @@ const EUROPEAN_TLDS = [
   ".de",
   ".at",
   ".ch",
+  ".fr",
+  ".it",
+  ".es",
+  ".pt",
   ".nl",
   ".be",
   ".lu",
@@ -187,10 +192,6 @@ const EUROPEAN_TLDS = [
   ".se",
   ".no",
   ".fi",
-  ".fr",
-  ".it",
-  ".es",
-  ".pt",
   ".ie",
   ".pl",
   ".cz",
@@ -221,6 +222,7 @@ const COMMON_COMPOUND_TLDS = new Set([
 ]);
 
 export class LeadPipelineAgent {
+  private readonly apolloClient = new ApolloClient();
   private readonly companySearchClient = new CompanySearchClient();
 
   private readonly azureClient = new AzureOpenAIClient();
@@ -3862,78 +3864,90 @@ export class LeadPipelineAgent {
     let filteredByRejectedWebsitesCount = 0;
     let filteredByCurrentRunCacheCount = 0;
     let discoveredCompanyCount = 0;
-    const queryResults = await this.mapWithConcurrency(
-      queries.map((query) => async () => {
-        const payload = await exaClient.runSearch(apiKey, query, 20, prioritizedExcludedDomains.requestExcludedDomains);
-        const discoveredCompanies: CompanySample[] = [];
-        const queryReturnedResults = payload.results?.length ?? 0;
-        let queryFilteredByExcludedDomains = 0;
-        let queryFilteredByHubSpot = 0;
-        let queryFilteredByRejectedWebsites = 0;
-        let queryFilteredByCurrentRunCache = 0;
+    const queryResults: CompanySample[] = [];
+    const reprioritizeExcludeDomain = (domain: string, category: DirectExaExcludedDomainCategory) => {
+      const existingIndex = prioritizedExcludedDomains.requestExcludedDomains.indexOf(domain);
+      if (existingIndex >= 0) {
+        prioritizedExcludedDomains.requestExcludedDomains.splice(existingIndex, 1);
+      }
 
-        for (const result of payload.results ?? []) {
-          const normalizedDomain = exaClient.normalizeUrl(result.url);
-          if (!normalizedDomain) {
-            continue;
-          }
+      excludedDomains.add(domain);
+      excludedDomainCategories.set(domain, category);
+      prioritizedExcludedDomains.requestExcludedDomains.push(domain);
+    };
 
-          const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
-          if (excludeDomain && excludedDomains.has(excludeDomain)) {
-            queryFilteredByExcludedDomains += 1;
-            const category = excludedDomainCategories.get(excludeDomain);
-            if (category === "hubspot") {
-              queryFilteredByHubSpot += 1;
-            } else if (category === "rejected_website") {
-              queryFilteredByRejectedWebsites += 1;
-            } else if (category === "current_run_cache") {
-              queryFilteredByCurrentRunCache += 1;
-            }
-            continue;
-          }
+    for (const query of queries) {
+      const payload = await exaClient.runSearch(apiKey, query, 20, prioritizedExcludedDomains.requestExcludedDomains);
+      const discoveredCompanies: CompanySample[] = [];
+      const queryReturnedResults = payload.results?.length ?? 0;
+      let queryFilteredByExcludedDomains = 0;
+      let queryFilteredByHubSpot = 0;
+      let queryFilteredByRejectedWebsites = 0;
+      let queryFilteredByCurrentRunCache = 0;
 
-          discoveredCompanies.push({
-            name: exaClient.deriveCompanyName(normalizedDomain, result.title),
-            domain: exaClient.toCanonicalCompanyDomain(normalizedDomain),
-            country: exaClient.inferCountryFromDomain(normalizedDomain, result, filter.locations[0]),
-            shortDescription: exaClient.buildDescription(result, filter),
-            sourceFilter: `${filter.name} (exa-search: ${query.slice(0, 72)})`,
-            discoveryQuery: query
-          });
-
-          if (excludeDomain) {
-            excludedDomains.add(excludeDomain);
-            excludedDomainCategories.set(excludeDomain, "current_run_cache");
-          }
+      for (const result of payload.results ?? []) {
+        const normalizedDomain = exaClient.normalizeUrl(result.url);
+        if (!normalizedDomain) {
+          continue;
         }
 
-        completedQueries += 1;
-        returnedResultsCount += queryReturnedResults;
-        filteredByExcludedDomainsCount += queryFilteredByExcludedDomains;
-        filteredByHubSpotCount += queryFilteredByHubSpot;
-        filteredByRejectedWebsitesCount += queryFilteredByRejectedWebsites;
-        filteredByCurrentRunCacheCount += queryFilteredByCurrentRunCache;
-        discoveredCompanyCount += discoveredCompanies.length;
-        onQueryProgress?.({
-          executedQueries: completedQueries,
-          totalQueries: queries.length,
-          query,
-          returnedResults: returnedResultsCount,
-          filteredByExcludedDomains: filteredByExcludedDomainsCount,
-          filteredByHubSpot: filteredByHubSpotCount,
-          filteredByRejectedWebsites: filteredByRejectedWebsitesCount,
-          filteredByCurrentRunCache: filteredByCurrentRunCacheCount,
-          duplicatesRemoved: Math.max(0, returnedResultsCount - filteredByExcludedDomainsCount - discoveredCompanyCount),
-          rawCompaniesFound: discoveredCompanyCount,
-          ...debugUpdateBase
+        const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
+        if (excludeDomain && excludedDomains.has(excludeDomain)) {
+          queryFilteredByExcludedDomains += 1;
+          const category = excludedDomainCategories.get(excludeDomain);
+          if (category === "hubspot") {
+            queryFilteredByHubSpot += 1;
+            reprioritizeExcludeDomain(excludeDomain, "hubspot");
+          } else if (category === "rejected_website") {
+            queryFilteredByRejectedWebsites += 1;
+            reprioritizeExcludeDomain(excludeDomain, "rejected_website");
+          } else if (category === "current_run_cache") {
+            queryFilteredByCurrentRunCache += 1;
+            reprioritizeExcludeDomain(excludeDomain, "current_run_cache");
+          }
+          continue;
+        }
+
+        discoveredCompanies.push({
+          name: exaClient.deriveCompanyName(normalizedDomain, result.title),
+          domain: exaClient.toCanonicalCompanyDomain(normalizedDomain),
+          country: exaClient.inferCountryFromDomain(normalizedDomain, result, filter.locations[0]),
+          shortDescription: exaClient.buildDescription(result, filter),
+          sourceFilter: `${filter.name} (exa-search: ${query.slice(0, 72)})`,
+          discoveryQuery: query
         });
 
-        return discoveredCompanies;
-      }),
-      Math.min(DIRECT_EXA_QUERY_CONCURRENCY, Math.max(1, queries.length))
-    );
+        if (excludeDomain) {
+          reprioritizeExcludeDomain(excludeDomain, "current_run_cache");
+        }
+      }
 
-    return queryResults.flat();
+      completedQueries += 1;
+      returnedResultsCount += queryReturnedResults;
+      filteredByExcludedDomainsCount += queryFilteredByExcludedDomains;
+      filteredByHubSpotCount += queryFilteredByHubSpot;
+      filteredByRejectedWebsitesCount += queryFilteredByRejectedWebsites;
+      filteredByCurrentRunCacheCount += queryFilteredByCurrentRunCache;
+      discoveredCompanyCount += discoveredCompanies.length;
+      onQueryProgress?.({
+        executedQueries: completedQueries,
+        totalQueries: queries.length,
+        query,
+        returnedResults: returnedResultsCount,
+        filteredByExcludedDomains: filteredByExcludedDomainsCount,
+        filteredByHubSpot: filteredByHubSpotCount,
+        filteredByRejectedWebsites: filteredByRejectedWebsitesCount,
+        filteredByCurrentRunCache: filteredByCurrentRunCacheCount,
+        duplicatesRemoved: Math.max(0, returnedResultsCount - filteredByExcludedDomainsCount - discoveredCompanyCount),
+        rawCompaniesFound: discoveredCompanyCount,
+        ...debugUpdateBase,
+        excludedDomains: prioritizedExcludedDomains.requestExcludedDomains
+      });
+
+      queryResults.push(...discoveredCompanies);
+    }
+
+    return queryResults;
   }
 
   async discoverDirectExaCompaniesForExecution(
@@ -4055,9 +4069,9 @@ export class LeadPipelineAgent {
       requestExcludedDomains: [
         ...splitHubSpotDomains.regular,
         ...splitRejectedDomains.regular,
-        ...splitCurrentRunDomains.regular,
         ...splitHubSpotDomains.promoted,
         ...splitRejectedDomains.promoted,
+        ...splitCurrentRunDomains.regular,
         ...splitCurrentRunDomains.promoted
       ],
       localExcludedDomains: new Set(seenDomains),
@@ -4219,34 +4233,6 @@ export class LeadPipelineAgent {
     return added;
   }
 
-  private async excludeExistingHubSpotDomains(
-    companies: PreCategorizedCompany[],
-    dryRun: boolean,
-    disableHubSpotDeduplication: boolean,
-    syncToHubSpot: boolean
-  ): Promise<PreCategorizedCompany[]> {
-    if (dryRun || disableHubSpotDeduplication || syncToHubSpot || companies.length === 0) {
-      return companies;
-    }
-
-    const domains = companies
-      .map((company) => company.domain)
-      .filter((domain): domain is string => Boolean(domain));
-    if (domains.length === 0) {
-      return companies;
-    }
-
-    const existingDomains = await this.getKnownHubSpotDomains(domains);
-    if (existingDomains.size === 0) {
-      return companies;
-    }
-
-    return companies.filter((company) => {
-      const normalizedDomain = company.domain?.trim().toLowerCase();
-      return !normalizedDomain || !existingDomains.has(normalizedDomain);
-    });
-  }
-
   private async excludeExistingCompanySamples(
     companies: CompanySample[],
     dryRun: boolean,
@@ -4302,6 +4288,34 @@ export class LeadPipelineAgent {
       filteredByCacheCount,
       filteredByHubSpotCount: Math.max(0, filteredByCache.length - filteredByHubSpot.length)
     };
+  }
+
+  private async excludeExistingHubSpotDomains(
+    companies: PreCategorizedCompany[],
+    dryRun: boolean,
+    disableHubSpotDeduplication: boolean,
+    syncToHubSpot: boolean
+  ): Promise<PreCategorizedCompany[]> {
+    if (dryRun || disableHubSpotDeduplication || syncToHubSpot || companies.length === 0) {
+      return companies;
+    }
+
+    const domains = companies
+      .map((company) => company.domain)
+      .filter((domain): domain is string => Boolean(domain));
+    if (domains.length === 0) {
+      return companies;
+    }
+
+    const existingDomains = await this.getKnownHubSpotDomains(domains);
+    if (existingDomains.size === 0) {
+      return companies;
+    }
+
+    return companies.filter((company) => {
+      const normalizedDomain = company.domain?.trim().toLowerCase();
+      return !normalizedDomain || !existingDomains.has(normalizedDomain);
+    });
   }
 
   private async fetchAvailableSearchSample(
@@ -4717,7 +4731,7 @@ export class LeadPipelineAgent {
     companies: CompanySample[];
   }): Promise<void> {
     const outputDir = process.env.LEAD_AGENT_DISCOVERY_CHECKPOINT_DIR?.trim()
-      || path.join(process.cwd(), "data", "lead-run-discovery-checkpoints", params.runId);
+      || path.join(getLeadAgentRuntimeDataDirectory(), "lead-run-discovery-checkpoints", params.runId);
     await fs.mkdir(outputDir, { recursive: true });
 
     const safeFilterName = params.filter.name
@@ -4816,6 +4830,38 @@ export class LeadPipelineAgent {
           [] as PublicContactCandidate[]
         )
       ] as const),
+      this.contactSearchConcurrency
+    );
+
+    return new Map(entries);
+  }
+
+  private async collectApolloContacts(
+    companies: PreCategorizedCompany[],
+    _researchBriefs: ResearchBrief[],
+    dryRun: boolean,
+    _mainContext?: string
+  ): Promise<Map<string, PublicContactCandidate[]>> {
+    if (dryRun) {
+      return new Map(companies.map((company) => [this.getCompanyKey(company), []] as const));
+    }
+
+    const entries = await this.mapWithConcurrency(
+      companies.map((company) => async () => {
+        try {
+          const apolloCandidates = await this.apolloClient.searchContactsForCompany(company);
+          const enrichedContacts = await Promise.all(
+            apolloCandidates.slice(0, 5).map((candidate) => this.apolloClient.enrichContactEmail(candidate, company).catch(() => null))
+          );
+
+          return [
+            this.getCompanyKey(company),
+            enrichedContacts.filter((contact): contact is PublicContactCandidate => Boolean(contact))
+          ] as const;
+        } catch {
+          return [this.getCompanyKey(company), [] as PublicContactCandidate[]] as const;
+        }
+      }),
       this.contactSearchConcurrency
     );
 
