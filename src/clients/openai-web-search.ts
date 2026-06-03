@@ -853,6 +853,7 @@ export class OpenAIWebSearchClient {
   }
 
   async findCompanyAddress(company: Pick<PreCategorizedCompany, "name" | "domain" | "country">): Promise<{
+    companyName?: string;
     address?: string;
     city?: string;
     zip?: string;
@@ -864,9 +865,10 @@ export class OpenAIWebSearchClient {
     }
 
     const prompt = [
-      "Find the official postal address of this company using public organization-level web sources.",
+      "Find the official legal company name and postal address of this company using public organization-level web sources.",
       "Use only organization-level information from the company website, legal notice, contact page, map listing, or reputable company directory.",
       "Do not include or search for personal data such as employee names, personal emails, direct phone numbers, or personal social profiles.",
+      "Prefer the legal entity from the official website, impressum, legal notice, or footer when available.",
       "Return only the best verified headquarters or main office mailing address if available.",
       "Accept an address only when a full street-level postal address is explicitly shown in a trustworthy source.",
       "Reject marketing copy, news fragments, certifications, slogans, award text, date strings, boilerplate, or generic company descriptions even if they contain numbers or locations.",
@@ -874,12 +876,13 @@ export class OpenAIWebSearchClient {
       `Company name: ${company.name}`,
       company.domain ? `Known website: ${company.domain}` : undefined,
       company.country ? `Known country: ${company.country}` : undefined,
-      "Return strict JSON with {\"address\":\"...\",\"city\":\"...\",\"zip\":\"...\",\"state\":\"...\",\"country\":\"...\",\"verificationStatus\":\"verified|uncertain|not_found\",\"confidence\":0.0,\"sourceType\":\"official_website|legal_notice|map_listing|directory|other\",\"reason\":\"...\"}. Use empty strings for unknown values."
+      "Return strict JSON with {\"companyName\":\"...\",\"address\":\"...\",\"city\":\"...\",\"zip\":\"...\",\"state\":\"...\",\"country\":\"...\",\"verificationStatus\":\"verified|uncertain|not_found\",\"confidence\":0.0,\"sourceType\":\"official_website|legal_notice|map_listing|directory|other\",\"reason\":\"...\"}. Use empty strings for unknown values."
     ].filter(Boolean).join("\n\n");
 
     try {
       const response = await this.runWebSearch(prompt, 320, "preResearch");
       const parsed = this.parseJson<{
+        companyName?: string;
         address?: string;
         city?: string;
         zip?: string;
@@ -893,6 +896,7 @@ export class OpenAIWebSearchClient {
         ? parsed.confidence
         : Number.parseFloat(String(parsed.confidence ?? ""));
       const result = {
+        companyName: parsed.companyName?.trim(),
         address: parsed.address?.trim(),
         city: parsed.city?.trim(),
         zip: parsed.zip?.trim(),
@@ -912,7 +916,7 @@ export class OpenAIWebSearchClient {
         return null;
       }
 
-      return result.address || result.city || result.zip || result.state || result.country ? result : null;
+      return result.companyName || result.address || result.city || result.zip || result.state || result.country ? result : null;
     } catch {
       return null;
     }

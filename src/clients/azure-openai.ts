@@ -509,6 +509,147 @@ export class AzureOpenAIClient {
     }
   }
 
+  async analyzeCompanyHomepage(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country" | "category">,
+    homepage: {
+      url: string;
+      evidenceSnippet: string;
+      candidateLinks: Array<{ url: string; anchorText: string }>;
+    },
+    dryRun: boolean
+  ): Promise<{
+    companyName?: string;
+    address?: string;
+    city?: string;
+    zip?: string;
+    state?: string;
+    country?: string;
+    emails: string[];
+    phones: string[];
+    followUpUrls: string[];
+  } | null> {
+    if (dryRun || !readiness.azureConfigured) {
+      return null;
+    }
+
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Read official company homepage evidence and extract organization-level company information only. Extract the legal company name, postal address, shared company inboxes, and main switchboard phone numbers when they are explicitly visible. Then choose the best 1 to 5 same-domain follow-up links that are most likely to contain missing official company information, legal identity, address details, or company-level contact details. Prefer kontakt, contact, impressum, imprint, legal, about, company, team, and footer-linked pages when relevant. Do not include personal data. Do not invent information. Return strict JSON with {"companyName":"...","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"followUpUrls":["https://..."]}. Use empty strings or empty arrays when unknown.`
+        },
+        {
+          role: "user",
+          content: [
+            `Company: ${company.name}`,
+            company.domain ? `Domain: ${company.domain}` : undefined,
+            company.country ? `Country: ${company.country}` : undefined,
+            `Homepage URL: ${homepage.url}`,
+            `Homepage evidence: ${homepage.evidenceSnippet}`,
+            `Candidate same-domain links JSON: ${JSON.stringify(homepage.candidateLinks.slice(0, 30))}`
+          ].filter(Boolean).join("\n\n")
+        }
+      ], { maxTokens: 600 });
+
+      const parsed = this.parseJsonObject<{
+        companyName?: string;
+        address?: string;
+        city?: string;
+        zip?: string;
+        state?: string;
+        country?: string;
+        emails?: string[];
+        phones?: string[];
+        followUpUrls?: string[];
+      }>(content);
+
+      return {
+        companyName: parsed.companyName?.trim(),
+        address: parsed.address?.trim(),
+        city: parsed.city?.trim(),
+        zip: parsed.zip?.trim(),
+        state: parsed.state?.trim(),
+        country: parsed.country?.trim(),
+        emails: Array.from(new Set((parsed.emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))),
+        phones: Array.from(new Set((parsed.phones ?? []).map((value) => value.trim()).filter(Boolean))),
+        followUpUrls: Array.from(new Set((parsed.followUpUrls ?? []).map((value) => value.trim()).filter(Boolean))).slice(0, 5)
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async extractCompanyProfileFromWebsiteEvidence(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country" | "category">,
+    pages: Array<{
+      url: string;
+      evidenceSnippet: string;
+      emails?: string[];
+      phones?: string[];
+      linkedInProfileUrl?: string;
+      namedContacts?: unknown[];
+    }>,
+    dryRun: boolean
+  ): Promise<{
+    companyName?: string;
+    address?: string;
+    city?: string;
+    zip?: string;
+    state?: string;
+    country?: string;
+    emails: string[];
+    phones: string[];
+    linkedInUrls: string[];
+  } | null> {
+    if (dryRun || !readiness.azureConfigured || pages.length === 0) {
+      return null;
+    }
+
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Consolidate organization-level company information from official website evidence only. Use the supplied homepage and follow-up pages to extract the legal company name, postal address, shared company inboxes, main switchboard phone numbers, and company LinkedIn page URLs. Prefer impressum/legal notice/contact/footer evidence over marketing copy. Do not include personal data and do not invent values. Return strict JSON with {"companyName":"...","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"linkedInUrls":["https://..."]}. Use empty strings or arrays when unknown.`
+        },
+        {
+          role: "user",
+          content: [
+            `Company: ${company.name}`,
+            company.domain ? `Domain: ${company.domain}` : undefined,
+            company.country ? `Country: ${company.country}` : undefined,
+            `Official website evidence JSON: ${JSON.stringify(pages.slice(0, 6))}`
+          ].filter(Boolean).join("\n\n")
+        }
+      ], { maxTokens: 900 });
+
+      const parsed = this.parseJsonObject<{
+        companyName?: string;
+        address?: string;
+        city?: string;
+        zip?: string;
+        state?: string;
+        country?: string;
+        emails?: string[];
+        phones?: string[];
+        linkedInUrls?: string[];
+      }>(content);
+
+      return {
+        companyName: parsed.companyName?.trim(),
+        address: parsed.address?.trim(),
+        city: parsed.city?.trim(),
+        zip: parsed.zip?.trim(),
+        state: parsed.state?.trim(),
+        country: parsed.country?.trim(),
+        emails: Array.from(new Set((parsed.emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))),
+        phones: Array.from(new Set((parsed.phones ?? []).map((value) => value.trim()).filter(Boolean))),
+        linkedInUrls: Array.from(new Set((parsed.linkedInUrls ?? []).map((value) => value.trim()).filter(Boolean)))
+      };
+    } catch {
+      return null;
+    }
+  }
+
   getUsageTotals(): AzureUsageCost {
     return { ...this.usageTotals };
   }
