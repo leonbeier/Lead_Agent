@@ -106,6 +106,7 @@ interface BrowserSearchArticle {
 const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
+const HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS = 250;
 const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
@@ -240,6 +241,7 @@ export class HubSpotClient {
   private readonly openAIWebSearchClient = new OpenAIWebSearchClient();
 
   private searchRequestQueue = Promise.resolve();
+  private browserTaskQueue = Promise.resolve();
 
   async getAllCompanyDomains(): Promise<Set<string>> {
     if (!readiness.hubspotConfigured) {
@@ -1948,74 +1950,76 @@ export class HubSpotClient {
 
   private async searchDuckDuckGoBrowserResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
     try {
-      const browser = await this.launchBrowserForWebTasks();
+      return await this.scheduleBrowserTask(async () => {
+        const browser = await this.launchBrowserForWebTasks();
 
-      try {
-        const page = await browser.newPage({
-          locale: "de-DE",
-          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
-        });
+        try {
+          const page = await browser.newPage({
+            locale: "de-DE",
+            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
+          });
 
-        await page.goto(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&ia=web`, {
-          waitUntil: "domcontentloaded",
-          timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
-        });
-        await page.waitForSelector('article[data-testid="result"]', {
-          timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
-        }).catch(() => undefined);
-        await page.waitForTimeout(3000);
+          await page.goto(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&ia=web`, {
+            waitUntil: "domcontentloaded",
+            timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
+          });
+          await page.waitForSelector('article[data-testid="result"]', {
+            timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
+          }).catch(() => undefined);
+          await page.waitForTimeout(3000);
 
-        const articles = await page.evaluate((limit) => {
-          const parseSnippet = (articleText: string, title: string, url: string): string => {
-            const normalizedUrl = url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
-            const lines = articleText
-              .split(/\r?\n/)
-              .map((line) => line.trim())
-              .filter(Boolean)
-              .filter((line) => line !== title)
-              .filter((line) => line !== url)
-              .filter((line) => line !== normalizedUrl)
-              .filter((line) => !/^LinkedIn/i.test(line));
+          const articles = await page.evaluate((limit) => {
+            const parseSnippet = (articleText: string, title: string, url: string): string => {
+              const normalizedUrl = url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+              const lines = articleText
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .filter((line) => line !== title)
+                .filter((line) => line !== url)
+                .filter((line) => line !== normalizedUrl)
+                .filter((line) => !/^LinkedIn/i.test(line));
 
-            return lines.join(" ");
-          };
+              return lines.join(" ");
+            };
 
-          return Array.from(document.querySelectorAll('article[data-testid="result"]'))
-            .map((article) => {
-              const element = article as HTMLElement;
-              const titleLinks = Array.from(element.querySelectorAll('a[href*="linkedin.com/in"]')) as HTMLAnchorElement[];
-              const titleLink = titleLinks.find((link) => {
-                const text = (link.textContent || "").trim();
-                return text.length > 0 && /linkedin/i.test(text) && !/^https?:/i.test(text) && !/›/.test(text);
-              }) ?? titleLinks.find((link) => {
-                const text = (link.textContent || "").trim();
-                return text.length > 0 && !/^https?:/i.test(text) && !/›/.test(text);
-              });
-              if (!titleLink) {
-                return null;
-              }
+            return Array.from(document.querySelectorAll('article[data-testid="result"]'))
+              .map((article) => {
+                const element = article as HTMLElement;
+                const titleLinks = Array.from(element.querySelectorAll('a[href*="linkedin.com/in"]')) as HTMLAnchorElement[];
+                const titleLink = titleLinks.find((link) => {
+                  const text = (link.textContent || "").trim();
+                  return text.length > 0 && /linkedin/i.test(text) && !/^https?:/i.test(text) && !/›/.test(text);
+                }) ?? titleLinks.find((link) => {
+                  const text = (link.textContent || "").trim();
+                  return text.length > 0 && !/^https?:/i.test(text) && !/›/.test(text);
+                });
+                if (!titleLink) {
+                  return null;
+                }
 
-              const title = (titleLink.textContent || "").trim();
-              const url = titleLink.href;
-              const snippet = parseSnippet(element.innerText || "", title, url);
+                const title = (titleLink.textContent || "").trim();
+                const url = titleLink.href;
+                const snippet = parseSnippet(element.innerText || "", title, url);
 
-              return {
-                url,
-                title,
-                snippet
-              };
-            })
-            .filter((article): article is BrowserSearchArticle => Boolean(article))
-            .slice(0, limit);
-        }, Math.max(maxResults, 8));
+                return {
+                  url,
+                  title,
+                  snippet
+                };
+              })
+              .filter((article): article is BrowserSearchArticle => Boolean(article))
+              .slice(0, limit);
+          }, Math.max(maxResults, 8));
 
-        return articles.map((article) => ({
-          ...article,
-          query
-        }));
-      } finally {
-        await browser.close().catch(() => undefined);
-      }
+          return articles.map((article) => ({
+            ...article,
+            query
+          }));
+        } finally {
+          await browser.close().catch(() => undefined);
+        }
+      });
     } catch {
       return [];
     }
@@ -3519,27 +3523,29 @@ export class HubSpotClient {
 
   private async fetchHtmlWithBrowser(url: string): Promise<string | null> {
     try {
-      const browser = await this.launchBrowserForWebTasks();
+      return await this.scheduleBrowserTask(async () => {
+        const browser = await this.launchBrowserForWebTasks();
 
-      try {
-        const page = await browser.newPage({
-          locale: "de-DE",
-          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
-        });
+        try {
+          const page = await browser.newPage({
+            locale: "de-DE",
+            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
+          });
 
-        await page.goto(url, {
-          waitUntil: "domcontentloaded",
-          timeout: WEBSITE_BROWSER_FETCH_TIMEOUT_MS
-        });
-        await page.waitForLoadState("networkidle", {
-          timeout: 5000
-        }).catch(() => undefined);
+          await page.goto(url, {
+            waitUntil: "domcontentloaded",
+            timeout: WEBSITE_BROWSER_FETCH_TIMEOUT_MS
+          });
+          await page.waitForLoadState("networkidle", {
+            timeout: 5000
+          }).catch(() => undefined);
 
-        const html = await page.content();
-        return html.trim().length > 0 ? html : null;
-      } finally {
-        await browser.close().catch(() => undefined);
-      }
+          const html = await page.content();
+          return html.trim().length > 0 ? html : null;
+        } finally {
+          await browser.close().catch(() => undefined);
+        }
+      });
     } catch (error) {
       console.warn("HubSpotClient.fetchHtmlWithBrowser failed", {
         url,
@@ -3561,6 +3567,24 @@ export class HubSpotClient {
       return chromium.launch({
         headless: true
       });
+    }
+  }
+
+  private async scheduleBrowserTask<T>(task: () => Promise<T>): Promise<T> {
+    const previousTask = this.browserTaskQueue;
+    let releaseQueue: (() => void) | undefined;
+
+    this.browserTaskQueue = new Promise<void>((resolve) => {
+      releaseQueue = resolve;
+    });
+
+    await previousTask;
+
+    try {
+      return await task();
+    } finally {
+      await this.delay(HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS);
+      releaseQueue?.();
     }
   }
 
