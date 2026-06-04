@@ -673,6 +673,9 @@ export class HubSpotClient {
     const linkedinUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
     const firstName = this.normalizeNamePart(contact.firstName);
     const lastName = this.normalizeNamePart(contact.lastName);
+    const mailboxNameFallback = email && this.isGenericMailbox(email) && !firstName && !lastName
+      ? email
+      : undefined;
     const hasReachableIdentity = Boolean(email || linkedinUrl || firstName || lastName);
     if (!hasReachableIdentity) {
       return null;
@@ -682,7 +685,7 @@ export class HubSpotClient {
       ...contact,
       email,
       linkedinUrl,
-      firstName,
+      firstName: firstName ?? mailboxNameFallback,
       lastName
     };
   }

@@ -86,6 +86,42 @@ test("buildQueries uses machine-builder specific language for machine_builder_ai
   assert.ok(queries.every((query) => !/turnkey vision inspection solutions/i.test(query)));
 });
 
+test("buildQueries uses consulting-specific language for consulting-led vision AI filters", () => {
+  const client = new ExaSearchClient();
+  const queries = client["buildQueries"]({
+    name: "Germany Vision AI Consulting Specialists",
+    persona: "Consulting-led machine vision and industrial AI specialist delivering implementation work for customers",
+    industries: ["Industrial Automation", "Machine Vision"],
+    locations: ["Germany"],
+    keywords: ["machine vision consulting", "industrial AI consulting", "inspection implementation", "embedded vision"],
+    employeeRanges: ["11,50"],
+    notes: "Prefer specialist boutiques and consulting-led delivery teams with hands-on implementation ownership.",
+    targetCategories: ["integrator_vision_ai_consulting"]
+  }, 1) as string[];
+
+  assert.ok(queries.some((query) => /consulting firms|specialist boutiques|implementation consultancies/i.test(query)));
+  assert.ok(queries.some((query) => /machine vision.*consultants|industrial AI.*consultants|embedded vision consultants/i.test(query)));
+  assert.ok(queries.every((query) => !/official company websites of system integrators or solution providers/i.test(query)));
+});
+
+test("buildQueries uses freelancer-specific language for solo vision AI specialists", () => {
+  const client = new ExaSearchClient();
+  const queries = client["buildQueries"]({
+    name: "Germany Vision AI Freelancers",
+    persona: "Solo machine vision and industrial AI freelancer delivering customer implementation work",
+    industries: ["Industrial Automation"],
+    locations: ["Germany"],
+    keywords: ["computer vision freelancer", "inspection consultant", "machine vision consultant"],
+    employeeRanges: ["1,10"],
+    notes: "Prefer independent specialists and solo consultants, not agencies or staffing marketplaces.",
+    targetCategories: ["integrator_vision_ai_freelancer"]
+  }, 1) as string[];
+
+  assert.ok(queries.some((query) => /independent consultants, freelancers, and solo specialists/i.test(query)));
+  assert.ok(queries.some((query) => /personal business websites of independent specialists/i.test(query)));
+  assert.ok(queries.every((query) => !/official company websites of system integrators or solution providers/i.test(query)));
+});
+
 test("discoverCompanies requests 20 Exa results per query regardless of lead limit", async () => {
   const client = new ExaSearchClient();
   client.setApiKey("test-key");
@@ -216,6 +252,18 @@ test("normalizeUrl collapses Exa result urls to the root company domain", () => 
 
   assert.equal(normalizeUrl("http://www.example-integrator.de/team/?a=1#people"), "https://www.example-integrator.de");
   assert.equal(normalizeUrl("https://example-integrator.de/contact"), "https://example-integrator.de");
+});
+
+test("buildSearchPayload normalizes excluded websites to basis domains", () => {
+  const client = new ExaSearchClient();
+  client.setAdditionalExcludedDomains([
+    "https://jobs.example-integrator.co.uk/team",
+    "https://www.example-integrator.de/contact"
+  ]);
+
+  const payload = client["buildSearchPayload"]("test query", 20, ["https://foo.example-integrator.co.uk/about"]);
+
+  assert.deepEqual(payload.excludeDomains, ["example-integrator.co.uk", "example-integrator.de"]);
 });
 
 test("deriveCompanyName falls back to the domain when Exa returns a marketing headline", () => {

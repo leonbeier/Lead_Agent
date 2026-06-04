@@ -86,6 +86,46 @@ test("CacheDatabaseStore preserves repeated live Exa domains so recurring priori
   }
 });
 
+test("CacheDatabaseStore persists live Exa excluded-domain details for UI inspection", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lead-agent-cache-db-"));
+  const databasePath = path.join(tempDir, "live-cache-excluded-details.sqlite");
+  const store = new CacheDatabaseStore(databasePath);
+
+  try {
+    store.writeLiveExaCache({
+      entries: [],
+      discoveredDomains: [],
+      queryRuns: [
+        {
+          timestamp: "2026-06-04T11:40:00.000Z",
+          filterName: "Germany Machine Vision System Integrators",
+          query: "test query",
+          excludedDomains: ["example.com"],
+          excludedDomainDetails: [
+            {
+              domain: "example.com",
+              category: "hubspot",
+              includedInRequest: true,
+              requestIndex: 14,
+              occurrences: 3,
+              priority: 3,
+              lastSeenAt: "2026-06-04T11:39:00.000Z"
+            }
+          ]
+        }
+      ]
+    });
+
+    const liveExaCache = store.readLiveExaCache();
+
+    assert.equal(liveExaCache.queryRuns?.[0]?.excludedDomainDetails?.[0]?.domain, "example.com");
+    assert.equal(liveExaCache.queryRuns?.[0]?.excludedDomainDetails?.[0]?.includedInRequest, true);
+    assert.equal(liveExaCache.queryRuns?.[0]?.excludedDomainDetails?.[0]?.requestIndex, 14);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("CacheDatabaseStore keeps test-lab query history separate from discovered domains", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lead-agent-cache-db-"));
   const databasePath = path.join(tempDir, "testlab-cache.sqlite");

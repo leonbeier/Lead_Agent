@@ -57,7 +57,7 @@ test("previewHubSpotSync builds company field previews from the same mapping as 
   assert.match(preview.companyProperties.description, /Industrial automation/i);
 });
 
-test("previewHubSpotSync skips generic mailbox contacts without person identity", async () => {
+test("previewHubSpotSync keeps generic mailbox contacts and uses the email as fallback name", async () => {
   const client = new HubSpotClient();
   const contacts: PublicContactCandidate[] = [
     {
@@ -78,8 +78,10 @@ test("previewHubSpotSync skips generic mailbox contacts without person identity"
 
   const preview = await client.previewHubSpotSync(buildSampleCompany(), buildSampleBrief(), contacts, { includeAddressLookup: false });
 
-  assert.equal(preview.contacts[0]?.skipped, true);
-  assert.match(preview.contacts[0]?.skipReason ?? "", /Generic mailbox/i);
+  assert.equal(preview.contacts[0]?.skipped, false);
+  assert.equal(preview.contacts[0]?.properties.email, "info@sample-automation.de");
+  assert.equal(preview.contacts[0]?.properties.firstname, "info@sample-automation.de");
+  assert.equal(preview.contacts[0]?.properties.lastname, undefined);
   assert.equal(preview.contacts[1]?.properties.firstname, "Martin");
   assert.equal(preview.contacts[1]?.properties.jobtitle, "Managing Director");
   assert.equal(preview.contacts[1]?.properties.hs_linkedin_url, "https://www.linkedin.com/in/martin-minsel");

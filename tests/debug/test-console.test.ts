@@ -4,6 +4,24 @@ import { buildDebugSearchFilter, normalizeManualWebsites, normalizeWebsiteUrl } 
 import { DebugConsoleService } from "../../src/debug/test-console-service";
 import { ControlPlaneStore } from "../../src/control-plane";
 
+function toBasisDomain(value?: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const hostname = new URL(value.includes("://") ? value : `https://${value}`).hostname.replace(/^www\./i, "").toLowerCase();
+  const labels = hostname.split(".").filter(Boolean);
+  if (labels.length <= 2) {
+    return hostname;
+  }
+
+  const compoundTlds = new Set(["co.uk", "com.au", "com.br", "co.jp", "co.kr", "co.in", "com.mx", "com.tr", "com.pl", "com.sg"]);
+  const compoundTld = labels.slice(-2).join(".");
+  return compoundTlds.has(compoundTld)
+    ? labels.slice(-3).join(".")
+    : labels.slice(-2).join(".");
+}
+
 test("buildDebugSearchFilter keeps a category-compatible base filter and overrides the region", () => {
   const filter = buildDebugSearchFilter("integrator_general_ai", "Germany");
 
@@ -138,20 +156,14 @@ test("runExaCompanySearch rejects domains that are already excluded even when Ex
         },
         {
           title: "New company",
-          url: "https://new-company.example.com",
+          url: "https://new-company.fresh-domain.test",
           summary: "Fresh result"
         }
       ]
     }),
     buildSearchPayload: (query: string) => ({ query }),
     loadKnownExcludedDomains: async () => new Set<string>(["already-known.example.com"]),
-    toExcludeDomain: (value?: string) => {
-      if (!value) {
-        return undefined;
-      }
-
-      return new URL(value).hostname.replace(/^www\./i, "");
-    },
+    toExcludeDomain: toBasisDomain,
     normalizeUrl: (url?: string) => url,
     toCanonicalCompanyDomain: (url: string) => url,
     deriveCompanyName: (domain: string) => domain,
@@ -179,7 +191,7 @@ test("runExaCompanySearch rejects domains that are already excluded even when Ex
   );
 
   assert.equal(result.discoveredCompanies.length, 1);
-  assert.equal(result.discoveredCompanies[0]?.domain, "https://new-company.example.com");
+  assert.equal(result.discoveredCompanies[0]?.domain, "https://new-company.fresh-domain.test");
   assert.equal(result.generatedSearches[0]?.rejectedResults[0]?.reason, "excluded_domain");
 });
 
@@ -203,13 +215,7 @@ test("runExaCompanySearch can route queries through the Azure planner when enabl
     },
     buildSearchPayload: (query: string) => ({ query }),
     loadKnownExcludedDomains: async () => new Set<string>(),
-    toExcludeDomain: (value?: string) => {
-      if (!value) {
-        return undefined;
-      }
-
-      return new URL(value.includes("://") ? value : `https://${value}`).hostname.replace(/^www\./i, "");
-    },
+    toExcludeDomain: toBasisDomain,
     normalizeUrl: (url?: string) => url,
     toCanonicalCompanyDomain: (url: string) => url,
     deriveCompanyName: (domain: string) => domain,
@@ -660,7 +666,8 @@ test("runExaCompanySearch excludes only hubspot and debug rejected websites befo
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), false);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), false);
   assert.equal(requestPayloadDomains.includes("prior-run-exa.test"), false);
-  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), true);
+  assert.equal(requestPayloadDomains.includes("example0.com"), true);
+  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
   assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);
   assert.equal(requestPayloadDomains.includes("debug-rejected.test"), true);
   assert.equal(requestPayloadDomains.includes("live-rejected.test"), false);
@@ -668,6 +675,7 @@ test("runExaCompanySearch excludes only hubspot and debug rejected websites befo
   assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
   assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
   assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
+  assert.equal(requestPayloadDomains.includes("example1.com"), false);
 });
 
 test("runAiPrefilterStage honors high requested concurrency in test lab", async () => {

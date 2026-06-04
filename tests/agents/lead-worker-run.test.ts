@@ -818,6 +818,133 @@ test("worker run drains accepted companies when Exa aborts with a raw timeout er
   assert.equal(result.stopped, false);
 });
 
+test("worker run keeps streaming Exa raw companies into AI when the batch times out after progress updates", async () => {
+  const syncedCompanies: string[] = [];
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncedCompanies.push(companies[0]?.name ?? "unknown");
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: companies.length,
+          syncedCount: companies.length,
+          companySyncedCount: companies.length,
+          contactSyncedCount: companies.length
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async (
+        _filter: OrganizationFilter,
+        _targetCategories: LeadCategory[],
+        _queryCount: number,
+        _screeningOptions: unknown,
+        _executionOptions: unknown,
+        onQueryProgress?: (update: {
+          executedQueries: number;
+          totalQueries: number;
+          query: string;
+          returnedResults: number;
+          filteredByExcludedDomains: number;
+          filteredByHubSpot: number;
+          filteredByRejectedWebsites: number;
+          filteredByCurrentRunCache: number;
+          duplicatesRemoved: number;
+          rawCompaniesFound: number;
+          newRawCompanies?: Array<{
+            name: string;
+            domain?: string;
+            shortDescription: string;
+            sourceFilter: string;
+            discoveryQuery?: string;
+          }>;
+          filterName: string;
+          defaultQueries: string[];
+          plannedQueries: string[];
+          promptMessages?: Array<{ role: string; content: string }>;
+          excludedDomains: string[];
+        }) => void
+      ) => {
+        onQueryProgress?.({
+          executedQueries: 1,
+          totalQueries: 1,
+          query: "vision query",
+          returnedResults: 4,
+          filteredByExcludedDomains: 0,
+          filteredByHubSpot: 0,
+          filteredByRejectedWebsites: 0,
+          filteredByCurrentRunCache: 0,
+          duplicatesRemoved: 0,
+          rawCompaniesFound: 2,
+          newRawCompanies: [{
+            name: "Streamed Vision One",
+            domain: "streamed-vision-one.example.com",
+            shortDescription: "fit",
+            sourceFilter: "exa-filter",
+            discoveryQuery: "vision query"
+          }, {
+            name: "Streamed Vision Two",
+            domain: "streamed-vision-two.example.com",
+            shortDescription: "fit",
+            sourceFilter: "exa-filter",
+            discoveryQuery: "vision query"
+          }],
+          filterName: "filter-integrator_vision_industrial_ai",
+          defaultQueries: ["vision query"],
+          plannedQueries: ["vision query"],
+          promptMessages: [],
+          excludedDomains: []
+        });
+
+        throw new Error("Exa discovery timed out after 180000ms");
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 2,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.deepEqual(syncedCompanies, ["Streamed Vision One", "Streamed Vision Two"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 2);
+  assert.equal(result.shortlistedCompanies.length, 2);
+  assert.equal(result.completionReason, "exa_search_unavailable");
+});
+
 test("worker run can search with two Exa producer workers in parallel when multiple filters exist", async () => {
   let activeExaCalls = 0;
   let maxActiveExaCalls = 0;

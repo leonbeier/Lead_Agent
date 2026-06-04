@@ -450,7 +450,8 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
   assert.equal(prioritized.localExcludedDomains.has("debug-rejected.test"), false);
   assert.equal(prioritized.localExcludedDomains.has("matching-target.test"), false);
   assert.equal(requestPayloadDomains.length, 1200);
-  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), true);
+  assert.equal(requestPayloadDomains.includes("example0.com"), true);
+  assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), true);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), true);
   assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);

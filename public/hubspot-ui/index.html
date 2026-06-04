@@ -1529,8 +1529,21 @@ ${message.content || ""}`).join("\n\n");
           plannedQueries: historyEntry?.plannedQueries || latestQueryRun?.plannedQueries || [],
           promptMessages: historyEntry?.promptMessages || latestQueryRun?.promptMessages || [],
           excludedDomains: historyEntry?.excludedDomains || latestQueryRun?.excludedDomains || [],
+          excludedDomainDetails: latestQueryRun?.excludedDomainDetails || [],
           timestamp: historyEntry?.timestamp || latestQueryRun?.timestamp || data?.latestLeadRun?.createdAt || null
         };
+      }
+
+      function formatExcludedDomainDetails(entries, onlyIncludedInRequest = false) {
+        return (entries || [])
+          .filter((entry) => !onlyIncludedInRequest || entry?.includedInRequest)
+          .map((entry, index) => {
+            const prefix = entry?.includedInRequest
+              ? `${typeof entry.requestIndex === "number" ? entry.requestIndex + 1 : index + 1}/1200 IN`
+              : "OUTSIDE-1200";
+            return `${prefix} | ${entry.domain} | Quelle ${entry.category} | Vorher ${entry.occurrences || 0} | Prioritaet ${entry.priority || 0}${entry.lastSeenAt ? ` | Zuletzt ${new Date(entry.lastSeenAt).toLocaleString("de-DE")}` : ""}`;
+          })
+          .join("\n");
       }
 
       function renderLiveSearchDebugPanel(searchHistory, data = bootstrapData) {
@@ -1540,6 +1553,8 @@ ${message.content || ""}`).join("\n\n");
 
         const debugData = getLatestLivePlannerDebugData(searchHistory, data);
         const hasPlannerData = debugData.plannedQueries.length > 0 || debugData.promptMessages.length > 0 || debugData.excludedDomains.length > 0;
+        const excludedDomainDetails = Array.isArray(debugData.excludedDomainDetails) ? debugData.excludedDomainDetails : [];
+        const includedExcludedDomains = excludedDomainDetails.filter((entry) => entry?.includedInRequest);
 
         liveSearchDebugPanel.innerHTML = `
           <div class="debug-card" style="grid-column: 1 / -1;">
@@ -1552,6 +1567,8 @@ ${message.content || ""}`).join("\n\n");
             ${debugData.plannedQueries.length > 0 ? `<details open><summary>Geplante Exa-Queries (${debugData.plannedQueries.length})</summary><pre>${escapeHtml(debugData.plannedQueries.join("\n\n"))}</pre></details>` : ""}
             ${debugData.promptMessages.length > 0 ? `<details open><summary>Azure Planner Prompt</summary><pre>${escapeHtml(formatPlannerPromptMessages(debugData.promptMessages))}</pre></details>` : ""}
             ${debugData.excludedDomains.length > 0 ? `<details><summary>Excluded Websites (${debugData.excludedDomains.length})</summary><pre>${escapeHtml(debugData.excludedDomains.join("\n"))}</pre></details>` : ""}
+            ${excludedDomainDetails.length > 0 ? `<details open><summary>Alle ausgeschlossenen Basisdomains (${excludedDomainDetails.length})</summary><pre>${escapeHtml(formatExcludedDomainDetails(excludedDomainDetails, false))}</pre></details>` : ""}
+            ${includedExcludedDomains.length > 0 ? `<details open><summary>Finale Exa Exclude-Liste im Request (${includedExcludedDomains.length}/1200)</summary><pre>${escapeHtml(formatExcludedDomainDetails(excludedDomainDetails, true))}</pre></details>` : ""}
             ${!hasPlannerData ? '<div class="history-item" style="margin-top: 12px;"><strong>Noch keine sichtbaren Azure-Planer-Daten im Live-Verlauf</strong><span class="mini-meta">Der UI-Block ist jetzt vorhanden. Wenn hier weiter nichts erscheint, fehlt nicht die UI, sondern die Persistenz von plannedQueries, promptMessages und excludedDomains im Live-Pfad.</span></div>' : ""}
           </div>
         `;

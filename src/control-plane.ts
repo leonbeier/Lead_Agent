@@ -508,7 +508,16 @@ const liveExaQueryRunSchema = z.object({
     role: z.string().min(1),
     content: z.string()
   })).optional(),
-  excludedDomains: z.array(z.string().min(1)).optional()
+  excludedDomains: z.array(z.string().min(1)).optional(),
+  excludedDomainDetails: z.array(z.object({
+    domain: z.string().min(1),
+    category: z.enum(["hubspot", "rejected_website", "current_run_cache"]),
+    includedInRequest: z.boolean(),
+    requestIndex: z.number().int().nonnegative().optional(),
+    occurrences: z.number().int().nonnegative().optional(),
+    priority: z.number().int().nonnegative().optional(),
+    lastSeenAt: z.string().min(1).optional()
+  })).optional()
 });
 
 const liveExaRecurringDomainSchema = z.object({
@@ -1131,7 +1140,16 @@ export class ControlPlaneStore {
             query,
             plannedQueries: queryRun.plannedQueries?.map((value) => value.trim()).filter(Boolean),
             promptMessages: queryRun.promptMessages?.map((message) => ({ role: message.role, content: message.content })),
-            excludedDomains: queryRun.excludedDomains?.map((domain) => domain.trim().toLowerCase()).filter(Boolean)
+            excludedDomains: queryRun.excludedDomains?.map((domain) => domain.trim().toLowerCase()).filter(Boolean),
+            excludedDomainDetails: queryRun.excludedDomainDetails?.map((entry) => ({
+              domain: entry.domain.trim().toLowerCase(),
+              category: entry.category,
+              includedInRequest: Boolean(entry.includedInRequest),
+              requestIndex: typeof entry.requestIndex === "number" ? entry.requestIndex : undefined,
+              occurrences: typeof entry.occurrences === "number" ? entry.occurrences : undefined,
+              priority: typeof entry.priority === "number" ? entry.priority : undefined,
+              lastSeenAt: entry.lastSeenAt
+            })).filter((entry) => entry.domain)
           });
         }
 

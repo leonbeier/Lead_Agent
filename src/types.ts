@@ -245,6 +245,17 @@ export interface LiveExaQueryRun {
     content: string;
   }>;
   excludedDomains?: string[];
+  excludedDomainDetails?: LiveExaExcludedDomainDetail[];
+}
+
+export interface LiveExaExcludedDomainDetail {
+  domain: string;
+  category: "hubspot" | "rejected_website" | "current_run_cache";
+  includedInRequest: boolean;
+  requestIndex?: number;
+  occurrences?: number;
+  priority?: number;
+  lastSeenAt?: string;
 }
 
 export interface LiveExaRecurringDomain {

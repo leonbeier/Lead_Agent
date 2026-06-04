@@ -52,6 +52,7 @@ const EXA_MAX_RETRIES = 3;
 const EXA_QUERY_CONCURRENCY = 3;
 const EXA_REQUEST_TIMEOUT_MS = env.EXA_REQUEST_TIMEOUT_MS;
 const HUBSPOT_EXCLUDED_DOMAIN_FETCH_TIMEOUT_MS = 10_000;
+const COMMON_COMPOUND_TLDS = new Set(["co.uk", "com.au", "com.br", "co.jp", "co.kr", "co.in", "com.mx", "com.tr", "com.pl", "com.sg"]);
 const GENERIC_COMPANY_NAMES = new Set(["home", "homepage", "startseite", "services", "solutions", "products", "company"]);
 const COMPANY_NAME_STOP_WORDS = new Set(["ai", "the", "and", "for", "with", "vision", "industrial", "automation", "machine", "marking", "robotics", "solutions", "systems", "services"]);
 export class ExaSearchClient {
@@ -252,7 +253,7 @@ export class ExaSearchClient {
 
   private buildSearchPayload(query: string, numResults: number, excludeDomains: string[] = []): ExaSearchRequestPayload {
     const normalizedExcludeDomains = Array.from(new Set([
-      ...excludeDomains.map((domain) => domain.trim().toLowerCase()).filter(Boolean),
+      ...excludeDomains.map((domain) => this.toExcludeDomain(domain)).filter((domain): domain is string => Boolean(domain)),
       ...this.additionalExcludedDomains
     ]))
       .slice(-MAX_EXA_EXCLUDE_DOMAINS);
@@ -351,7 +352,16 @@ export class ExaSearchClient {
 
     try {
       const parsed = value.includes("://") ? new URL(value) : new URL(`https://${value}`);
-      return parsed.hostname.replace(/^www\./i, "").toLowerCase();
+      const hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+      const labels = hostname.split(".").filter(Boolean);
+      if (labels.length <= 2) {
+        return hostname;
+      }
+
+      const compoundTld = labels.slice(-2).join(".");
+      return COMMON_COMPOUND_TLDS.has(compoundTld)
+        ? labels.slice(-3).join(".")
+        : labels.slice(-2).join(".");
     } catch {
       return undefined;
     }
@@ -398,12 +408,15 @@ export class ExaSearchClient {
     const semanticFocus = this.buildSemanticSearchFocus(filter, compactPersona, primaryKeywords);
     const applicationAngles = this.buildApplicationAngles(filter);
     const primaryCategory = filter.targetCategories?.[0];
+    const consultingLedCategory = primaryCategory === "integrator_vision_ai_consulting" || primaryCategory === "integrator_vision_ai_freelancer";
     const refinementClause = this.buildRefinementClause(options.targetCategoryRefinement);
     const queryPool = locationVariants.flatMap((location) => {
       const primaryQueries = primaryCategory === "industrial_end_customer_scaled"
         ? this.buildIndustrialEndCustomerPrimaryQueries(location, filter, semanticFocus)
         : primaryCategory === "machine_builder_ai_enablement"
           ? this.buildMachineBuilderPrimaryQueries(location, filter, semanticFocus)
+        : consultingLedCategory
+          ? this.buildConsultingPrimaryQueries(location, filter, semanticFocus)
         : [
             `${location} companies that provide ${semanticFocus}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
             `${location} system integrators and solution providers that deliver ${semanticFocus} for customer projects. Prefer official company websites and exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`,
@@ -414,6 +427,8 @@ export class ExaSearchClient {
         ? this.buildIndustrialEndCustomerAngleQuery(location, filter, semanticFocus, angle)
         : primaryCategory === "machine_builder_ai_enablement"
           ? this.buildMachineBuilderAngleQuery(location, filter, semanticFocus, angle)
+        : consultingLedCategory
+          ? this.buildConsultingAngleQuery(location, filter, semanticFocus, angle)
         : `${location} companies that provide ${semanticFocus} for ${angle}. Prefer official company websites of system integrators or solution providers. Exclude directories, marketplaces, job boards, news articles, PDFs, and pure component manufacturers.`
       );
 
@@ -597,6 +612,46 @@ export class ExaSearchClient {
   ): string {
     const industries = filter.industries.slice(0, 2).join(" and ") || "industrial automation and machinery";
     return `${location} machine builders, OEMs, and automation equipment suppliers in ${industries} with ${angle}. Prefer official company websites of machinery vendors and OEMs serving manufacturing customers. Exclude directories, job boards, marketplaces, generic component vendors, news articles, PDFs, and pure consultancies. Focus on firms that deliver customer machines or equipment, not only software services.`;
+  }
+
+  private buildConsultingPrimaryQueries(
+    location: string,
+    filter: OrganizationFilter,
+    semanticFocus: string
+  ): string[] {
+    const isFreelancerCategory = filter.targetCategories?.includes("integrator_vision_ai_freelancer");
+    const audience = isFreelancerCategory
+      ? "independent consultants, freelancers, and solo specialists"
+      : "consulting firms, specialist boutiques, and implementation consultancies";
+    const officialWebsiteTarget = isFreelancerCategory
+      ? "official company websites or personal business websites of independent specialists"
+      : "official company websites of consulting firms, specialist boutiques, or implementation consultancies";
+    const exclusion = isFreelancerCategory
+      ? "Exclude staffing marketplaces, job boards, directories, generic agencies, news articles, PDFs, and product-only vendors."
+      : "Exclude directories, marketplaces, job boards, news articles, PDFs, training-only providers, advisory-only firms, and pure component vendors.";
+
+    return [
+      `${location} ${audience} that deliver ${semanticFocus} for customer projects. Prefer ${officialWebsiteTarget}. ${exclusion}`,
+      `${location} machine vision, industrial AI, inspection, or embedded vision consultants with hands-on implementation services for customers. Prefer ${officialWebsiteTarget}. ${exclusion}`,
+      `${location} consulting-led providers offering customer-specific machine vision, AOI, inspection, or industrial AI implementation work. Prefer ${officialWebsiteTarget}. Exclude generic strategy consulting, recruiters, directories, news pages, PDFs, and component catalogs.`
+    ];
+  }
+
+  private buildConsultingAngleQuery(
+    location: string,
+    filter: OrganizationFilter,
+    semanticFocus: string,
+    angle: string
+  ): string {
+    const isFreelancerCategory = filter.targetCategories?.includes("integrator_vision_ai_freelancer");
+    const audience = isFreelancerCategory
+      ? "independent consultants, freelancers, and solo specialists"
+      : "consulting firms, specialist boutiques, and implementation consultancies";
+    const officialWebsiteTarget = isFreelancerCategory
+      ? "official company websites or personal business websites of independent specialists"
+      : "official company websites of consulting firms, specialist boutiques, or implementation consultancies";
+
+    return `${location} ${audience} with ${angle} and delivery ownership for ${semanticFocus}. Prefer ${officialWebsiteTarget}. Exclude directories, marketplaces, job boards, news articles, PDFs, staffing platforms, and advisory-only firms with no implementation work.`;
   }
 
   private buildLocationVariants(location: string): string[] {

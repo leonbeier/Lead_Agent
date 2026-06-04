@@ -22,6 +22,7 @@ import {
   LeadLearningData,
   LeadJobRequest,
   LeadJobResult,
+  LiveExaExcludedDomainDetail,
   LiveExaRecurringDomain,
   LeadRunFunnel,
   LeadRunProgress,
@@ -130,6 +131,13 @@ type DirectExaExcludeDomainSources = {
 };
 
 type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache";
+
+type DirectExaExcludedDomainBuildResult = {
+  requestExcludedDomains: string[];
+  localExcludedDomains: Set<string>;
+  localExcludedDomainCategories: Map<string, DirectExaExcludedDomainCategory>;
+  localExcludedDomainDetails: LiveExaExcludedDomainDetail[];
+};
 
 const MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS = 1200;
 const DIRECT_EXA_REPEAT_QUERY_UNIQUE_THRESHOLD = 10;
@@ -3773,11 +3781,13 @@ export class LeadPipelineAgent {
       filteredByCurrentRunCache: number;
       duplicatesRemoved: number;
       rawCompaniesFound: number;
+      newRawCompanies?: CompanySample[];
       filterName: string;
       defaultQueries: string[];
       plannedQueries: string[];
       promptMessages?: Array<{ role: string; content: string }>;
       excludedDomains: string[];
+      excludedDomainDetails?: LiveExaExcludedDomainDetail[];
     }) => void
   ): Promise<CompanySample[]> {
     const exaClient = this.exaPreviewClient as unknown as {
@@ -3841,7 +3851,8 @@ export class LeadPipelineAgent {
       defaultQueries: queryPlanningContext.plannedQueryMetadata?.defaultQueries ?? defaultQueries.slice(0, plannerQueryCount),
       plannedQueries: queryPlanningContext.plannedQueryMetadata?.plannedQueries ?? queries,
       promptMessages: queryPlanningContext.plannedQueryMetadata?.promptMessages ?? queryGenerationPromptMessages,
-      excludedDomains: prioritizedExcludedDomains.requestExcludedDomains
+      excludedDomains: prioritizedExcludedDomains.requestExcludedDomains,
+      excludedDomainDetails: prioritizedExcludedDomains.localExcludedDomainDetails
     };
     onQueryProgress?.({
       executedQueries: 0,
@@ -3854,6 +3865,7 @@ export class LeadPipelineAgent {
       filteredByCurrentRunCache: 0,
       duplicatesRemoved: 0,
       rawCompaniesFound: 0,
+      newRawCompanies: [],
       ...debugUpdateBase
     });
     let completedQueries = 0;
@@ -3954,6 +3966,7 @@ export class LeadPipelineAgent {
         filteredByCurrentRunCache: filteredByCurrentRunCacheCount,
         duplicatesRemoved: Math.max(0, returnedResultsCount - filteredByExcludedDomainsCount - discoveredCompanyCount),
         rawCompaniesFound: discoveredCompanyCount,
+        newRawCompanies: discoveredCompanies,
         ...debugUpdateBase,
         plannedQueries: queryQueue,
         excludedDomains: prioritizedExcludedDomains.requestExcludedDomains
@@ -4060,11 +4073,13 @@ export class LeadPipelineAgent {
       filteredByCurrentRunCache: number;
       duplicatesRemoved: number;
       rawCompaniesFound: number;
+      newRawCompanies?: CompanySample[];
       filterName: string;
       defaultQueries: string[];
       plannedQueries: string[];
       promptMessages?: Array<{ role: string; content: string }>;
       excludedDomains: string[];
+      excludedDomainDetails?: LiveExaExcludedDomainDetail[];
     }) => void
   ): Promise<CompanySample[]> {
     return this.runDirectExaCompanySearch(filter, targetCategories, maxQueryCount, excludeDomainSources, queryPlanningContext, onQueryProgress);
@@ -4075,7 +4090,7 @@ export class LeadPipelineAgent {
     targetCategories: LeadCategory[],
     hubSpotExcludedDomains: Iterable<string>,
     excludeDomainSources: DirectExaExcludeDomainSources = {}
-  ): { requestExcludedDomains: string[]; localExcludedDomains: Set<string>; localExcludedDomainCategories: Map<string, DirectExaExcludedDomainCategory> } {
+  ): DirectExaExcludedDomainBuildResult {
     const seenDomains = new Set<string>();
     const localExcludedDomainCategories = new Map<string, DirectExaExcludedDomainCategory>();
     const hubSpotDomains: string[] = [];
@@ -4173,17 +4188,69 @@ export class LeadPipelineAgent {
     const splitRejectedDomains = splitPromotedDomains(rejectedWebsiteDomains);
     const splitCurrentRunDomains = splitPromotedDomains(currentRunExcludedDomains);
 
-    return {
-      requestExcludedDomains: [
+    const requestExcludedDomains = [
         ...splitHubSpotDomains.regular,
         ...splitRejectedDomains.regular,
         ...splitHubSpotDomains.promoted,
         ...splitRejectedDomains.promoted,
         ...splitCurrentRunDomains.regular,
         ...splitCurrentRunDomains.promoted
-      ].slice(-MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS),
+      ].slice(-MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
+
+    const recurringByDomain = new Map<string, LiveExaRecurringDomain>();
+    for (const recurringDomain of historicalRecurringDomains) {
+      const normalizedDomain = this.normalizeExcludeDomain(recurringDomain.domain);
+      if (normalizedDomain && !recurringByDomain.has(normalizedDomain)) {
+        recurringByDomain.set(normalizedDomain, recurringDomain);
+      }
+    }
+
+    const requestDomainPositions = new Map<string, number>();
+    requestExcludedDomains.forEach((domain, index) => {
+      requestDomainPositions.set(domain, index);
+    });
+
+    const localExcludedDomainDetails = Array.from(seenDomains)
+      .map<LiveExaExcludedDomainDetail>((domain) => {
+        const recurringDomain = recurringByDomain.get(domain);
+        const requestIndex = requestDomainPositions.get(domain);
+        return {
+          domain,
+          category: localExcludedDomainCategories.get(domain) ?? "hubspot",
+          includedInRequest: requestIndex !== undefined,
+          requestIndex,
+          occurrences: recurringDomain?.occurrences ?? 0,
+          priority: recurringDomain?.priority ?? 0,
+          lastSeenAt: recurringDomain?.lastSeenAt
+        };
+      })
+      .sort((left, right) => {
+        if (Number(right.includedInRequest) !== Number(left.includedInRequest)) {
+          return Number(right.includedInRequest) - Number(left.includedInRequest);
+        }
+
+        if (left.requestIndex !== undefined && right.requestIndex !== undefined && left.requestIndex !== right.requestIndex) {
+          return left.requestIndex - right.requestIndex;
+        }
+
+        const priorityDelta = (right.priority ?? 0) - (left.priority ?? 0);
+        if (priorityDelta !== 0) {
+          return priorityDelta;
+        }
+
+        const occurrenceDelta = (right.occurrences ?? 0) - (left.occurrences ?? 0);
+        if (occurrenceDelta !== 0) {
+          return occurrenceDelta;
+        }
+
+        return left.domain.localeCompare(right.domain);
+      });
+
+    return {
+      requestExcludedDomains,
       localExcludedDomains: new Set(seenDomains),
-      localExcludedDomainCategories
+      localExcludedDomainCategories,
+      localExcludedDomainDetails
     };
   }
 
@@ -4210,21 +4277,7 @@ export class LeadPipelineAgent {
   }
 
   private normalizeExcludeDomain(domain: string | undefined): string | undefined {
-    if (!domain) {
-      return undefined;
-    }
-
-    try {
-      const parsed = domain.includes("://") ? new URL(domain) : new URL(`https://${domain}`);
-      return parsed.hostname.toLowerCase().replace(/^www\./, "");
-    } catch {
-      return domain
-        .trim()
-        .toLowerCase()
-        .replace(/^https?:\/\//, "")
-        .replace(/^www\./, "")
-        .replace(/\/$/, "");
-    }
+    return this.normalizeDomain(domain);
   }
 
   private buildSearchHistoryEntry(
