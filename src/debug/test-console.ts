@@ -36,11 +36,17 @@ export function buildDebugSearchFilter(
 
   const normalizedRegion = normalizeRegion(region);
   const normalizedRegionToken = normalizedRegion?.toLowerCase();
+  const rankByScopeSpecificity = (matches: OrganizationFilter[]): OrganizationFilter | undefined => matches
+    .map((filter) => ({
+      filter,
+      distinctLocationCount: new Set(filter.locations.map((location) => location.trim().toLowerCase()).filter(Boolean)).size
+    }))
+    .sort((left, right) => left.distinctLocationCount - right.distinctLocationCount)[0]?.filter;
   const exactRegionMatch = normalizedRegionToken
-    ? categoryMatches.find((filter) => filter.locations.some((location) => location.trim().toLowerCase() === normalizedRegionToken))
+    ? rankByScopeSpecificity(categoryMatches.filter((filter) => filter.locations.some((location) => location.trim().toLowerCase() === normalizedRegionToken)))
     : undefined;
   const partialRegionMatch = normalizedRegionToken
-    ? categoryMatches.find((filter) => filter.locations.some((location) => location.trim().toLowerCase().includes(normalizedRegionToken)))
+    ? rankByScopeSpecificity(categoryMatches.filter((filter) => filter.locations.some((location) => location.trim().toLowerCase().includes(normalizedRegionToken))))
     : undefined;
   const baseFilter = exactRegionMatch ?? partialRegionMatch ?? categoryMatches[0];
 

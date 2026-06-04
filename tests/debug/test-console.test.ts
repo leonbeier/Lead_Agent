@@ -26,6 +26,24 @@ test("buildDebugSearchFilter normalizes DE to Germany before overriding the regi
   assert.match(filter.name, /\[debug Germany\]$/);
 });
 
+test("buildDebugSearchFilter prefers the narrowest Germany-scoped filter over Europe-wide matches", () => {
+  const filter = buildDebugSearchFilter("integrator_relevant_focus", "DE");
+
+  assert.equal(filter.name, "Germany Embedded Vision Engineering Firms [debug Germany]");
+  assert.deepEqual(filter.locations, ["Germany"]);
+  assert.match(filter.persona, /^German /);
+  assert.match(filter.notes, /^German /);
+});
+
+test("buildDebugSearchFilter prefers Germany-only vision filters when multiple exact region matches exist", () => {
+  const filter = buildDebugSearchFilter("integrator_vision_industrial_ai", "DE");
+
+  assert.deepEqual(filter.locations, ["Germany"]);
+  assert.match(filter.name, /^Germany /);
+  assert.doesNotMatch(filter.name, /^Europe /);
+  assert.match(filter.persona, /^German /);
+});
+
 test("normalizeWebsiteUrl canonicalizes protocol, strips query/hash, and rejects invalid values", () => {
   assert.equal(normalizeWebsiteUrl("example.com/path/?a=1#frag"), "https://example.com/path");
   assert.equal(normalizeWebsiteUrl("https://www.example.com/"), "https://www.example.com");
