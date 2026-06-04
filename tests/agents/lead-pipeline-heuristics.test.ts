@@ -495,3 +495,108 @@ test("direct exa path feeds freshly discovered domains into later Exa queries", 
   assert.equal((excludeDomainSnapshots[1] ?? []).length <= 1200, true);
 });
 
+test("direct exa path repeats a strong query up to three times and prioritizes fresh domains into excludes", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  const executedQueries: string[] = [];
+  const excludeDomainSnapshots: string[][] = [];
+
+  agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
+  agent.controlPlaneStore.getLiveExaCache = async () => ({ entries: [], discoveredDomains: [] });
+  agent.exaPreviewClient = {
+    runtimeApiKey: "exa-test-key",
+    buildQueries: () => ["query one"],
+    runSearch: async (_apiKey: string, query: string, _numResults: number, excludeDomains: string[] = []) => {
+      executedQueries.push(query);
+      excludeDomainSnapshots.push([...excludeDomains]);
+
+      if (executedQueries.length === 1) {
+        return {
+          results: Array.from({ length: 11 }, (_, index) => ({
+            url: `https://fresh-${index}.example/about`,
+            title: `Fresh ${index}`
+          }))
+        };
+      }
+
+      return { results: [] };
+    },
+    toExcludeDomain: (value: string | undefined) => value ? new URL(value).hostname.replace(/^www\./, "") : undefined,
+    normalizeUrl: (value: string | undefined) => value ? new URL(value).origin : undefined,
+    toCanonicalCompanyDomain: (value: string) => value,
+    deriveCompanyName: (_value: string, title?: string) => title ?? "Fresh",
+    inferCountryFromDomain: () => "Germany",
+    buildDescription: () => "fresh",
+    loadKnownExcludedDomains: async () => new Set<string>()
+  };
+
+  const discovered = await agent.runDirectExaCompanySearch(
+    {
+      name: "Germany Vision Integrators",
+      persona: "Integrator",
+      industries: ["Industrial Automation"],
+      keywords: ["machine vision integrator"],
+      locations: ["Germany"],
+      employeeRanges: ["11,50"],
+      targetCategories: ["integrator_vision_industrial_ai"],
+      notes: "live"
+    },
+    ["integrator_vision_industrial_ai"],
+    1,
+    { screeningScope: "live" },
+    { useAzureQueryPlanner: false }
+  );
+
+  assert.equal(discovered.length, 11);
+  assert.deepEqual(executedQueries, ["query one", "query one"]);
+  assert.equal(excludeDomainSnapshots[0]?.includes("fresh-0.example"), false);
+  assert.equal(excludeDomainSnapshots[1]?.includes("fresh-0.example"), true);
+});
+
+test("direct exa path falls back to baseline queries after planner timeouts", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  const executedQueries: string[] = [];
+  let plannerCalls = 0;
+
+  agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
+  agent.controlPlaneStore.getLiveExaCache = async () => ({ entries: [], discoveredDomains: [] });
+  agent.azureClient.planExaSearchQueries = async () => {
+    plannerCalls += 1;
+    throw new Error("Exa query planner timed out after 45000ms");
+  };
+  agent.exaPreviewClient = {
+    runtimeApiKey: "exa-test-key",
+    buildQueries: () => ["baseline query one", "baseline query two"],
+    runSearch: async (_apiKey: string, query: string) => {
+      executedQueries.push(query);
+      return { results: [] };
+    },
+    toExcludeDomain: (value: string | undefined) => value ? new URL(value).hostname.replace(/^www\./, "") : undefined,
+    normalizeUrl: (value: string | undefined) => value,
+    toCanonicalCompanyDomain: (value: string) => value,
+    deriveCompanyName: () => "Example",
+    inferCountryFromDomain: () => "Germany",
+    buildDescription: () => "example",
+    loadKnownExcludedDomains: async () => new Set<string>()
+  };
+
+  await agent.runDirectExaCompanySearch(
+    {
+      name: "Germany Vision Integrators",
+      persona: "Integrator",
+      industries: ["Industrial Automation"],
+      keywords: ["machine vision integrator"],
+      locations: ["Germany"],
+      employeeRanges: ["11,50"],
+      targetCategories: ["integrator_vision_industrial_ai"],
+      notes: "live"
+    },
+    ["integrator_vision_industrial_ai"],
+    2,
+    { screeningScope: "live" },
+    { useAzureQueryPlanner: true }
+  );
+
+  assert.equal(plannerCalls, 2);
+  assert.deepEqual(executedQueries, ["baseline query one", "baseline query two"]);
+});
+

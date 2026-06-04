@@ -130,6 +130,9 @@ type DirectExaExcludeDomainSources = {
 type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache";
 
 const MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS = 1200;
+const DIRECT_EXA_REPEAT_QUERY_UNIQUE_THRESHOLD = 10;
+const MAX_DIRECT_EXA_QUERY_EXECUTIONS = 3;
+const DIRECT_EXA_PLANNER_RETRY_TIMEOUT_MS = 90000;
 
 type DirectExaQueryPlanningContext = {
   dryRun?: boolean;
@@ -3818,24 +3821,15 @@ export class LeadPipelineAgent {
     const queries = (forcedQueries.length > 0
       ? forcedQueries
       : useAzureQueryPlanner
-        ? await this.azureClient.planExaSearchQueries(
+        ? await this.resolveDirectExaPlannerQueries(
           filter,
           defaultQueries.slice(0, plannerQueryCount),
-          queryPlanningContext.learning,
-          Boolean(queryPlanningContext.dryRun),
-          queryPlanningContext.mainContext,
-          queryPlanningContext.searchStrategyContext,
           plannerQueryCount,
-          {
-            recentQueryHistory: queryPlanningContext.recentQueryHistory,
-            prequalification: queryPlanningContext.prequalification,
-            excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
-            requestedTargetCategories: targetCategories,
-            targetCategoryRefinement: queryPlanningContext.targetCategoryRefinement,
-            debugCapture: (details) => {
-              queryGenerationPromptMessages = details.promptMessages;
-              queryPlanningContext.debugCapture?.(details);
-            }
+          targetCategories,
+          prioritizedExcludedDomains.requestExcludedDomains,
+          queryPlanningContext,
+          (promptMessages) => {
+            queryGenerationPromptMessages = promptMessages;
           }
         )
         : defaultQueries).slice(0, Math.max(1, maxQueryCount));
@@ -3867,6 +3861,8 @@ export class LeadPipelineAgent {
     let filteredByCurrentRunCacheCount = 0;
     let discoveredCompanyCount = 0;
     const queryResults: CompanySample[] = [];
+    const queryExecutionCounts = new Map<string, number>();
+    const queryQueue = [...queries];
     const reprioritizeExcludeDomain = (domain: string, category: DirectExaExcludedDomainCategory) => {
       const existingIndex = prioritizedExcludedDomains.requestExcludedDomains.indexOf(domain);
       if (existingIndex >= 0) {
@@ -3879,7 +3875,14 @@ export class LeadPipelineAgent {
       this.trimDirectExaRequestExcludedDomains(prioritizedExcludedDomains.requestExcludedDomains);
     };
 
-    for (const query of queries) {
+    for (let queryIndex = 0; queryIndex < queryQueue.length; queryIndex += 1) {
+      const query = queryQueue[queryIndex];
+      if (!query) {
+        continue;
+      }
+
+      const executionCount = (queryExecutionCounts.get(query) ?? 0) + 1;
+      queryExecutionCounts.set(query, executionCount);
       const payload = await exaClient.runSearch(apiKey, query, 20, prioritizedExcludedDomains.requestExcludedDomains);
       const discoveredCompanies: CompanySample[] = [];
       const queryReturnedResults = payload.results?.length ?? 0;
@@ -3932,9 +3935,14 @@ export class LeadPipelineAgent {
       filteredByRejectedWebsitesCount += queryFilteredByRejectedWebsites;
       filteredByCurrentRunCacheCount += queryFilteredByCurrentRunCache;
       discoveredCompanyCount += discoveredCompanies.length;
+
+      if (discoveredCompanies.length > DIRECT_EXA_REPEAT_QUERY_UNIQUE_THRESHOLD && executionCount < MAX_DIRECT_EXA_QUERY_EXECUTIONS) {
+        queryQueue.push(query);
+      }
+
       onQueryProgress?.({
         executedQueries: completedQueries,
-        totalQueries: queries.length,
+        totalQueries: queryQueue.length,
         query,
         returnedResults: returnedResultsCount,
         filteredByExcludedDomains: filteredByExcludedDomainsCount,
@@ -3944,6 +3952,7 @@ export class LeadPipelineAgent {
         duplicatesRemoved: Math.max(0, returnedResultsCount - filteredByExcludedDomainsCount - discoveredCompanyCount),
         rawCompaniesFound: discoveredCompanyCount,
         ...debugUpdateBase,
+        plannedQueries: queryQueue,
         excludedDomains: prioritizedExcludedDomains.requestExcludedDomains
       });
 
@@ -3951,6 +3960,84 @@ export class LeadPipelineAgent {
     }
 
     return queryResults;
+  }
+
+  private async resolveDirectExaPlannerQueries(
+    filter: OrganizationFilter,
+    defaultQueries: string[],
+    plannerQueryCount: number,
+    targetCategories: LeadCategory[],
+    excludedDomains: string[],
+    queryPlanningContext: DirectExaQueryPlanningContext,
+    capturePromptMessages: (promptMessages: Array<{ role: string; content: string }>) => void
+  ): Promise<string[]> {
+    try {
+      return await this.azureClient.planExaSearchQueries(
+        filter,
+        defaultQueries,
+        queryPlanningContext.learning,
+        Boolean(queryPlanningContext.dryRun),
+        queryPlanningContext.mainContext,
+        queryPlanningContext.searchStrategyContext,
+        plannerQueryCount,
+        {
+          recentQueryHistory: queryPlanningContext.recentQueryHistory,
+          prequalification: queryPlanningContext.prequalification,
+          excludedDomainExamples: excludedDomains.slice(0, 30),
+          requestedTargetCategories: targetCategories,
+          targetCategoryRefinement: queryPlanningContext.targetCategoryRefinement,
+          debugCapture: (details) => {
+            capturePromptMessages(details.promptMessages);
+            queryPlanningContext.debugCapture?.(details);
+          }
+        }
+      );
+    } catch (error) {
+      if (!this.isRecoverableDirectExaPlannerError(error)) {
+        throw error;
+      }
+
+      try {
+        return await this.azureClient.planExaSearchQueries(
+          filter,
+          defaultQueries,
+          queryPlanningContext.learning,
+          Boolean(queryPlanningContext.dryRun),
+          queryPlanningContext.mainContext,
+          queryPlanningContext.searchStrategyContext,
+          plannerQueryCount,
+          {
+            recentQueryHistory: queryPlanningContext.recentQueryHistory,
+            prequalification: queryPlanningContext.prequalification,
+            excludedDomainExamples: excludedDomains.slice(0, 30),
+            requestedTargetCategories: targetCategories,
+            targetCategoryRefinement: queryPlanningContext.targetCategoryRefinement,
+            plannerTimeoutMs: DIRECT_EXA_PLANNER_RETRY_TIMEOUT_MS,
+            debugCapture: (details) => {
+              capturePromptMessages(details.promptMessages);
+              queryPlanningContext.debugCapture?.(details);
+            }
+          }
+        );
+      } catch (retryError) {
+        if (!this.isRecoverableDirectExaPlannerError(retryError)) {
+          throw retryError;
+        }
+
+        return defaultQueries;
+      }
+    }
+  }
+
+  private isRecoverableDirectExaPlannerError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return /Exa query planner timed out/i.test(error.message)
+      || /Exa query planner diversity rewrite timed out/i.test(error.message)
+      || /temporarily unavailable/i.test(error.message)
+      || /fetch failed/i.test(error.message);
   }
 
   async discoverDirectExaCompaniesForExecution(
