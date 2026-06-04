@@ -18,7 +18,20 @@ test("Exa query planner prompt uses the new ONE WARE system and structured user 
     azureClient.buildLearningContextForSearchStrategy = () => "Learning summary";
     azureClient.runChat = async (messages) => {
       capturedMessages = messages;
-      return JSON.stringify({ queries: ["Germany machine vision system integrator official company websites"] });
+      return JSON.stringify({
+        queries: ["Germany machine vision system integrator official company websites"],
+        constraintCheck: {
+          requiredLocalities: ["Germany"],
+          allQueriesPreserveLocality: true,
+          forbiddenBroadeningTermsPresent: false,
+          preservedLocalitiesByQuery: [
+            {
+              query: "Germany machine vision system integrator official company websites",
+              preservedLocalities: ["Germany"]
+            }
+          ]
+        }
+      });
     };
 
     const queries = await azureClient.planExaSearchQueries(
@@ -155,7 +168,13 @@ test("Exa query planner prompt uses the new ONE WARE system and structured user 
     assert.match(systemPrompt, /Do not repeat overused openings such as Europe official company websites of machine vision system integrators/i);
     assert.match(systemPrompt, /Output:/i);
     assert.match(systemPrompt, /Return only strict JSON with this exact shape:/i);
-    assert.match(systemPrompt, /\{"queries":\["query 1"\]\}/i);
+    assert.match(systemPrompt, /Hard constraints:/i);
+    assert.match(systemPrompt, /Required localities: Germany/i);
+    assert.match(systemPrompt, /Every query must contain at least one exact required locality term verbatim/i);
+    assert.match(systemPrompt, /If the required locality is Germany, every query must literally contain Germany/i);
+    assert.match(systemPrompt, /Failure output shape:/i);
+    assert.match(systemPrompt, /locality_constraint_unsatisfied/i);
+    assert.match(systemPrompt, /"constraintCheck"/i);
     assert.match(systemPrompt, /Query style:/i);
     assert.match(systemPrompt, /Write natural-language Exa queries/i);
     assert.match(systemPrompt, /Do not use site:/i);
@@ -171,6 +190,8 @@ test("Exa query planner prompt uses the new ONE WARE system and structured user 
     assert.match(userPrompt, /Target:/i);
     assert.match(userPrompt, /This section defines the exact kind of companies you are trying to find/i);
     assert.match(userPrompt, /Required locality terms to preserve in every query: Germany/i);
+    assert.match(userPrompt, /Search only inside these required localities\. Do not broaden beyond them: Germany/i);
+    assert.match(userPrompt, /Forbidden broadening terms for this run: europe, european, eu, emea, dach, global, worldwide, international/i);
     assert.match(userPrompt, /Desired target categories for this run: integrator_vision_industrial_ai/i);
     assert.match(userPrompt, /Non-desired selectable categories for this run:/i);
     assert.match(userPrompt, /Also avoid drifting into: other, irrelevant/i);
@@ -212,16 +233,17 @@ test("Exa query planner prompt uses the new ONE WARE system and structured user 
     assert.match(userPrompt, /Vision Integrators Germany \| 3\/20 relevant \| 15%/i);
     assert.match(userPrompt, /Final task:/i);
     assert.match(userPrompt, /Create exactly 1 new Exa company-discovery queries/i);
+    assert.match(userPrompt, /If you cannot satisfy the locality constraints exactly, return the failure JSON with error=locality_constraint_unsatisfied/i);
     assert.match(userPrompt, /Baseline query angles to build on:/i);
     assert.match(userPrompt, /Angle 1: Germany companies that provide machine vision system integration for industrial automation/i);
     assert.match(userPrompt, /Return only:/i);
-    assert.match(userPrompt, /\{"queries":\["\.\.\."\]\}/i);
+    assert.match(userPrompt, /"constraintCheck"/i);
   } finally {
     readiness.azureConfigured = previousAzureConfigured;
   }
 });
 
-test("Exa query planner falls back to baseline queries when Azure planning times out", async () => {
+test("Exa query planner fails loudly when Azure planning times out", async () => {
   const azureClient = new AzureOpenAIClient() as unknown as {
     planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
     runChat: () => Promise<string>;
@@ -233,33 +255,34 @@ test("Exa query planner falls back to baseline queries when Azure planning times
   try {
     azureClient.runChat = async () => new Promise<string>(() => undefined);
 
-    const queries = await azureClient.planExaSearchQueries(
-      {
-        name: "Vision Integrators Germany",
-        persona: "Operations leaders",
-        industries: ["Manufacturing"],
-        keywords: ["machine vision", "industrial image processing"],
-        locations: ["Germany"],
-        employeeRanges: ["11-50"],
-        targetCategories: ["integrator_vision_industrial_ai"],
-        notes: "Find machine-vision-focused industrial integrators in Germany."
-      },
-      ["baseline query", "second baseline query"],
-      undefined,
-      false,
-      undefined,
-      undefined,
-      2,
-      { plannerTimeoutMs: 1 }
+    await assert.rejects(
+      () => azureClient.planExaSearchQueries(
+        {
+          name: "Vision Integrators Germany",
+          persona: "Operations leaders",
+          industries: ["Manufacturing"],
+          keywords: ["machine vision", "industrial image processing"],
+          locations: ["Germany"],
+          employeeRanges: ["11-50"],
+          targetCategories: ["integrator_vision_industrial_ai"],
+          notes: "Find machine-vision-focused industrial integrators in Germany."
+        },
+        ["baseline query", "second baseline query"],
+        undefined,
+        false,
+        undefined,
+        undefined,
+        2,
+        { plannerTimeoutMs: 1 }
+      ),
+      /timed out/i
     );
-
-    assert.deepEqual(queries, ["baseline query", "second baseline query"]);
   } finally {
     readiness.azureConfigured = previousAzureConfigured;
   }
 });
 
-test("Exa query planner falls back to locality-safe baseline queries when Azure broadens Germany filters to Europe", async () => {
+test("Exa query planner rejects broadened Europe queries for Germany filters", async () => {
   const azureClient = new AzureOpenAIClient() as unknown as {
     planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
     runChat: () => Promise<string>;
@@ -273,35 +296,39 @@ test("Exa query planner falls back to locality-safe baseline queries when Azure 
       queries: [
         "Europe companies that provide industrial automation integration and project engineering services.",
         "Europe system integrators for industrial automation software and MES implementation."
-      ]
+      ],
+      constraintCheck: {
+        requiredLocalities: ["Germany"],
+        allQueriesPreserveLocality: false,
+        forbiddenBroadeningTermsPresent: true,
+        preservedLocalitiesByQuery: []
+      }
     });
 
-    const queries = await azureClient.planExaSearchQueries(
-      {
-        name: "Germany Automation Software Integrators",
-        persona: "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects",
-        industries: ["Industrial Automation", "Industrial Software"],
-        keywords: ["industrial automation integrator", "mes system integrator"],
-        locations: ["Germany"],
-        employeeRanges: ["11,50"],
-        targetCategories: ["integrator_general_ai"],
-        notes: "Prefer German industrial software and automation implementation partners."
-      },
-      [
-        "Germany companies that provide industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services.",
-        "Germany system integrators and solution providers that deliver industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services for customer projects."
-      ],
-      undefined,
-      false,
-      undefined,
-      undefined,
-      2
+    await assert.rejects(
+      () => azureClient.planExaSearchQueries(
+        {
+          name: "Germany Automation Software Integrators",
+          persona: "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects",
+          industries: ["Industrial Automation", "Industrial Software"],
+          keywords: ["industrial automation integrator", "mes system integrator"],
+          locations: ["Germany"],
+          employeeRanges: ["11,50"],
+          targetCategories: ["integrator_general_ai"],
+          notes: "Prefer German industrial software and automation implementation partners."
+        },
+        [
+          "Germany companies that provide industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services.",
+          "Germany system integrators and solution providers that deliver industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services for customer projects."
+        ],
+        undefined,
+        false,
+        undefined,
+        undefined,
+        2
+      ),
+      /locality|broadened/i
     );
-
-    assert.deepEqual(queries, [
-      "Germany companies that provide industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services.",
-      "Germany system integrators and solution providers that deliver industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services for customer projects."
-    ]);
   } finally {
     readiness.azureConfigured = previousAzureConfigured;
   }

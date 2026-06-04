@@ -758,127 +758,188 @@ export class AzureOpenAIClient {
   ): Promise<string[]> {
     const targetQueryCount = Math.max(1, maxQueryCount);
     const baselineQueries = Array.from(new Set(defaultQueries.map((query) => query.trim()).filter(Boolean))).slice(0, targetQueryCount);
-    if (baselineQueries.length === 0 || dryRun || !readiness.azureConfigured) {
-      return baselineQueries;
+    if (baselineQueries.length === 0) {
+      return [];
     }
 
-    try {
-      const requestedLocalities = Array.from(new Set((filter.locations ?? []).map((location) => location.trim()).filter(Boolean)));
-      const requestedCategories = Array.from(new Set((options.requestedTargetCategories ?? filter.targetCategories ?? []).map((category) => category.trim()).filter(Boolean)));
-      const recentQueryHistory = (options.recentQueryHistory ?? [])
-        .filter((entry) => entry?.query?.trim())
-        .slice(0, 50);
-      const exaLearning = learning?.searchHistoryByMode?.exa_search?.searchHistory ?? [];
-      const goodSignalsContext = this.buildExaSearchGoodSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
-      const avoidSignalsContext = this.buildExaSearchAvoidSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
-      const recentExaContext = this.buildExaSearchPerformanceSummary(exaLearning);
-      const excludedDomainExamples = Array.from(new Set((options.excludedDomainExamples ?? []).map((domain) => domain.trim().toLowerCase()).filter(Boolean))).slice(0, 30);
+    if (!readiness.azureConfigured) {
+      throw new Error("Exa query planner requires Azure AI to be configured.");
+    }
 
-      const promptMessages: Array<{ role: "system" | "user"; content: string }> = [
-        {
-          role: "system",
-          content: this.buildExaPlannerSystemPrompt(mainContext, searchStrategyContext, targetQueryCount)
-        },
-        {
-          role: "user",
-          content: this.buildExaPlannerUserPrompt(
-            filter,
-            requestedLocalities,
-            requestedCategories as LeadCategory[],
-            options.targetCategoryRefinement,
-            goodSignalsContext,
-            avoidSignalsContext,
-            baselineQueries,
-            recentQueryHistory,
-            recentExaContext,
-            excludedDomainExamples,
-            targetQueryCount
-          )
-        }
-      ];
-      options.debugCapture?.({ promptMessages });
-      const plannerTimeoutMs = Math.max(1, options.plannerTimeoutMs ?? EXA_QUERY_PLANNER_TIMEOUT_MS);
+    const requestedLocalities = Array.from(new Set((filter.locations ?? []).map((location) => location.trim()).filter(Boolean)));
+    const requestedCategories = Array.from(new Set((options.requestedTargetCategories ?? filter.targetCategories ?? []).map((category) => category.trim()).filter(Boolean)));
+    const recentQueryHistory = (options.recentQueryHistory ?? [])
+      .filter((entry) => entry?.query?.trim())
+      .slice(0, 50);
+    const exaLearning = learning?.searchHistoryByMode?.exa_search?.searchHistory ?? [];
+    const goodSignalsContext = this.buildExaSearchGoodSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
+    const avoidSignalsContext = this.buildExaSearchAvoidSignalsContext(options.prequalification, requestedCategories as LeadCategory[]);
+    const recentExaContext = this.buildExaSearchPerformanceSummary(exaLearning);
+    const excludedDomainExamples = Array.from(new Set((options.excludedDomainExamples ?? []).map((domain) => domain.trim().toLowerCase()).filter(Boolean))).slice(0, 30);
+    const forbiddenBroadeningTerms = this.getPlannerForbiddenBroadeningTerms(requestedLocalities);
 
-      const content = await this.runChatWithTimeout(
-        promptMessages,
-        { maxTokens: 700 },
-        plannerTimeoutMs,
-        "Exa query planner"
-      );
-
-      const parsed = this.parseJsonObject<{ queries?: string[] }>(content);
-      const plannedQueries = Array.from(new Set((parsed.queries ?? []).map((query) => query.trim()).filter(Boolean)));
-      const initialQueries = this.buildLocalitySafePlannerQueries(
-        plannedQueries,
-        baselineQueries,
-        requestedLocalities,
-        targetQueryCount
-      );
-
-      if (initialQueries.length > 1 && this.exaQueriesNeedDiversification(initialQueries, requestedLocalities, baselineQueries)) {
-        const rewrittenContent = await this.runChatWithTimeout(
-          [
-            promptMessages[0],
-            {
-              role: "user",
-              content: this.buildExaPlannerDiversityRewritePrompt(
-                filter,
-                requestedLocalities,
-                requestedCategories as LeadCategory[],
-                baselineQueries,
-                recentQueryHistory,
-                excludedDomainExamples,
-                initialQueries,
-                targetQueryCount
-              )
-            }
-          ],
-          { maxTokens: 700 },
-          plannerTimeoutMs,
-          "Exa query planner diversity rewrite"
-        );
-
-        const rewrittenParsed = this.parseJsonObject<{ queries?: string[] }>(rewrittenContent);
-        const rewrittenQueries = this.buildLocalitySafePlannerQueries(
-          Array.from(new Set((rewrittenParsed.queries ?? []).map((query) => query.trim()).filter(Boolean))),
-          baselineQueries,
+    const promptMessages: Array<{ role: "system" | "user"; content: string }> = [
+      {
+        role: "system",
+        content: this.buildExaPlannerSystemPrompt(mainContext, searchStrategyContext, targetQueryCount, requestedLocalities, forbiddenBroadeningTerms)
+      },
+      {
+        role: "user",
+        content: this.buildExaPlannerUserPrompt(
+          filter,
           requestedLocalities,
-          targetQueryCount
-        );
-        if (rewrittenQueries.length > 0) {
-          return rewrittenQueries;
-        }
+          requestedCategories as LeadCategory[],
+          options.targetCategoryRefinement,
+          goodSignalsContext,
+          avoidSignalsContext,
+          baselineQueries,
+          recentQueryHistory,
+          recentExaContext,
+          excludedDomainExamples,
+          targetQueryCount,
+          forbiddenBroadeningTerms
+        )
+      }
+    ];
+    options.debugCapture?.({ promptMessages });
+    const plannerTimeoutMs = Math.max(1, options.plannerTimeoutMs ?? EXA_QUERY_PLANNER_TIMEOUT_MS);
+
+    const content = await this.runChatWithTimeout(
+      promptMessages,
+      { maxTokens: 900 },
+      plannerTimeoutMs,
+      "Exa query planner"
+    );
+
+    const parsed = this.parseJsonObject<{
+      queries?: string[];
+      error?: string;
+      constraintCheck?: {
+        requiredLocalities?: string[];
+        allQueriesPreserveLocality?: boolean;
+        forbiddenBroadeningTermsPresent?: boolean;
+        preservedLocalitiesByQuery?: Array<{ query?: string; preservedLocalities?: string[] }>;
+      };
+    }>(content);
+    const initialQueries = this.validateExaPlannerQueries(
+      parsed,
+      requestedLocalities,
+      forbiddenBroadeningTerms,
+      targetQueryCount,
+      "Exa query planner"
+    );
+
+    if (initialQueries.length > 1 && this.exaQueriesNeedDiversification(initialQueries, requestedLocalities, baselineQueries)) {
+      const rewrittenContent = await this.runChatWithTimeout(
+        [
+          promptMessages[0],
+          {
+            role: "user",
+            content: this.buildExaPlannerDiversityRewritePrompt(
+              filter,
+              requestedLocalities,
+              requestedCategories as LeadCategory[],
+              baselineQueries,
+              recentQueryHistory,
+              excludedDomainExamples,
+              initialQueries,
+              targetQueryCount,
+              forbiddenBroadeningTerms
+            )
+          }
+        ],
+        { maxTokens: 900 },
+        plannerTimeoutMs,
+        "Exa query planner diversity rewrite"
+      );
+
+      const rewrittenParsed = this.parseJsonObject<{
+        queries?: string[];
+        error?: string;
+        constraintCheck?: {
+          requiredLocalities?: string[];
+          allQueriesPreserveLocality?: boolean;
+          forbiddenBroadeningTermsPresent?: boolean;
+          preservedLocalitiesByQuery?: Array<{ query?: string; preservedLocalities?: string[] }>;
+        };
+      }>(rewrittenContent);
+      return this.validateExaPlannerQueries(
+        rewrittenParsed,
+        requestedLocalities,
+        forbiddenBroadeningTerms,
+        targetQueryCount,
+        "Exa query planner diversity rewrite"
+      );
+    }
+
+    return initialQueries;
+  }
+
+  private validateExaPlannerQueries(
+    response: {
+      queries?: string[];
+      error?: string;
+      constraintCheck?: {
+        requiredLocalities?: string[];
+        allQueriesPreserveLocality?: boolean;
+        forbiddenBroadeningTermsPresent?: boolean;
+        preservedLocalitiesByQuery?: Array<{ query?: string; preservedLocalities?: string[] }>;
+      };
+    },
+    requestedLocalities: string[],
+    forbiddenBroadeningTerms: string[],
+    targetQueryCount: number,
+    label: string
+  ): string[] {
+    if (response.error?.trim()) {
+      throw new Error(`${label} returned error: ${response.error.trim()}`);
+    }
+
+    if (response.constraintCheck?.allQueriesPreserveLocality === false) {
+      throw new Error(`${label} returned queries that violate locality constraints.`);
+    }
+
+    if (response.constraintCheck?.forbiddenBroadeningTermsPresent) {
+      throw new Error(`${label} returned broadened queries outside the requested locality.`);
+    }
+
+    const queries = Array.from(new Set((response.queries ?? []).map((query) => query.trim()).filter(Boolean)));
+    if (queries.length !== targetQueryCount) {
+      throw new Error(`${label} returned ${queries.length} queries, expected exactly ${targetQueryCount}.`);
+    }
+
+    const normalizedLocalities = Array.from(new Set(requestedLocalities.map((value) => this.normalizePlannerPhrase(value)).filter(Boolean)));
+    for (const query of queries) {
+      const normalizedQuery = this.normalizePlannerPhrase(query);
+      if (normalizedLocalities.length > 0 && !normalizedLocalities.some((locality) => this.normalizedPlannerPhraseIncludes(normalizedQuery, locality))) {
+        throw new Error(`${label} returned a query without the required locality: ${query}`);
       }
 
-      return initialQueries;
-    } catch {
-      return baselineQueries;
-    }
-  }
-
-  private buildLocalitySafePlannerQueries(
-    plannedQueries: string[],
-    baselineQueries: string[],
-    requestedLocalities: string[],
-    targetQueryCount: number
-  ): string[] {
-    const localitySafePlannedQueries = this.filterPlannerQueriesByRequiredLocality(plannedQueries, requestedLocalities);
-    const localitySafeBaselineQueries = this.filterPlannerQueriesByRequiredLocality(baselineQueries, requestedLocalities);
-    const fallbackQueries = localitySafeBaselineQueries.length > 0 ? localitySafeBaselineQueries : baselineQueries;
-    const combinedQueries = Array.from(new Set([...localitySafePlannedQueries, ...fallbackQueries].map((query) => query.trim()).filter(Boolean)));
-    return combinedQueries.slice(0, targetQueryCount);
-  }
-
-  private filterPlannerQueriesByRequiredLocality(queries: string[], requestedLocalities: string[]): string[] {
-    const normalizedLocalities = Array.from(new Set(requestedLocalities.map((value) => this.normalizePlannerPhrase(value)).filter(Boolean)));
-    if (normalizedLocalities.length === 0) {
-      return queries;
+      const forbiddenTerm = forbiddenBroadeningTerms.find((term) => this.normalizedPlannerPhraseIncludes(normalizedQuery, term));
+      if (forbiddenTerm) {
+        throw new Error(`${label} returned a query with forbidden broadening term '${forbiddenTerm}': ${query}`);
+      }
     }
 
-    return queries.filter((query) => {
-      const normalizedQuery = this.normalizePlannerPhrase(query);
-      return normalizedLocalities.some((locality) => normalizedQuery.includes(locality));
-    });
+    return queries;
+  }
+
+  private getPlannerForbiddenBroadeningTerms(requestedLocalities: string[]): string[] {
+    const normalizedRequestedLocalities = new Set(requestedLocalities.map((value) => this.normalizePlannerPhrase(value)).filter(Boolean));
+    const candidates = [
+      "europe",
+      "european",
+      "eu",
+      "emea",
+      "dach",
+      "global",
+      "worldwide",
+      "international"
+    ];
+
+    return candidates
+      .map((value) => this.normalizePlannerPhrase(value))
+      .filter((value) => value && !normalizedRequestedLocalities.has(value));
   }
 
   private normalizePlannerPhrase(value: string): string {
@@ -890,9 +951,28 @@ export class AzureOpenAIClient {
       .trim();
   }
 
-  private buildExaPlannerSystemPrompt(mainContext: string | undefined, searchStrategyContext: string | undefined, queryCount: number): string {
+  private normalizedPlannerPhraseIncludes(normalizedHaystack: string, normalizedNeedle: string): boolean {
+    return ` ${normalizedHaystack} `.includes(` ${normalizedNeedle} `);
+  }
+
+  private buildExaPlannerSystemPrompt(
+    mainContext: string | undefined,
+    searchStrategyContext: string | undefined,
+    queryCount: number,
+    requestedLocalities: string[],
+    forbiddenBroadeningTerms: string[]
+  ): string {
     const queryExample = JSON.stringify({
-      queries: Array.from({ length: Math.max(1, queryCount) }, (_, index) => `query ${index + 1}`)
+      queries: Array.from({ length: Math.max(1, queryCount) }, (_, index) => `query ${index + 1}`),
+      constraintCheck: {
+        requiredLocalities: requestedLocalities,
+        allQueriesPreserveLocality: true,
+        forbiddenBroadeningTermsPresent: false,
+        preservedLocalitiesByQuery: Array.from({ length: Math.max(1, queryCount) }, (_, index) => ({
+          query: `query ${index + 1}`,
+          preservedLocalities: requestedLocalities
+        }))
+      }
     });
 
     return [
@@ -910,6 +990,14 @@ export class AzureOpenAIClient {
       "",
       "Your job is not to sell ONE WARE.",
       "Your job is to create Exa company-discovery queries that find official company websites of relevant target companies.",
+      "",
+      "Hard constraints:",
+      requestedLocalities.length > 0 ? `* Required localities: ${requestedLocalities.join(", ")}` : "* No locality provided.",
+      requestedLocalities.length > 0 ? "* Every query must contain at least one exact required locality term verbatim." : "* Preserve the exact requested scope.",
+      requestedLocalities.length > 0 ? "* Search explicitly only inside the required locality scope. Do not broaden to a parent region or wider market." : undefined,
+      forbiddenBroadeningTerms.length > 0 ? `* Forbidden broadening terms unless explicitly requested in the locality list: ${forbiddenBroadeningTerms.join(", ")}.` : undefined,
+      requestedLocalities.length > 0 ? "* If the required locality is Germany, every query must literally contain Germany and must not replace it with Europe, European, DACH, EU, EMEA, global, worldwide, or international." : undefined,
+      "* If you cannot satisfy all hard constraints, return an explicit planner error JSON and do not guess.",
       "",
       "Query-planning rules:",
       "",
@@ -1391,12 +1479,26 @@ export class AzureOpenAIClient {
       "",
       "Output reminder:",
       "Return only strict JSON.",
-      `Return exactly ${queryCount} queries.`,
+      `Return exactly ${queryCount} queries when successful.`,
       "Every query must be a detailed natural-language Exa search instruction.",
       "Every query must preserve the required locality term.",
+      "Every query must stay only within the required locality scope.",
       "Every query must include explicit exclusions.",
       "Every query must avoid exact or near-exact repetition of recent query history.",
-      "Every query must respect the selected target categories and must not exclude desired categories."
+      "Every query must respect the selected target categories and must not exclude desired categories.",
+      "Successful output shape:",
+      queryExample,
+      "Failure output shape:",
+      JSON.stringify({
+        queries: [],
+        error: "locality_constraint_unsatisfied",
+        constraintCheck: {
+          requiredLocalities: requestedLocalities,
+          allQueriesPreserveLocality: false,
+          forbiddenBroadeningTermsPresent: true,
+          preservedLocalitiesByQuery: []
+        }
+      })
     ].filter(Boolean).join("\n");
   }
 
@@ -1411,11 +1513,18 @@ export class AzureOpenAIClient {
     recentQueryHistory: ExaQueryHistoryInsight[],
     recentExaContext: string | undefined,
     excludedDomainExamples: string[],
-    queryCount: number
+    queryCount: number,
+    forbiddenBroadeningTerms: string[]
   ): string {
     const targetCategorySections = this.splitExaSearchAvoidSignalsContext(avoidSignalsContext);
     const queryPlaceholderExample = JSON.stringify({
-      queries: Array.from({ length: Math.max(1, queryCount) }, () => "...")
+      queries: Array.from({ length: Math.max(1, queryCount) }, () => "..."),
+      constraintCheck: {
+        requiredLocalities: requestedLocalities,
+        allQueriesPreserveLocality: true,
+        forbiddenBroadeningTermsPresent: false,
+        preservedLocalitiesByQuery: Array.from({ length: Math.max(1, queryCount) }, () => ({ query: "...", preservedLocalities: requestedLocalities }))
+      }
     });
 
     return [
@@ -1423,6 +1532,8 @@ export class AzureOpenAIClient {
         "Target:",
         "This section defines the exact kind of companies you are trying to find.",
         requestedLocalities.length > 0 ? `* Required locality terms to preserve in every query: ${requestedLocalities.join(", ")}` : undefined,
+        requestedLocalities.length > 0 ? `* Search only inside these required localities. Do not broaden beyond them: ${requestedLocalities.join(", ")}` : undefined,
+        forbiddenBroadeningTerms.length > 0 ? `* Forbidden broadening terms for this run: ${forbiddenBroadeningTerms.join(", ")}` : undefined,
         requestedCategories.length > 0 ? `* Desired target categories for this run: ${requestedCategories.join(", ")}` : undefined,
         targetCategoryRefinement?.trim()
           ? [
@@ -1490,6 +1601,8 @@ export class AzureOpenAIClient {
         "",
         `The ${queryCount} queries must:`,
         "* preserve the required locality term in every query,",
+        "* search explicitly only within the required locality scope,",
+        "* avoid any forbidden broadening term for this run,",
         "* stay inside the supplied target profile,",
         "* avoid exact and near-duplicate versions of recent queries,",
         "* use different but still relevant search angles,",
@@ -1506,6 +1619,8 @@ export class AzureOpenAIClient {
         "",
         `Baseline query angles to build on:\n${this.buildExaBaselineQuerySummary(baselineQueries)}`,
         "",
+        "If you cannot satisfy the locality constraints exactly, return the failure JSON with error=locality_constraint_unsatisfied.",
+        "",
         "Return only:",
         queryPlaceholderExample
       ].join("\n")
@@ -1520,7 +1635,8 @@ export class AzureOpenAIClient {
     recentQueryHistory: ExaQueryHistoryInsight[],
     excludedDomainExamples: string[],
     draftQueries: string[],
-    queryCount: number
+    queryCount: number,
+    forbiddenBroadeningTerms: string[]
   ): string {
     const probeTypes = [
       "1. company-type-led",
@@ -1539,6 +1655,8 @@ export class AzureOpenAIClient {
       "Non-negotiable rewrite rules:",
       "* Keep the same target profile and do not broaden the ICP.",
       "* Preserve the required locality intent in every query.",
+      "* Search explicitly only inside the required locality scope.",
+      forbiddenBroadeningTerms.length > 0 ? `* Do not use these forbidden broadening terms unless they are explicitly requested: ${forbiddenBroadeningTerms.join(", ")}.` : undefined,
       "* Do not copy any draft query or recent historical query too closely.",
       "* Do not let more than two queries share the same opening pattern.",
       "* Use the exact probe-type spread listed below. Make each query visibly feel like its assigned probe type.",
@@ -1554,6 +1672,7 @@ export class AzureOpenAIClient {
       ...probeTypes,
       "",
       `Required locality terms: ${requestedLocalities.join(", ") || "None supplied"}`,
+      forbiddenBroadeningTerms.length > 0 ? `Forbidden broadening terms: ${forbiddenBroadeningTerms.join(", ")}` : undefined,
       `Desired target categories: ${requestedCategories.join(", ") || "None supplied"}`,
       `Filter: ${filter.name}`,
       "",
@@ -1571,7 +1690,7 @@ export class AzureOpenAIClient {
       "",
       `Draft queries to rewrite:\n${draftQueries.map((query, index) => `${index + 1}. ${query}`).join("\n")}`,
       "",
-      `Return only {\"queries\":[...]} with exactly ${queryCount} rewritten query strings.`
+      `Return only {\"queries\":[...],\"constraintCheck\":{...}} with exactly ${queryCount} rewritten query strings. If you cannot preserve locality exactly, return {\"queries\":[],\"error\":\"locality_constraint_unsatisfied\",\"constraintCheck\":{...}}.`
     ].filter(Boolean).join("\n");
   }
 

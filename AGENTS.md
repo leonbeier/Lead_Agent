@@ -20,6 +20,46 @@ Follow this order every time unless the user explicitly asks for a different pro
 
 Do not skip directly to deployment or broad workaround changes before local reproduction, root-cause identification, and local validation are done.
 
+## Agent-first rule
+
+This repository is **agent first**.
+
+When behavior depends on interpreting websites, contact pages, company descriptions, search queries, search-strategy reasoning, locality/scope preservation, category selection, or output formatting:
+
+- Prefer agent prompts, structured agent outputs, and chained agent stages over handwritten parsing logic.
+- Prefer prompt composition, schema design, and agent-to-agent handoff payloads over new regexes, keyword scoring, post-processing heuristics, or text-repair code.
+- Treat AI outputs as contracts that must be improved at the prompt/schema level when they are wrong.
+- If the AI output is unreliable, fix the prompt, schema, retry strategy, or explicit failure mode first.
+- Do not silently repair, broaden, normalize, or reinterpret AI output with custom code unless the user explicitly approves that heuristic path.
+
+## Heuristic approval rule
+
+Do **not** add new heuristic parsing, text-repair, regex extraction, keyword rules, scoring rules, fallback queries, default-query substitution, post-processing guards, or silent output normalization for AI-driven flows unless all of the following are true:
+
+1. You are confident an agent/prompt/schema solution is not viable or would be materially worse.
+2. You explain that conclusion to the user.
+3. The user explicitly approves the heuristic implementation.
+
+If approval is missing, stop at the agent/prompt/schema design step and do not ship the heuristic workaround.
+
+## Query-planning rule
+
+For Exa query planning and search-strategy generation:
+
+- Locality, market scope, and selected categories are hard constraints, not soft hints.
+- Do not repair planner mistakes with fallback/default queries or silent locality guards unless the user explicitly approves that heuristic path.
+- When the planner violates locality or scope, first strengthen the prompt, output schema, and explicit failure contract.
+- Prefer structured planner outputs that self-report constraint satisfaction.
+
+## Extraction rule
+
+For company/address/contact extraction:
+
+- Do not keep adding custom website text parsing logic just because page formats differ.
+- Prefer agent prompts that consume raw page content and return normalized structured outputs.
+- Prefer multi-step agent pipelines where one agent identifies relevant pages and another agent extracts the structured facts.
+- If a non-AI parser is truly unavoidable, ask the user before adding it.
+
 ## Filter and deduplication rules
 
 **Do not bypass or weaken filters.** The system is intentionally designed with:
