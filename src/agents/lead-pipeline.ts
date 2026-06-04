@@ -22,6 +22,7 @@ import {
   LeadLearningData,
   LeadJobRequest,
   LeadJobResult,
+  LiveExaRecurringDomain,
   LeadRunFunnel,
   LeadRunProgress,
   PreCategorizedCompany,
@@ -125,6 +126,7 @@ type DirectExaExcludeDomainSources = {
   screeningScope?: "live" | "debug";
   currentRunExcludedDomains?: string[];
   historicalExaDomains?: string[];
+  historicalRecurringDomains?: LiveExaRecurringDomain[];
 };
 
 type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache";
@@ -3805,7 +3807,8 @@ export class LeadPipelineAgent {
       await exaClient.loadKnownExcludedDomains(),
       {
         ...excludeDomainSources,
-        historicalExaDomains: excludeDomainSources.historicalExaDomains ?? liveExaCache.discoveredDomains
+        historicalExaDomains: excludeDomainSources.historicalExaDomains ?? liveExaCache.discoveredDomains,
+        historicalRecurringDomains: excludeDomainSources.historicalRecurringDomains ?? liveExaCache.recurringDomains
       }
     );
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;
@@ -4117,16 +4120,31 @@ export class LeadPipelineAgent {
     }
 
     const historicalExaScores = new Map<string, number>();
-    const historicalExaDomains = excludeDomainSources.historicalExaDomains ?? [];
-    const historicalDomainCount = historicalExaDomains.length;
-    for (const [index, domain] of historicalExaDomains.entries()) {
-      const normalizedDomain = this.normalizeExcludeDomain(domain);
-      if (!normalizedDomain) {
-        continue;
-      }
+    const historicalRecurringDomains = excludeDomainSources.historicalRecurringDomains ?? [];
+    if (historicalRecurringDomains.length > 0) {
+      const recurringDomainCount = historicalRecurringDomains.length;
+      for (const [index, recurringDomain] of historicalRecurringDomains.entries()) {
+        const normalizedDomain = this.normalizeExcludeDomain(recurringDomain.domain);
+        if (!normalizedDomain) {
+          continue;
+        }
 
-      const recencyWeight = Math.max(1, historicalDomainCount - index);
-      historicalExaScores.set(normalizedDomain, (historicalExaScores.get(normalizedDomain) ?? 0) + recencyWeight);
+        const recencyWeight = Math.max(1, recurringDomainCount - index);
+        const priorityWeight = Math.max(1, Number(recurringDomain.priority ?? recurringDomain.occurrences ?? 1));
+        historicalExaScores.set(normalizedDomain, (historicalExaScores.get(normalizedDomain) ?? 0) + priorityWeight * 1000 + recencyWeight);
+      }
+    } else {
+      const historicalExaDomains = excludeDomainSources.historicalExaDomains ?? [];
+      const historicalDomainCount = historicalExaDomains.length;
+      for (const [index, domain] of historicalExaDomains.entries()) {
+        const normalizedDomain = this.normalizeExcludeDomain(domain);
+        if (!normalizedDomain) {
+          continue;
+        }
+
+        const recencyWeight = Math.max(1, historicalDomainCount - index);
+        historicalExaScores.set(normalizedDomain, (historicalExaScores.get(normalizedDomain) ?? 0) + recencyWeight);
+      }
     }
 
     const splitPromotedDomains = (domains: string[]) => {

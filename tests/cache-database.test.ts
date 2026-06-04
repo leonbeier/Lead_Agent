@@ -51,6 +51,41 @@ test("CacheDatabaseStore keeps live Exa and screening data in sqlite tables", as
   }
 });
 
+test("CacheDatabaseStore preserves repeated live Exa domains so recurring priority can be rebuilt", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lead-agent-cache-db-"));
+  const databasePath = path.join(tempDir, "live-cache-recurring.sqlite");
+  const store = new CacheDatabaseStore(databasePath);
+
+  try {
+    store.writeLiveExaCache({
+      entries: [
+        {
+          timestamp: "2026-05-23T14:05:00.000Z",
+          domain: "repeat.example",
+          companyName: "Repeat Example",
+          discoveryQuery: "query two",
+          sourceFilter: "exa-search:test"
+        },
+        {
+          timestamp: "2026-05-23T14:00:00.000Z",
+          domain: "repeat.example",
+          companyName: "Repeat Example",
+          discoveryQuery: "query one",
+          sourceFilter: "exa-search:test"
+        }
+      ],
+      discoveredDomains: ["repeat.example"]
+    });
+
+    const liveExaCache = store.readLiveExaCache();
+
+    assert.equal(liveExaCache.entries.length, 2);
+    assert.deepEqual(liveExaCache.entries.map((entry) => entry.domain), ["repeat.example", "repeat.example"]);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("CacheDatabaseStore keeps test-lab query history separate from discovered domains", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lead-agent-cache-db-"));
   const databasePath = path.join(tempDir, "testlab-cache.sqlite");

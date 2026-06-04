@@ -247,9 +247,20 @@ export interface LiveExaQueryRun {
   excludedDomains?: string[];
 }
 
+export interface LiveExaRecurringDomain {
+  domain: string;
+  occurrences: number;
+  priority: number;
+  lastSeenAt: string;
+  companyName?: string;
+  discoveryQuery?: string;
+  sourceFilter?: string;
+}
+
 export interface LiveExaCache {
   entries: RawExaHistoryEntry[];
   discoveredDomains: string[];
+  recurringDomains?: LiveExaRecurringDomain[];
   queryRuns?: LiveExaQueryRun[];
 }
 

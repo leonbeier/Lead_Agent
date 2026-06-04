@@ -511,9 +511,20 @@ const liveExaQueryRunSchema = z.object({
   excludedDomains: z.array(z.string().min(1)).optional()
 });
 
+const liveExaRecurringDomainSchema = z.object({
+  domain: z.string().min(1),
+  occurrences: z.number().int().positive(),
+  priority: z.number().int().positive(),
+  lastSeenAt: z.string().min(1),
+  companyName: z.string().min(1).optional(),
+  discoveryQuery: z.string().min(1).optional(),
+  sourceFilter: z.string().min(1).optional()
+});
+
 const liveExaCacheSchema = z.object({
   entries: z.array(rawExaHistoryEntrySchema),
   discoveredDomains: z.array(z.string().min(1)),
+  recurringDomains: z.array(liveExaRecurringDomainSchema).optional(),
   queryRuns: z.array(liveExaQueryRunSchema).optional()
 });
 
@@ -608,8 +619,76 @@ const defaultTestLabExaCache = {
 const defaultLiveExaCache: LiveExaCache = {
   entries: [],
   discoveredDomains: [],
+  recurringDomains: [],
   queryRuns: []
 };
+
+export function buildLiveExaRecurringDomains(
+  entries: RawExaHistoryEntry[],
+  fallbackDomains: string[] = []
+): NonNullable<LiveExaCache["recurringDomains"]> {
+  const recurringByDomain = new Map<string, NonNullable<LiveExaCache["recurringDomains"]>[number]>();
+
+  for (const entry of entries) {
+    const domain = entry.domain?.trim().toLowerCase();
+    if (!domain) {
+      continue;
+    }
+
+    const timestamp = entry.timestamp?.trim() || new Date(0).toISOString();
+    const existing = recurringByDomain.get(domain);
+    if (!existing) {
+      recurringByDomain.set(domain, {
+        domain,
+        occurrences: 1,
+        priority: 1,
+        lastSeenAt: timestamp,
+        companyName: entry.companyName,
+        discoveryQuery: entry.discoveryQuery,
+        sourceFilter: entry.sourceFilter
+      });
+      continue;
+    }
+
+    existing.occurrences += 1;
+    existing.priority += 1;
+    if (Date.parse(timestamp) >= Date.parse(existing.lastSeenAt)) {
+      existing.lastSeenAt = timestamp;
+      existing.companyName = entry.companyName ?? existing.companyName;
+      existing.discoveryQuery = entry.discoveryQuery ?? existing.discoveryQuery;
+      existing.sourceFilter = entry.sourceFilter ?? existing.sourceFilter;
+    }
+  }
+
+  for (const domainValue of fallbackDomains) {
+    const domain = domainValue?.trim().toLowerCase();
+    if (!domain || recurringByDomain.has(domain)) {
+      continue;
+    }
+
+    recurringByDomain.set(domain, {
+      domain,
+      occurrences: 1,
+      priority: 1,
+      lastSeenAt: new Date(0).toISOString()
+    });
+  }
+
+  return Array.from(recurringByDomain.values())
+    .sort((left, right) => {
+      if (right.priority !== left.priority) {
+        return right.priority - left.priority;
+      }
+
+      const timestampDelta = Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt);
+      if (timestampDelta !== 0) {
+        return timestampDelta;
+      }
+
+      return left.domain.localeCompare(right.domain);
+    })
+    .slice(0, 2000);
+}
 
 const suggestedControls = [
   "targetLeadCount",
@@ -1008,29 +1087,33 @@ export class ControlPlaneStore {
 
   async getLiveExaCache(): Promise<LiveExaCache> {
     const cache = await this.readLiveExaCacheFromDatabase();
+    const recurringDomains = buildLiveExaRecurringDomains(cache.entries, cache.discoveredDomains);
     return liveExaCacheSchema.parse({
       ...defaultLiveExaCache,
-      ...cache
+      ...cache,
+      recurringDomains,
+      discoveredDomains: recurringDomains.length > 0
+        ? recurringDomains.map((entry) => entry.domain)
+        : cache.discoveredDomains
     });
   }
 
   async writeLiveExaCache(cache: LiveExaCache): Promise<void> {
-    const entriesByDomain = new Map<string, RawExaHistoryEntry>();
+    const normalizedEntries: RawExaHistoryEntry[] = [];
     for (const entry of cache.entries) {
       const normalizedDomain = entry.domain.trim().toLowerCase();
       if (!normalizedDomain) {
         continue;
       }
 
-      if (!entriesByDomain.has(normalizedDomain)) {
-        entriesByDomain.set(normalizedDomain, {
-          ...entry,
-          domain: normalizedDomain
-        });
-      }
+      normalizedEntries.push({
+        ...entry,
+        domain: normalizedDomain
+      });
     }
 
-    const entries = Array.from(entriesByDomain.values()).slice(0, 5000);
+    const entries = normalizedEntries.slice(0, 5000);
+    const recurringDomains = buildLiveExaRecurringDomains(entries, cache.discoveredDomains);
     const queryRuns = (cache.queryRuns ?? [])
       .reduce<NonNullable<LiveExaCache["queryRuns"]>>((runs, queryRun) => {
         const timestamp = queryRun.timestamp?.trim();
@@ -1057,7 +1140,8 @@ export class ControlPlaneStore {
       .slice(0, 1000);
     this.liveCacheDatabase.writeLiveExaCache(liveExaCacheSchema.parse({
       entries,
-      discoveredDomains: entries.map((entry) => entry.domain),
+      discoveredDomains: recurringDomains.map((entry) => entry.domain),
+      recurringDomains,
       queryRuns
     }));
   }

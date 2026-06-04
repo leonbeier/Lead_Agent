@@ -412,6 +412,26 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
     {
       screeningScope: "live",
       currentRunExcludedDomains: ["same-run-1.test", "duplicate.test", "same-run-2.test"],
+      historicalRecurringDomains: [
+        {
+          domain: "hubspot-0.example0.com",
+          occurrences: 6,
+          priority: 6,
+          lastSeenAt: "2026-06-04T09:00:00.000Z"
+        },
+        {
+          domain: "live-rejected.test",
+          occurrences: 5,
+          priority: 5,
+          lastSeenAt: "2026-06-04T08:59:00.000Z"
+        },
+        {
+          domain: "same-run-1.test",
+          occurrences: 4,
+          priority: 4,
+          lastSeenAt: "2026-06-04T08:58:00.000Z"
+        }
+      ],
       historicalExaDomains: [
         "hubspot-0.example0.com",
         "live-rejected.test",

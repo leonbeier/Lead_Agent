@@ -937,7 +937,8 @@
           },
           liveExaCache: {
             entries: [],
-            discoveredDomains: []
+            discoveredDomains: [],
+            recurringDomains: []
           },
           companyScreeningDatabase: {
             records: []
@@ -1563,17 +1564,22 @@ ${message.content || ""}`).join("\n\n");
         const queryTexts = getLiveQueryTextsForSearchHistory(searchHistory, data);
         const foundCategorySummary = summarizeCategoryBreakdown(searchHistory);
         const latestTimestamp = (searchHistory || [])[0]?.timestamp || latestLeadRun?.createdAt;
+        const recurringDomains = getRecurringLiveDomains(data);
+        const recurringPreview = recurringDomains.slice(0, 20);
 
         renderLiveSearchDebugPanel(searchHistory, data);
 
-        if ((!searchHistory || searchHistory.length === 0) && queryTexts.length === 0) {
+        if ((!searchHistory || searchHistory.length === 0) && queryTexts.length === 0 && recurringDomains.length === 0) {
           liveExaOverviewList.innerHTML = '<div class="history-item"><strong>Noch kein Live Exa Verlauf</strong><span class="mini-meta">Sobald ein Live-Run echte Exa-Schritte ausfuehrt, erscheinen hier Queries, Zielkategorien und Kategorie-Ergebnisse.</span></div>';
           return;
         }
 
         liveExaOverviewList.innerHTML = [
           `<div class="history-item"><strong>${searchHistory?.length || 0} Suchschritte im aktuellen Verlauf</strong><span class="mini-meta">Letztes Update: ${latestTimestamp ? new Date(latestTimestamp).toLocaleString("de-DE") : "n/a"}</span><span class="mini-meta">Gewuenschte Kategorien: ${(desiredCategories || []).map((category) => getCategoryLabel(category)).join(", ") || "keine"}</span><span class="mini-meta">Echte Query-Texte: ${queryTexts.length}</span></div>`,
-          `<div class="history-item"><strong>Gefundene Kategorien gesamt</strong><span class="mini-meta">${foundCategorySummary.join(" · ") || "Noch keine kategorisierten Ergebnisse."}</span></div>`
+          `<div class="history-item"><strong>Gefundene Kategorien gesamt</strong><span class="mini-meta">${foundCategorySummary.join(" · ") || "Noch keine kategorisierten Ergebnisse."}</span></div>`,
+          recurringDomains.length > 0
+            ? `<div class="history-item"><strong>Wiederkehrende Websites mit Prioritaet</strong><span class="mini-meta">Diese Liste wird persistent auf Railway gespeichert und bei jedem erneuten Auftreten hochgezaehlt.</span><span class="mini-meta">Gesamt beobachtet: ${recurringDomains.length}</span><details><summary>Top ${recurringPreview.length} Websites anzeigen</summary><pre>${escapeHtml(recurringPreview.map((entry, index) => `${index + 1}. ${entry.domain} | Prioritaet ${entry.priority || entry.occurrences || 0} | Treffer ${entry.occurrences || 0} | Zuletzt ${entry.lastSeenAt ? new Date(entry.lastSeenAt).toLocaleString("de-DE") : "n/a"}${entry.discoveryQuery ? ` | Query: ${entry.discoveryQuery}` : ""}`).join("\n"))}</pre></details></div>`
+            : ""
         ].join("");
       }
 
@@ -1722,6 +1728,51 @@ ${message.content || ""}`).join("\n\n");
 
       function getLiveExaHistory(data = bootstrapData) {
         return data?.liveExaCache?.entries || [];
+      }
+
+      function getRecurringLiveDomains(data = bootstrapData) {
+        const recurringDomains = data?.liveExaCache?.recurringDomains;
+        if (Array.isArray(recurringDomains) && recurringDomains.length > 0) {
+          return recurringDomains;
+        }
+
+        const recurringByDomain = new Map();
+        for (const entry of getLiveExaHistory(data)) {
+          const domain = (entry?.domain || "").trim().toLowerCase();
+          if (!domain) {
+            continue;
+          }
+
+          const timestamp = entry?.timestamp || new Date(0).toISOString();
+          const existing = recurringByDomain.get(domain);
+          if (!existing) {
+            recurringByDomain.set(domain, {
+              domain,
+              occurrences: 1,
+              priority: 1,
+              lastSeenAt: timestamp,
+              discoveryQuery: entry?.discoveryQuery,
+              sourceFilter: entry?.sourceFilter
+            });
+            continue;
+          }
+
+          existing.occurrences += 1;
+          existing.priority += 1;
+          if (Date.parse(timestamp) >= Date.parse(existing.lastSeenAt)) {
+            existing.lastSeenAt = timestamp;
+            existing.discoveryQuery = entry?.discoveryQuery || existing.discoveryQuery;
+            existing.sourceFilter = entry?.sourceFilter || existing.sourceFilter;
+          }
+        }
+
+        return Array.from(recurringByDomain.values()).sort((left, right) => {
+          if ((right.priority || 0) !== (left.priority || 0)) {
+            return (right.priority || 0) - (left.priority || 0);
+          }
+
+          return Date.parse(right.lastSeenAt || 0) - Date.parse(left.lastSeenAt || 0);
+        });
       }
 
       function isDebugScreeningRecord(record) {
@@ -2462,6 +2513,11 @@ ${message.content || ""}`).join("\n\n");
 
       async function refreshLiveRunStatus() {
         const payload = await requestJson("/api/control/run-status");
+        if (bootstrapData) {
+          const liveExaPayload = await requestJson("/api/control/cache/live-exa");
+          bootstrapData.liveExaCache = liveExaPayload.cache || { entries: [], discoveredDomains: [], recurringDomains: [] };
+          renderLiveExaOverview(bootstrapData.latestLeadRun, getSearchHistoryForMode(bootstrapData), bootstrapData.settings, bootstrapData);
+        }
         renderLiveRunStatus(payload.runStatus);
         return payload.runStatus;
       }

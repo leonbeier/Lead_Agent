@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readJsonFileWithRecovery, resolveLeadAgentDataPaths } from "../src/control-plane";
+import { buildLiveExaRecurringDomains, readJsonFileWithRecovery, resolveLeadAgentDataPaths } from "../src/control-plane";
 
 test("readJsonFileWithRecovery backs up corrupted JSON and restores defaults", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lead-agent-control-plane-"));
@@ -56,4 +56,29 @@ test("resolveLeadAgentDataPaths honors explicit runtime directories", () => {
   assert.equal(paths.cacheDatabaseDirectory, path.resolve(cacheDir));
   assert.equal(paths.liveExaCachePath, path.join(path.resolve(runtimeDir), "live-exa-cache.json"));
   assert.equal(paths.debugCacheDatabasePath, path.join(path.resolve(cacheDir), "testlab-cache.sqlite"));
+});
+
+test("buildLiveExaRecurringDomains raises priority for repeated websites and sorts them to the top", () => {
+  const recurringDomains = buildLiveExaRecurringDomains([
+    {
+      timestamp: "2026-06-04T10:10:00.000Z",
+      domain: "repeat.example",
+      discoveryQuery: "query two"
+    },
+    {
+      timestamp: "2026-06-04T10:00:00.000Z",
+      domain: "single.example",
+      discoveryQuery: "query one"
+    },
+    {
+      timestamp: "2026-06-04T09:55:00.000Z",
+      domain: "repeat.example",
+      discoveryQuery: "query zero"
+    }
+  ]);
+
+  assert.equal(recurringDomains?.[0]?.domain, "repeat.example");
+  assert.equal(recurringDomains?.[0]?.occurrences, 2);
+  assert.equal(recurringDomains?.[0]?.priority, 2);
+  assert.equal(recurringDomains?.[1]?.domain, "single.example");
 });
