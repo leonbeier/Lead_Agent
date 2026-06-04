@@ -637,7 +637,8 @@ test("runExaCompanySearch excludes only hubspot and debug rejected websites befo
     20
   );
 
-  const requestPayloadDomains = (capturedExcludeDomains[0] ?? []).slice(-1200);
+  const requestPayloadDomains = capturedExcludeDomains[0] ?? [];
+  assert.equal(requestPayloadDomains.length, 1200);
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), false);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), false);
   assert.equal(requestPayloadDomains.includes("prior-run-exa.test"), false);

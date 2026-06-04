@@ -422,13 +422,14 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
     }
   );
 
-  const requestPayloadDomains = prioritized.requestExcludedDomains.slice(-1200);
+  const requestPayloadDomains = prioritized.requestExcludedDomains;
 
   assert.equal(prioritized.localExcludedDomains.has("same-run-1.test"), true);
   assert.equal(prioritized.localExcludedDomains.has("relevant-hubspot.test"), true);
   assert.equal(prioritized.localExcludedDomains.has("live-rejected.test"), true);
   assert.equal(prioritized.localExcludedDomains.has("debug-rejected.test"), false);
   assert.equal(prioritized.localExcludedDomains.has("matching-target.test"), false);
+  assert.equal(requestPayloadDomains.length, 1200);
   assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), true);
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), true);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), true);
@@ -490,5 +491,7 @@ test("direct exa path feeds freshly discovered domains into later Exa queries", 
   assert.equal(excludeDomainSnapshots.length, 2);
   assert.equal(excludeDomainSnapshots[0]?.includes("fresh-domain.example"), false);
   assert.equal(excludeDomainSnapshots[1]?.includes("fresh-domain.example"), true);
+  assert.equal((excludeDomainSnapshots[0] ?? []).length <= 1200, true);
+  assert.equal((excludeDomainSnapshots[1] ?? []).length <= 1200, true);
 });
 

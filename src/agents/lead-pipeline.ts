@@ -129,6 +129,8 @@ type DirectExaExcludeDomainSources = {
 
 type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache";
 
+const MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS = 1200;
+
 type DirectExaQueryPlanningContext = {
   dryRun?: boolean;
   learning?: LeadLearningData;
@@ -3874,6 +3876,7 @@ export class LeadPipelineAgent {
       excludedDomains.add(domain);
       excludedDomainCategories.set(domain, category);
       prioritizedExcludedDomains.requestExcludedDomains.push(domain);
+      this.trimDirectExaRequestExcludedDomains(prioritizedExcludedDomains.requestExcludedDomains);
     };
 
     for (const query of queries) {
@@ -4073,10 +4076,18 @@ export class LeadPipelineAgent {
         ...splitRejectedDomains.promoted,
         ...splitCurrentRunDomains.regular,
         ...splitCurrentRunDomains.promoted
-      ],
+      ].slice(-MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS),
       localExcludedDomains: new Set(seenDomains),
       localExcludedDomainCategories
     };
+  }
+
+  private trimDirectExaRequestExcludedDomains(domains: string[]): void {
+    if (domains.length <= MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS) {
+      return;
+    }
+
+    domains.splice(0, domains.length - MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
   }
 
   private matchesDirectExaExcludeScope(record: CompanyScreeningRecord, screeningScope?: "live" | "debug"): boolean {
