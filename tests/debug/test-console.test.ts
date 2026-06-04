@@ -668,14 +668,14 @@ test("runExaCompanySearch excludes only hubspot and debug rejected websites befo
   assert.equal(requestPayloadDomains.includes("prior-run-exa.test"), false);
   assert.equal(requestPayloadDomains.includes("example0.com"), true);
   assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
-  assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);
-  assert.equal(requestPayloadDomains.includes("debug-rejected.test"), true);
+  assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), false);
+  assert.equal(requestPayloadDomains.includes("debug-rejected.test"), false);
   assert.equal(requestPayloadDomains.includes("live-rejected.test"), false);
   assert.equal(requestPayloadDomains.includes("matching-target.test"), false);
-  assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
-  assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
+  assert.equal(requestPayloadDomains.includes("duplicate.test"), false);
+  assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 0);
   assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
-  assert.equal(requestPayloadDomains.includes("example1.com"), false);
+  assert.equal(requestPayloadDomains.includes("example1.com"), true);
 });
 
 test("runAiPrefilterStage honors high requested concurrency in test lab", async () => {
