@@ -4100,7 +4100,16 @@ export class LeadPipelineAgent {
 
     const pushDomain = (collection: string[], domain: string | undefined, category: DirectExaExcludedDomainCategory) => {
       const normalizedDomain = this.normalizeExcludeDomain(domain);
-      if (!normalizedDomain || seenDomains.has(normalizedDomain)) {
+      if (!normalizedDomain) {
+        return;
+      }
+
+      if (seenDomains.has(normalizedDomain)) {
+        if (category === "current_run_cache") {
+          localExcludedDomainCategories.set(normalizedDomain, category);
+          collection.push(normalizedDomain);
+        }
+
         return;
       }
 
@@ -4188,14 +4197,14 @@ export class LeadPipelineAgent {
     const splitRejectedDomains = splitPromotedDomains(rejectedWebsiteDomains);
     const splitCurrentRunDomains = splitPromotedDomains(currentRunExcludedDomains);
 
-    const requestExcludedDomains = [
-        ...splitHubSpotDomains.regular,
-        ...splitRejectedDomains.regular,
+    const requestExcludedDomains = Array.from(new Set([
         ...splitHubSpotDomains.promoted,
         ...splitRejectedDomains.promoted,
+        ...splitCurrentRunDomains.promoted,
         ...splitCurrentRunDomains.regular,
-        ...splitCurrentRunDomains.promoted
-      ].slice(-MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
+        ...splitHubSpotDomains.regular,
+        ...splitRejectedDomains.regular
+      ])).slice(0, MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
 
     const recurringByDomain = new Map<string, LiveExaRecurringDomain>();
     for (const recurringDomain of historicalRecurringDomains) {
@@ -4229,10 +4238,6 @@ export class LeadPipelineAgent {
           return Number(right.includedInRequest) - Number(left.includedInRequest);
         }
 
-        if (left.requestIndex !== undefined && right.requestIndex !== undefined && left.requestIndex !== right.requestIndex) {
-          return left.requestIndex - right.requestIndex;
-        }
-
         const priorityDelta = (right.priority ?? 0) - (left.priority ?? 0);
         if (priorityDelta !== 0) {
           return priorityDelta;
@@ -4241,6 +4246,10 @@ export class LeadPipelineAgent {
         const occurrenceDelta = (right.occurrences ?? 0) - (left.occurrences ?? 0);
         if (occurrenceDelta !== 0) {
           return occurrenceDelta;
+        }
+
+        if (left.requestIndex !== undefined && right.requestIndex !== undefined && left.requestIndex !== right.requestIndex) {
+          return left.requestIndex - right.requestIndex;
         }
 
         return left.domain.localeCompare(right.domain);

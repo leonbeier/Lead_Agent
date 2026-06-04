@@ -1541,7 +1541,7 @@ ${message.content || ""}`).join("\n\n");
             const prefix = entry?.includedInRequest
               ? `${typeof entry.requestIndex === "number" ? entry.requestIndex + 1 : index + 1}/1200 IN`
               : "OUTSIDE-1200";
-            return `${prefix} | ${entry.domain} | Quelle ${entry.category} | Vorher ${entry.occurrences || 0} | Prioritaet ${entry.priority || 0}${entry.lastSeenAt ? ` | Zuletzt ${new Date(entry.lastSeenAt).toLocaleString("de-DE")}` : ""}`;
+            return `${prefix} | ${entry.domain} | Quelle ${entry.category} | Vorher in Exa ${entry.occurrences || 0} | Exa-Prioritaet ${entry.priority || 0}${entry.lastSeenAt ? ` | Zuletzt in Exa ${new Date(entry.lastSeenAt).toLocaleString("de-DE")}` : ""}`;
           })
           .join("\n");
       }
@@ -1567,7 +1567,7 @@ ${message.content || ""}`).join("\n\n");
             ${debugData.plannedQueries.length > 0 ? `<details open><summary>Geplante Exa-Queries (${debugData.plannedQueries.length})</summary><pre>${escapeHtml(debugData.plannedQueries.join("\n\n"))}</pre></details>` : ""}
             ${debugData.promptMessages.length > 0 ? `<details open><summary>Azure Planner Prompt</summary><pre>${escapeHtml(formatPlannerPromptMessages(debugData.promptMessages))}</pre></details>` : ""}
             ${debugData.excludedDomains.length > 0 ? `<details><summary>Excluded Websites (${debugData.excludedDomains.length})</summary><pre>${escapeHtml(debugData.excludedDomains.join("\n"))}</pre></details>` : ""}
-            ${excludedDomainDetails.length > 0 ? `<details open><summary>Alle ausgeschlossenen Basisdomains (${excludedDomainDetails.length})</summary><pre>${escapeHtml(formatExcludedDomainDetails(excludedDomainDetails, false))}</pre></details>` : ""}
+            ${excludedDomainDetails.length > 0 ? `<details open><summary>Alle ausgeschlossenen Basisdomains (${excludedDomainDetails.length})</summary><span class="mini-meta">Vorher in Exa und Exa-Prioritaet zaehlen nur fruehere Exa-Treffer fuer diese Basisdomain. Reine HubSpot-Ausschluesse ohne frueheren Exa-Treffer bleiben dort bei 0.</span><pre>${escapeHtml(formatExcludedDomainDetails(excludedDomainDetails, false))}</pre></details>` : ""}
             ${includedExcludedDomains.length > 0 ? `<details open><summary>Finale Exa Exclude-Liste im Request (${includedExcludedDomains.length}/1200)</summary><pre>${escapeHtml(formatExcludedDomainDetails(excludedDomainDetails, true))}</pre></details>` : ""}
             ${!hasPlannerData ? '<div class="history-item" style="margin-top: 12px;"><strong>Noch keine sichtbaren Azure-Planer-Daten im Live-Verlauf</strong><span class="mini-meta">Der UI-Block ist jetzt vorhanden. Wenn hier weiter nichts erscheint, fehlt nicht die UI, sondern die Persistenz von plannedQueries, promptMessages und excludedDomains im Live-Pfad.</span></div>' : ""}
           </div>

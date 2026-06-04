@@ -454,12 +454,23 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
   assert.equal(requestPayloadDomains.includes("hubspot-0.example0.com"), false);
   assert.equal(requestPayloadDomains.includes("same-run-1.test"), true);
   assert.equal(requestPayloadDomains.includes("same-run-2.test"), true);
-  assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), true);
+  assert.equal(requestPayloadDomains.includes("relevant-hubspot.test"), false);
   assert.equal(requestPayloadDomains.includes("live-rejected.test"), true);
   assert.equal(requestPayloadDomains.includes("debug-rejected.test"), false);
   assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
   assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
   assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
+  assert.equal(requestPayloadDomains[0], "example0.com");
+  assert.equal(requestPayloadDomains[1], "live-rejected.test");
+  assert.equal(requestPayloadDomains[2], "same-run-1.test");
+
+  const prioritizedDetailDomains = prioritized.localExcludedDomainDetails
+    .filter((entry) => entry.includedInRequest)
+    .slice(0, 3)
+    .map((entry) => entry.domain);
+  assert.deepEqual(prioritizedDetailDomains, ["example0.com", "live-rejected.test", "same-run-1.test"]);
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "example0.com")?.occurrences, 6);
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "example0.com")?.priority, 6);
 });
 
 test("direct exa path feeds freshly discovered domains into later Exa queries", async () => {
