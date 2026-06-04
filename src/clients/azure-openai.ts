@@ -808,7 +808,12 @@ export class AzureOpenAIClient {
 
       const parsed = this.parseJsonObject<{ queries?: string[] }>(content);
       const plannedQueries = Array.from(new Set((parsed.queries ?? []).map((query) => query.trim()).filter(Boolean)));
-      const initialQueries = plannedQueries.length > 0 ? plannedQueries.slice(0, targetQueryCount) : baselineQueries;
+      const initialQueries = this.buildLocalitySafePlannerQueries(
+        plannedQueries,
+        baselineQueries,
+        requestedLocalities,
+        targetQueryCount
+      );
 
       if (initialQueries.length > 1 && this.exaQueriesNeedDiversification(initialQueries, requestedLocalities, baselineQueries)) {
         const rewrittenContent = await this.runChatWithTimeout(
@@ -834,7 +839,12 @@ export class AzureOpenAIClient {
         );
 
         const rewrittenParsed = this.parseJsonObject<{ queries?: string[] }>(rewrittenContent);
-        const rewrittenQueries = Array.from(new Set((rewrittenParsed.queries ?? []).map((query) => query.trim()).filter(Boolean))).slice(0, targetQueryCount);
+        const rewrittenQueries = this.buildLocalitySafePlannerQueries(
+          Array.from(new Set((rewrittenParsed.queries ?? []).map((query) => query.trim()).filter(Boolean))),
+          baselineQueries,
+          requestedLocalities,
+          targetQueryCount
+        );
         if (rewrittenQueries.length > 0) {
           return rewrittenQueries;
         }
@@ -844,6 +854,40 @@ export class AzureOpenAIClient {
     } catch {
       return baselineQueries;
     }
+  }
+
+  private buildLocalitySafePlannerQueries(
+    plannedQueries: string[],
+    baselineQueries: string[],
+    requestedLocalities: string[],
+    targetQueryCount: number
+  ): string[] {
+    const localitySafePlannedQueries = this.filterPlannerQueriesByRequiredLocality(plannedQueries, requestedLocalities);
+    const localitySafeBaselineQueries = this.filterPlannerQueriesByRequiredLocality(baselineQueries, requestedLocalities);
+    const fallbackQueries = localitySafeBaselineQueries.length > 0 ? localitySafeBaselineQueries : baselineQueries;
+    const combinedQueries = Array.from(new Set([...localitySafePlannedQueries, ...fallbackQueries].map((query) => query.trim()).filter(Boolean)));
+    return combinedQueries.slice(0, targetQueryCount);
+  }
+
+  private filterPlannerQueriesByRequiredLocality(queries: string[], requestedLocalities: string[]): string[] {
+    const normalizedLocalities = Array.from(new Set(requestedLocalities.map((value) => this.normalizePlannerPhrase(value)).filter(Boolean)));
+    if (normalizedLocalities.length === 0) {
+      return queries;
+    }
+
+    return queries.filter((query) => {
+      const normalizedQuery = this.normalizePlannerPhrase(query);
+      return normalizedLocalities.some((locality) => normalizedQuery.includes(locality));
+    });
+  }
+
+  private normalizePlannerPhrase(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   private buildExaPlannerSystemPrompt(mainContext: string | undefined, searchStrategyContext: string | undefined, queryCount: number): string {

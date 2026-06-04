@@ -258,3 +258,51 @@ test("Exa query planner falls back to baseline queries when Azure planning times
     readiness.azureConfigured = previousAzureConfigured;
   }
 });
+
+test("Exa query planner falls back to locality-safe baseline queries when Azure broadens Germany filters to Europe", async () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
+    runChat: () => Promise<string>;
+  };
+  const previousAzureConfigured = readiness.azureConfigured;
+
+  readiness.azureConfigured = true;
+
+  try {
+    azureClient.runChat = async () => JSON.stringify({
+      queries: [
+        "Europe companies that provide industrial automation integration and project engineering services.",
+        "Europe system integrators for industrial automation software and MES implementation."
+      ]
+    });
+
+    const queries = await azureClient.planExaSearchQueries(
+      {
+        name: "Germany Automation Software Integrators",
+        persona: "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects",
+        industries: ["Industrial Automation", "Industrial Software"],
+        keywords: ["industrial automation integrator", "mes system integrator"],
+        locations: ["Germany"],
+        employeeRanges: ["11,50"],
+        targetCategories: ["integrator_general_ai"],
+        notes: "Prefer German industrial software and automation implementation partners."
+      },
+      [
+        "Germany companies that provide industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services.",
+        "Germany system integrators and solution providers that deliver industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services for customer projects."
+      ],
+      undefined,
+      false,
+      undefined,
+      undefined,
+      2
+    );
+
+    assert.deepEqual(queries, [
+      "Germany companies that provide industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services.",
+      "Germany system integrators and solution providers that deliver industrial automation integration, PLC or SCADA implementation, MES connectivity, production software delivery, and project-based engineering services for customer projects."
+    ]);
+  } finally {
+    readiness.azureConfigured = previousAzureConfigured;
+  }
+});
