@@ -45,6 +45,21 @@ let activeLeadRunAbortController: AbortController | undefined;
 const hubSpotConsolePath = path.join(process.cwd(), "public", "hubspot-ui", "index.html");
 const publicRoutes = new Set(["/health", "/oauth-callback"]);
 
+export function shouldUseCachedLiveSearchDebug(statusUpdatedAt: string | undefined, latestQueryRunTimestamp: string | undefined): boolean {
+  const statusUpdatedAtMs = Date.parse(statusUpdatedAt || "");
+  const latestQueryRunMs = Date.parse(latestQueryRunTimestamp || "");
+
+  if (!Number.isFinite(latestQueryRunMs)) {
+    return false;
+  }
+
+  if (!Number.isFinite(statusUpdatedAtMs)) {
+    return true;
+  }
+
+  return latestQueryRunMs > statusUpdatedAtMs;
+}
+
 function resetLeadRunStatus(detail: string, stage: LeadRunStatus["stage"] = "idle", stageLabel = "Bereit"): void {
   leadRunStatus.running = false;
   leadRunStatus.stage = stage;
@@ -286,6 +301,10 @@ async function buildRunStatusResponse(): Promise<{ runStatus: LeadRunStatus }> {
   const liveExaCache = await controlPlaneStore.getLiveExaCache();
   const latestQueryRun = liveExaCache.queryRuns?.[0];
   if (!latestQueryRun) {
+    return { runStatus: leadRunStatus };
+  }
+
+  if (!shouldUseCachedLiveSearchDebug(leadRunStatus.updatedAt, latestQueryRun.timestamp)) {
     return { runStatus: leadRunStatus };
   }
 
