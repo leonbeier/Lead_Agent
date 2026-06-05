@@ -465,8 +465,7 @@ export class AzureOpenAIClient {
         evidenceSnippet: page.evidenceSnippet,
         emails: page.emails ?? [],
         phones: page.phones ?? [],
-        linkedInProfileUrl: page.linkedInProfileUrl,
-        namedContacts: page.namedContacts ?? []
+        linkedInProfileUrl: page.linkedInProfileUrl
       })),
       hitGroups: evidence.hitGroups.slice(0, 4)
     };
@@ -479,7 +478,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Extract and match public contact data for outbound outreach from raw official-website evidence and raw public web-search evidence. This step is for extraction and matching, not for aggressive filtering. Return all evidence-backed contacts for the supplied company up to 6 entries. Keep every evidence-backed personal LinkedIn profile that clearly belongs to the supplied company. Keep website email addresses and phone numbers even when they cannot be matched to a named person; in that case emit a separate generic website contact instead of guessing. If the only public LinkedIn evidence is a company LinkedIn page or other non-person LinkedIn reference that clearly belongs to the supplied company, keep at most one such company-level fallback contact instead of dropping LinkedIn entirely. Match email addresses and phone numbers to a named person only when the evidence clearly supports the match. Reject only gibberish, broken encoding, CTA text, navigation text, placeholders, and corrupted names. Do not invent names, titles, emails, phones, or LinkedIn URLs. Return strict JSON with {"contacts":[{"firstName":"...","lastName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","linkedinConnectionCount":123,"sourceUrl":"...","sourceQuery":"...","sourceSnippet":"...","label":"linkedin_profile|website_named_contact|public_named_mailbox|public_generic_mailbox|web_search_contact"}]}. Keep up to 6 contacts, best first.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Extract and match public contact data for outbound outreach from raw official-website evidence and raw public web-search evidence. This step is for extraction and matching, not for aggressive filtering. Read the raw evidenceSnippet text yourself to identify named people (for example Geschäftsführung/management, Ansprechpartner/contact persons, named team members) together with their role and a reachable channel. Return all evidence-backed contacts for the supplied company up to 6 entries. Keep every evidence-backed personal LinkedIn profile that clearly belongs to the supplied company. Keep website email addresses and phone numbers even when they cannot be matched to a named person; in that case emit a separate generic website contact instead of guessing. If the only public LinkedIn evidence is a company LinkedIn page or other non-person LinkedIn reference that clearly belongs to the supplied company, keep at most one such company-level fallback contact instead of dropping LinkedIn entirely. Match email addresses and phone numbers to a named person only when the evidence clearly supports the match. Never treat call-to-action, navigation, menu, button, slogan, or heading text (for example "Mehr erfahren", "Learn More", "Nehmen Sie Kontakt", "What To Expect") as a person name. Reject only gibberish, broken encoding, CTA text, navigation text, placeholders, and corrupted names. Do not invent names, titles, emails, phones, or LinkedIn URLs. Return strict JSON with {"contacts":[{"firstName":"...","lastName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","linkedinConnectionCount":123,"sourceUrl":"...","sourceQuery":"...","sourceSnippet":"...","label":"linkedin_profile|website_named_contact|public_named_mailbox|public_generic_mailbox|web_search_contact"}]}. Keep up to 6 contacts, best first.`
         },
         {
           role: "user",
@@ -520,6 +519,7 @@ export class AzureOpenAIClient {
   ): Promise<{
     companyName?: string;
     entityScope?: "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
+    searchAliases: string[];
     address?: string;
     city?: string;
     zip?: string;
@@ -537,7 +537,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Read official company homepage evidence and extract organization-level company information only. Extract the exact legal operating entity for the supplied domain, postal address, shared company inboxes, and main switchboard phone numbers when they are explicitly visible. If the homepage mainly references a parent group, holding company, umbrella brand, or product brand, do not return that parent or brand name as companyName unless the evidence explicitly shows it is the exact legal operating entity for this supplied domain. When the homepage evidence is ambiguous, leave companyName empty and set entityScope accordingly. Then choose the best 1 to 5 same-domain follow-up links that are most likely to contain missing official company information, legal identity, address details, or company-level contact details. Prefer kontakt, contact, impressum, imprint, legal, about, company, team, and footer-linked pages when relevant. Do not include personal data. Do not invent information. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"followUpUrls":["https://..."]}. Use empty strings or empty arrays when unknown.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Read official company homepage evidence and extract organization-level company information only. Extract the exact legal operating entity for the supplied domain, postal address, shared company inboxes, and main switchboard phone numbers when they are explicitly visible. If the homepage mainly references a parent group, holding company, umbrella brand, or product brand, do not return that parent or brand name as companyName unless the evidence explicitly shows it is the exact legal operating entity for this supplied domain. When the homepage evidence is ambiguous, leave companyName empty and set entityScope accordingly. Also produce searchAliases: 1 to 4 short, search-friendly names for the exact operating entity that a recruiter could type to find this company's employees on LinkedIn. Include only the legal entity name, its brand or short form, and the domain token. searchAliases must never contain call-to-action, marketing, slogan, navigation, menu, button, or heading phrases (for example "Nehmen Sie Kontakt", "Learn More", "Mehr erfahren", "Contact us"), and never a parent group or unrelated brand. If you are unsure, return only the domain token. Then choose the best 1 to 5 same-domain follow-up links that are most likely to contain missing official company information, legal identity, address details, or company-level contact details. Prefer kontakt, contact, impressum, imprint, legal, about, company, team, and footer-linked pages when relevant. Do not include personal data. Do not invent information. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","searchAliases":["..."],"address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"followUpUrls":["https://..."]}. Use empty strings or empty arrays when unknown.`
         },
         {
           role: "user",
@@ -555,6 +555,7 @@ export class AzureOpenAIClient {
       const parsed = this.parseJsonObject<{
         companyName?: string;
         entityScope?: string;
+        searchAliases?: string[];
         address?: string;
         city?: string;
         zip?: string;
@@ -580,6 +581,7 @@ export class AzureOpenAIClient {
       return {
         companyName: parsed.companyName?.trim(),
         entityScope: normalizedEntityScope,
+        searchAliases: Array.from(new Set((parsed.searchAliases ?? []).map((value) => value.trim()).filter(Boolean))).slice(0, 4),
         address: parsed.address?.trim(),
         city: parsed.city?.trim(),
         zip: parsed.zip?.trim(),
@@ -608,6 +610,7 @@ export class AzureOpenAIClient {
   ): Promise<{
     companyName?: string;
     entityScope?: "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
+    searchAliases: string[];
     address?: string;
     city?: string;
     zip?: string;
@@ -625,7 +628,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Consolidate organization-level company information from official website evidence only. Use the supplied homepage and follow-up pages to extract the exact legal operating entity for the supplied domain, the postal address, shared company inboxes, main switchboard phone numbers, and company LinkedIn page URLs. Prefer impressum/legal notice/contact/footer evidence over marketing copy. If the website mentions a parent group, holding company, umbrella brand, or product brand, do not return that parent or brand name as companyName unless the evidence explicitly shows it is the exact legal operating entity for this supplied domain. When the evidence points to a parent group or brand but the exact operating entity is unclear, leave companyName empty and set entityScope accordingly. Do not include personal data and do not invent values. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"linkedInUrls":["https://..."]}. Use empty strings or arrays when unknown.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Consolidate organization-level company information from official website evidence only. Use the supplied homepage and follow-up pages to extract the exact legal operating entity for the supplied domain, the postal address, shared company inboxes, main switchboard phone numbers, and company LinkedIn page URLs. Prefer impressum/legal notice/contact/footer evidence over marketing copy. If the website mentions a parent group, holding company, umbrella brand, or product brand, do not return that parent or brand name as companyName unless the evidence explicitly shows it is the exact legal operating entity for this supplied domain. When the evidence points to a parent group or brand but the exact operating entity is unclear, leave companyName empty and set entityScope accordingly. Also produce searchAliases: 1 to 4 short, search-friendly names for the exact operating entity that a recruiter could type to find this company's employees on LinkedIn. Include only the legal entity name, its brand or short form, and the domain token. searchAliases must never contain call-to-action, marketing, slogan, navigation, menu, button, or heading phrases (for example "Nehmen Sie Kontakt", "Learn More", "Mehr erfahren", "Contact us"), and never a parent group or unrelated brand. If you are unsure, return only the domain token. Do not include personal data and do not invent values. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","searchAliases":["..."],"address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"linkedInUrls":["https://..."]}. Use empty strings or arrays when unknown.`
         },
         {
           role: "user",
@@ -641,6 +644,7 @@ export class AzureOpenAIClient {
       const parsed = this.parseJsonObject<{
         companyName?: string;
         entityScope?: string;
+        searchAliases?: string[];
         address?: string;
         city?: string;
         zip?: string;
@@ -666,6 +670,7 @@ export class AzureOpenAIClient {
       return {
         companyName: parsed.companyName?.trim(),
         entityScope: normalizedEntityScope,
+        searchAliases: Array.from(new Set((parsed.searchAliases ?? []).map((value) => value.trim()).filter(Boolean))).slice(0, 4),
         address: parsed.address?.trim(),
         city: parsed.city?.trim(),
         zip: parsed.zip?.trim(),

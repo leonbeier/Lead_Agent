@@ -44,6 +44,7 @@ interface ExtractedCompanyAddress {
 interface OfficialWebsiteCompanyProfile {
   companyName?: string;
   entityScope?: "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
+  searchAliases: string[];
   address?: string;
   city?: string;
   zip?: string;
@@ -414,7 +415,14 @@ export class HubSpotClient {
           [] as Array<{ url: string; html: string }>
         )
       : [];
-    const aliases = this.extractCompanySearchAliases(company, pages);
+    const officialWebsiteProfile = company.domain
+      ? await this.withTimeout(
+          this.getOfficialWebsiteCompanyProfile(company).catch(() => null),
+          EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
+          null as OfficialWebsiteCompanyProfile | null
+        )
+      : null;
+    const aliases = this.extractCompanySearchAliases(company, pages, officialWebsiteProfile);
     const websitePages = this.buildWebsitePageDebugEntries(company, pages);
     const { queries, hitGroups, contacts: llmContacts } = await this.extractAzureMatchedContacts(company, pages, aliases, websitePages);
     const websiteContacts = await this.extractWebsiteContactsFromPages(company, pages);
@@ -1068,7 +1076,7 @@ export class HubSpotClient {
       return this.discoverWebSearchContacts(company, pages);
     }
 
-    const officialWebsiteProfile = pages.length > 0 && !seedAzureContacts
+    const officialWebsiteProfile = pages.length > 0
       ? await this.getOfficialWebsiteCompanyProfile(company).catch(() => null)
       : null;
     const officialWebsiteFallbackContacts = pages.length === 0
@@ -1082,7 +1090,7 @@ export class HubSpotClient {
 
     if (pages.length === 0 && officialWebsiteFallbackContacts.length > 0 && (seedWebsiteContacts?.length ?? 0) === 0 && reachableWebsiteFallbackContacts.length > 0) {
       const linkedInFallbackContacts = (await this.withTimeout(
-        this.discoverWebSearchContacts(company, pages, websiteContacts),
+        this.discoverWebSearchContacts(company, pages, websiteContacts, officialWebsiteProfile),
         PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
         [] as PublicContactCandidate[]
       ))
@@ -1130,7 +1138,7 @@ export class HubSpotClient {
     }
 
     const webSearchContacts = await this.withTimeout(
-      this.discoverWebSearchContacts(company, pages, websiteContacts),
+      this.discoverWebSearchContacts(company, pages, websiteContacts, officialWebsiteProfile),
       PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
       [] as PublicContactCandidate[]
     );
@@ -1172,8 +1180,25 @@ export class HubSpotClient {
       linkedInProfileUrl?: string;
       namedContacts: unknown[];
     }> = websitePages ?? this.buildWebsitePageDebugEntries(company, pages) ?? [];
-    const queries = this.buildPublicContactSearchQueries(company, aliases)
-      .filter((query) => /site:linkedin\.com\/in/i.test(query))
+    // Agent-first: let the Foundry query planner propose the LinkedIn people-search queries from
+    // the website evidence and the validated company aliases. The deterministic combinatorial
+    // builder only supplements/falls back when the planner is unavailable.
+    const queryPlanningEvidence = [
+      normalizedWebsitePages
+        .map((page) => page.evidenceSnippet)
+        .filter(Boolean)
+        .slice(0, 4)
+        .join("\n\n"),
+      aliases.length > 0 ? `Company aliases: ${aliases.join(" | ")}` : undefined
+    ].filter(Boolean).join("\n\n");
+    const suggestedLinkedInQueries = (await this.withTimeout(
+      this.foundryAgentsClient.suggestPublicContactQueries(company, queryPlanningEvidence, false),
+      PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
+      [] as string[]
+    )).filter((query) => /site:linkedin\.com\/in/i.test(query));
+    const deterministicLinkedInQueries = this.buildPublicContactSearchQueries(company, aliases)
+      .filter((query) => /site:linkedin\.com\/in/i.test(query));
+    const queries = Array.from(new Set([...suggestedLinkedInQueries, ...deterministicLinkedInQueries]))
       .slice(0, 4);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => ({
@@ -1188,8 +1213,7 @@ export class HubSpotClient {
         evidenceSnippet: page.evidenceSnippet,
         emails: page.emails,
         phones: page.phones,
-        linkedInProfileUrl: page.linkedInProfileUrl,
-        namedContacts: page.namedContacts
+        linkedInProfileUrl: page.linkedInProfileUrl
       })),
       hitGroups: hitGroups.map((group) => ({
         query: group.query,
@@ -1245,7 +1269,12 @@ export class HubSpotClient {
         });
       }
 
-      namedWebsiteContacts.push(...this.extractNamedContactsFromPage(page.url, page.html, primaryPhone, emails));
+      // Agent-first: when Azure is configured, named people are extracted by the AI agent
+      // directly from the raw page evidence (extractPublicContactsFromEvidence). The line-pairing
+      // text heuristic only runs as a fallback when Azure is unavailable.
+      if (!readiness.azureConfigured) {
+        namedWebsiteContacts.push(...this.extractNamedContactsFromPage(page.url, page.html, primaryPhone, emails));
+      }
     }
 
     const websiteContacts = this.mergeDiscoveredContacts(
@@ -1296,7 +1325,7 @@ export class HubSpotClient {
         emails,
         phones,
         linkedInProfileUrl: this.extractLinkedInProfileUrlFromPage(page.html),
-        namedContacts: this.extractNamedContactsFromPage(page.url, page.html, primaryPhone, emails)
+        namedContacts: readiness.azureConfigured ? [] : this.extractNamedContactsFromPage(page.url, page.html, primaryPhone, emails)
       };
     });
   }
@@ -1417,9 +1446,10 @@ export class HubSpotClient {
   private async discoverWebSearchContacts(
     company: PreCategorizedCompany,
     pages: Array<{ url: string; html: string }>,
-    knownContacts: PublicContactCandidate[] = []
+    knownContacts: PublicContactCandidate[] = [],
+    officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): Promise<PublicContactCandidate[]> {
-    const companyAliases = this.extractCompanySearchAliases(company, pages);
+    const companyAliases = this.extractCompanySearchAliases(company, pages, officialWebsiteProfile);
     const websiteEvidence = pages
       .map((page) => this.buildWebsiteEvidenceSnippet(page.url, page.html))
       .filter(Boolean)
@@ -1545,7 +1575,7 @@ export class HubSpotClient {
 
   private extractCompanySearchAliases(
     company: Pick<PreCategorizedCompany, "name" | "domain">,
-    pages: Array<{ url: string; html: string }>,
+    _pages: Array<{ url: string; html: string }>,
     officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): string[] {
     const companyName = company.name.trim();
@@ -1553,36 +1583,34 @@ export class HubSpotClient {
     const primaryToken = (normalizedDomain?.split(".")[0] ?? companyName)
       .split(/[-_\s]+/)
       .find((token) => token && token.length >= 4 && !/^(ai|the|group)$/i.test(token));
-    const pageAliases = this.extractLegalEntityCandidatesFromPages(company, pages);
+
+    // Agent-first: the Azure website profiler is the authoritative source for search aliases.
+    // It reads raw page content and returns validated legal/brand/domain aliases without
+    // CTA, marketing, navigation, or heading text. We never mine aliases from page text with
+    // regex heuristics anymore.
+    const aiAliases = (officialWebsiteProfile?.searchAliases ?? [])
+      .map((alias) => alias.replace(/\s+/g, " ").trim())
+      .filter((alias) => alias.length > 0 && alias.length <= 40);
+
+    // Deterministic company master-data fallbacks (no page-text parsing). These are used
+    // alongside the AI aliases and as the only source when Azure is unavailable.
     const officialWebsiteAlias = officialWebsiteProfile?.entityScope === "exact_operating_entity"
       ? officialWebsiteProfile.companyName?.trim()
       : undefined;
-    const exactOperatingEntityAliases = officialWebsiteAlias
-      ? [
-          officialWebsiteAlias,
-          officialWebsiteAlias.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
-          companyName,
-          companyName.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
-          primaryToken ? this.toTitleCase(primaryToken) : undefined
-        ]
-      : null;
+    const deterministicAliases = [
+      officialWebsiteAlias,
+      companyName,
+      officialWebsiteAlias?.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
+      companyName.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
+      primaryToken ? this.toTitleCase(primaryToken) : undefined
+    ]
+      .filter((alias): alias is string => Boolean(alias))
+      .map((alias) => alias.replace(/\s+/g, " ").trim())
+      .filter((alias) => alias.length > 0 && alias.length <= 40)
+      // Domain-token relevance guard keeps descriptive labels from leaking into LinkedIn queries.
+      .filter((alias) => !primaryToken || alias.toLowerCase().includes(primaryToken.toLowerCase()));
 
-    return Array.from(
-      new Set(
-        (exactOperatingEntityAliases ?? [
-          companyName,
-          officialWebsiteAlias,
-          companyName.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
-          primaryToken ? this.toTitleCase(primaryToken) : undefined,
-          ...pageAliases
-        ])
-          .filter((alias): alias is string => Boolean(alias))
-          .map((alias) => alias.replace(/\s+/g, " ").trim())
-          .filter((alias) => alias.length <= 40)
-          .filter((alias) => !/^(kontaktieren sie|contact|kontakt|bei|about|ueber|über)\b/i.test(alias))
-          .filter((alias) => !primaryToken || alias.toLowerCase().includes(primaryToken.toLowerCase()))
-      )
-    ).slice(0, 6);
+    return Array.from(new Set([...aiAliases, ...deterministicAliases])).slice(0, 6);
   }
 
   private extractLegalEntityCandidatesFromPages(
@@ -2987,7 +3015,7 @@ export class HubSpotClient {
         emails: homepageEmails,
         phones: homepagePhones,
         linkedInProfileUrl: this.extractLinkedInProfileUrlFromPage(homepageHtml),
-        namedContacts: this.extractNamedContactsFromPage(rootUrl, homepageHtml, homepagePhones[0], homepageEmails)
+        namedContacts: []
       },
       ...followUpPages
         .filter((page): page is { url: string; html: string } => Boolean(page))
@@ -3000,7 +3028,7 @@ export class HubSpotClient {
             emails,
             phones,
             linkedInProfileUrl: this.extractLinkedInProfileUrlFromPage(page.html),
-            namedContacts: this.extractNamedContactsFromPage(page.url, page.html, phones[0], emails)
+            namedContacts: []
           };
         })
     ];
@@ -3012,6 +3040,10 @@ export class HubSpotClient {
     return {
       companyName: finalProfile?.companyName ?? homepageAnalysis?.companyName,
       entityScope: finalProfile?.entityScope ?? homepageAnalysis?.entityScope,
+      searchAliases: Array.from(new Set([
+        ...(finalProfile?.searchAliases ?? []),
+        ...(homepageAnalysis?.searchAliases ?? [])
+      ])),
       address: finalProfile?.address ?? homepageAnalysis?.address,
       city: finalProfile?.city ?? homepageAnalysis?.city,
       zip: finalProfile?.zip ?? homepageAnalysis?.zip,

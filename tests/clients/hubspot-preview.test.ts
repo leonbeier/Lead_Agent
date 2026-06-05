@@ -1038,7 +1038,24 @@ test("findPublicContactsFromPages returns official website contacts without wait
   const client = new HubSpotClient();
   const company = buildSampleCompany();
 
-  client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
+  // Agent-first: named website people are extracted by the Azure contact agent from raw page
+  // evidence, not by a text heuristic. When the agent already returns a named website contact,
+  // the deterministic web-search fallback must not run.
+  client["extractAzureMatchedContacts"] = async () => ({
+    queries: [],
+    hitGroups: [],
+    contacts: [
+      {
+        firstName: "Markus",
+        lastName: "Fackert",
+        jobTitle: "Managing Director",
+        email: "info@sample-automation.de",
+        phone: "+4930123456",
+        sourceUrl: "https://sample-automation.de/kontakt",
+        label: "website_named_contact"
+      }
+    ]
+  });
   client["discoverWebSearchContacts"] = async () => {
     throw new Error("web search fallback should not run when official website contacts are already available");
   };
