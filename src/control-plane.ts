@@ -23,6 +23,7 @@ import {
   ExaQueryHistoryInsight,
   FilterEvaluation,
   LiveExaCache,
+  LiveExaExcludedDomainDetail,
   LatestLeadRunRecord,
   LeadAgentSettings,
   LeadLearningData,
@@ -44,6 +45,164 @@ const selectableCategorySchema = z.enum([
 ]);
 
 const DEFAULT_RUNTIME_DATA_DIRECTORY = "/data";
+const LIVE_EXA_REQUEST_EXCLUDED_DOMAIN_LIMIT = 1200;
+const LIVE_EXA_EXCLUDED_DOMAIN_CATEGORY_PRIORITY: Record<LiveExaExcludedDomainDetail["category"], number> = {
+  current_run_cache: 0,
+  hubspot: 1,
+  rejected_website: 2,
+  historical_exa: 3
+};
+
+function compareCanonicalLiveExaExcludedDomainPriority(
+  left: Pick<LiveExaExcludedDomainDetail, "domain" | "category" | "recentOccurrences" | "occurrences" | "requestIndex">,
+  right: Pick<LiveExaExcludedDomainDetail, "domain" | "category" | "recentOccurrences" | "occurrences" | "requestIndex">
+): number {
+  const recentOccurrenceDelta = (right.recentOccurrences ?? 0) - (left.recentOccurrences ?? 0);
+  if (recentOccurrenceDelta !== 0) {
+    return recentOccurrenceDelta;
+  }
+
+  const occurrenceDelta = (right.occurrences ?? 0) - (left.occurrences ?? 0);
+  if (occurrenceDelta !== 0) {
+    return occurrenceDelta;
+  }
+
+  const categoryDelta = (LIVE_EXA_EXCLUDED_DOMAIN_CATEGORY_PRIORITY[left.category] ?? Number.MAX_SAFE_INTEGER)
+    - (LIVE_EXA_EXCLUDED_DOMAIN_CATEGORY_PRIORITY[right.category] ?? Number.MAX_SAFE_INTEGER);
+  if (categoryDelta !== 0) {
+    return categoryDelta;
+  }
+
+  const leftIndex = typeof left.requestIndex === "number" ? left.requestIndex : Number.MAX_SAFE_INTEGER;
+  const rightIndex = typeof right.requestIndex === "number" ? right.requestIndex : Number.MAX_SAFE_INTEGER;
+  if (leftIndex !== rightIndex) {
+    return leftIndex - rightIndex;
+  }
+
+  return left.domain.localeCompare(right.domain);
+}
+
+function compareCanonicalLiveExaExcludedDomainDetails(
+  left: Pick<LiveExaExcludedDomainDetail, "domain" | "category" | "includedInRequest" | "requestIndex" | "recentOccurrences" | "occurrences">,
+  right: Pick<LiveExaExcludedDomainDetail, "domain" | "category" | "includedInRequest" | "requestIndex" | "recentOccurrences" | "occurrences">
+): number {
+  if (Number(right.includedInRequest) !== Number(left.includedInRequest)) {
+    return Number(right.includedInRequest) - Number(left.includedInRequest);
+  }
+
+  const priorityDelta = compareCanonicalLiveExaExcludedDomainPriority(left, right);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const leftIndex = typeof left.requestIndex === "number" ? left.requestIndex : Number.MAX_SAFE_INTEGER;
+  const rightIndex = typeof right.requestIndex === "number" ? right.requestIndex : Number.MAX_SAFE_INTEGER;
+  if (leftIndex !== rightIndex) {
+    return leftIndex - rightIndex;
+  }
+
+  return left.domain.localeCompare(right.domain);
+}
+
+export function canonicalizeLiveExaExcludedDomainState(
+  entries: LiveExaExcludedDomainDetail[] | undefined
+): { excludedDomains?: string[]; excludedDomainDetails?: LiveExaExcludedDomainDetail[] } {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return {};
+  }
+
+  const normalizedByDomain = new Map<string, LiveExaExcludedDomainDetail>();
+  for (const entry of entries) {
+    const normalizedDomain = entry.domain?.trim().toLowerCase();
+    if (!normalizedDomain) {
+      continue;
+    }
+
+    const normalizedEntry: LiveExaExcludedDomainDetail = {
+      ...entry,
+      domain: normalizedDomain
+    };
+
+    const existingEntry = normalizedByDomain.get(normalizedDomain);
+    if (!existingEntry || compareCanonicalLiveExaExcludedDomainPriority(normalizedEntry, existingEntry) < 0) {
+      normalizedByDomain.set(normalizedDomain, normalizedEntry);
+    }
+  }
+
+  const priorityRankedEntries = Array.from(normalizedByDomain.values())
+    .sort((left, right) => compareCanonicalLiveExaExcludedDomainPriority(left, right));
+
+  const excludedDomains = priorityRankedEntries
+    .map((entry) => entry.domain)
+    .slice(0, LIVE_EXA_REQUEST_EXCLUDED_DOMAIN_LIMIT);
+
+  const requestDomainPositions = new Map<string, number>();
+  excludedDomains.forEach((domain, index) => {
+    requestDomainPositions.set(domain, index);
+  });
+
+  const excludedDomainDetails = priorityRankedEntries
+    .map<LiveExaExcludedDomainDetail>((entry) => {
+      const requestIndex = requestDomainPositions.get(entry.domain);
+      return {
+        ...entry,
+        includedInRequest: requestIndex !== undefined,
+        requestIndex
+      };
+    })
+    .sort((left, right) => compareCanonicalLiveExaExcludedDomainDetails(left, right));
+
+  return {
+    excludedDomains,
+    excludedDomainDetails
+  };
+}
+
+function normalizeLiveExaQueryRuns(
+  queryRuns: NonNullable<LiveExaCache["queryRuns"]> | undefined
+): NonNullable<LiveExaCache["queryRuns"]> {
+  return (queryRuns ?? [])
+    .reduce<NonNullable<LiveExaCache["queryRuns"]>>((runs, queryRun) => {
+      const timestamp = queryRun.timestamp?.trim();
+      const filterName = queryRun.filterName?.trim();
+      const query = queryRun.query?.trim();
+      if (!timestamp || !filterName || !query) {
+        return runs;
+      }
+
+      const key = `${filterName}__${query}`;
+      if (!runs.some((candidate) => `${candidate.filterName}__${candidate.query}` === key)) {
+        const normalizedExcludedDomainDetails = canonicalizeLiveExaExcludedDomainState(
+          queryRun.excludedDomainDetails?.map((entry) => ({
+            domain: entry.domain.trim().toLowerCase(),
+            category: entry.category,
+            includedInRequest: Boolean(entry.includedInRequest),
+            requestIndex: typeof entry.requestIndex === "number" ? entry.requestIndex : undefined,
+            recentOccurrences: typeof entry.recentOccurrences === "number" ? entry.recentOccurrences : undefined,
+            recentPriority: typeof entry.recentPriority === "number" ? entry.recentPriority : undefined,
+            recentLastSeenAt: entry.recentLastSeenAt,
+            occurrences: typeof entry.occurrences === "number" ? entry.occurrences : undefined,
+            priority: typeof entry.priority === "number" ? entry.priority : undefined,
+            lastSeenAt: entry.lastSeenAt
+          })).filter((entry) => entry.domain)
+        );
+
+        runs.push({
+          timestamp,
+          filterName,
+          query,
+          plannedQueries: queryRun.plannedQueries?.map((value) => value.trim()).filter(Boolean),
+          promptMessages: queryRun.promptMessages?.map((message) => ({ role: message.role, content: message.content })),
+          excludedDomains: normalizedExcludedDomainDetails.excludedDomains
+            ?? queryRun.excludedDomains?.map((domain) => domain.trim().toLowerCase()).filter(Boolean),
+          excludedDomainDetails: normalizedExcludedDomainDetails.excludedDomainDetails
+        });
+      }
+
+      return runs;
+    }, [])
+    .slice(0, 1000);
+}
 
 export interface LeadAgentDataPaths {
   runtimeDataDirectory: string;
@@ -482,6 +641,19 @@ const exaQueryHistoryInsightSchema = z.object({
   timestamp: z.string().optional(),
   detectedCategories: z.array(leadCategorySchema).optional(),
   foundCategoryBreakdown: z.record(leadCategorySchema, z.number().int().nonnegative()).optional(),
+  excludedDomains: z.array(z.string().min(1)).optional(),
+  excludedDomainDetails: z.array(z.object({
+    domain: z.string().min(1),
+    category: z.enum(["hubspot", "rejected_website", "current_run_cache", "historical_exa"]),
+    includedInRequest: z.boolean(),
+    requestIndex: z.number().int().nonnegative().optional(),
+    recentOccurrences: z.number().int().nonnegative().optional(),
+    recentPriority: z.number().int().nonnegative().optional(),
+    recentLastSeenAt: z.string().min(1).optional(),
+    occurrences: z.number().int().nonnegative().optional(),
+    priority: z.number().int().nonnegative().optional(),
+    lastSeenAt: z.string().min(1).optional()
+  })).optional(),
   note: z.string().optional()
 });
 
@@ -511,9 +683,12 @@ const liveExaQueryRunSchema = z.object({
   excludedDomains: z.array(z.string().min(1)).optional(),
   excludedDomainDetails: z.array(z.object({
     domain: z.string().min(1),
-    category: z.enum(["hubspot", "rejected_website", "current_run_cache"]),
+    category: z.enum(["hubspot", "rejected_website", "current_run_cache", "historical_exa"]),
     includedInRequest: z.boolean(),
     requestIndex: z.number().int().nonnegative().optional(),
+    recentOccurrences: z.number().int().nonnegative().optional(),
+    recentPriority: z.number().int().nonnegative().optional(),
+    recentLastSeenAt: z.string().min(1).optional(),
     occurrences: z.number().int().nonnegative().optional(),
     priority: z.number().int().nonnegative().optional(),
     lastSeenAt: z.string().min(1).optional()
@@ -533,6 +708,7 @@ const liveExaRecurringDomainSchema = z.object({
 const liveExaCacheSchema = z.object({
   entries: z.array(rawExaHistoryEntrySchema),
   discoveredDomains: z.array(z.string().min(1)),
+  recentRecurringDomains: z.array(liveExaRecurringDomainSchema).optional(),
   recurringDomains: z.array(liveExaRecurringDomainSchema).optional(),
   queryRuns: z.array(liveExaQueryRunSchema).optional()
 });
@@ -628,9 +804,12 @@ const defaultTestLabExaCache = {
 const defaultLiveExaCache: LiveExaCache = {
   entries: [],
   discoveredDomains: [],
+  recentRecurringDomains: [],
   recurringDomains: [],
   queryRuns: []
 };
+
+const MAX_RECENT_LIVE_EXA_QUERY_RUNS = 50;
 
 export function buildLiveExaRecurringDomains(
   entries: RawExaHistoryEntry[],
@@ -697,6 +876,28 @@ export function buildLiveExaRecurringDomains(
       return left.domain.localeCompare(right.domain);
     })
     .slice(0, 2000);
+}
+
+export function buildRecentLiveExaRecurringDomains(
+  entries: RawExaHistoryEntry[],
+  queryRuns: NonNullable<LiveExaCache["queryRuns"]> = []
+): NonNullable<LiveExaCache["recentRecurringDomains"]> {
+  const recentRunTimestamps = queryRuns
+    .slice(0, MAX_RECENT_LIVE_EXA_QUERY_RUNS)
+    .map((queryRun) => Date.parse(queryRun.timestamp))
+    .filter((timestamp) => Number.isFinite(timestamp));
+
+  if (recentRunTimestamps.length === 0) {
+    return [];
+  }
+
+  const cutoffTimestamp = Math.min(...recentRunTimestamps);
+  const recentEntries = entries.filter((entry) => {
+    const timestamp = Date.parse(entry.timestamp);
+    return Number.isFinite(timestamp) && timestamp >= cutoffTimestamp;
+  });
+
+  return buildLiveExaRecurringDomains(recentEntries);
 }
 
 const suggestedControls = [
@@ -1096,10 +1297,14 @@ export class ControlPlaneStore {
 
   async getLiveExaCache(): Promise<LiveExaCache> {
     const cache = await this.readLiveExaCacheFromDatabase();
+    const queryRuns = normalizeLiveExaQueryRuns(cache.queryRuns);
     const recurringDomains = buildLiveExaRecurringDomains(cache.entries, cache.discoveredDomains);
+    const recentRecurringDomains = buildRecentLiveExaRecurringDomains(cache.entries, queryRuns);
     return liveExaCacheSchema.parse({
       ...defaultLiveExaCache,
       ...cache,
+      queryRuns,
+      recentRecurringDomains,
       recurringDomains,
       discoveredDomains: recurringDomains.length > 0
         ? recurringDomains.map((entry) => entry.domain)
@@ -1123,42 +1328,12 @@ export class ControlPlaneStore {
 
     const entries = normalizedEntries.slice(0, 5000);
     const recurringDomains = buildLiveExaRecurringDomains(entries, cache.discoveredDomains);
-    const queryRuns = (cache.queryRuns ?? [])
-      .reduce<NonNullable<LiveExaCache["queryRuns"]>>((runs, queryRun) => {
-        const timestamp = queryRun.timestamp?.trim();
-        const filterName = queryRun.filterName?.trim();
-        const query = queryRun.query?.trim();
-        if (!timestamp || !filterName || !query) {
-          return runs;
-        }
-
-        const key = `${filterName}__${query}`;
-        if (!runs.some((candidate) => `${candidate.filterName}__${candidate.query}` === key)) {
-          runs.push({
-            timestamp,
-            filterName,
-            query,
-            plannedQueries: queryRun.plannedQueries?.map((value) => value.trim()).filter(Boolean),
-            promptMessages: queryRun.promptMessages?.map((message) => ({ role: message.role, content: message.content })),
-            excludedDomains: queryRun.excludedDomains?.map((domain) => domain.trim().toLowerCase()).filter(Boolean),
-            excludedDomainDetails: queryRun.excludedDomainDetails?.map((entry) => ({
-              domain: entry.domain.trim().toLowerCase(),
-              category: entry.category,
-              includedInRequest: Boolean(entry.includedInRequest),
-              requestIndex: typeof entry.requestIndex === "number" ? entry.requestIndex : undefined,
-              occurrences: typeof entry.occurrences === "number" ? entry.occurrences : undefined,
-              priority: typeof entry.priority === "number" ? entry.priority : undefined,
-              lastSeenAt: entry.lastSeenAt
-            })).filter((entry) => entry.domain)
-          });
-        }
-
-        return runs;
-      }, [])
-      .slice(0, 1000);
+    const queryRuns = normalizeLiveExaQueryRuns(cache.queryRuns);
+    const recentRecurringDomains = buildRecentLiveExaRecurringDomains(entries, queryRuns);
     this.liveCacheDatabase.writeLiveExaCache(liveExaCacheSchema.parse({
       entries,
       discoveredDomains: recurringDomains.map((entry) => entry.domain),
+      recentRecurringDomains,
       recurringDomains,
       queryRuns
     }));

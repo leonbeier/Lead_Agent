@@ -519,6 +519,7 @@ export class AzureOpenAIClient {
     dryRun: boolean
   ): Promise<{
     companyName?: string;
+    entityScope?: "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
     address?: string;
     city?: string;
     zip?: string;
@@ -536,7 +537,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Read official company homepage evidence and extract organization-level company information only. Extract the legal company name, postal address, shared company inboxes, and main switchboard phone numbers when they are explicitly visible. Then choose the best 1 to 5 same-domain follow-up links that are most likely to contain missing official company information, legal identity, address details, or company-level contact details. Prefer kontakt, contact, impressum, imprint, legal, about, company, team, and footer-linked pages when relevant. Do not include personal data. Do not invent information. Return strict JSON with {"companyName":"...","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"followUpUrls":["https://..."]}. Use empty strings or empty arrays when unknown.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Read official company homepage evidence and extract organization-level company information only. Extract the exact legal operating entity for the supplied domain, postal address, shared company inboxes, and main switchboard phone numbers when they are explicitly visible. If the homepage mainly references a parent group, holding company, umbrella brand, or product brand, do not return that parent or brand name as companyName unless the evidence explicitly shows it is the exact legal operating entity for this supplied domain. When the homepage evidence is ambiguous, leave companyName empty and set entityScope accordingly. Then choose the best 1 to 5 same-domain follow-up links that are most likely to contain missing official company information, legal identity, address details, or company-level contact details. Prefer kontakt, contact, impressum, imprint, legal, about, company, team, and footer-linked pages when relevant. Do not include personal data. Do not invent information. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"followUpUrls":["https://..."]}. Use empty strings or empty arrays when unknown.`
         },
         {
           role: "user",
@@ -553,6 +554,7 @@ export class AzureOpenAIClient {
 
       const parsed = this.parseJsonObject<{
         companyName?: string;
+        entityScope?: string;
         address?: string;
         city?: string;
         zip?: string;
@@ -563,8 +565,21 @@ export class AzureOpenAIClient {
         followUpUrls?: string[];
       }>(content);
 
+      const normalizedEntityScope = (() => {
+        switch (parsed.entityScope?.trim().toLowerCase()) {
+          case "exact_operating_entity":
+          case "parent_group":
+          case "brand_or_product":
+          case "uncertain":
+            return parsed.entityScope.trim().toLowerCase() as "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
+          default:
+            return undefined;
+        }
+      })();
+
       return {
         companyName: parsed.companyName?.trim(),
+        entityScope: normalizedEntityScope,
         address: parsed.address?.trim(),
         city: parsed.city?.trim(),
         zip: parsed.zip?.trim(),
@@ -592,6 +607,7 @@ export class AzureOpenAIClient {
     dryRun: boolean
   ): Promise<{
     companyName?: string;
+    entityScope?: "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
     address?: string;
     city?: string;
     zip?: string;
@@ -609,7 +625,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Consolidate organization-level company information from official website evidence only. Use the supplied homepage and follow-up pages to extract the legal company name, postal address, shared company inboxes, main switchboard phone numbers, and company LinkedIn page URLs. Prefer impressum/legal notice/contact/footer evidence over marketing copy. Do not include personal data and do not invent values. Return strict JSON with {"companyName":"...","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"linkedInUrls":["https://..."]}. Use empty strings or arrays when unknown.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Consolidate organization-level company information from official website evidence only. Use the supplied homepage and follow-up pages to extract the exact legal operating entity for the supplied domain, the postal address, shared company inboxes, main switchboard phone numbers, and company LinkedIn page URLs. Prefer impressum/legal notice/contact/footer evidence over marketing copy. If the website mentions a parent group, holding company, umbrella brand, or product brand, do not return that parent or brand name as companyName unless the evidence explicitly shows it is the exact legal operating entity for this supplied domain. When the evidence points to a parent group or brand but the exact operating entity is unclear, leave companyName empty and set entityScope accordingly. Do not include personal data and do not invent values. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"linkedInUrls":["https://..."]}. Use empty strings or arrays when unknown.`
         },
         {
           role: "user",
@@ -624,6 +640,7 @@ export class AzureOpenAIClient {
 
       const parsed = this.parseJsonObject<{
         companyName?: string;
+        entityScope?: string;
         address?: string;
         city?: string;
         zip?: string;
@@ -634,8 +651,21 @@ export class AzureOpenAIClient {
         linkedInUrls?: string[];
       }>(content);
 
+      const normalizedEntityScope = (() => {
+        switch (parsed.entityScope?.trim().toLowerCase()) {
+          case "exact_operating_entity":
+          case "parent_group":
+          case "brand_or_product":
+          case "uncertain":
+            return parsed.entityScope.trim().toLowerCase() as "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
+          default:
+            return undefined;
+        }
+      })();
+
       return {
         companyName: parsed.companyName?.trim(),
+        entityScope: normalizedEntityScope,
         address: parsed.address?.trim(),
         city: parsed.city?.trim(),
         zip: parsed.zip?.trim(),
@@ -955,6 +985,126 @@ export class AzureOpenAIClient {
     return ` ${normalizedHaystack} `.includes(` ${normalizedNeedle} `);
   }
 
+
+  private getPlannerPrimaryLocality(requestedLocalities: string[]): string {
+    return requestedLocalities.map((value) => value.trim()).find(Boolean) ?? "Europe";
+  }
+
+  private buildPlannerGeographyAngleExamples(requestedLocalities: string[]): string[] {
+    const primaryLocality = this.getPlannerPrimaryLocality(requestedLocalities);
+    const normalizedPrimaryLocality = this.normalizePlannerPhrase(primaryLocality);
+
+    if (normalizedPrimaryLocality === "germany") {
+      return [
+        "* Germany nationwide",
+        "* DACH",
+        "* NRW / Ruhr",
+        "* OWL",
+        "* Bavaria / Munich",
+        "* Baden-Wuerttemberg / Stuttgart",
+        "* Hamburg / Northern Germany",
+        "* Benelux",
+        "* Nordics",
+        "* another relevant Europe-first cluster if it stays inside the target geography"
+      ];
+    }
+
+    if (normalizedPrimaryLocality === "europe") {
+      return [
+        "* Europe-wide",
+        "* France",
+        "* DACH",
+        "* Benelux",
+        "* Nordics",
+        "* Italy / Northern Italy",
+        "* Iberia",
+        "* Central Europe",
+        "* a single-country angle that stays inside Europe",
+        "* another relevant Europe-first cluster that still stays inside Europe"
+      ];
+    }
+
+    return [
+      `* ${primaryLocality} nationwide`,
+      `* capital-region angle inside ${primaryLocality}`,
+      `* northern ${primaryLocality}`,
+      `* southern ${primaryLocality}`,
+      `* a major industrial cluster inside ${primaryLocality}`,
+      `* another relevant sub-region that still stays inside ${primaryLocality}`
+    ];
+  }
+
+  private buildPlannerAngleVariationExamples(requestedLocalities: string[]): {
+    integrator: string[];
+    machineBuilder: string[];
+    cameraManufacturer: string[];
+    nonIndustrial: string[];
+  } {
+    const primaryLocality = this.getPlannerPrimaryLocality(requestedLocalities);
+    const normalizedPrimaryLocality = this.normalizePlannerPhrase(primaryLocality);
+
+    if (normalizedPrimaryLocality === "germany") {
+      return {
+        integrator: [
+          "* Germany official company websites of computer vision and industrial image processing service providers focused on quality control, defect detection, and production-line inspection, with customer-specific implementation or deployment work - not camera manufacturers, imaging component suppliers, hardware resellers, factories, industrial end customers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+          "* Germany official company websites of OWL, NRW, or Ruhr-area automation integrators delivering machine vision, PLC or SCADA integration, OT connectivity, and inspection-related software projects for customers - not machine builders, OEM equipment vendors, camera hardware sellers, measurement-only specialists, staffing agencies, directories, marketplaces, job boards, news pages, PDFs, or irrelevant content pages.",
+          "* Germany official company websites of Bavaria or Munich-area AI engineering boutiques implementing embedded vision, edge AI, inspection AI, or hardware-efficient computer vision models for customer projects, with hands-on deployment work - not generic AI advisory firms, training-only providers, staffing marketplaces, SaaS vendors, directories, job boards, news articles, PDFs, or irrelevant content pages."
+        ],
+        machineBuilder: [
+          "* Germany official company websites of machine builders, OEM equipment vendors, or Sondermaschinenbau companies that build inspection machines, production cells, scanners, or camera-enabled systems and could add Vision AI or Edge AI capabilities to their products - not pure component distributors, generic resellers, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.",
+          "* DACH official company websites of OEMs and machine builders delivering packaging, assembly, inspection, or automation equipment with camera systems, sensor workflows, or AI-ready machine options - not software-only agencies, staffing firms, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages."
+        ],
+        cameraManufacturer: [
+          "* Germany official company websites of camera manufacturers, imaging module vendors, or machine-vision hardware companies that sell camera systems into technical applications and could benefit from AI-ready model generation or edge vision capabilities - not generic distributors, resellers without product control, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages."
+        ],
+        nonIndustrial: [
+          "* Germany official company websites of drone technology companies delivering autonomous inspection, camera-based perception, mapping, or edge AI workflows with real product deployment or customer implementation - not hobby drone shops, training providers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+          "* Germany official company websites of medtech imaging or medical device companies using computer vision, image analysis, embedded AI, or AI-assisted inspection workflows with productization or deployment ownership - not hospitals, academic labs without commercial product path, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages."
+        ]
+      };
+    }
+
+    if (normalizedPrimaryLocality === "europe") {
+      return {
+        integrator: [
+          "* France official company websites of computer vision and industrial image processing service providers focused on quality control, defect detection, and production-line inspection, with customer-specific implementation or deployment work - not camera manufacturers, imaging component suppliers, hardware resellers, factories, industrial end customers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+          "* Benelux official company websites of automation integrators delivering machine vision, PLC or SCADA integration, OT connectivity, and inspection-related software projects for customers - not machine builders, OEM equipment vendors, camera hardware sellers, measurement-only specialists, staffing agencies, directories, marketplaces, job boards, news pages, PDFs, or irrelevant content pages.",
+          "* Nordics official company websites of AI engineering boutiques implementing embedded vision, edge AI, inspection AI, or hardware-efficient computer vision models for customer projects, with hands-on deployment work - not generic AI advisory firms, training-only providers, staffing marketplaces, SaaS vendors, directories, job boards, news articles, PDFs, or irrelevant content pages."
+        ],
+        machineBuilder: [
+          "* DACH official company websites of machine builders, OEM equipment vendors, or Sondermaschinenbau companies that build inspection machines, production cells, scanners, or camera-enabled systems and could add Vision AI or Edge AI capabilities to their products - not pure component distributors, generic resellers, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.",
+          "* Italy or Spain official company websites of OEMs and machine builders delivering packaging, assembly, inspection, or automation equipment with camera systems, sensor workflows, or AI-ready machine options - not software-only agencies, staffing firms, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages."
+        ],
+        cameraManufacturer: [
+          "* Europe official company websites of camera manufacturers, imaging module vendors, or machine-vision hardware companies that sell camera systems into technical applications and could benefit from AI-ready model generation or edge vision capabilities - not generic distributors, resellers without product control, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages."
+        ],
+        nonIndustrial: [
+          "* Europe official company websites of drone technology companies delivering autonomous inspection, camera-based perception, mapping, or edge AI workflows with real product deployment or customer implementation - not hobby drone shops, training providers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+          "* Europe official company websites of medtech imaging or medical device companies using computer vision, image analysis, embedded AI, or AI-assisted inspection workflows with productization or deployment ownership - not hospitals, academic labs without commercial product path, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages."
+        ]
+      };
+    }
+
+    return {
+      integrator: [
+        `* ${primaryLocality} official company websites of computer vision and industrial image processing service providers focused on quality control, defect detection, and production-line inspection, with customer-specific implementation or deployment work - not camera manufacturers, imaging component suppliers, hardware resellers, factories, industrial end customers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.`,
+        `* ${primaryLocality} official company websites of automation integrators delivering machine vision, PLC or SCADA integration, OT connectivity, and inspection-related software projects for customers - not machine builders, OEM equipment vendors, camera hardware sellers, measurement-only specialists, staffing agencies, directories, marketplaces, job boards, news pages, PDFs, or irrelevant content pages.`,
+        `* ${primaryLocality} official company websites of AI engineering boutiques implementing embedded vision, edge AI, inspection AI, or hardware-efficient computer vision models for customer projects, with hands-on deployment work - not generic AI advisory firms, training-only providers, staffing marketplaces, SaaS vendors, directories, job boards, news articles, PDFs, or irrelevant content pages.`
+      ],
+      machineBuilder: [
+        `* ${primaryLocality} official company websites of machine builders, OEM equipment vendors, or Sondermaschinenbau companies that build inspection machines, production cells, scanners, or camera-enabled systems and could add Vision AI or Edge AI capabilities to their products - not pure component distributors, generic resellers, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.`,
+        `* ${primaryLocality} official company websites of OEMs and machine builders delivering packaging, assembly, inspection, or automation equipment with camera systems, sensor workflows, or AI-ready machine options - not software-only agencies, staffing firms, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.`
+      ],
+      cameraManufacturer: [
+        `* ${primaryLocality} official company websites of camera manufacturers, imaging module vendors, or machine-vision hardware companies that sell camera systems into technical applications and could benefit from AI-ready model generation or edge vision capabilities - not generic distributors, resellers without product control, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.`
+      ],
+      nonIndustrial: [
+        `* ${primaryLocality} official company websites of drone technology companies delivering autonomous inspection, camera-based perception, mapping, or edge AI workflows with real product deployment or customer implementation - not hobby drone shops, training providers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.`,
+        `* ${primaryLocality} official company websites of medtech imaging or medical device companies using computer vision, image analysis, embedded AI, or AI-assisted inspection workflows with productization or deployment ownership - not hospitals, academic labs without commercial product path, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.`
+      ]
+    };
+  }
+
   private buildExaPlannerSystemPrompt(
     mainContext: string | undefined,
     searchStrategyContext: string | undefined,
@@ -962,6 +1112,12 @@ export class AzureOpenAIClient {
     requestedLocalities: string[],
     forbiddenBroadeningTerms: string[]
   ): string {
+    const requiresLiteralGermany = requestedLocalities
+      .map((value) => this.normalizePlannerPhrase(value))
+      .includes("germany");
+    const plannerOpeningExample = this.getPlannerPrimaryLocality(requestedLocalities);
+    const geographyAngleExamples = this.buildPlannerGeographyAngleExamples(requestedLocalities);
+    const angleVariationExamples = this.buildPlannerAngleVariationExamples(requestedLocalities);
     const queryExample = JSON.stringify({
       queries: Array.from({ length: Math.max(1, queryCount) }, (_, index) => `query ${index + 1}`),
       constraintCheck: {
@@ -996,7 +1152,7 @@ export class AzureOpenAIClient {
       requestedLocalities.length > 0 ? "* Every query must contain at least one exact required locality term verbatim." : "* Preserve the exact requested scope.",
       requestedLocalities.length > 0 ? "* Search explicitly only inside the required locality scope. Do not broaden to a parent region or wider market." : undefined,
       forbiddenBroadeningTerms.length > 0 ? `* Forbidden broadening terms unless explicitly requested in the locality list: ${forbiddenBroadeningTerms.join(", ")}.` : undefined,
-      requestedLocalities.length > 0 ? "* If the required locality is Germany, every query must literally contain Germany and must not replace it with Europe, European, DACH, EU, EMEA, global, worldwide, or international." : undefined,
+      requiresLiteralGermany ? "* If the required locality is Germany, every query must literally contain Germany and must not replace it with Europe, European, DACH, EU, EMEA, global, worldwide, or international." : undefined,
       "* If you cannot satisfy all hard constraints, return an explicit planner error JSON and do not guess.",
       "",
       "Query-planning rules:",
@@ -1209,7 +1365,7 @@ export class AzureOpenAIClient {
       "Do not return a query that is only a lightly rewritten version of an old query.",
       "Do not use the same sentence structure as an old query if the angle is essentially unchanged.",
       "Do not simply swap one synonym, one region, or one exclusion phrase and call it new.",
-      "Do not repeat overused openings such as Europe official company websites of machine vision system integrators unless the history clearly proves that wording is necessary and you substantially change the search angle.",
+      `Do not repeat overused openings such as ${plannerOpeningExample} official company websites of machine vision system integrators unless the history clearly proves that wording is necessary and you substantially change the search angle.`,
       "",
       "Before writing the final queries, compare each new query against the old queries.",
       "A new query is acceptable only if it differs in at least two meaningful ways, such as:",
@@ -1296,7 +1452,7 @@ export class AzureOpenAIClient {
       "Across the full set, vary at least four of these dimensions: company self-description, capability family, use case, delivery model, deployment context, region, or exclusion focus.",
       "No more than two queries may share the same opening pattern, such as the same first company-type phrase or the same geography-led opening.",
       "If recent history overused one opening or synonym family, force new openings that enter through a different route into the ICP.",
-      "Do not begin every query with Europe official company websites of. Some queries should enter through capability, use case, delivery model, or region first, while still clearly asking Exa to find official company websites.",
+      `Do not begin every query with ${plannerOpeningExample} official company websites of. Some queries should enter through capability, use case, delivery model, or region first, while still clearly asking Exa to find official company websites.`,
       "When queryCount allows it, spread the set across these probe types: company-type-led, capability-led, use-case-led, deployment-led, region-cluster-led, and service-shape-led.",
       "Those probe types are an internal planning checklist. Do not output the labels; just make the queries visibly different.",
       "If both integrators and freelancers are desired, dedicate separate queries to them instead of repeating the same integrator-and-freelancer pairing throughout the set.",
@@ -1373,16 +1529,7 @@ export class AzureOpenAIClient {
       "* hardware-constrained AI models",
       "",
       "Geography angle:",
-      "* Germany nationwide",
-      "* DACH",
-      "* NRW / Ruhr",
-      "* OWL",
-      "* Bavaria / Munich",
-      "* Baden-Wuerttemberg / Stuttgart",
-      "* Hamburg / Northern Germany",
-      "* Benelux",
-      "* Nordics",
-      "* another relevant Europe-first cluster if it stays inside the target geography",
+      ...geographyAngleExamples,
       "",
       "Exclusion angle:",
       "Use exclusions dynamically based on the non-desired categories for this run.",
@@ -1405,27 +1552,23 @@ export class AzureOpenAIClient {
       "A strong query names the target company type, delivery model, use case, region where useful, and several non-target company types to avoid.",
       "",
       "Example of too-similar queries:",
-      "* Europe machine vision system integrators for industrial visual inspection...",
-      "* Europe machine vision solution providers for industrial quality inspection...",
-      "* Europe industrial image processing integrators for AOI...",
+      `* ${plannerOpeningExample} machine vision system integrators for industrial visual inspection...`,
+      `* ${plannerOpeningExample} machine vision solution providers for industrial quality inspection...`,
+      `* ${plannerOpeningExample} industrial image processing integrators for AOI...`,
       "",
       "These are too similar because they likely search the same result space.",
       "",
       "Example of acceptable angle variation when integrators are desired and machine builders, camera manufacturers, software platforms, and end customers are not desired:",
-      "* Europe official company websites of German computer vision and industrial image processing service providers focused on quality control, defect detection, and production-line inspection, with customer-specific implementation or deployment work — not camera manufacturers, imaging component suppliers, hardware resellers, factories, industrial end customers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
-      "* Europe official company websites of OWL, NRW, or Ruhr-area automation integrators delivering machine vision, PLC or SCADA integration, OT connectivity, and inspection-related software projects for customers — not machine builders, OEM equipment vendors, camera hardware sellers, measurement-only specialists, staffing agencies, directories, marketplaces, job boards, news pages, PDFs, or irrelevant content pages.",
-      "* Europe official company websites of Bavaria or Munich-area AI engineering boutiques implementing embedded vision, edge AI, inspection AI, or hardware-efficient computer vision models for customer projects, with hands-on deployment work — not generic AI advisory firms, training-only providers, staffing marketplaces, SaaS vendors, directories, job boards, news articles, PDFs, or irrelevant content pages.",
+      ...angleVariationExamples.integrator,
       "",
       "Example of acceptable angle variation when machine builders are explicitly desired:",
-      "* Europe official company websites of German machine builders, OEM equipment vendors, or Sondermaschinenbau companies that build inspection machines, production cells, scanners, or camera-enabled systems and could add Vision AI or Edge AI capabilities to their products — not pure component distributors, generic resellers, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.",
-      "* Europe official company websites of DACH OEMs and machine builders delivering packaging, assembly, inspection, or automation equipment with camera systems, sensor workflows, or AI-ready machine options — not software-only agencies, staffing firms, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+      ...angleVariationExamples.machineBuilder,
       "",
       "Example of acceptable angle variation when camera manufacturers are explicitly desired:",
-      "* Europe official company websites of camera manufacturers, imaging module vendors, or machine-vision hardware companies that sell camera systems into technical applications and could benefit from AI-ready model generation or edge vision capabilities — not generic distributors, resellers without product control, job boards, directories, marketplaces, news articles, PDFs, or irrelevant content pages.",
+      ...angleVariationExamples.cameraManufacturer,
       "",
       "Example of acceptable angle variation when non-industrial technical verticals are desired:",
-      "* Europe official company websites of drone technology companies delivering autonomous inspection, camera-based perception, mapping, or edge AI workflows with real product deployment or customer implementation — not hobby drone shops, training providers, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
-      "* Europe official company websites of medtech imaging or medical device companies using computer vision, image analysis, embedded AI, or AI-assisted inspection workflows with productization or deployment ownership — not hospitals, academic labs without commercial product path, directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.",
+      ...angleVariationExamples.nonIndustrial,
       "",
       "The examples are not templates to copy exactly.",
       "They demonstrate the expected level of specificity: same ICP, different search angle, explicit ownership signal, concrete use case, useful region where relevant, and strong natural-language exclusions that do not conflict with selected target categories.",
@@ -1646,6 +1789,7 @@ export class AzureOpenAIClient {
       "5. region-cluster-led",
       "6. service-shape-led"
     ].slice(0, Math.max(1, queryCount));
+    const plannerOpeningExample = this.getPlannerPrimaryLocality(requestedLocalities);
 
     return [
       "Rewrite the draft Exa queries below because they are still too similar to each other.",
@@ -1660,7 +1804,7 @@ export class AzureOpenAIClient {
       "* Do not copy any draft query or recent historical query too closely.",
       "* Do not let more than two queries share the same opening pattern.",
       "* Use the exact probe-type spread listed below. Make each query visibly feel like its assigned probe type.",
-      "* At least half of the queries must avoid opening with Europe official company websites of.",
+      `* At least half of the queries must avoid opening with ${plannerOpeningExample} official company websites of.`,
       "* Do not reuse any baseline query verbatim.",
       "* At most one query may keep the baseline-style companies that provide ... Prefer official company websites ... Exclude ... template.",
       "* At least four queries must explicitly ask for official company websites of a concrete company type and must name wrong-company exclusions before the noisy-result tail.",

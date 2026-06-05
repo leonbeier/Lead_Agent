@@ -945,6 +945,89 @@ test("worker run keeps streaming Exa raw companies into AI when the batch times 
   assert.equal(result.completionReason, "exa_search_unavailable");
 });
 
+test("worker run continues with other Exa filters after a temporary search timeout", async () => {
+  const syncedCompanies: string[] = [];
+  const attemptedFilters: string[] = [];
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncedCompanies.push(companies[0]?.name ?? "unknown");
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: companies.length,
+          syncedCount: companies.length,
+          companySyncedCount: companies.length,
+          contactSyncedCount: companies.length
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [
+        createFilter("integrator_vision_industrial_ai"),
+        { ...createFilter("integrator_vision_industrial_ai"), name: "filter-integrator-backup" }
+      ],
+      discoverDirectExaCompaniesForExecution: async (filter: OrganizationFilter) => {
+        attemptedFilters.push(filter.name);
+        if (filter.name === "filter-integrator_vision_industrial_ai") {
+          throw new Error("Exa discovery timed out after 180000ms");
+        }
+
+        return [{
+          name: "Backup Vision Integrator",
+          domain: "backup-vision-integrator.example.com",
+          shortDescription: "fit",
+          sourceFilter: filter.name,
+          discoveryQuery: "backup query"
+        }];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.ok(attemptedFilters.includes("filter-integrator_vision_industrial_ai"));
+  assert.ok(attemptedFilters.includes("filter-integrator-backup"));
+  assert.deepEqual(syncedCompanies, ["Backup Vision Integrator"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  assert.equal(result.shortlistedCompanies[0]?.name, "Backup Vision Integrator");
+  assert.equal(result.completionReason, "target_reached");
+});
+
 test("worker run can search with two Exa producer workers in parallel when multiple filters exist", async () => {
   let activeExaCalls = 0;
   let maxActiveExaCalls = 0;

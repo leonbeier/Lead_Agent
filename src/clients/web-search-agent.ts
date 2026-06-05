@@ -2,7 +2,6 @@ import { OrganizationFilter, CompanySample, CompanySearchMode, CrawledWebsitePro
 import { DiffbotSearchClient } from "./diffbot-search";
 import { ExaSearchClient } from "./exa-search";
 import { OpenCrawlerDiscoveryMetrics, OpenCrawlerSearchClient } from "./open-crawler-search";
-import { OpenAIWebSearchClient } from "./openai-web-search";
 
 interface SearchEvidence {
   context: string;
@@ -10,8 +9,6 @@ interface SearchEvidence {
 }
 
 export class WebSearchAgent {
-  private readonly openAIWebSearchClient = new OpenAIWebSearchClient();
-
   private readonly openCrawlerSearchClient = new OpenCrawlerSearchClient();
 
   private readonly diffbotSearchClient = new DiffbotSearchClient();
@@ -36,14 +33,14 @@ export class WebSearchAgent {
 
   private getProvider(mode: CompanySearchMode) {
     if (mode === "exa_search") {
-      return this.exaSearchClient.isConfigured() ? this.exaSearchClient : this.openAIWebSearchClient;
+      return this.exaSearchClient.isConfigured() ? this.exaSearchClient : this.openCrawlerSearchClient;
     }
 
     if (mode === "diffbot_search") {
       return this.diffbotSearchClient;
     }
 
-    return mode === "open_crawler_search" ? this.openCrawlerSearchClient : this.openAIWebSearchClient;
+    return this.openCrawlerSearchClient;
   }
 
   resetDiscoveryMetrics(mode: CompanySearchMode): void {

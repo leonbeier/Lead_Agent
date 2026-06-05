@@ -1,6 +1,6 @@
 import { env } from "../config";
 import { OrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
-import { OpenAIWebSearchClient } from "./openai-web-search";
+import { OpenCrawlerSearchClient } from "./open-crawler-search";
 
 type DiffbotResponse = {
   data?: Array<Record<string, unknown>>;
@@ -54,7 +54,7 @@ function entityField(entity: Record<string, unknown>, fieldName: string): string
 }
 
 export class DiffbotSearchClient {
-  private readonly fallbackResearchClient = new OpenAIWebSearchClient();
+  private readonly fallbackResearchClient = new OpenCrawlerSearchClient();
 
   private runtimeToken?: string;
 

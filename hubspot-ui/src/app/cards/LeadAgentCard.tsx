@@ -151,6 +151,18 @@ type RunStatusPayload = {
       }>;
       lastExecutedQuery?: string;
       excludedDomains?: string[];
+      excludedDomainDetails?: Array<{
+        domain: string;
+        category: string;
+        includedInRequest: boolean;
+        requestIndex?: number;
+        recentOccurrences?: number;
+        recentPriority?: number;
+        recentLastSeenAt?: string;
+        occurrences?: number;
+        priority?: number;
+        lastSeenAt?: string;
+      }>;
       executedQueries?: number;
       totalQueries?: number;
       returnedResults?: number;
@@ -233,6 +245,74 @@ function formatQueryStats(stats: NonNullable<NonNullable<RunStatusPayload["runSt
       categoryBreakdown ? `categories: ${categoryBreakdown}` : undefined
     ].filter(Boolean).join("\n");
   }).join("\n\n");
+}
+
+function formatExcludedDomainDetails(
+  entries: NonNullable<NonNullable<RunStatusPayload["runStatus"]>["liveSearchDebug"]>["excludedDomainDetails"] | undefined,
+  onlyIncludedInRequest = false
+) {
+  if (!entries || entries.length === 0) {
+    return "";
+  }
+
+  const categoryPriority: Record<string, number> = {
+    current_run_cache: 0,
+    hubspot: 1,
+    rejected_website: 2,
+    historical_exa: 3
+  };
+
+  const normalizedEntries = entries
+    .filter((entry) => !onlyIncludedInRequest || entry?.includedInRequest)
+    .slice()
+    .sort((left, right) => {
+      const leftIndex = typeof left?.requestIndex === "number" ? left.requestIndex : Number.MAX_SAFE_INTEGER;
+      const rightIndex = typeof right?.requestIndex === "number" ? right.requestIndex : Number.MAX_SAFE_INTEGER;
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex;
+      }
+
+      const leftIncluded = Boolean(left?.includedInRequest);
+      const rightIncluded = Boolean(right?.includedInRequest);
+      if (leftIncluded !== rightIncluded) {
+        return Number(rightIncluded) - Number(leftIncluded);
+      }
+
+      const recentOccurrenceDelta = Number(right?.recentOccurrences || 0) - Number(left?.recentOccurrences || 0);
+      if (recentOccurrenceDelta !== 0) {
+        return recentOccurrenceDelta;
+      }
+
+      const occurrenceDelta = Number(right?.occurrences || 0) - Number(left?.occurrences || 0);
+      if (occurrenceDelta !== 0) {
+        return occurrenceDelta;
+      }
+
+      const leftCategoryPriority = categoryPriority[left?.category ?? ""] ?? Number.MAX_SAFE_INTEGER;
+      const rightCategoryPriority = categoryPriority[right?.category ?? ""] ?? Number.MAX_SAFE_INTEGER;
+      if (leftCategoryPriority !== rightCategoryPriority) {
+        return leftCategoryPriority - rightCategoryPriority;
+      }
+
+      return String(left?.domain || "").localeCompare(String(right?.domain || ""));
+    });
+
+  const visibleRequestCount = normalizedEntries.filter((entry) => entry?.includedInRequest).length;
+
+  return normalizedEntries.map((entry) => {
+    const prefix = entry?.includedInRequest
+      ? `${(typeof entry.requestIndex === "number" ? entry.requestIndex : 0) + 1}/${visibleRequestCount} IN`
+      : "OUTSIDE-1200";
+    return [
+      `${prefix} | ${entry.domain} | Quelle ${entry.category}`,
+      `Neuere Exa-Treffer ${entry.recentOccurrences || 0}`,
+      `Neuere Exa-Prioritaet ${entry.recentPriority || 0}`,
+      entry.recentLastSeenAt ? `Zuletzt in neueren Exa-Treffern ${formatTimestamp(entry.recentLastSeenAt)}` : undefined,
+      `Historische Exa-Treffer ${entry.occurrences || 0}`,
+      `Historische Exa-Prioritaet ${entry.priority || 0}`,
+      entry.lastSeenAt ? `Zuletzt in Exa ${formatTimestamp(entry.lastSeenAt)}` : undefined
+    ].filter(Boolean).join(" | ");
+  }).join("\n");
 }
 
 function parseLeadRunStartError(error: unknown): { message: string; runStatus?: RunStatusPayload["runStatus"] } {
@@ -821,6 +901,26 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
                 label={`Excluded Websites (${runStatus.liveSearchDebug.excludedDomains.length})`}
                 value={runStatus.liveSearchDebug.excludedDomains.join("\n")}
                 rows={10}
+                resize="vertical"
+                readOnly={true}
+              />
+            )}
+            {Array.isArray(runStatus.liveSearchDebug.excludedDomainDetails) && runStatus.liveSearchDebug.excludedDomainDetails.length > 0 && (
+              <TextArea
+                name="liveSearchDebug-excludedDomainDetails"
+                label={`Alle ausgeschlossenen Basisdomains (${runStatus.liveSearchDebug.excludedDomainDetails.length})`}
+                value={formatExcludedDomainDetails(runStatus.liveSearchDebug.excludedDomainDetails, false)}
+                rows={14}
+                resize="vertical"
+                readOnly={true}
+              />
+            )}
+            {Array.isArray(runStatus.liveSearchDebug.excludedDomainDetails) && runStatus.liveSearchDebug.excludedDomainDetails.some((entry) => entry?.includedInRequest) && (
+              <TextArea
+                name="liveSearchDebug-finalExcludedDomainDetails"
+                label={`Finale Exa Exclude-Liste im Request (${runStatus.liveSearchDebug.excludedDomainDetails.filter((entry) => entry?.includedInRequest).length}/1200)`}
+                value={formatExcludedDomainDetails(runStatus.liveSearchDebug.excludedDomainDetails, true)}
+                rows={14}
                 resize="vertical"
                 readOnly={true}
               />

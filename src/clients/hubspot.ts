@@ -43,6 +43,7 @@ interface ExtractedCompanyAddress {
 
 interface OfficialWebsiteCompanyProfile {
   companyName?: string;
+  entityScope?: "exact_operating_entity" | "parent_group" | "brand_or_product" | "uncertain";
   address?: string;
   city?: string;
   zip?: string;
@@ -1062,12 +1063,35 @@ export class HubSpotClient {
       return this.discoverWebSearchContacts(company, pages);
     }
 
-    const websiteContacts = seedWebsiteContacts ?? await this.extractWebsiteContactsFromPages(company, pages);
+    const officialWebsiteProfile = pages.length > 0
+      ? await this.getOfficialWebsiteCompanyProfile(company).catch(() => null)
+      : null;
+    const officialWebsiteFallbackContacts = pages.length === 0
+      ? await this.discoverOfficialWebsiteSearchContacts(company, officialWebsiteProfile)
+      : [];
+    const websiteContacts = this.mergeDiscoveredContacts(
+      officialWebsiteFallbackContacts,
+      seedWebsiteContacts ?? await this.extractWebsiteContactsFromPages(company, pages, officialWebsiteProfile)
+    );
+    const reachableWebsiteFallbackContacts = this.selectReachableWebsiteFallbackContacts(websiteContacts).slice(0, 2);
+
+    if (pages.length === 0 && officialWebsiteFallbackContacts.length > 0 && (seedWebsiteContacts?.length ?? 0) === 0 && reachableWebsiteFallbackContacts.length > 0) {
+      const linkedInFallbackContacts = (await this.withTimeout(
+        this.discoverWebSearchContacts(company, pages, websiteContacts),
+        PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
+        [] as PublicContactCandidate[]
+      ))
+        .filter((contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl))
+        .slice(0, Math.max(0, 4 - reachableWebsiteFallbackContacts.length));
+
+      return this.mergeDiscoveredContacts(linkedInFallbackContacts, reachableWebsiteFallbackContacts).slice(0, 4);
+    }
+
     const websitePages = this.buildWebsitePageDebugEntries(company, pages);
     const azureMatchedContacts = (await this.extractAzureMatchedContacts(
       company,
       pages,
-      this.extractCompanySearchAliases(company, pages),
+      this.extractCompanySearchAliases(company, pages, officialWebsiteProfile),
       websitePages
     )).contacts;
     const normalizedAzureContacts = this.collapseDuplicateMailboxContacts(
@@ -1080,7 +1104,7 @@ export class HubSpotClient {
       }))
     ).filter((contact) => !this.isLowValueMailbox(contact.email ?? ""));
 
-    const websiteFallbackContacts = this.selectReachableWebsiteFallbackContacts(websiteContacts).slice(0, 2);
+    const websiteFallbackContacts = reachableWebsiteFallbackContacts;
 
     if (normalizedAzureContacts.length > 0) {
       return this.composeFinalPublicContacts(
@@ -1181,7 +1205,8 @@ export class HubSpotClient {
 
   private async extractWebsiteContactsFromPages(
     company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
-    pages: Array<{ url: string; html: string }>
+    pages: Array<{ url: string; html: string }>,
+    officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): Promise<PublicContactCandidate[]> {
     if (!company.domain) {
       return [];
@@ -1222,7 +1247,7 @@ export class HubSpotClient {
       [...candidates.values()].filter((candidate) => !this.isLowValueMailbox(candidate.email ?? "")),
       namedWebsiteContacts
     );
-    const officialWebsiteSearchContacts = await this.discoverOfficialWebsiteSearchContacts(company);
+    const officialWebsiteSearchContacts = await this.discoverOfficialWebsiteSearchContacts(company, officialWebsiteProfile);
 
     return this.mergeDiscoveredContacts(officialWebsiteSearchContacts, websiteContacts);
   }
@@ -1287,19 +1312,20 @@ export class HubSpotClient {
   }
 
   private async discoverOfficialWebsiteSearchContacts(
-    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
+    officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): Promise<PublicContactCandidate[]> {
-    const officialWebsiteProfile = await this.getOfficialWebsiteCompanyProfile(company as PreCategorizedCompany).catch(() => null);
-    if (officialWebsiteProfile) {
-      const sourceUrl = officialWebsiteProfile.sourceUrls[0] || (company.domain ? this.normalizeCompanyUrl(company.domain) : company.name);
-      const primaryPhone = officialWebsiteProfile.phones[0];
-      const aiContacts = officialWebsiteProfile.emails.map<PublicContactCandidate>((email) => ({
+    const resolvedOfficialWebsiteProfile = officialWebsiteProfile ?? await this.getOfficialWebsiteCompanyProfile(company as PreCategorizedCompany).catch(() => null);
+    if (resolvedOfficialWebsiteProfile) {
+      const sourceUrl = resolvedOfficialWebsiteProfile.sourceUrls[0] || (company.domain ? this.normalizeCompanyUrl(company.domain) : company.name);
+      const primaryPhone = resolvedOfficialWebsiteProfile.phones[0];
+      const aiContacts = resolvedOfficialWebsiteProfile.emails.map<PublicContactCandidate>((email) => ({
         email,
         phone: primaryPhone,
         sourceUrl,
         label: this.isGenericMailbox(email) ? "public_generic_mailbox" : "public_named_mailbox",
         jobTitle: this.isGenericMailbox(email) ? "General contact" : "Public contact",
-        linkedinUrl: officialWebsiteProfile.linkedInUrls[0],
+        linkedinUrl: resolvedOfficialWebsiteProfile.linkedInUrls[0],
         ...(!this.isGenericMailbox(email) ? this.inferNameFromEmail(email) : {})
       }));
 
@@ -1312,7 +1338,7 @@ export class HubSpotClient {
           {
             phone: primaryPhone,
             sourceUrl,
-            linkedinUrl: officialWebsiteProfile.linkedInUrls[0],
+            linkedinUrl: resolvedOfficialWebsiteProfile.linkedInUrls[0],
             label: "public_generic_mailbox",
             jobTitle: "General contact"
           }
@@ -1320,34 +1346,12 @@ export class HubSpotClient {
       }
     }
 
-    const contactInfo = await this.openAIWebSearchClient.findCompanyContactInfo(company);
-    if (!contactInfo) {
+    if (!company.domain) {
       return [];
     }
 
-    const sourceUrl = contactInfo.urls[0] || company.domain || company.name;
-    const primaryPhone = contactInfo.phones[0];
-    const emailContacts = contactInfo.emails.map<PublicContactCandidate>((email) => ({
-      email,
-      phone: primaryPhone,
-      sourceUrl,
-      label: this.isGenericMailbox(email) ? "public_generic_mailbox" : "public_named_mailbox",
-      jobTitle: this.isGenericMailbox(email) ? "General contact" : "Public contact",
-      ...(!this.isGenericMailbox(email) ? this.inferNameFromEmail(email) : {})
-    }));
-
-    if (emailContacts.length > 0) {
-      return emailContacts;
-    }
-
-    return primaryPhone
-      ? [{
-          phone: primaryPhone,
-          sourceUrl,
-          label: "public_generic_mailbox",
-          jobTitle: "General contact"
-        }]
-      : [];
+    const pages = await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain));
+    return this.extractGenericWebsiteContactsFromPages(company, pages);
   }
 
   private composeFinalPublicContacts(
@@ -1536,7 +1540,8 @@ export class HubSpotClient {
 
   private extractCompanySearchAliases(
     company: Pick<PreCategorizedCompany, "name" | "domain">,
-    pages: Array<{ url: string; html: string }>
+    pages: Array<{ url: string; html: string }>,
+    officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): string[] {
     const companyName = company.name.trim();
     const normalizedDomain = this.normalizeDomain(company.domain);
@@ -1544,15 +1549,28 @@ export class HubSpotClient {
       .split(/[-_\s]+/)
       .find((token) => token && token.length >= 4 && !/^(ai|the|group)$/i.test(token));
     const pageAliases = this.extractLegalEntityCandidatesFromPages(company, pages);
+    const officialWebsiteAlias = officialWebsiteProfile?.entityScope === "exact_operating_entity"
+      ? officialWebsiteProfile.companyName?.trim()
+      : undefined;
+    const exactOperatingEntityAliases = officialWebsiteAlias
+      ? [
+          officialWebsiteAlias,
+          officialWebsiteAlias.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
+          companyName,
+          companyName.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
+          primaryToken ? this.toTitleCase(primaryToken) : undefined
+        ]
+      : null;
 
     return Array.from(
       new Set(
-        [
+        (exactOperatingEntityAliases ?? [
           companyName,
+          officialWebsiteAlias,
           companyName.replace(/\b(GmbH|AG|UG|Ltd|LLC|Inc)\b/gi, " ").replace(/\s+/g, " ").trim(),
           primaryToken ? this.toTitleCase(primaryToken) : undefined,
           ...pageAliases
-        ]
+        ])
           .filter((alias): alias is string => Boolean(alias))
           .map((alias) => alias.replace(/\s+/g, " ").trim())
           .filter((alias) => alias.length <= 40)
@@ -1611,7 +1629,7 @@ export class HubSpotClient {
 
   private extractLegalEntityNameFromLine(line: string): string | null {
     const normalizedLine = line.replace(/\s+/g, " ").trim();
-    if (!normalizedLine || normalizedLine.length > 180) {
+    if (!normalizedLine || normalizedLine.length > 600) {
       return null;
     }
 
@@ -1635,12 +1653,13 @@ export class HubSpotClient {
     const domainTokens = (normalizedDomain?.split(".")[0] ?? "")
       .split(/[-_]+/)
       .map((token) => this.normalizeCompanyComparisonValue(token))
-      .filter((token) => token.length >= 4);
+      .filter((token) => token.length >= 3)
+      .filter((token) => !/^(www|the|group|holding|company|legal|vision|automation|solutions|systems|info)$/i.test(token));
     const nameTokens = company.name
       .split(/[^A-Za-zÄÖÜäöüß0-9]+/)
       .map((token) => this.normalizeCompanyComparisonValue(token))
-      .filter((token) => token.length >= 4)
-      .filter((token) => !/^(gmbh|group|holding|company|legal|vision|automation|solutions|systems)$/i.test(token));
+      .filter((token) => token.length >= 3)
+      .filter((token) => !/^(gmbh|ag|ug|kg|www|the|group|holding|company|legal|vision|automation|solutions|systems|info)$/i.test(token));
 
     return Array.from(new Set([...domainTokens, ...nameTokens]));
   }
@@ -2790,7 +2809,7 @@ export class HubSpotClient {
 
     if (webSearchAddress || officialWebsiteProfile?.address || officialWebsiteProfile?.city || officialWebsiteProfile?.zip) {
       return {
-        companyName: trustedOfficialWebsiteCompanyName ?? webSearchAddress?.companyName ?? legalEntityName,
+        companyName: trustedOfficialWebsiteCompanyName ?? legalEntityName ?? webSearchAddress?.companyName,
         address: officialWebsiteProfile?.address ?? webSearchAddress?.address,
         city: officialWebsiteProfile?.city ?? webSearchAddress?.city,
         zip: officialWebsiteProfile?.zip ?? webSearchAddress?.zip,
@@ -2838,19 +2857,79 @@ export class HubSpotClient {
   }
 
   private async extractCompanyAddressWithWebSearch(company: PreCategorizedCompany): Promise<ExtractedCompanyAddress | null> {
-    const extractedAddress = await this.openAIWebSearchClient.findCompanyAddress(company);
-    if (!extractedAddress) {
+    if (!company.domain) {
       return null;
     }
 
-    return {
-      companyName: extractedAddress.companyName?.trim(),
-      address: extractedAddress.address,
-      city: extractedAddress.city,
-      zip: extractedAddress.zip,
-      state: extractedAddress.state,
-      country: this.normalizeCountryName(extractedAddress.country) ?? company.country
-    };
+    const pages = await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain));
+    for (const page of pages) {
+      const extractedAddress = this.extractPostalAddress(page.html, company.country);
+      if (!extractedAddress) {
+        continue;
+      }
+
+      return {
+        companyName: extractedAddress.companyName?.trim(),
+        address: extractedAddress.address,
+        city: extractedAddress.city,
+        zip: extractedAddress.zip,
+        state: extractedAddress.state,
+        country: this.normalizeCountryName(extractedAddress.country) ?? company.country
+      };
+    }
+
+    return null;
+  }
+
+  private extractGenericWebsiteContactsFromPages(
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
+    pages: Array<{ url: string; html: string }>
+  ): PublicContactCandidate[] {
+    if (!company.domain) {
+      return [];
+    }
+
+    const allowedEmailDomains = this.buildAllowedEmailDomains(this.normalizeCompanyUrl(company.domain));
+    const contactsByEmail = new Map<string, PublicContactCandidate>();
+    const phoneOnlyContacts: PublicContactCandidate[] = [];
+
+    for (const page of pages) {
+      const emails = this.extractEmails(page.html, allowedEmailDomains);
+      const phones = this.extractPhones(page.html);
+      const primaryPhone = phones[0];
+
+      for (const email of emails) {
+        if (this.isLowValueMailbox(email)) {
+          continue;
+        }
+
+        const isGenericMailbox = this.isGenericMailbox(email);
+        contactsByEmail.set(email, {
+          email,
+          phone: contactsByEmail.get(email)?.phone ?? primaryPhone,
+          sourceUrl: page.url,
+          label: isGenericMailbox ? "public_generic_mailbox" : "public_named_mailbox",
+          jobTitle: isGenericMailbox ? "General contact" : "Public contact",
+          ...(!isGenericMailbox ? this.inferNameFromEmail(email) : {})
+        });
+      }
+
+      if (emails.length === 0 && primaryPhone) {
+        phoneOnlyContacts.push({
+          phone: primaryPhone,
+          sourceUrl: page.url,
+          label: "public_generic_mailbox",
+          jobTitle: "General contact"
+        });
+      }
+    }
+
+    const emailContacts = Array.from(contactsByEmail.values());
+    if (emailContacts.length > 0) {
+      return emailContacts;
+    }
+
+    return phoneOnlyContacts.slice(0, 1);
   }
 
   private async getOfficialWebsiteCompanyProfile(company: PreCategorizedCompany): Promise<OfficialWebsiteCompanyProfile | null> {
@@ -2927,6 +3006,7 @@ export class HubSpotClient {
 
     return {
       companyName: finalProfile?.companyName ?? homepageAnalysis?.companyName,
+      entityScope: finalProfile?.entityScope ?? homepageAnalysis?.entityScope,
       address: finalProfile?.address ?? homepageAnalysis?.address,
       city: finalProfile?.city ?? homepageAnalysis?.city,
       zip: finalProfile?.zip ?? homepageAnalysis?.zip,
@@ -2940,12 +3020,8 @@ export class HubSpotClient {
   }
 
   private isTrustedOfficialWebsiteProfile(profile: OfficialWebsiteCompanyProfile, company: PreCategorizedCompany): boolean {
-    if (profile.address || profile.city || profile.zip) {
-      return true;
-    }
-
     const companyName = profile.companyName?.trim();
-    if (!companyName) {
+    if (!companyName || profile.entityScope !== "exact_operating_entity") {
       return false;
     }
 

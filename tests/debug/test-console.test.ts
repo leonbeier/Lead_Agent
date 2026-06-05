@@ -514,6 +514,77 @@ test("runExaCompanySearch avoids repeating the exact previous query when Azure r
   assert.deepEqual(executedQueries, ["fresh default two"]);
 });
 
+test("runExaCompanySearch falls back to baseline queries after planner timeouts", async () => {
+  const service = new DebugConsoleService() as any;
+  const executedQueries: string[] = [];
+  let plannerCalls = 0;
+
+  service.exaSearchClient = {
+    runtimeApiKey: "test-api-key",
+    buildQueries: () => ["default one", "default two", "default three"],
+    runSearch: async (_apiKey: string, query: string) => {
+      executedQueries.push(query);
+      return { results: [] };
+    },
+    buildSearchPayload: (query: string) => ({ query }),
+    loadKnownExcludedDomains: async () => new Set<string>(),
+    toExcludeDomain: (value?: string) => {
+      if (!value) {
+        return undefined;
+      }
+
+      return new URL(value.includes("://") ? value : `https://${value}`).hostname.replace(/^www\./i, "");
+    },
+    normalizeUrl: (url?: string) => url,
+    toCanonicalCompanyDomain: (url: string) => url,
+    deriveCompanyName: (domain: string) => domain,
+    inferCountryFromDomain: () => "Germany",
+    buildDescription: () => "Mock description"
+  };
+
+  service.azureOpenAIClient = {
+    planExaSearchQueries: async () => {
+      plannerCalls += 1;
+      throw new Error("Exa query planner timed out after 45000ms");
+    }
+  };
+
+  service.controlPlaneStore = {
+    getSettings: async () => ({
+      mainContext: "Main context",
+      searchStrategyContext: "Search strategy"
+    }),
+    getLearning: async () => ({
+      companyFeedback: [],
+      filterPerformance: {},
+      searchHistory: [],
+      searchHistoryByMode: {}
+    }),
+    getTestLabExaCache: async () => ({ queryHistory: [], discoveredDomains: [] }),
+    getCompanyScreeningDatabase: async () => ({ records: [] }),
+    writeTestLabExaCache: async () => undefined
+  };
+
+  const result = await service.runExaCompanySearch(
+    {
+      stage: "company_search",
+      targetCategory: "integrator_vision_industrial_ai",
+      targetCategories: ["integrator_vision_industrial_ai"],
+      companySearchMode: "exa_search",
+      exaQueryCount: 2,
+      limit: 20,
+      useAzureQueryPlanner: true
+    },
+    [buildDebugSearchFilter("integrator_vision_industrial_ai", "Germany")],
+    20
+  );
+
+  assert.equal(plannerCalls, 2);
+  assert.deepEqual(executedQueries, ["default one", "default two"]);
+  assert.equal(result.generatedSearches[0]?.queryGeneration.source, "baseline_default_queries");
+  assert.deepEqual(result.generatedSearches[0]?.queryGeneration.plannedQueries, ["default one", "default two", "default three"]);
+});
+
 test("runExaCompanySearch passes the Test Lab target-category refinement into the Azure planner", async () => {
   const service = new DebugConsoleService() as any;
   const plannerCalls: Array<{ targetCategoryRefinement?: string }> = [];
@@ -577,7 +648,7 @@ test("runExaCompanySearch passes the Test Lab target-category refinement into th
   assert.equal(plannerCalls[0]?.targetCategoryRefinement, "only food production plants");
 });
 
-test("runExaCompanySearch excludes only hubspot and debug rejected websites before adding current-request domains", async () => {
+test("runExaCompanySearch hard-excludes hubspot and cached Test Lab Exa websites before adding new request domains", async () => {
   const service = new DebugConsoleService() as any;
   const hubSpotDomains = Array.from({ length: 1300 }, (_, index) => `hubspot-${index}.example${index}.com`);
   hubSpotDomains.push("relevant-hubspot.test", "duplicate.test");
@@ -672,8 +743,8 @@ test("runExaCompanySearch excludes only hubspot and debug rejected websites befo
   assert.equal(requestPayloadDomains.includes("debug-rejected.test"), false);
   assert.equal(requestPayloadDomains.includes("live-rejected.test"), false);
   assert.equal(requestPayloadDomains.includes("matching-target.test"), false);
-  assert.equal(requestPayloadDomains.includes("duplicate.test"), false);
-  assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 0);
+  assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
+  assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
   assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
   assert.equal(requestPayloadDomains.includes("example1.com"), true);
 });
@@ -795,9 +866,11 @@ test("buildContactAnalysis runs research and contact debug together and keeps pr
     phoneScript: "Phone"
   });
   service.hubspotClient.resolveCompanyAddress = async () => ({
+    companyName: "Senswork GmbH",
     city: "Burghausen"
   });
-  service.hubspotClient.debugPublicContactDiscovery = async (_company: unknown, options: { selectedContactsTimeoutMs?: number }) => {
+  service.hubspotClient.debugPublicContactDiscovery = async (resolvedCompany: { name: string }, options: { selectedContactsTimeoutMs?: number }) => {
+    assert.equal(resolvedCompany.name, "Senswork GmbH");
     assert.equal(options.selectedContactsTimeoutMs, 90_000);
     return {
       aliases: ["Senswork"],
@@ -815,11 +888,12 @@ test("buildContactAnalysis runs research and contact debug together and keeps pr
     };
   };
   service.hubspotClient.previewHubSpotSync = async (
-    _company: unknown,
+    resolvedCompany: { name: string },
     _brief: unknown,
     contacts: Array<{ email?: string }>,
     options: { extractedAddress?: { city?: string } | null }
   ) => {
+    assert.equal(resolvedCompany.name, "Senswork GmbH");
     assert.equal(options.extractedAddress?.city, "Burghausen");
     return {
     companyProperties: {},
@@ -888,14 +962,16 @@ test("buildOutreachAnalysis preloads address lookup for preview", async () => {
     phoneScript: "Phone"
   });
   service.hubspotClient.resolveCompanyAddress = async () => ({
+    companyName: "Senswork GmbH",
     city: "Burghausen"
   });
   service.hubspotClient.previewHubSpotSync = async (
-    _company: unknown,
+    resolvedCompany: { name: string },
     _brief: unknown,
     _contacts: unknown[],
     options: { extractedAddress?: { city?: string } | null }
   ) => {
+    assert.equal(resolvedCompany.name, "Senswork GmbH");
     assert.equal(options.extractedAddress?.city, "Burghausen");
     return {
       companyProperties: {},

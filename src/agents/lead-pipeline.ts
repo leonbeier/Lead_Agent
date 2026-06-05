@@ -9,7 +9,7 @@ import { AzureOpenAIClient } from "../clients/azure-openai";
 import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { ControlPlaneStore, getLeadAgentRuntimeDataDirectory } from "../control-plane";
-import { buildDebugSearchFilter } from "../debug/test-console";
+import { buildDebugSearchFilter, resolveSearchFilterBase } from "../debug/test-console";
 import {
   OrganizationFilter,
   CompanyScreeningDatabase,
@@ -72,6 +72,7 @@ const MAX_FILTER_REVISIONS = 1;
 const MIN_COMPANIES_REVIEWED_BEFORE_FILTER_GIVE_UP = 40;
 const CONTACT_DISCOVERY_CONCURRENCY = env.CONTACT_DISCOVERY_CONCURRENCY;
 const PUBLIC_CONTACT_DISCOVERY_TIMEOUT_MS = 90_000;
+const COMPANY_IDENTITY_RESOLUTION_TIMEOUT_MS = 45_000;
 const PARALLEL_FILTER_PROBE_COUNT = 5;
 const FILTERS_TO_EXPAND_AFTER_PROBE = 5;
 const DIRECT_EXA_FILTER_CONCURRENCY = 3;
@@ -126,11 +127,20 @@ type LeadPipelineRunOptions = {
 type DirectExaExcludeDomainSources = {
   screeningScope?: "live" | "debug";
   currentRunExcludedDomains?: string[];
+  currentRunRecurringDomains?: LiveExaRecurringDomain[];
   historicalExaDomains?: string[];
+  historicalRecentRecurringDomains?: LiveExaRecurringDomain[];
   historicalRecurringDomains?: LiveExaRecurringDomain[];
 };
 
-type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache";
+type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache" | "historical_exa";
+
+const DIRECT_EXA_EXCLUDED_DOMAIN_CATEGORY_PRIORITY: Record<DirectExaExcludedDomainCategory, number> = {
+  current_run_cache: 0,
+  hubspot: 1,
+  rejected_website: 2,
+  historical_exa: 3
+};
 
 type DirectExaExcludedDomainBuildResult = {
   requestExcludedDomains: string[];
@@ -477,10 +487,34 @@ export class LeadPipelineAgent {
       } else {
         emitSyncPreparationProgress(40, `Research-Briefs werden fuer ${pendingCompanies.length} Firmen parallel vorbereitet.`);
       }
+      const syncEligibleCompanies = dryRun
+        ? pendingCompanies
+        : await this.mapWithConcurrency(
+            pendingCompanies.map((company) => async () => {
+              const resolvedIdentity = await this.withTimeout(
+                this.hubspotClient.resolveCompanyAddress(company),
+                COMPANY_IDENTITY_RESOLUTION_TIMEOUT_MS,
+                null
+              );
+              const canonicalName = resolvedIdentity?.companyName?.trim();
+              const canonicalCountry = resolvedIdentity?.country?.trim();
+
+              if (canonicalName) {
+                company.name = canonicalName;
+              }
+
+              if (canonicalCountry) {
+                company.country = canonicalCountry;
+              }
+
+              return company;
+            }),
+            this.outreachPrepConcurrency
+          );
       const preparedResearchEntries = dryRun
         ? []
         : await this.mapWithConcurrency(
-            pendingCompanies.map((company) => async () => ({
+            syncEligibleCompanies.map((company) => async () => ({
               companyKey: this.getCompanyKey(company),
               brief: await this.withTimeout(
                 this.azureClient.buildResearchBrief(company, dryRun, mainContext, learning, {
@@ -496,8 +530,6 @@ export class LeadPipelineAgent {
       for (const entry of preparedResearchEntries) {
         researchBriefsByCompany.set(entry.companyKey, entry.brief);
       }
-
-      const syncEligibleCompanies = pendingCompanies;
 
       const pendingResearchBriefs = syncEligibleCompanies
         .map((company) => researchBriefsByCompany.get(this.getCompanyKey(company)))
@@ -3747,9 +3779,17 @@ export class LeadPipelineAgent {
       : ["machine_builder_ai_enablement" as LeadCategory])) as SelectableLeadCategory[];
 
     return requestedCategories.map((category) => {
+      const { baseFilter, normalizedRegion } = resolveSearchFilterBase(category, market);
+      const liveLocations = normalizedRegion?.toLowerCase() === "europe" && baseFilter.locations.length > 1
+        ? [...baseFilter.locations]
+        : normalizedRegion
+          ? [normalizedRegion]
+          : [...baseFilter.locations];
+
       const debugFilter = buildDebugSearchFilter(category, market);
       return {
         ...debugFilter,
+        locations: liveLocations,
         name: debugFilter.name.replace(/\s*\[debug(?: [^\]]+)?\]\s*$/i, "").trim(),
         notes: debugFilter.notes.replace(/\s*Debug console request for .*$/i, "").trim()
       } satisfies OrganizationFilter;
@@ -3850,9 +3890,7 @@ export class LeadPipelineAgent {
       filterName: filter.name,
       defaultQueries: queryPlanningContext.plannedQueryMetadata?.defaultQueries ?? defaultQueries.slice(0, plannerQueryCount),
       plannedQueries: queryPlanningContext.plannedQueryMetadata?.plannedQueries ?? queries,
-      promptMessages: queryPlanningContext.plannedQueryMetadata?.promptMessages ?? queryGenerationPromptMessages,
-      excludedDomains: prioritizedExcludedDomains.requestExcludedDomains,
-      excludedDomainDetails: prioritizedExcludedDomains.localExcludedDomainDetails
+      promptMessages: queryPlanningContext.plannedQueryMetadata?.promptMessages ?? queryGenerationPromptMessages
     };
     onQueryProgress?.({
       executedQueries: 0,
@@ -3866,6 +3904,8 @@ export class LeadPipelineAgent {
       duplicatesRemoved: 0,
       rawCompaniesFound: 0,
       newRawCompanies: [],
+      excludedDomains: prioritizedExcludedDomains.requestExcludedDomains,
+      excludedDomainDetails: prioritizedExcludedDomains.localExcludedDomainDetails,
       ...debugUpdateBase
     });
     let completedQueries = 0;
@@ -3878,6 +3918,48 @@ export class LeadPipelineAgent {
     const queryResults: CompanySample[] = [];
     const queryExecutionCounts = new Map<string, number>();
     const queryQueue = [...queries];
+    const updateCurrentRunOccurrence = (domain: string) => {
+      const detailsByDomain = new Map(
+        prioritizedExcludedDomains.localExcludedDomainDetails.map((entry) => [entry.domain, entry])
+      );
+      const existingDetail = detailsByDomain.get(domain);
+      const recentOccurrences = (existingDetail?.recentOccurrences ?? 0) + 1;
+
+      detailsByDomain.set(domain, {
+        domain,
+        category: excludedDomainCategories.get(domain) ?? existingDetail?.category ?? "current_run_cache",
+        includedInRequest: existingDetail?.includedInRequest ?? false,
+        requestIndex: existingDetail?.requestIndex,
+        recentOccurrences,
+        recentPriority: recentOccurrences,
+        recentLastSeenAt: new Date().toISOString(),
+        occurrences: existingDetail?.occurrences ?? 0,
+        priority: existingDetail?.priority ?? 0,
+        lastSeenAt: existingDetail?.lastSeenAt
+      });
+
+      prioritizedExcludedDomains.localExcludedDomainDetails = Array.from(detailsByDomain.values());
+    };
+    const syncExcludedDomainRequestOrder = () => {
+      const rebuiltDetails = this.rebuildDirectExaExcludedDomainDetails(
+        excludedDomains,
+        excludedDomainCategories,
+        prioritizedExcludedDomains.requestExcludedDomains,
+        prioritizedExcludedDomains.localExcludedDomainDetails
+      );
+
+      prioritizedExcludedDomains.requestExcludedDomains = rebuiltDetails
+        .filter((entry) => entry.includedInRequest)
+        .map((entry) => entry.domain)
+        .slice(0, MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
+
+      prioritizedExcludedDomains.localExcludedDomainDetails = this.rebuildDirectExaExcludedDomainDetails(
+        excludedDomains,
+        excludedDomainCategories,
+        prioritizedExcludedDomains.requestExcludedDomains,
+        rebuiltDetails
+      );
+    };
     const reprioritizeExcludeDomain = (domain: string, category: DirectExaExcludedDomainCategory) => {
       const existingIndex = prioritizedExcludedDomains.requestExcludedDomains.indexOf(domain);
       if (existingIndex >= 0) {
@@ -3888,6 +3970,8 @@ export class LeadPipelineAgent {
       excludedDomainCategories.set(domain, category);
       prioritizedExcludedDomains.requestExcludedDomains.push(domain);
       this.trimDirectExaRequestExcludedDomains(prioritizedExcludedDomains.requestExcludedDomains);
+      updateCurrentRunOccurrence(domain);
+      syncExcludedDomainRequestOrder();
     };
 
     for (let queryIndex = 0; queryIndex < queryQueue.length; queryIndex += 1) {
@@ -3969,7 +4053,8 @@ export class LeadPipelineAgent {
         newRawCompanies: discoveredCompanies,
         ...debugUpdateBase,
         plannedQueries: queryQueue,
-        excludedDomains: prioritizedExcludedDomains.requestExcludedDomains
+        excludedDomains: prioritizedExcludedDomains.requestExcludedDomains,
+        excludedDomainDetails: prioritizedExcludedDomains.localExcludedDomainDetails
       });
 
       queryResults.push(...discoveredCompanies);
@@ -4105,8 +4190,12 @@ export class LeadPipelineAgent {
       }
 
       if (seenDomains.has(normalizedDomain)) {
-        if (category === "current_run_cache") {
+        const existingCategory = localExcludedDomainCategories.get(normalizedDomain);
+        if (!existingCategory || this.compareDirectExaExcludedDomainCategories(category, existingCategory) < 0) {
           localExcludedDomainCategories.set(normalizedDomain, category);
+        }
+
+        if (category === "current_run_cache") {
           collection.push(normalizedDomain);
         }
 
@@ -4143,68 +4232,27 @@ export class LeadPipelineAgent {
       pushDomain(currentRunExcludedDomains, domain, "current_run_cache");
     }
 
-    const historicalExaScores = new Map<string, number>();
+    const historicalExaDomains: string[] = [];
     const historicalRecurringDomains = excludeDomainSources.historicalRecurringDomains ?? [];
     if (historicalRecurringDomains.length > 0) {
-      const recurringDomainCount = historicalRecurringDomains.length;
-      for (const [index, recurringDomain] of historicalRecurringDomains.entries()) {
+      for (const recurringDomain of historicalRecurringDomains) {
         const normalizedDomain = this.normalizeExcludeDomain(recurringDomain.domain);
         if (!normalizedDomain) {
           continue;
         }
 
-        const recencyWeight = Math.max(1, recurringDomainCount - index);
-        const priorityWeight = Math.max(1, Number(recurringDomain.priority ?? recurringDomain.occurrences ?? 1));
-        historicalExaScores.set(normalizedDomain, (historicalExaScores.get(normalizedDomain) ?? 0) + priorityWeight * 1000 + recencyWeight);
+        pushDomain(historicalExaDomains, normalizedDomain, "historical_exa");
       }
     } else {
-      const historicalExaDomains = excludeDomainSources.historicalExaDomains ?? [];
-      const historicalDomainCount = historicalExaDomains.length;
-      for (const [index, domain] of historicalExaDomains.entries()) {
+      for (const domain of excludeDomainSources.historicalExaDomains ?? []) {
         const normalizedDomain = this.normalizeExcludeDomain(domain);
         if (!normalizedDomain) {
           continue;
         }
 
-        const recencyWeight = Math.max(1, historicalDomainCount - index);
-        historicalExaScores.set(normalizedDomain, (historicalExaScores.get(normalizedDomain) ?? 0) + recencyWeight);
+        pushDomain(historicalExaDomains, normalizedDomain, "historical_exa");
       }
     }
-
-    const splitPromotedDomains = (domains: string[]) => {
-      const regular: string[] = [];
-      const promoted = domains
-        .map((domain, index) => ({
-          domain,
-          index,
-          score: historicalExaScores.get(domain) ?? 0
-        }))
-        .filter((entry) => {
-          if (entry.score <= 0) {
-            regular.push(entry.domain);
-            return false;
-          }
-
-          return true;
-        })
-        .sort((left, right) => left.score - right.score || left.index - right.index)
-        .map((entry) => entry.domain);
-
-      return { regular, promoted };
-    };
-
-    const splitHubSpotDomains = splitPromotedDomains(hubSpotDomains);
-    const splitRejectedDomains = splitPromotedDomains(rejectedWebsiteDomains);
-    const splitCurrentRunDomains = splitPromotedDomains(currentRunExcludedDomains);
-
-    const requestExcludedDomains = Array.from(new Set([
-        ...splitHubSpotDomains.promoted,
-        ...splitRejectedDomains.promoted,
-        ...splitCurrentRunDomains.promoted,
-        ...splitCurrentRunDomains.regular,
-        ...splitHubSpotDomains.regular,
-        ...splitRejectedDomains.regular
-      ])).slice(0, MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
 
     const recurringByDomain = new Map<string, LiveExaRecurringDomain>();
     for (const recurringDomain of historicalRecurringDomains) {
@@ -4214,46 +4262,52 @@ export class LeadPipelineAgent {
       }
     }
 
-    const requestDomainPositions = new Map<string, number>();
-    requestExcludedDomains.forEach((domain, index) => {
-      requestDomainPositions.set(domain, index);
-    });
+    const currentRunRecurringByDomain = new Map<string, LiveExaRecurringDomain>();
+    for (const recurringDomain of excludeDomainSources.currentRunRecurringDomains ?? []) {
+      const normalizedDomain = this.normalizeExcludeDomain(recurringDomain.domain);
+      if (normalizedDomain && !currentRunRecurringByDomain.has(normalizedDomain)) {
+        currentRunRecurringByDomain.set(normalizedDomain, recurringDomain);
+      }
+    }
 
-    const localExcludedDomainDetails = Array.from(seenDomains)
+    const rankedExcludedDomainDetails = Array.from(seenDomains)
       .map<LiveExaExcludedDomainDetail>((domain) => {
         const recurringDomain = recurringByDomain.get(domain);
-        const requestIndex = requestDomainPositions.get(domain);
+        const currentRunRecurringDomain = currentRunRecurringByDomain.get(domain);
         return {
           domain,
           category: localExcludedDomainCategories.get(domain) ?? "hubspot",
-          includedInRequest: requestIndex !== undefined,
-          requestIndex,
+          includedInRequest: false,
+          requestIndex: undefined,
+          recentOccurrences: currentRunRecurringDomain?.occurrences ?? 0,
+          recentPriority: currentRunRecurringDomain?.priority ?? 0,
+          recentLastSeenAt: currentRunRecurringDomain?.lastSeenAt,
           occurrences: recurringDomain?.occurrences ?? 0,
           priority: recurringDomain?.priority ?? 0,
           lastSeenAt: recurringDomain?.lastSeenAt
         };
       })
-      .sort((left, right) => {
-        if (Number(right.includedInRequest) !== Number(left.includedInRequest)) {
-          return Number(right.includedInRequest) - Number(left.includedInRequest);
-        }
+      .sort((left, right) => this.compareDirectExaExcludedDomainDetails(left, right));
 
-        const priorityDelta = (right.priority ?? 0) - (left.priority ?? 0);
-        if (priorityDelta !== 0) {
-          return priorityDelta;
-        }
+    const requestExcludedDomains = rankedExcludedDomainDetails
+      .map((entry) => entry.domain)
+      .slice(0, MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
 
-        const occurrenceDelta = (right.occurrences ?? 0) - (left.occurrences ?? 0);
-        if (occurrenceDelta !== 0) {
-          return occurrenceDelta;
-        }
+    const requestDomainPositions = new Map<string, number>();
+    requestExcludedDomains.forEach((domain, index) => {
+      requestDomainPositions.set(domain, index);
+    });
 
-        if (left.requestIndex !== undefined && right.requestIndex !== undefined && left.requestIndex !== right.requestIndex) {
-          return left.requestIndex - right.requestIndex;
-        }
-
-        return left.domain.localeCompare(right.domain);
-      });
+    const localExcludedDomainDetails = rankedExcludedDomainDetails
+      .map<LiveExaExcludedDomainDetail>((entry) => {
+        const requestIndex = requestDomainPositions.get(entry.domain);
+        return {
+          ...entry,
+          includedInRequest: requestIndex !== undefined,
+          requestIndex
+        };
+      })
+      .sort((left, right) => this.compareDirectExaExcludedDomainDetails(left, right));
 
     return {
       requestExcludedDomains,
@@ -4268,7 +4322,89 @@ export class LeadPipelineAgent {
       return;
     }
 
-    domains.splice(0, domains.length - MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
+    domains.splice(MAX_DIRECT_EXA_REQUEST_EXCLUDED_DOMAINS);
+  }
+
+  private rebuildDirectExaExcludedDomainDetails(
+    domains: Iterable<string>,
+    categories: Map<string, DirectExaExcludedDomainCategory>,
+    requestExcludedDomains: string[],
+    existingDetails: LiveExaExcludedDomainDetail[] = []
+  ): LiveExaExcludedDomainDetail[] {
+    const requestDomainPositions = new Map<string, number>();
+    requestExcludedDomains.forEach((domain, index) => {
+      requestDomainPositions.set(domain, index);
+    });
+
+    const existingDetailsByDomain = new Map(existingDetails.map((entry) => [entry.domain, entry]));
+    const allDomains = Array.from(new Set([
+      ...Array.from(domains),
+      ...requestExcludedDomains,
+      ...existingDetailsByDomain.keys()
+    ]));
+
+    return allDomains
+      .map<LiveExaExcludedDomainDetail>((domain) => {
+        const existingDetail = existingDetailsByDomain.get(domain);
+        const requestIndex = requestDomainPositions.get(domain);
+        return {
+          domain,
+          category: categories.get(domain) ?? existingDetail?.category ?? "hubspot",
+          includedInRequest: requestIndex !== undefined,
+          requestIndex,
+          recentOccurrences: existingDetail?.recentOccurrences ?? 0,
+          recentPriority: existingDetail?.recentPriority ?? 0,
+          recentLastSeenAt: existingDetail?.recentLastSeenAt,
+          occurrences: existingDetail?.occurrences ?? 0,
+          priority: existingDetail?.priority ?? 0,
+          lastSeenAt: existingDetail?.lastSeenAt
+        };
+      })
+      .sort((left, right) => this.compareDirectExaExcludedDomainDetails(left, right));
+  }
+
+  private compareDirectExaExcludedDomainCategories(
+    left?: DirectExaExcludedDomainCategory,
+    right?: DirectExaExcludedDomainCategory
+  ): number {
+    const leftPriority = DIRECT_EXA_EXCLUDED_DOMAIN_CATEGORY_PRIORITY[left ?? "historical_exa"];
+    const rightPriority = DIRECT_EXA_EXCLUDED_DOMAIN_CATEGORY_PRIORITY[right ?? "historical_exa"];
+    return leftPriority - rightPriority;
+  }
+
+  private compareDirectExaExcludedDomainDetails(
+    left: Pick<LiveExaExcludedDomainDetail, "domain" | "category" | "includedInRequest" | "requestIndex" | "recentOccurrences" | "occurrences">,
+    right: Pick<LiveExaExcludedDomainDetail, "domain" | "category" | "includedInRequest" | "requestIndex" | "recentOccurrences" | "occurrences">
+  ): number {
+    if (Number(right.includedInRequest) !== Number(left.includedInRequest)) {
+      return Number(right.includedInRequest) - Number(left.includedInRequest);
+    }
+
+    const recentOccurrenceDelta = (right.recentOccurrences ?? 0) - (left.recentOccurrences ?? 0);
+    if (recentOccurrenceDelta !== 0) {
+      return recentOccurrenceDelta;
+    }
+
+    const occurrenceDelta = (right.occurrences ?? 0) - (left.occurrences ?? 0);
+    if (occurrenceDelta !== 0) {
+      return occurrenceDelta;
+    }
+
+    const categoryDelta = this.compareDirectExaExcludedDomainCategories(
+      left.category as DirectExaExcludedDomainCategory | undefined,
+      right.category as DirectExaExcludedDomainCategory | undefined
+    );
+    if (categoryDelta !== 0) {
+      return categoryDelta;
+    }
+
+    const leftIndex = typeof left.requestIndex === "number" ? left.requestIndex : Number.MAX_SAFE_INTEGER;
+    const rightIndex = typeof right.requestIndex === "number" ? right.requestIndex : Number.MAX_SAFE_INTEGER;
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+
+    return left.domain.localeCompare(right.domain);
   }
 
   private matchesDirectExaExcludeScope(record: CompanyScreeningRecord, screeningScope?: "live" | "debug"): boolean {

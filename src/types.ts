@@ -250,9 +250,12 @@ export interface LiveExaQueryRun {
 
 export interface LiveExaExcludedDomainDetail {
   domain: string;
-  category: "hubspot" | "rejected_website" | "current_run_cache";
+  category: "hubspot" | "rejected_website" | "current_run_cache" | "historical_exa";
   includedInRequest: boolean;
   requestIndex?: number;
+  recentOccurrences?: number;
+  recentPriority?: number;
+  recentLastSeenAt?: string;
   occurrences?: number;
   priority?: number;
   lastSeenAt?: string;
@@ -271,6 +274,7 @@ export interface LiveExaRecurringDomain {
 export interface LiveExaCache {
   entries: RawExaHistoryEntry[];
   discoveredDomains: string[];
+  recentRecurringDomains?: LiveExaRecurringDomain[];
   recurringDomains?: LiveExaRecurringDomain[];
   queryRuns?: LiveExaQueryRun[];
 }
@@ -346,6 +350,8 @@ export interface ExaQueryHistoryInsight {
   timestamp?: string;
   detectedCategories?: LeadCategory[];
   foundCategoryBreakdown?: Partial<Record<LeadCategory, number>>;
+  excludedDomains?: string[];
+  excludedDomainDetails?: LiveExaExcludedDomainDetail[];
   returnedResults?: number;
   filteredByExcludedDomains?: number;
   rawFound?: number;
@@ -525,6 +531,7 @@ export interface LeadRunProgress {
     }>;
     lastExecutedQuery?: string;
     excludedDomains?: string[];
+    excludedDomainDetails?: LiveExaExcludedDomainDetail[];
     executedQueries?: number;
     totalQueries?: number;
     returnedResults?: number;

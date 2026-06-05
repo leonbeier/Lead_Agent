@@ -172,6 +172,7 @@ test("extractCompanyAddress prefers the AI website company profile before weaker
   const client = new HubSpotClient();
   client["getOfficialWebsiteCompanyProfile"] = async () => ({
     companyName: "MODI Modular Digits GmbH",
+    entityScope: "exact_operating_entity",
     address: "An der Höhe 20",
     city: "Wiehl",
     zip: "51674",
@@ -203,6 +204,100 @@ test("extractCompanyAddress prefers the AI website company profile before weaker
   assert.equal(extracted?.zip, "51674");
 });
 
+test("extractCompanyAddress ignores parent-group names from the website profile when the exact operating entity is not confirmed", async () => {
+  const client = new HubSpotClient();
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "Die smarten Produkte der Eckelmann AG",
+    entityScope: "parent_group",
+    address: "Fichtenweg 36",
+    city: "Erfurt",
+    zip: "99098",
+    state: undefined,
+    country: "Germany",
+    emails: ["info@rex-at.de"],
+    phones: ["+49 361 550760"],
+    linkedInUrls: ["https://www.linkedin.com/company/rex-at"],
+    sourceUrls: ["https://rex-at.de/impressum"]
+  });
+  client["collectCandidatePages"] = async () => ([
+    {
+      url: "https://rex-at.de/impressum",
+      html: `
+        <html>
+          <body>
+            <h1>Impressum</h1>
+            <p>REX Automatisierungstechnik GmbH</p>
+          </body>
+        </html>
+      `
+    }
+  ]);
+  client["extractCompanyAddressWithWebSearch"] = async () => ({
+    companyName: "REX Automatisierungstechnik GmbH",
+    address: "Fichtenweg 36",
+    city: "Erfurt",
+    zip: "99098",
+    country: "Germany"
+  });
+
+  const extracted = await client["extractCompanyAddress"]({
+    ...buildSampleCompany(),
+    name: "Rex At",
+    domain: "https://rex-at.de"
+  });
+
+  assert.equal(extracted?.companyName, "REX Automatisierungstechnik GmbH");
+  assert.equal(extracted?.address, "Fichtenweg 36");
+  assert.equal(extracted?.city, "Erfurt");
+});
+
+test("extractCompanyAddress prefers the legal entity from official pages over a weaker web-search company name", async () => {
+  const client = new HubSpotClient();
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "Die smarten Produkte der Eckelmann AG",
+    entityScope: "parent_group",
+    address: "Fichtenweg 36",
+    city: "Erfurt",
+    zip: "99098",
+    state: undefined,
+    country: "Germany",
+    emails: ["info@rex-at.de"],
+    phones: ["+49 361 550760"],
+    linkedInUrls: [],
+    sourceUrls: ["https://rex-at.de"]
+  });
+  client["collectCandidatePages"] = async () => ([
+    {
+      url: "https://rex-at.de/impressum",
+      html: `
+        <html>
+          <body>
+            <h1>Impressum</h1>
+            <p>REX Automatisierungstechnik GmbH</p>
+          </body>
+        </html>
+      `
+    }
+  ]);
+  client["extractCompanyAddressWithWebSearch"] = async () => ({
+    companyName: "Die smarten Produkte der Eckelmann AG",
+    address: "Fichtenweg 36",
+    city: "Erfurt",
+    zip: "99098",
+    country: "Germany"
+  });
+
+  const extracted = await client["extractCompanyAddress"]({
+    ...buildSampleCompany(),
+    name: "Rex At",
+    domain: "https://rex-at.de"
+  });
+
+  assert.equal(extracted?.companyName, "REX Automatisierungstechnik GmbH");
+  assert.equal(extracted?.address, "Fichtenweg 36");
+  assert.equal(extracted?.city, "Erfurt");
+});
+
 test("extractCompanyAddress captures legal entity names from impressum pages", async () => {
   const client = new HubSpotClient();
   client["getOfficialWebsiteCompanyProfile"] = async () => null;
@@ -231,6 +326,42 @@ test("extractCompanyAddress captures legal entity names from impressum pages", a
   });
 
   assert.equal(extracted?.companyName, "BERND MÜNSTERMANN GMBH & CO. KG");
+});
+
+test("extractCompanyAddress captures legal entity names from long mixed website lines", async () => {
+  const client = new HubSpotClient();
+  client["getOfficialWebsiteCompanyProfile"] = async () => null;
+  client["collectCandidatePages"] = async () => ([
+    {
+      url: "https://rex-at.de/automation-engineering.html",
+      html: `
+        <html>
+          <body>
+            <p>Automation Engineering - REX Automatisierungstechnik GmbH {{insert_article::header-balken-link}} +49 (0) 36203/9591-0 info@rex-at.de News Unternehmen Ueber uns Eckelmann Group Standort Geschaeftsfuehrung Kompetenzen Automation Engineering Automation Projects Software Products Hardware Products Loesungen Automatisierung Fertigungsmaschinen Praezisionsmaschinen Sondermaschinen Anlagenautomation Retrofit</p>
+            <p>Fuer einen in Waermepumpen wichtigen Vortex-Durchflusssensor wurde mit SMR Sondermaschinen GmbH ein anderer Anbieter genannt.</p>
+          </body>
+        </html>
+      `
+    }
+  ]);
+  client["apolloClient"] = {
+    getOrganizationAddress: async () => null
+  };
+  client["extractCompanyAddressWithWebSearch"] = async () => ({
+    companyName: "Die smarten Produkte der Eckelmann AG",
+    address: "Fichtenweg 36",
+    city: "Erfurt",
+    zip: "99098",
+    country: "Germany"
+  });
+
+  const extracted = await client["extractCompanyAddress"]({
+    ...buildSampleCompany(),
+    name: "Rex At",
+    domain: "https://rex-at.de"
+  });
+
+  assert.equal(extracted?.companyName, "REX Automatisierungstechnik GmbH");
 });
 
 test("extractCompanyAddress parses inline footer addresses with legal entity and country", async () => {
@@ -765,6 +896,44 @@ test("findPublicContactsFromPages keeps an official website mailbox alongside Az
   assert.ok(contacts.some((contact) => contact.linkedinUrl === "https://www.linkedin.com/in/max-muster"));
 });
 
+test("findPublicContactsFromPages uses the exact operating entity from the official website profile as a search alias", async () => {
+  const client = new HubSpotClient();
+  const company = {
+    ...buildSampleCompany(),
+    name: "Rex At",
+    domain: "https://rex-at.de"
+  };
+  let receivedAliases: string[] = [];
+
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "REX Automatisierungstechnik GmbH",
+    entityScope: "exact_operating_entity",
+    address: undefined,
+    city: undefined,
+    zip: undefined,
+    state: undefined,
+    country: "Germany",
+    emails: [],
+    phones: [],
+    linkedInUrls: [],
+    sourceUrls: ["https://rex-at.de/impressum"]
+  });
+  client["extractAzureMatchedContacts"] = async (_company: unknown, _pages: unknown, aliases: string[]) => {
+    receivedAliases = aliases;
+    return { queries: [], hitGroups: [], contacts: [] };
+  };
+  client["discoverWebSearchContacts"] = async () => [];
+
+  await client["findPublicContactsFromPages"](company, [{
+    url: "https://rex-at.de/impressum",
+    html: "<html><body><h1>Impressum</h1><p>Die smarten Produkte der Eckelmann AG</p><p>REX Automatisierungstechnik GmbH</p></body></html>"
+  }], []);
+
+  assert.equal(receivedAliases[0], "REX Automatisierungstechnik GmbH");
+  assert.ok(receivedAliases.includes("REX Automatisierungstechnik GmbH"));
+  assert.ok(!receivedAliases.includes("Die smarten Produkte der Eckelmann AG"));
+});
+
 test("debug contact discovery reuses cached LinkedIn search results for final selection", async () => {
   const client = new HubSpotClient();
   const company = buildSampleCompany();
@@ -966,10 +1135,18 @@ test("findPublicContacts adds official website email and phone from web search w
   const company = buildSampleCompany();
 
   client["collectCandidatePages"] = async () => [];
-  client["openAIWebSearchClient"]["findCompanyContactInfo"] = async () => ({
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "Sample Automation GmbH",
+    entityScope: "exact_operating_entity",
+    address: "Musterstrasse 12",
+    city: "Berlin",
+    zip: "10115",
+    state: undefined,
+    country: "Germany",
     emails: ["info@sample-automation.de"],
     phones: ["+49 30 123456"],
-    urls: ["https://sample-automation.de/kontakt"]
+    linkedInUrls: ["https://www.linkedin.com/company/sample-automation"],
+    sourceUrls: ["https://sample-automation.de/kontakt"]
   });
   client["discoverWebSearchContacts"] = async () => ([
     {
@@ -995,6 +1172,7 @@ test("discoverOfficialWebsiteSearchContacts prefers AI website profile company c
 
   client["getOfficialWebsiteCompanyProfile"] = async () => ({
     companyName: "Sample Automation GmbH",
+    entityScope: "exact_operating_entity",
     address: "Musterstrasse 12",
     city: "Berlin",
     zip: "10115",
@@ -1024,10 +1202,18 @@ test("discoverPublicContactsForExecution falls back to official company contact 
   client["collectCandidatePages"] = async () => {
     throw new Error("Public contact discovery timed out.");
   };
-  client["openAIWebSearchClient"]["findCompanyContactInfo"] = async () => ({
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "Sample Automation GmbH",
+    entityScope: "exact_operating_entity",
+    address: "Musterstrasse 12",
+    city: "Berlin",
+    zip: "10115",
+    state: undefined,
+    country: "Germany",
     emails: ["info@sample-automation.de"],
     phones: ["+49 30 123456"],
-    urls: ["https://sample-automation.de/kontakt"]
+    linkedInUrls: [],
+    sourceUrls: ["https://sample-automation.de/kontakt"]
   });
   client["discoverWebSearchContacts"] = async () => [];
 

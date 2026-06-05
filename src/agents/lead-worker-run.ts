@@ -203,6 +203,14 @@ const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
 const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
+const MIN_EXA_BATCH_REQUESTS = 2;
+
+function getExaDiscoveryTimeoutMs(queryCount: number): number {
+  return Math.max(
+    DEFAULT_EXA_DISCOVERY_TIMEOUT_MS,
+    env.EXA_REQUEST_TIMEOUT_MS * Math.max(MIN_EXA_BATCH_REQUESTS, queryCount + 1)
+  );
+}
 
 function summarizeContactChannels(contacts: PublicContactCandidate[]): string {
   const byLabel = new Map<string, number>();
@@ -459,6 +467,17 @@ export class LeadWorkerRunService {
     const hasReachedTarget = () => metrics.hubspotWritten >= targetLeadCount;
     const shouldStopNewPipelineWork = () => stopping || hasReachedTarget();
     const shouldDrainAcceptedCompaniesAfterSearchStop = () => stopReason === "exa_search_unavailable" || stopReason === "exa_credits_exhausted";
+    const temporarilyUnavailableFilters = new Set<string>();
+    let hadTemporaryExaFailure = false;
+
+    const getNextSearchFilter = (): OrganizationFilter | undefined => {
+      const availableFilters = filters.filter((filter) => !temporarilyUnavailableFilters.has(filter.name));
+      if (availableFilters.length === 0) {
+        return undefined;
+      }
+
+      return availableFilters[searchCounter % availableFilters.length];
+    };
 
     const stopAiQueue = () => {
       // Don't clear the queue - let existing items finish processing
@@ -1121,7 +1140,16 @@ export class LeadWorkerRunService {
           continue;
         }
 
-        const filter = filters[searchCounter % filters.length];
+        const filter = getNextSearchFilter();
+        if (!filter) {
+          stopReason = stopReason || "exa_search_unavailable";
+          stopping = true;
+          log("Alle Exa-Filter sind nach temporaeren Suchfehlern ausgeschieden. Bereits angenommene Firmen werden trotzdem fertig verarbeitet.");
+          stopAiQueue();
+          maybePromoteStandby();
+          break;
+        }
+
         const searchId = `worker-search-${searchCounter + 1}`;
         const aggregate: SearchAggregate = {
           id: searchId,
@@ -1149,12 +1177,13 @@ export class LeadWorkerRunService {
           let plannedDefaultQueries: string[] | undefined;
           let plannedPromptMessages: Array<{ role: string; content: string }> | undefined;
           let receivedStreamedRawCompanies = false;
+          const exaDiscoveryTimeoutMs = getExaDiscoveryTimeoutMs(exaQueryCount);
 
           let exaTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
           const exaTimeoutPromise = new Promise<never>((_, reject) => {
             exaTimeoutHandle = setTimeout(() => {
-              reject(new Error(`Exa discovery timed out after ${DEFAULT_EXA_DISCOVERY_TIMEOUT_MS}ms`));
-            }, DEFAULT_EXA_DISCOVERY_TIMEOUT_MS);
+              reject(new Error(`Exa discovery timed out after ${exaDiscoveryTimeoutMs}ms`));
+            }, exaDiscoveryTimeoutMs);
           });
 
           let rawCompanies: CompanySample[];
@@ -1337,20 +1366,35 @@ export class LeadWorkerRunService {
               }))
             );
           }
+          temporarilyUnavailableFilters.delete(filter.name);
           emitProgress();
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           if (this.isExaCreditsExhaustedError(errorMessage) || this.isExaTemporarilyUnavailableError(error)) {
-            stopReason = stopReason || (this.isExaCreditsExhaustedError(errorMessage)
-              ? "exa_credits_exhausted"
-              : "exa_search_unavailable");
-            stopping = true;
-            log(`Exa-Suche gestoppt. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
+            if (this.isExaCreditsExhaustedError(errorMessage)) {
+              stopReason = stopReason || "exa_credits_exhausted";
+              stopping = true;
+              log(`Exa-Suche gestoppt. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
+              await flushBufferedLiveRawCompanies();
+              stopAiQueue();
+              maybePromoteStandby();
+              break;
+            }
+
+            temporarilyUnavailableFilters.add(filter.name);
+            hadTemporaryExaFailure = true;
+            log(`Exa-Batch fuer ${filter.name} fehlgeschlagen. Worker versucht mit den uebrigen Filtern weiterzumachen. (${errorMessage})`);
             await flushBufferedLiveRawCompanies();
-            stopAiQueue();
-            // Immediately promote all remaining standby companies to prevent data loss
-            maybePromoteStandby();
-            break;
+            if (temporarilyUnavailableFilters.size >= filters.length) {
+              stopReason = stopReason || "exa_search_unavailable";
+              stopping = true;
+              log("Alle Exa-Filter sind nach temporaeren Suchfehlern ausgeschieden. Bereits angenommene Firmen werden trotzdem fertig verarbeitet.");
+              stopAiQueue();
+              maybePromoteStandby();
+              break;
+            }
+
+            continue;
           }
 
           throw error;
@@ -1517,7 +1561,11 @@ export class LeadWorkerRunService {
       },
       timedOut,
       stopped: stopReason === "manually_stopped",
-      completionReason: stopReason || (metrics.hubspotWritten >= targetLeadCount ? "target_reached" : "search_exhausted"),
+      completionReason: stopReason || (metrics.hubspotWritten >= targetLeadCount
+        ? "target_reached"
+        : hadTemporaryExaFailure
+          ? "exa_search_unavailable"
+          : "search_exhausted"),
       costs: undefined
     };
 

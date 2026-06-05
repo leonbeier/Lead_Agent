@@ -317,6 +317,7 @@ async function buildRunStatusResponse(): Promise<{ runStatus: LeadRunStatus }> {
         promptMessages: latestQueryRun.promptMessages,
         lastExecutedQuery: latestQueryRun.query,
         excludedDomains: latestQueryRun.excludedDomains,
+        excludedDomainDetails: latestQueryRun.excludedDomainDetails,
         executedQueries: latestQueryRun.plannedQueries?.length,
         totalQueries: latestQueryRun.plannedQueries?.length
       },

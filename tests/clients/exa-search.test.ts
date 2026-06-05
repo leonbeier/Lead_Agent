@@ -68,6 +68,23 @@ test("buildDebugSearchFilter picks the dedicated Europe automation filter for in
   assert.deepEqual(filter.targetCategories, ["integrator_relevant_focus"]);
 });
 
+test("buildQueries interleaves countries early for Europe-wide vision integrator filters", () => {
+  const client = new ExaSearchClient();
+  const queries = client["buildQueries"]({
+    name: "Europe Vision System Integrators",
+    persona: "European system integrator delivering machine vision inspection and industrial image processing projects for customers",
+    industries: ["Industrial Automation", "System Integration"],
+    locations: ["Germany", "France", "Italy"],
+    keywords: ["machine vision integrator", "industrial image processing", "optical inspection"],
+    notes: "Europe-wide ICP.",
+    targetCategories: ["integrator_vision_industrial_ai"]
+  }, 1) as string[];
+
+  assert.ok(queries[0]?.includes("Germany"));
+  assert.ok(queries[1]?.includes("France"));
+  assert.ok(!queries[1]?.includes("Germany"));
+});
+
 test("buildQueries uses machine-builder specific language for machine_builder_ai_enablement", () => {
   const client = new ExaSearchClient();
   const queries = client["buildQueries"]({
@@ -264,6 +281,19 @@ test("buildSearchPayload normalizes excluded websites to basis domains", () => {
   const payload = client["buildSearchPayload"]("test query", 20, ["https://foo.example-integrator.co.uk/about"]);
 
   assert.deepEqual(payload.excludeDomains, ["example-integrator.co.uk", "example-integrator.de"]);
+});
+
+test("buildSearchPayload keeps the first 1200 excluded domains in order", () => {
+  const client = new ExaSearchClient();
+  const excludeDomains = Array.from({ length: 1203 }, (_, index) => `domain-${index + 1}.example`);
+
+  const payload = client["buildSearchPayload"]("test query", 20, excludeDomains);
+
+  assert.equal(payload.excludeDomains?.length, 1200);
+  assert.equal(payload.excludeDomains?.[0], "domain-1.example");
+  assert.equal(payload.excludeDomains?.[1199], "domain-1200.example");
+  assert.equal(payload.excludeDomains?.includes("domain-1201.example"), false);
+  assert.equal(payload.excludeDomains?.includes("domain-1203.example"), false);
 });
 
 test("deriveCompanyName falls back to the domain when Exa returns a marketing headline", () => {

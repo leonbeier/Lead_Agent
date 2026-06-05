@@ -165,7 +165,7 @@ test("Exa query planner prompt uses the new ONE WARE system and structured user 
     assert.match(systemPrompt, /Every query should explicitly ask for official company websites or official websites/i);
     assert.match(systemPrompt, /press pages, patents, academic pages, product brochures, trade-fair profiles, association member pages, investor pages/i);
     assert.match(systemPrompt, /Most important rule: do not repeat old queries/i);
-    assert.match(systemPrompt, /Do not repeat overused openings such as Europe official company websites of machine vision system integrators/i);
+    assert.match(systemPrompt, /Do not repeat overused openings such as Germany official company websites of machine vision system integrators/i);
     assert.match(systemPrompt, /Output:/i);
     assert.match(systemPrompt, /Return only strict JSON with this exact shape:/i);
     assert.match(systemPrompt, /Hard constraints:/i);
@@ -329,6 +329,183 @@ test("Exa query planner rejects broadened Europe queries for Germany filters", a
       ),
       /locality|broadened/i
     );
+  } finally {
+    readiness.azureConfigured = previousAzureConfigured;
+  }
+});
+
+test("Exa query planner prompt switches locality constraints from Germany to Europe when Europe is requested", async () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
+    runChat: (messages: Array<{ role: string; content: string }>) => Promise<string>;
+  };
+  let capturedMessages: Array<{ role: string; content: string }> = [];
+  const previousAzureConfigured = readiness.azureConfigured;
+
+  readiness.azureConfigured = true;
+
+  try {
+    azureClient.runChat = async (messages) => {
+      capturedMessages = messages;
+      return JSON.stringify({
+        queries: ["Europe official company websites for machine vision system integrators"],
+        constraintCheck: {
+          requiredLocalities: ["Europe"],
+          allQueriesPreserveLocality: true,
+          forbiddenBroadeningTermsPresent: false,
+          preservedLocalitiesByQuery: [
+            {
+              query: "Europe official company websites for machine vision system integrators",
+              preservedLocalities: ["Europe"]
+            }
+          ]
+        }
+      });
+    };
+
+    const queries = await azureClient.planExaSearchQueries(
+      {
+        name: "Vision Integrators Europe",
+        persona: "Operations leaders",
+        industries: ["Manufacturing"],
+        keywords: ["machine vision", "industrial image processing"],
+        locations: ["Europe"],
+        employeeRanges: ["11-50"],
+        targetCategories: ["integrator_vision_industrial_ai"],
+        notes: "Find machine-vision-focused industrial integrators in Europe."
+      },
+      ["Europe companies that provide machine vision system integration for industrial automation"],
+      undefined,
+      false,
+      undefined,
+      undefined,
+      1
+    );
+
+    assert.deepEqual(queries, ["Europe official company websites for machine vision system integrators"]);
+
+    const systemPrompt = capturedMessages.find((message) => message.role === "system")?.content ?? "";
+    const userPrompt = capturedMessages.find((message) => message.role === "user")?.content ?? "";
+
+    assert.match(systemPrompt, /Required localities: Europe/i);
+    assert.doesNotMatch(systemPrompt, /If the required locality is Germany, every query must literally contain Germany/i);
+    assert.match(userPrompt, /Required locality terms to preserve in every query: Europe/i);
+    assert.match(userPrompt, /Search only inside these required localities\. Do not broaden beyond them: Europe/i);
+  } finally {
+    readiness.azureConfigured = previousAzureConfigured;
+  }
+});
+
+test("Exa query planner prompt localizes geography examples and opening warnings to the requested locality", async () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
+    runChat: (messages: Array<{ role: string; content: string }>) => Promise<string>;
+  };
+  const capturedCalls: Array<Array<{ role: string; content: string }>> = [];
+  const previousAzureConfigured = readiness.azureConfigured;
+
+  readiness.azureConfigured = true;
+
+  try {
+    let callCount = 0;
+    azureClient.runChat = async (messages) => {
+      capturedCalls.push(messages);
+      callCount += 1;
+      if (callCount === 1) {
+        return JSON.stringify({
+          queries: [
+            "France companies that provide machine vision system integration for industrial automation",
+            "France system integrators and solution providers that deliver machine vision projects for industrial inspection",
+            "France industrial image processing specialists for AOI and defect detection"
+          ],
+          constraintCheck: {
+            requiredLocalities: ["France"],
+            allQueriesPreserveLocality: true,
+            forbiddenBroadeningTermsPresent: false,
+            preservedLocalitiesByQuery: [
+              {
+                query: "France companies that provide machine vision system integration for industrial automation",
+                preservedLocalities: ["France"]
+              },
+              {
+                query: "France system integrators and solution providers that deliver machine vision projects for industrial inspection",
+                preservedLocalities: ["France"]
+              },
+              {
+                query: "France industrial image processing specialists for AOI and defect detection",
+                preservedLocalities: ["France"]
+              }
+            ]
+          }
+        });
+      }
+
+      return JSON.stringify({
+        queries: [
+          "France official company websites of automation integrators delivering machine vision projects for quality control",
+          "France official company websites of industrial image processing specialists handling defect detection deployments",
+          "France official company websites of AI engineering boutiques shipping embedded vision systems"
+        ],
+        constraintCheck: {
+          requiredLocalities: ["France"],
+          allQueriesPreserveLocality: true,
+          forbiddenBroadeningTermsPresent: false,
+          preservedLocalitiesByQuery: [
+            {
+              query: "France official company websites of automation integrators delivering machine vision projects for quality control",
+              preservedLocalities: ["France"]
+            },
+            {
+              query: "France official company websites of industrial image processing specialists handling defect detection deployments",
+              preservedLocalities: ["France"]
+            },
+            {
+              query: "France official company websites of AI engineering boutiques shipping embedded vision systems",
+              preservedLocalities: ["France"]
+            }
+          ]
+        }
+      });
+    };
+
+    const queries = await azureClient.planExaSearchQueries(
+      {
+        name: "Vision Integrators France",
+        persona: "Operations leaders",
+        industries: ["Manufacturing"],
+        keywords: ["machine vision", "industrial image processing"],
+        locations: ["France"],
+        employeeRanges: ["11-50"],
+        targetCategories: ["integrator_vision_industrial_ai"],
+        notes: "Find machine-vision-focused industrial integrators in France."
+      },
+      [
+        "France companies that provide machine vision system integration for industrial automation",
+        "France system integrators and solution providers that deliver machine vision projects for industrial inspection",
+        "France industrial image processing specialists for AOI and defect detection"
+      ],
+      undefined,
+      false,
+      undefined,
+      undefined,
+      3
+    );
+
+    assert.deepEqual(queries, [
+      "France official company websites of automation integrators delivering machine vision projects for quality control",
+      "France official company websites of industrial image processing specialists handling defect detection deployments",
+      "France official company websites of AI engineering boutiques shipping embedded vision systems"
+    ]);
+    assert.equal(capturedCalls.length, 2);
+
+    const systemPrompt = capturedCalls[0]?.find((message) => message.role === "system")?.content ?? "";
+    const rewritePrompt = capturedCalls[1]?.find((message) => message.role === "user")?.content ?? "";
+
+    assert.match(systemPrompt, /Geography angle:\n\* France nationwide/i);
+    assert.match(systemPrompt, /Example of too-similar queries:\n\* France machine vision system integrators/i);
+    assert.match(systemPrompt, /Do not begin every query with France official company websites of\./i);
+    assert.match(rewritePrompt, /At least half of the queries must avoid opening with France official company websites of\./i);
+    assert.doesNotMatch(rewritePrompt, /At least half of the queries must avoid opening with Europe official company websites of\./i);
   } finally {
     readiness.azureConfigured = previousAzureConfigured;
   }

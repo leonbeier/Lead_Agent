@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildLiveExaRecurringDomains, readJsonFileWithRecovery, resolveLeadAgentDataPaths } from "../src/control-plane";
+import {
+  buildLiveExaRecurringDomains,
+  buildRecentLiveExaRecurringDomains,
+  canonicalizeLiveExaExcludedDomainState,
+  readJsonFileWithRecovery,
+  resolveLeadAgentDataPaths
+} from "../src/control-plane";
 
 test("readJsonFileWithRecovery backs up corrupted JSON and restores defaults", async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "lead-agent-control-plane-"));
@@ -81,4 +87,90 @@ test("buildLiveExaRecurringDomains raises priority for repeated websites and sor
   assert.equal(recurringDomains?.[0]?.occurrences, 2);
   assert.equal(recurringDomains?.[0]?.priority, 2);
   assert.equal(recurringDomains?.[1]?.domain, "single.example");
+});
+
+test("buildRecentLiveExaRecurringDomains keeps only domains from the latest Exa query window", () => {
+  const recurringDomains = buildRecentLiveExaRecurringDomains(
+    [
+      {
+        timestamp: "2026-06-04T10:10:00.000Z",
+        domain: "recent-repeat.example",
+        discoveryQuery: "query two"
+      },
+      {
+        timestamp: "2026-06-04T10:09:00.000Z",
+        domain: "recent-repeat.example",
+        discoveryQuery: "query one"
+      },
+      {
+        timestamp: "2026-06-04T08:00:00.000Z",
+        domain: "old.example",
+        discoveryQuery: "query zero"
+      }
+    ],
+    [
+      {
+        timestamp: "2026-06-04T10:10:00.000Z",
+        filterName: "Recent Run",
+        query: "recent query"
+      },
+      {
+        timestamp: "2026-06-04T10:09:00.000Z",
+        filterName: "Recent Run",
+        query: "recent query follow-up"
+      }
+    ]
+  );
+
+  assert.equal(recurringDomains.length, 1);
+  assert.equal(recurringDomains[0]?.domain, "recent-repeat.example");
+  assert.equal(recurringDomains[0]?.occurrences, 2);
+});
+
+test("canonicalizeLiveExaExcludedDomainState rebuilds stale request indices from priority order", () => {
+  const canonical = canonicalizeLiveExaExcludedDomainState([
+    {
+      domain: "sciaky.com",
+      category: "historical_exa",
+      includedInRequest: true,
+      requestIndex: 0,
+      recentOccurrences: 1,
+      occurrences: 1
+    },
+    {
+      domain: "u-experten.de",
+      category: "hubspot",
+      includedInRequest: true,
+      requestIndex: 40,
+      recentOccurrences: 2,
+      occurrences: 3
+    },
+    {
+      domain: "hahn-ie.com",
+      category: "hubspot",
+      includedInRequest: true,
+      requestIndex: 42,
+      recentOccurrences: 2,
+      occurrences: 3
+    },
+    {
+      domain: "data-spree.com",
+      category: "hubspot",
+      includedInRequest: true,
+      requestIndex: 43,
+      recentOccurrences: 2,
+      occurrences: 3
+    }
+  ]);
+
+  assert.deepEqual(canonical.excludedDomains?.slice(0, 4), [
+    "u-experten.de",
+    "hahn-ie.com",
+    "data-spree.com",
+    "sciaky.com"
+  ]);
+  assert.equal(canonical.excludedDomainDetails?.find((entry) => entry.domain === "u-experten.de")?.requestIndex, 0);
+  assert.equal(canonical.excludedDomainDetails?.find((entry) => entry.domain === "hahn-ie.com")?.requestIndex, 1);
+  assert.equal(canonical.excludedDomainDetails?.find((entry) => entry.domain === "data-spree.com")?.requestIndex, 2);
+  assert.equal(canonical.excludedDomainDetails?.find((entry) => entry.domain === "sciaky.com")?.requestIndex, 3);
 });

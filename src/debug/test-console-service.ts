@@ -6,7 +6,7 @@ import { ExaSearchClient } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { WebSearchAgent } from "../clients/web-search-agent";
 import { ControlPlaneStore } from "../control-plane";
-import { OrganizationFilter, CompanySample, ExaQueryHistoryInsight, LeadCategory, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
+import { OrganizationFilter, CompanySample, ExaQueryHistoryInsight, LeadCategory, LiveExaExcludedDomainDetail, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
 import { buildDebugSearchFilter, DebugConsoleSearchMode, normalizeManualWebsites } from "./test-console";
 
 export type DebugConsoleStage = "company_search" | "ai_prefilter" | "outreach_prep" | "contact_discovery";
@@ -138,6 +138,8 @@ export interface DebugConsoleContactDiscoveryResult {
 const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 150_000;
 
 const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 90_000;
+
+const DEBUG_EXA_PLANNER_RETRY_TIMEOUT_MS = 90_000;
 
 export class DebugConsoleService {
   private readonly exaSearchClient = new ExaSearchClient();
@@ -384,19 +386,20 @@ export class DebugConsoleService {
       };
     }
 
-    const [researchBrief, extractedAddress] = await Promise.all([
-      this.azureOpenAIClient.buildResearchBrief(baseAnalysis.categorizedCompany, false, undefined, undefined, {
+    const extractedAddress = await this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany);
+    const canonicalCompany = this.applyResolvedCompanyIdentity(baseAnalysis.categorizedCompany, extractedAddress);
+
+    const researchBrief = await this.azureOpenAIClient.buildResearchBrief(canonicalCompany, false, undefined, undefined, {
         includeWebResearch: true
-      }),
-      this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany)
-    ]);
-    const hubspotPreview = await this.hubspotClient.previewHubSpotSync(baseAnalysis.categorizedCompany, researchBrief, [], {
+      });
+    const hubspotPreview = await this.hubspotClient.previewHubSpotSync(canonicalCompany, researchBrief, [], {
       includeAddressLookup: true,
       extractedAddress
     });
 
     return {
       ...baseAnalysis,
+      categorizedCompany: canonicalCompany,
       researchBrief: this.toResearchBriefPreview(researchBrief),
       hubspotPreview
     };
@@ -415,22 +418,24 @@ export class DebugConsoleService {
     }
 
     try {
-      const [researchBrief, publicContactDebug, extractedAddress] = await this.withTimeout(
+      const extractedAddress = await this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany);
+      const canonicalCompany = this.applyResolvedCompanyIdentity(baseAnalysis.categorizedCompany, extractedAddress);
+
+      const [researchBrief, publicContactDebug] = await this.withTimeout(
         Promise.all([
-          this.azureOpenAIClient.buildResearchBrief(baseAnalysis.categorizedCompany, false, undefined, undefined, {
+          this.azureOpenAIClient.buildResearchBrief(canonicalCompany, false, undefined, undefined, {
             includeWebResearch: true
           }),
-          this.buildDetailedContactDebug(baseAnalysis.categorizedCompany, {
+          this.buildDetailedContactDebug(canonicalCompany, {
             selectedContactsTimeoutMs: DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS
-          }),
-          this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany)
+          })
         ]),
         DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS,
         `Kontakt-Check hat nach ${Math.round(DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS / 1000)}s das Zeitlimit erreicht.`
       );
 
       const hubspotPreview = await this.hubspotClient.previewHubSpotSync(
-        baseAnalysis.categorizedCompany,
+        canonicalCompany,
         researchBrief,
         publicContactDebug.selectedContacts,
         {
@@ -441,6 +446,7 @@ export class DebugConsoleService {
 
       return {
         ...baseAnalysis,
+        categorizedCompany: canonicalCompany,
         researchBrief: this.toResearchBriefPreview(researchBrief),
         publicContactDebug,
         hubspotPreview
@@ -454,6 +460,20 @@ export class DebugConsoleService {
         error: error instanceof Error ? error.message : "Kontakt-Check ist fehlgeschlagen."
       };
     }
+  }
+
+  private applyResolvedCompanyIdentity(
+    company: PreCategorizedCompany,
+    extractedAddress: Awaited<ReturnType<HubSpotClient["resolveCompanyAddress"]>>
+  ): PreCategorizedCompany {
+    const canonicalName = extractedAddress?.companyName?.trim();
+    const canonicalCountry = extractedAddress?.country?.trim();
+
+    return {
+      ...company,
+      ...(canonicalName ? { name: canonicalName } : {}),
+      ...(canonicalCountry ? { country: canonicalCountry } : {})
+    };
   }
 
   private buildManualCompany(website: string, filter: OrganizationFilter): CompanySample {
@@ -477,6 +497,95 @@ export class DebugConsoleService {
     return normalizeManualWebsites(request.websites)
       .map((website) => this.buildManualCompany(website, filter))
       .slice(0, request.limit);
+  }
+
+  private isRecoverableExaPlannerError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return /Exa query planner timed out/i.test(error.message)
+      || /Exa query planner diversity rewrite timed out/i.test(error.message)
+      || /temporarily unavailable/i.test(error.message)
+      || /fetch failed/i.test(error.message);
+  }
+
+  private async resolveDebugExaPlannerQueries(
+    filter: OrganizationFilter,
+    defaultQueries: string[],
+    learning: Awaited<ReturnType<ControlPlaneStore["getLearning"]>> | undefined,
+    settings: Awaited<ReturnType<ControlPlaneStore["getSettings"]>> | undefined,
+    plannerQueryCount: number,
+    request: DebugConsoleRunRequest,
+    recentQueryHistory: Array<{ query: string; note?: string }> | undefined,
+    excludedDomainExamples: string[],
+    capturePromptMessages: (promptMessages: Array<{ role: string; content: string }>) => void
+  ): Promise<{ queries: string[]; source: "azure_planner" | "baseline_default_queries" }> {
+    const plannerQueryInput = defaultQueries.slice(0, plannerQueryCount);
+
+    try {
+      return {
+        queries: await this.azureOpenAIClient.planExaSearchQueries(
+          filter,
+          plannerQueryInput,
+          learning,
+          false,
+          settings?.mainContext,
+          settings?.searchStrategyContext,
+          plannerQueryCount,
+          {
+            recentQueryHistory,
+            prequalification: settings?.prequalification,
+            excludedDomainExamples,
+            requestedTargetCategories: request.targetCategories,
+            targetCategoryRefinement: request.targetCategoryRefinement ?? settings?.targetCategoryRefinement,
+            debugCapture: (details) => {
+              capturePromptMessages(details.promptMessages);
+            }
+          }
+        ),
+        source: "azure_planner"
+      };
+    } catch (error) {
+      if (!this.isRecoverableExaPlannerError(error)) {
+        throw error;
+      }
+
+      try {
+        return {
+          queries: await this.azureOpenAIClient.planExaSearchQueries(
+            filter,
+            plannerQueryInput,
+            learning,
+            false,
+            settings?.mainContext,
+            settings?.searchStrategyContext,
+            plannerQueryCount,
+            {
+              recentQueryHistory,
+              prequalification: settings?.prequalification,
+              excludedDomainExamples,
+              requestedTargetCategories: request.targetCategories,
+              targetCategoryRefinement: request.targetCategoryRefinement ?? settings?.targetCategoryRefinement,
+              plannerTimeoutMs: DEBUG_EXA_PLANNER_RETRY_TIMEOUT_MS,
+              debugCapture: (details) => {
+                capturePromptMessages(details.promptMessages);
+              }
+            }
+          ),
+          source: "azure_planner"
+        };
+      } catch (retryError) {
+        if (!this.isRecoverableExaPlannerError(retryError)) {
+          throw retryError;
+        }
+
+        return {
+          queries: defaultQueries,
+          source: "baseline_default_queries"
+        };
+      }
+    }
   }
 
   private async runExaCompanySearch(request: DebugConsoleRunRequest, filters: OrganizationFilter[], limit: number): Promise<DebugConsoleCompanySearchResult> {
@@ -546,27 +655,22 @@ export class DebugConsoleService {
         ? Math.min(defaultQueries.length, Math.max(remainingQueryCount, 4))
         : remainingQueryCount;
       let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;
-      const queries = request.useAzureQueryPlanner
-        ? await this.azureOpenAIClient.planExaSearchQueries(
+      const resolvedQueryGeneration = request.useAzureQueryPlanner
+        ? await this.resolveDebugExaPlannerQueries(
           filter,
-          defaultQueries.slice(0, plannerQueryCount),
+          defaultQueries,
           learning,
-          false,
-          settings?.mainContext,
-          settings?.searchStrategyContext,
+          settings,
           plannerQueryCount,
-          {
-            recentQueryHistory,
-            prequalification: settings?.prequalification,
-            excludedDomainExamples: prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
-            requestedTargetCategories: request.targetCategories,
-            targetCategoryRefinement: request.targetCategoryRefinement ?? settings?.targetCategoryRefinement,
-            debugCapture: (details) => {
-              queryGenerationPromptMessages = details.promptMessages;
-            }
+          request,
+          recentQueryHistory,
+          prioritizedExcludedDomains.requestExcludedDomains.slice(0, 30),
+          (promptMessages) => {
+            queryGenerationPromptMessages = promptMessages;
           }
         )
-        : defaultQueries;
+        : { queries: defaultQueries, source: "baseline_default_queries" as const };
+      const queries = resolvedQueryGeneration.queries;
       const candidateQueries = Array.from(new Set([...queries, ...defaultQueries].map((query) => query.trim()).filter(Boolean)));
       const unseenQueries = candidateQueries.filter((query) => !testLabCache.queryHistory.includes(query));
       const queriesToRun = (unseenQueries.length > 0 ? unseenQueries : candidateQueries).slice(0, remainingQueryCount);
@@ -611,7 +715,7 @@ export class DebugConsoleService {
         generatedSearches.push({
           query,
           queryGeneration: {
-            source: request.useAzureQueryPlanner ? "azure_planner" : "baseline_default_queries",
+            source: resolvedQueryGeneration.source,
             defaultQueries: defaultQueries.slice(0, plannerQueryCount),
             plannedQueries: queries,
             promptMessages: queryGenerationPromptMessages
@@ -624,7 +728,10 @@ export class DebugConsoleService {
         executedQueryCount += 1;
 
         testLabCache.queryHistory.unshift(query);
-        testLabCache.queryInsights.unshift(this.buildSimulatedTestLabQueryInsight(query, filter));
+        testLabCache.queryInsights.unshift(this.buildSimulatedTestLabQueryInsight(query, filter, {
+          excludedDomains: [...prioritizedExcludedDomains.requestExcludedDomains],
+          excludedDomainDetails: prioritizedExcludedDomains.localExcludedDomainDetails
+        }));
         for (const result of payload.results ?? []) {
           const normalized = exaClient.toExcludeDomain(result.url);
           if (normalized) {
@@ -648,7 +755,14 @@ export class DebugConsoleService {
     };
   }
 
-  private buildSimulatedTestLabQueryInsight(query: string, filter: OrganizationFilter): ExaQueryHistoryInsight {
+  private buildSimulatedTestLabQueryInsight(
+    query: string,
+    filter: OrganizationFilter,
+    options: {
+      excludedDomains?: string[];
+      excludedDomainDetails?: LiveExaExcludedDomainDetail[];
+    } = {}
+  ): ExaQueryHistoryInsight {
     const weightedCategories: LeadCategory[] = [];
     const queryText = query.toLowerCase();
     const addCategory = (category: LeadCategory, weight = 1) => {
@@ -707,6 +821,8 @@ export class DebugConsoleService {
       query,
       timestamp: new Date().toISOString(),
       detectedCategories,
+      excludedDomains: options.excludedDomains,
+      excludedDomainDetails: options.excludedDomainDetails,
       note: "Test-Lab simulation: erkannte Query-Klassen aus dem Query-Text abgeleitet."
     };
   }

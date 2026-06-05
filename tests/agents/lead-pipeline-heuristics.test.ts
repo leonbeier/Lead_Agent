@@ -78,6 +78,17 @@ test("direct exa path keeps a machine-builder-compatible live filter without deb
   assert.doesNotMatch(filter.name, /\[debug/i);
 });
 
+test("direct exa path keeps Europe filter country list for Europe market", () => {
+  const agent = new LeadPipelineAgent() as any;
+
+  const filter = agent.buildDirectExaSearchFilter(["integrator_vision_industrial_ai"], "Europe");
+
+  assert.equal(filter.name, "Europe Vision System Integrators");
+  assert.doesNotMatch(filter.name, /\[debug/i);
+  assert.notDeepEqual(filter.locations, ["Europe"]);
+  assert.deepEqual(filter.locations.slice(0, 4), ["Germany", "France", "Italy", "Netherlands"]);
+});
+
 test("stopped direct exa runs still sync already qualified companies", async () => {
   const agent = new LeadPipelineAgent() as any;
   let stopRequested = false;
@@ -412,6 +423,20 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
     {
       screeningScope: "live",
       currentRunExcludedDomains: ["same-run-1.test", "duplicate.test", "same-run-2.test"],
+      currentRunRecurringDomains: [
+        {
+          domain: "live-rejected.test",
+          occurrences: 7,
+          priority: 7,
+          lastSeenAt: "2026-06-04T09:05:00.000Z"
+        },
+        {
+          domain: "same-run-1.test",
+          occurrences: 6,
+          priority: 6,
+          lastSeenAt: "2026-06-04T09:04:00.000Z"
+        }
+      ],
       historicalRecurringDomains: [
         {
           domain: "hubspot-0.example0.com",
@@ -460,22 +485,29 @@ test("direct exa exclude prioritization keeps hubspot, matching rejected website
   assert.equal(requestPayloadDomains.includes("duplicate.test"), true);
   assert.equal(requestPayloadDomains.filter((domain) => domain === "duplicate.test").length, 1);
   assert.equal(requestPayloadDomains.includes("hubspot-1.example1.com"), false);
-  assert.equal(requestPayloadDomains[0], "example0.com");
-  assert.equal(requestPayloadDomains[1], "live-rejected.test");
-  assert.equal(requestPayloadDomains[2], "same-run-1.test");
+  assert.equal(requestPayloadDomains[0], "live-rejected.test");
+  assert.equal(requestPayloadDomains[1], "same-run-1.test");
+  assert.equal(requestPayloadDomains[2], "example0.com");
 
   const prioritizedDetailDomains = prioritized.localExcludedDomainDetails
     .filter((entry) => entry.includedInRequest)
     .slice(0, 3)
     .map((entry) => entry.domain);
-  assert.deepEqual(prioritizedDetailDomains, ["example0.com", "live-rejected.test", "same-run-1.test"]);
+  assert.deepEqual(prioritizedDetailDomains, ["live-rejected.test", "same-run-1.test", "example0.com"]);
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "live-rejected.test")?.requestIndex, 0);
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "same-run-1.test")?.requestIndex, 1);
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "live-rejected.test")?.recentOccurrences, 7);
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "live-rejected.test")?.recentPriority, 7);
   assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "example0.com")?.occurrences, 6);
   assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "example0.com")?.priority, 6);
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "example0.com")?.category, "hubspot");
+  assert.equal(prioritized.localExcludedDomainDetails.find((entry) => entry.domain === "duplicate.test")?.category, "current_run_cache");
 });
 
 test("direct exa path feeds freshly discovered domains into later Exa queries", async () => {
   const agent = new LeadPipelineAgent() as any;
   const excludeDomainSnapshots: string[][] = [];
+  const excludedDomainDetailSnapshots: Array<Array<{ domain: string; includedInRequest: boolean; requestIndex?: number }>> = [];
 
   agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
   agent.controlPlaneStore.getLiveExaCache = async () => ({ entries: [], discoveredDomains: [] });
@@ -516,7 +548,16 @@ test("direct exa path feeds freshly discovered domains into later Exa queries", 
     ["integrator_vision_industrial_ai"],
     2,
     { screeningScope: "live" },
-    { useAzureQueryPlanner: false }
+    { useAzureQueryPlanner: false },
+    (update: { excludedDomainDetails?: Array<{ domain: string; includedInRequest: boolean; requestIndex?: number }> }) => {
+      excludedDomainDetailSnapshots.push(
+        (update.excludedDomainDetails ?? []).map((entry) => ({
+          domain: entry.domain,
+          includedInRequest: entry.includedInRequest,
+          requestIndex: entry.requestIndex
+        }))
+      );
+    }
   );
 
   assert.equal(discovered.length, 1);
@@ -525,6 +566,23 @@ test("direct exa path feeds freshly discovered domains into later Exa queries", 
   assert.equal(excludeDomainSnapshots[1]?.includes("fresh-domain.example"), true);
   assert.equal((excludeDomainSnapshots[0] ?? []).length <= 1200, true);
   assert.equal((excludeDomainSnapshots[1] ?? []).length <= 1200, true);
+  assert.equal(excludedDomainDetailSnapshots.length >= 2, true);
+  const latestFreshDomainDetail = excludedDomainDetailSnapshots.at(-1)?.find((entry) => entry.domain === "fresh-domain.example");
+  assert.equal(latestFreshDomainDetail?.includedInRequest, true);
+  assert.equal(latestFreshDomainDetail?.requestIndex, (excludeDomainSnapshots[1] ?? []).indexOf("fresh-domain.example"));
+});
+
+test("direct exa request trimming keeps the first 1200 priority-ranked domains", () => {
+  const agent = new LeadPipelineAgent() as any;
+  const domains = Array.from({ length: 1203 }, (_, index) => `domain-${index + 1}.example`);
+
+  agent.trimDirectExaRequestExcludedDomains(domains);
+
+  assert.equal(domains.length, 1200);
+  assert.equal(domains[0], "domain-1.example");
+  assert.equal(domains[1199], "domain-1200.example");
+  assert.equal(domains.includes("domain-1201.example"), false);
+  assert.equal(domains.includes("domain-1203.example"), false);
 });
 
 test("direct exa path repeats a strong query up to three times and prioritizes fresh domains into excludes", async () => {

@@ -24,11 +24,11 @@ export interface DebugConsoleRequestInput {
   websites?: string[];
 }
 
-export function buildDebugSearchFilter(
+export function resolveSearchFilterBase(
   targetCategory: SelectableLeadCategory,
   region?: string,
   filters: OrganizationFilter[] = defaultFilters
-): OrganizationFilter {
+): { baseFilter: OrganizationFilter; normalizedRegion?: string } {
   const categoryMatches = filters.filter((filter) => filter.targetCategories?.includes(targetCategory));
   if (categoryMatches.length === 0) {
     throw new Error(`No default filter exists for category ${targetCategory}.`);
@@ -49,6 +49,16 @@ export function buildDebugSearchFilter(
     ? rankByScopeSpecificity(categoryMatches.filter((filter) => filter.locations.some((location) => location.trim().toLowerCase().includes(normalizedRegionToken))))
     : undefined;
   const baseFilter = exactRegionMatch ?? partialRegionMatch ?? categoryMatches[0];
+
+  return { baseFilter, normalizedRegion };
+}
+
+export function buildDebugSearchFilter(
+  targetCategory: SelectableLeadCategory,
+  region?: string,
+  filters: OrganizationFilter[] = defaultFilters
+): OrganizationFilter {
+  const { baseFilter, normalizedRegion } = resolveSearchFilterBase(targetCategory, region, filters);
 
   return {
     ...baseFilter,

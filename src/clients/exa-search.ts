@@ -1,6 +1,6 @@
 import { env, readiness } from "../config";
 import { OrganizationFilter, CompanySample, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
-import { OpenAIWebSearchClient } from "./openai-web-search";
+import { OpenCrawlerSearchClient } from "./open-crawler-search";
 
 interface SearchEvidence {
   context: string;
@@ -60,7 +60,7 @@ export class ExaSearchClient {
 
   private static nextRequestAt = 0;
 
-  private readonly fallbackResearchClient = new OpenAIWebSearchClient();
+  private readonly fallbackResearchClient = new OpenCrawlerSearchClient();
 
   private runtimeApiKey?: string;
 
@@ -256,7 +256,7 @@ export class ExaSearchClient {
       ...excludeDomains.map((domain) => this.toExcludeDomain(domain)).filter((domain): domain is string => Boolean(domain)),
       ...this.additionalExcludedDomains
     ]))
-      .slice(-MAX_EXA_EXCLUDE_DOMAINS);
+      .slice(0, MAX_EXA_EXCLUDE_DOMAINS);
 
     return {
       query,
@@ -401,7 +401,20 @@ export class ExaSearchClient {
   buildQueries(filter: OrganizationFilter, page: number, options: ExaQueryBuildOptions = {}): string[] {
     const locations = Array.from(new Set(filter.locations.map((location) => location.trim()).filter(Boolean))).slice(0, 2);
     const effectiveLocations = locations.length > 0 ? locations : ["Germany"];
-    const locationVariants = Array.from(new Set(effectiveLocations.flatMap((location) => this.buildLocationVariants(location))));
+    const locationVariantGroups = effectiveLocations.map((location) => this.buildLocationVariants(location));
+    const maxLocationVariantCount = Math.max(0, ...locationVariantGroups.map((variants) => variants.length));
+    const locationVariants: string[] = [];
+
+    for (let variantIndex = 0; variantIndex < maxLocationVariantCount; variantIndex += 1) {
+      for (const variants of locationVariantGroups) {
+        const variant = variants[variantIndex];
+        if (variant) {
+          locationVariants.push(variant);
+        }
+      }
+    }
+
+    const dedupedLocationVariants = Array.from(new Set(locationVariants));
     const compactPersona = this.compactSearchPhrase(filter.persona, 6);
     const keywords = filter.keywords.slice(0, 6).map((keyword) => this.compactSearchPhrase(keyword, 4)).filter(Boolean);
     const primaryKeywords = keywords.slice(0, 3);
@@ -410,7 +423,7 @@ export class ExaSearchClient {
     const primaryCategory = filter.targetCategories?.[0];
     const consultingLedCategory = primaryCategory === "integrator_vision_ai_consulting" || primaryCategory === "integrator_vision_ai_freelancer";
     const refinementClause = this.buildRefinementClause(options.targetCategoryRefinement);
-    const queryPool = locationVariants.flatMap((location) => {
+    const queriesByLocation = dedupedLocationVariants.map((location) => {
       const primaryQueries = primaryCategory === "industrial_end_customer_scaled"
         ? this.buildIndustrialEndCustomerPrimaryQueries(location, filter, semanticFocus)
         : primaryCategory === "machine_builder_ai_enablement"
@@ -433,7 +446,19 @@ export class ExaSearchClient {
       );
 
       return [...primaryQueries, ...angleQueries].map((query) => refinementClause ? `${query} ${refinementClause}` : query);
-    }).filter(Boolean);
+    }).filter((queries) => queries.length > 0);
+
+    const queryPool: string[] = [];
+    const maxQueriesPerLocation = Math.max(0, ...queriesByLocation.map((queries) => queries.length));
+
+    for (let queryIndex = 0; queryIndex < maxQueriesPerLocation; queryIndex += 1) {
+      for (const locationQueries of queriesByLocation) {
+        const query = locationQueries[queryIndex];
+        if (query) {
+          queryPool.push(query);
+        }
+      }
+    }
 
     const baseQueries = Array.from(new Set(queryPool));
 
