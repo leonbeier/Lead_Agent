@@ -408,7 +408,11 @@ export class HubSpotClient {
     options: { selectedContactsTimeoutMs?: number } = {}
   ): Promise<PublicContactDebugResult> {
     const pages = company.domain
-      ? await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain))
+      ? await this.withTimeout(
+          this.collectCandidatePages(this.normalizeCompanyUrl(company.domain)).catch(() => [] as Array<{ url: string; html: string }>),
+          EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
+          [] as Array<{ url: string; html: string }>
+        )
       : [];
     const aliases = this.extractCompanySearchAliases(company, pages);
     const websitePages = this.buildWebsitePageDebugEntries(company, pages);
@@ -419,11 +423,11 @@ export class HubSpotClient {
       : this.selectReachableWebsiteFallbackContacts(websiteContacts).slice(0, 4);
     const selectedContacts = options.selectedContactsTimeoutMs
       ? await this.withTimeout(
-          this.findPublicContactsFromPages(company, pages, websiteContacts),
+          this.findPublicContactsFromPages(company, pages, websiteContacts, llmContacts),
           options.selectedContactsTimeoutMs,
           fallbackSelectedContacts
         )
-      : await this.findPublicContactsFromPages(company, pages, websiteContacts);
+      : await this.findPublicContactsFromPages(company, pages, websiteContacts, llmContacts);
 
     return {
       aliases,
@@ -1057,13 +1061,14 @@ export class HubSpotClient {
   private async findPublicContactsFromPages(
     company: PreCategorizedCompany,
     pages: Array<{ url: string; html: string }>,
-    seedWebsiteContacts?: PublicContactCandidate[]
+    seedWebsiteContacts?: PublicContactCandidate[],
+    seedAzureContacts?: PublicContactCandidate[]
   ): Promise<PublicContactCandidate[]> {
     if (!company.domain) {
       return this.discoverWebSearchContacts(company, pages);
     }
 
-    const officialWebsiteProfile = pages.length > 0
+    const officialWebsiteProfile = pages.length > 0 && !seedAzureContacts
       ? await this.getOfficialWebsiteCompanyProfile(company).catch(() => null)
       : null;
     const officialWebsiteFallbackContacts = pages.length === 0
@@ -1088,7 +1093,7 @@ export class HubSpotClient {
     }
 
     const websitePages = this.buildWebsitePageDebugEntries(company, pages);
-    const azureMatchedContacts = (await this.extractAzureMatchedContacts(
+    const azureMatchedContacts = seedAzureContacts ?? (await this.extractAzureMatchedContacts(
       company,
       pages,
       this.extractCompanySearchAliases(company, pages, officialWebsiteProfile),

@@ -669,6 +669,10 @@ app.get("/api/debug/live-exa-occurrences", async (_request, response, next) => {
         if (right.priority !== left.priority) {
           return right.priority - left.priority;
         }
+        const timestampDelta = Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt);
+        if (timestampDelta !== 0) {
+          return timestampDelta;
+        }
         return left.domain.localeCompare(right.domain);
       })
       .map((entry) => entry.domain);
@@ -731,6 +735,27 @@ app.post("/api/debug/live-exa-occurrences/record", async (request, response, nex
         after: afterByDomain.get(domain) ?? 0
       }))
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Debug: delete specific domains from the occurrence counter (used to clean up test data).
+app.post("/api/debug/live-exa-occurrences/delete", async (request, response, next) => {
+  try {
+    const body = request.body as { domains?: unknown };
+    const rawDomains = Array.isArray(body?.domains) ? body.domains : [];
+    const domains = rawDomains
+      .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+      .filter((value): value is string => value.length > 0);
+
+    if (domains.length === 0) {
+      response.status(400).json({ error: "Provide a non-empty 'domains' string array." });
+      return;
+    }
+
+    const removed = controlPlaneStore.deleteLiveExaDomainOccurrences(domains);
+    response.json({ removed, after: controlPlaneStore.getLiveExaDomainOccurrenceStats() });
   } catch (error) {
     next(error);
   }

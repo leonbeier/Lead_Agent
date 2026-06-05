@@ -139,6 +139,8 @@ const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 150_000;
 
 const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 90_000;
 
+const DEBUG_RESEARCH_BRIEF_TIMEOUT_MS = 120_000;
+
 const DEBUG_EXA_PLANNER_RETRY_TIMEOUT_MS = 90_000;
 
 export class DebugConsoleService {
@@ -421,22 +423,38 @@ export class DebugConsoleService {
       const extractedAddress = await this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany);
       const canonicalCompany = this.applyResolvedCompanyIdentity(baseAnalysis.categorizedCompany, extractedAddress);
 
-      const [researchBrief, publicContactDebug] = await this.withTimeout(
-        Promise.all([
+      const emptyContactDebug: Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>> = {
+        aliases: [],
+        queries: [],
+        websitePages: [],
+        hitGroups: [],
+        heuristicContacts: [],
+        selectedContacts: []
+      };
+
+      // Run research brief and contact discovery concurrently but independently so a
+      // slow/timed-out step never discards the partial results of the other. Website
+      // mails and LinkedIn contacts that were already found must always surface.
+      const [researchBrief, publicContactDebug] = await Promise.all([
+        this.withTimeoutValue(
           this.azureOpenAIClient.buildResearchBrief(canonicalCompany, false, undefined, undefined, {
             includeWebResearch: true
           }),
+          DEBUG_RESEARCH_BRIEF_TIMEOUT_MS,
+          null
+        ),
+        this.withTimeoutValue(
           this.buildDetailedContactDebug(canonicalCompany, {
             selectedContactsTimeoutMs: DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS
-          })
-        ]),
-        DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS,
-        `Kontakt-Check hat nach ${Math.round(DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS / 1000)}s das Zeitlimit erreicht.`
-      );
+          }),
+          DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS,
+          emptyContactDebug
+        )
+      ]);
 
       const hubspotPreview = await this.hubspotClient.previewHubSpotSync(
         canonicalCompany,
-        researchBrief,
+        researchBrief ?? undefined,
         publicContactDebug.selectedContacts,
         {
           includeAddressLookup: true,
@@ -447,7 +465,7 @@ export class DebugConsoleService {
       return {
         ...baseAnalysis,
         categorizedCompany: canonicalCompany,
-        researchBrief: this.toResearchBriefPreview(researchBrief),
+        researchBrief: researchBrief ? this.toResearchBriefPreview(researchBrief) : null,
         publicContactDebug,
         hubspotPreview
       };
@@ -1085,6 +1103,23 @@ export class DebugConsoleService {
           timeoutHandle = setTimeout(() => {
             reject(new Error(timeoutMessage));
           }, timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
+  private async withTimeoutValue<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
+    let timeoutHandle: NodeJS.Timeout | undefined;
+
+    try {
+      return await Promise.race([
+        promise.catch(() => fallbackValue),
+        new Promise<T>((resolve) => {
+          timeoutHandle = setTimeout(() => resolve(fallbackValue), timeoutMs);
         })
       ]);
     } finally {

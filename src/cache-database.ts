@@ -380,6 +380,23 @@ export class CacheDatabaseStore {
     });
   }
 
+  deleteLiveExaDomainOccurrences(domains: string[]): number {
+    const normalized = Array.from(new Set(domains.map((domain) => normalizeDomain(domain)).filter((domain): domain is string => Boolean(domain))));
+    if (normalized.length === 0) {
+      return 0;
+    }
+
+    return this.withDatabase((database) => {
+      const statement = database.prepare("DELETE FROM live_exa_domain_occurrences WHERE domain = ?");
+      let removed = 0;
+      for (const domain of normalized) {
+        const result = statement.run(domain);
+        removed += Number(result.changes ?? 0);
+      }
+      return removed;
+    });
+  }
+
   readTestLabExaCache(): { queryHistory: string[]; queryInsights: ExaQueryHistoryInsight[]; discoveredDomains: string[] } {
     return this.withDatabase((database) => {
       const queryHistory = database.prepare(`

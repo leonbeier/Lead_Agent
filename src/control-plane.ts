@@ -1457,6 +1457,10 @@ export class ControlPlaneStore {
     return this.liveCacheDatabase.countLiveExaDomainOccurrences();
   }
 
+  deleteLiveExaDomainOccurrences(domains: string[]): number {
+    return this.liveCacheDatabase.deleteLiveExaDomainOccurrences(domains);
+  }
+
   async clearLiveExaCache(): Promise<LiveExaCache> {
     await this.writeLiveExaCache(defaultLiveExaCache);
     this.liveCacheDatabase.clearLiveExaDomainOccurrences();
