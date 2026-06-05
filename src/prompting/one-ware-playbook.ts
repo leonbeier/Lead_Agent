@@ -490,8 +490,9 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
       "Keep partner framing and project efficiency language."
     ],
     personalizationRules: [
-      "Personalize only with concrete delivery hooks.",
-      "Retain template backbone and ONE WARE USP wording."
+      "Start from the segment template and personalize only where there is a clear factual hook.",
+      "Retain template backbone and ONE WARE USP wording. Replace [Name] with the contact name, [Branche] with the actual industry, and application-specific placeholders with evidence from the company profile.",
+      "Personalization should point to a concrete delivery bottleneck, use case, or market signal — not generic flattery."
     ],
     avoidSignals: ["Generic AI buzzwords without delivery context"]
   },
@@ -507,8 +508,9 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
       "Keep language concrete around client work, prototypes, and production handoff."
     ],
     personalizationRules: [
-      "Personalize around visible project types, feasibility work, or implementation bottlenecks.",
-      "Avoid enterprise-style language that does not fit a specialist consulting profile."
+      "Start from the segment template — stay close to original wording and structure.",
+      "Fill in [Name] with the contact name, [Branche] with the actual vertical, and application-specific placeholders with evidence from the company profile.",
+      "Personalize around visible project types, feasibility work, or implementation bottlenecks only where a clear factual hook exists."
     ],
     avoidSignals: ["Generic transformation consulting language", "Treating them like a scaled integrator organization"]
   },
@@ -524,8 +526,9 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
       "Keep language concrete around prototypes, implementation, and limited engineering bandwidth."
     ],
     personalizationRules: [
-      "Personalize around visible project types, feasibility work, or implementation bottlenecks.",
-      "Avoid language that implies a larger team or consulting organization."
+      "Start from the segment template — stay close to original wording and structure.",
+      "Fill in [Name] with the contact name, [Branche] with the actual vertical, and application-specific placeholders with concrete company evidence.",
+      "Personalize around visible project types or implementation bottlenecks only where a factual hook exists. Avoid language implying a larger team."
     ],
     avoidSignals: ["Generic transformation consulting language", "Treating them like a scaled integrator organization"]
   },
@@ -537,7 +540,7 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
       "Check if they implement projects, not only advise."
     ],
     outreachPriorities: ["Connect ONE WARE to project speed and predictability."],
-    personalizationRules: ["Personalize around current delivery workflow gaps."],
+    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name, [Branche] with the actual industry. Personalize only around concrete delivery workflow gaps."],
     avoidSignals: ["Treating them as AI beginners"]
   },
   integrator_relevant_focus: {
@@ -548,7 +551,7 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
       "Validate recurring vision/edge components."
     ],
     outreachPriorities: ["Anchor message in vertical project risk reduction."],
-    personalizationRules: ["Use factual vertical hooks only."],
+    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name, [Branche] with the actual vertical. Use factual vertical hooks only — no generic messaging."],
     avoidSignals: ["Over-generalized messaging"]
   },
   industrial_end_customer_scaled: {
@@ -559,7 +562,7 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
       "Find QC, inspection, and process automation leverage points."
     ],
     outreachPriorities: ["Lead with economics, feasibility, and speed to production."],
-    personalizationRules: ["Ground in concrete production context."],
+    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name, [Branche] with the actual production sector or product line. Ground personalization in concrete production context only."],
     avoidSignals: ["Abstract transformation talk"]
   },
   camera_manufacturer_partner: {
@@ -567,7 +570,7 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
     label: "Camera manufacturer partner",
     researchPriorities: ["Validate partner fit and customer AI-enablement potential."],
     outreachPriorities: ["Focus on enabling customer-ready AI setups."],
-    personalizationRules: ["Personalize with product-line evidence only."],
+    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name, [Branche] with the specific camera or imaging vertical. Personalize with product-line evidence only."],
     avoidSignals: ["Positioning as replacement of core hardware business"]
   },
   machine_builder_ai_enablement: {
@@ -575,7 +578,7 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
     label: "Machine builder AI enablement",
     researchPriorities: ["Validate OEM integration pathways, quality-control system portfolio, and customer-facing AI option potential."],
     outreachPriorities: ["Position ONE WARE as fast AI enablement layer for machine offerings and inspection-system upgrades."],
-    personalizationRules: ["Use machine, inspection-system, or quality-control product context, not generic AI language."],
+    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name, [Branche/Anwendung] with the actual machine type or inspection domain. Use machine, inspection-system, or quality-control product context — not generic AI language."],
     avoidSignals: ["Ignoring mechanical integration realities"]
   },
   machine_builder_vision_ai: {
@@ -600,7 +603,7 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
     label: "Software platform embedding partner",
     researchPriorities: ["Validate embeddability and partner incentives."],
     outreachPriorities: ["Lead with integration leverage and user value lift."],
-    personalizationRules: ["Tie outreach to concrete platform workflows."],
+    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name. Tie any personalization to concrete platform workflows or user-facing integration surfaces."],
     avoidSignals: ["Overpromising without integration fit"]
   },
   irrelevant: {
