@@ -104,6 +104,12 @@ export class CacheDatabaseStore {
         // Already migrated.
       }
 
+      try {
+        database.exec("ALTER TABLE live_exa_query_runs ADD COLUMN query_stats_json TEXT;");
+      } catch {
+        // Already migrated.
+      }
+
       return callback(database);
     } finally {
       database.close();
@@ -215,7 +221,7 @@ export class CacheDatabaseStore {
         ORDER BY last_seen_at DESC, domain ASC
       `).all() as Array<{ domain: string }>;
       const queryRuns = database.prepare(`
-        SELECT timestamp, filter_name, query, planned_queries_json, prompt_messages_json, excluded_domains_json, excluded_domain_details_json
+        SELECT timestamp, filter_name, query, planned_queries_json, prompt_messages_json, excluded_domains_json, excluded_domain_details_json, query_stats_json
         FROM live_exa_query_runs
         ORDER BY timestamp DESC, id DESC
       `).all() as Array<{
@@ -226,6 +232,7 @@ export class CacheDatabaseStore {
         prompt_messages_json: string | null;
         excluded_domains_json: string | null;
         excluded_domain_details_json: string | null;
+        query_stats_json: string | null;
       }>;
 
       return {
@@ -246,6 +253,9 @@ export class CacheDatabaseStore {
           excludedDomains: entry.excluded_domains_json ? JSON.parse(entry.excluded_domains_json) as string[] : undefined,
           excludedDomainDetails: entry.excluded_domain_details_json
             ? JSON.parse(entry.excluded_domain_details_json) as NonNullable<LiveExaCache["queryRuns"]>[number]["excludedDomainDetails"]
+            : undefined,
+          queryStats: entry.query_stats_json
+            ? JSON.parse(entry.query_stats_json) as NonNullable<LiveExaCache["queryRuns"]>[number]["queryStats"]
             : undefined
         }))
       };
@@ -264,8 +274,8 @@ export class CacheDatabaseStore {
         VALUES (?, ?)
       `);
       const queryRunStatement = database.prepare(`
-        INSERT INTO live_exa_query_runs (timestamp, filter_name, query, planned_queries_json, prompt_messages_json, excluded_domains_json, excluded_domain_details_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO live_exa_query_runs (timestamp, filter_name, query, planned_queries_json, prompt_messages_json, excluded_domains_json, excluded_domain_details_json, query_stats_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const entry of cache.entries) {
@@ -290,7 +300,8 @@ export class CacheDatabaseStore {
           queryRun.plannedQueries ? JSON.stringify(queryRun.plannedQueries) : null,
           queryRun.promptMessages ? JSON.stringify(queryRun.promptMessages) : null,
           queryRun.excludedDomains ? JSON.stringify(queryRun.excludedDomains) : null,
-          queryRun.excludedDomainDetails ? JSON.stringify(queryRun.excludedDomainDetails) : null
+          queryRun.excludedDomainDetails ? JSON.stringify(queryRun.excludedDomainDetails) : null,
+          queryRun.queryStats ? JSON.stringify(queryRun.queryStats) : null
         );
       }
     });

@@ -1365,16 +1365,35 @@ export class LeadWorkerRunService {
 
           const persistedQueryTexts = [...new Set(aggregate.queryTexts.map((query) => query.trim()).filter(Boolean))];
           if (persistedQueryTexts.length > 0) {
+            const queryStatByText = new Map(
+              aggregate.queryStats.map((queryStat) => [queryStat.query.trim(), queryStat])
+            );
             await this.controlPlaneStore.recordLiveExaQueryRuns(
-              persistedQueryTexts.map((query) => ({
-                timestamp: new Date().toISOString(),
-                filterName: aggregate.filter.name,
-                query,
-                plannedQueries: aggregate.plannedQueries,
-                promptMessages: aggregate.promptMessages,
-                excludedDomains: aggregate.excludedDomains,
-                excludedDomainDetails: aggregate.excludedDomainDetails
-              }))
+              persistedQueryTexts.map((query) => {
+                const queryStat = queryStatByText.get(query);
+                return {
+                  timestamp: new Date().toISOString(),
+                  filterName: aggregate.filter.name,
+                  query,
+                  plannedQueries: aggregate.plannedQueries,
+                  promptMessages: aggregate.promptMessages,
+                  excludedDomains: aggregate.excludedDomains,
+                  excludedDomainDetails: aggregate.excludedDomainDetails,
+                  queryStats: queryStat
+                    ? {
+                        rawFound: queryStat.rawFound,
+                        duplicates: queryStat.duplicates,
+                        accepted: queryStat.accepted,
+                        rejectedDifferentCategory: queryStat.rejectedDifferentCategory,
+                        rejectedOther: queryStat.rejectedOther,
+                        filteredByHubSpot: queryStat.filteredByHubSpot,
+                        filteredByRejectedWebsites: queryStat.filteredByRejectedWebsites,
+                        filteredByCurrentRunCache: queryStat.filteredByCurrentRunCache,
+                        categoryBreakdown: { ...queryStat.categoryBreakdown }
+                      }
+                    : undefined
+                };
+              })
             );
           }
           temporarilyUnavailableFilters.delete(filter.name);

@@ -120,6 +120,9 @@ const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
 const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
 const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 12000;
+// Amount of real visible page text handed to the AI website profiler so it can read the legal
+// company entity, postal address, and contact block itself (agent-first, no role-keyword pre-filter).
+const WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT = 2600;
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -2170,7 +2173,14 @@ export class HubSpotClient {
 
   private buildWebsiteEvidenceSnippet(url: string, html: string): string {
     const plainText = this.decodeHtmlEntities(this.stripHtml(html)).replace(/\s+/g, " ").trim();
-    const relevantText = Array.from(
+    // Agent-first: hand the model the actual visible page text so it can read the legal company
+    // entity, postal address, and contact block itself. The leading section of a company/contact/
+    // impressum page almost always carries this identity information. We no longer pre-filter the
+    // page down to role-keyword fragments (which previously starved the model of the company name
+    // and address). Role-adjacent snippets are still appended so deeper people/role context for
+    // LinkedIn contact discovery is preserved even on long pages.
+    const visibleText = plainText.slice(0, WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT);
+    const roleAdjacentText = Array.from(
       new Set(
         [...plainText.matchAll(new RegExp(`[^.!?]{0,120}(?:${PUBLIC_CONTACT_ROLE_PATTERNS.join("|")})[^.!?]{0,120}`, "gi"))]
           .map((match) => match[0].trim())
@@ -2178,13 +2188,17 @@ export class HubSpotClient {
       )
     ).slice(0, 4);
     const linkedInUrls = Array.from(new Set((html.match(/https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/[^"]+/gi) ?? []).slice(0, 4)));
-    const mailTos = Array.from(new Set((html.match(/mailto:([^"'>\s]+)/gi) ?? []).map((match) => match.replace(/^mailto:/i, "")).slice(0, 4)));
+    const emails = Array.from(new Set([
+      ...this.extractVisibleEmailsForAi(html),
+      ...(html.match(/mailto:([^"'>\s]+)/gi) ?? []).map((match) => match.replace(/^mailto:/i, ""))
+    ])).slice(0, 6);
 
     return [
       `Page: ${url}`,
-      relevantText.length > 0 ? `Relevant text: ${relevantText.join(" | ")}` : undefined,
+      visibleText.length > 0 ? `Visible page text: ${visibleText}` : undefined,
+      roleAdjacentText.length > 0 ? `Role mentions: ${roleAdjacentText.join(" | ")}` : undefined,
       linkedInUrls.length > 0 ? `LinkedIn URLs: ${linkedInUrls.join(" | ")}` : undefined,
-      mailTos.length > 0 ? `Emails: ${mailTos.join(" | ")}` : undefined
+      emails.length > 0 ? `Emails: ${emails.join(" | ")}` : undefined
     ].filter(Boolean).join("\n");
   }
 

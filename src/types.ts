@@ -235,6 +235,18 @@ export interface RawExaHistoryEntry {
   sourceFilter?: string;
 }
 
+export interface LiveExaQueryRunStats {
+  rawFound: number;
+  duplicates: number;
+  accepted: number;
+  rejectedDifferentCategory: number;
+  rejectedOther: number;
+  filteredByHubSpot: number;
+  filteredByRejectedWebsites: number;
+  filteredByCurrentRunCache: number;
+  categoryBreakdown?: Record<string, number>;
+}
+
 export interface LiveExaQueryRun {
   timestamp: string;
   filterName: string;
@@ -246,6 +258,7 @@ export interface LiveExaQueryRun {
   }>;
   excludedDomains?: string[];
   excludedDomainDetails?: LiveExaExcludedDomainDetail[];
+  queryStats?: LiveExaQueryRunStats;
 }
 
 export interface LiveExaExcludedDomainDetail {

@@ -1405,20 +1405,22 @@
       function buildLiveExaSearchHistoryFromCache(data = bootstrapData) {
         const queryRuns = sortSearchHistoryByTimestamp(data?.liveExaCache?.queryRuns || []);
         if (queryRuns.length > 0) {
-          return queryRuns.map((queryRun) => ({
+          return queryRuns.map((queryRun) => {
+            const stats = queryRun.queryStats || {};
+            return {
             timestamp: queryRun.timestamp,
             companySearchMode: "exa_search",
             filterName: queryRun.filterName,
             batchType: "expand_50",
             page: 1,
             requestedCount: 1,
-            returnedCount: 0,
-            relevantCount: 0,
+            returnedCount: stats.rawFound || 0,
+            relevantCount: stats.accepted || 0,
             relevanceRatio: 0,
-            categoryBreakdown: {},
+            categoryBreakdown: stats.categoryBreakdown || {},
             passedThreshold: false,
             recommendation: "live-exa-cache",
-            fetchedSampleCount: 0,
+            fetchedSampleCount: stats.rawFound || 0,
             eligibleSampleCount: 0,
             discoveryQueries: [queryRun.query],
             plannedQueries: queryRun.plannedQueries || [queryRun.query],
@@ -1426,15 +1428,19 @@
             excludedDomains: queryRun.excludedDomains,
             queryStats: [{
               query: queryRun.query,
-              rawFound: 0,
-              duplicates: 0,
-              accepted: 0,
-              rejectedDifferentCategory: 0,
-              rejectedOther: 0,
-              categoryBreakdown: {}
+              rawFound: stats.rawFound || 0,
+              duplicates: stats.duplicates || 0,
+              accepted: stats.accepted || 0,
+              rejectedDifferentCategory: stats.rejectedDifferentCategory || 0,
+              rejectedOther: stats.rejectedOther || 0,
+              filteredByHubSpot: stats.filteredByHubSpot || 0,
+              filteredByRejectedWebsites: stats.filteredByRejectedWebsites || 0,
+              filteredByCurrentRunCache: stats.filteredByCurrentRunCache || 0,
+              categoryBreakdown: stats.categoryBreakdown || {}
             }],
             decisionSamples: []
-          }));
+            };
+          });
         }
 
         const groupedEntries = new Map();
