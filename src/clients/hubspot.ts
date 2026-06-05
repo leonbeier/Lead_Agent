@@ -1136,7 +1136,8 @@ export class HubSpotClient {
       company,
       pages,
       this.extractCompanySearchAliases(company, pages, officialWebsiteProfile),
-      websitePages
+      websitePages,
+      officialWebsiteProfile
     )).contacts;
     const normalizedAzureContacts = this.collapseDuplicateMailboxContacts(
       azureMatchedContacts.map((contact) => ({
@@ -1216,7 +1217,8 @@ export class HubSpotClient {
       phones: string[];
       linkedInProfileUrl?: string;
       namedContacts: unknown[];
-    }>
+    }>,
+    officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): Promise<{
     queries: string[];
     hitGroups: Array<{
@@ -1237,13 +1239,15 @@ export class HubSpotClient {
     // the website evidence and the validated company aliases. The deterministic combinatorial
     // builder only supplements/falls back when the planner is unavailable.
     //
-    // When the original company.name is a descriptive marketing label (e.g. "LabVIEW Freelancer &
-    // Experte für Prüfstandautomatisierung"), the Foundry planner tends to build LinkedIn queries
-    // using that label instead of the actual legal entity name. Pass the best non-descriptive alias
-    // (e.g. "AK-concept") as the effective company name so the agent searches for the right entity.
-    const bestEntityAlias = aliases.find((alias) => alias.length >= 3 && !this.looksLikeDescriptiveCompanyLabel(alias));
-    const foundryCompany = bestEntityAlias && this.looksLikeDescriptiveCompanyLabel(company.name)
-      ? { ...company, name: bestEntityAlias }
+    // When the Azure website profiler has identified the exact legal operating entity
+    // (entityScope=exact_operating_entity), use that AI-extracted name as the company name for
+    // Foundry agents. This avoids Foundry searching for a marketing-label company name
+    // (e.g. "LabVIEW Freelancer & Experte...") instead of the real entity ("AK-concept").
+    const aiEntityName = officialWebsiteProfile?.entityScope === "exact_operating_entity"
+      ? officialWebsiteProfile.companyName?.trim()
+      : undefined;
+    const foundryCompany = aiEntityName && aiEntityName !== company.name
+      ? { ...company, name: aiEntityName }
       : company;
     const queryPlanningEvidence = [
       normalizedWebsitePages
@@ -1529,13 +1533,15 @@ export class HubSpotClient {
     officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): Promise<PublicContactCandidate[]> {
     const companyAliases = this.extractCompanySearchAliases(company, pages, officialWebsiteProfile);
-    // Use the best legal-entity alias as the effective company name for Foundry agents when the
-    // original company.name is a descriptive marketing label. The Foundry planner builds queries
-    // from company.name first, so passing the correct entity name ("AK-concept", "Tesium GmbH")
-    // instead of a descriptive label ("LabVIEW Freelancer & Experte...") gives much better results.
-    const bestEntityAlias = companyAliases.find((alias) => alias.length >= 3 && !this.looksLikeDescriptiveCompanyLabel(alias));
-    const foundryCompany = bestEntityAlias && this.looksLikeDescriptiveCompanyLabel(company.name)
-      ? { ...company, name: bestEntityAlias }
+    // Agent-first: use the Azure website profiler's identified legal entity name for Foundry agent
+    // calls when available. The website profiler already determined the correct operating entity
+    // (e.g. "AK-concept Anton Kopylow") — pass that to Foundry so it searches for the right entity
+    // instead of the marketing label stored in company.name.
+    const aiEntityName = officialWebsiteProfile?.entityScope === "exact_operating_entity"
+      ? officialWebsiteProfile.companyName?.trim()
+      : undefined;
+    const foundryCompany = aiEntityName && aiEntityName !== company.name
+      ? { ...company, name: aiEntityName }
       : company;
     const websiteEvidence = pages
       .map((page) => this.buildWebsiteEvidenceSnippet(page.url, page.html))
