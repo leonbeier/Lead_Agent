@@ -3995,10 +3995,28 @@ export class LeadPipelineAgent {
       let queryFilteredByRejectedWebsites = 0;
       let queryFilteredByCurrentRunCache = 0;
 
+      // Persistently record EVERY domain Exa returned for this query (including the ones we
+      // exclude/skip) so the historical per-domain occurrence counter accumulates across runs
+      // and drives exclude prioritization. This counter is never bulk-deleted.
+      const returnedOccurrenceEntries: RawExaHistoryEntry[] = [];
+      const seenReturnedDomains = new Set<string>();
+
       for (const result of payload.results ?? []) {
         const normalizedDomain = exaClient.normalizeUrl(result.url);
         if (!normalizedDomain) {
           continue;
+        }
+
+        const occurrenceDomain = exaClient.toExcludeDomain(normalizedDomain) ?? normalizedDomain;
+        if (occurrenceDomain && !seenReturnedDomains.has(occurrenceDomain)) {
+          seenReturnedDomains.add(occurrenceDomain);
+          returnedOccurrenceEntries.push({
+            timestamp: new Date().toISOString(),
+            domain: occurrenceDomain,
+            companyName: result.title?.trim() || undefined,
+            discoveryQuery: query,
+            sourceFilter: filter.name
+          });
         }
 
         const excludeDomain = exaClient.toExcludeDomain(normalizedDomain);
@@ -4031,6 +4049,9 @@ export class LeadPipelineAgent {
           reprioritizeExcludeDomain(excludeDomain, "current_run_cache");
         }
       }
+
+      // Persist the per-domain occurrence counts for everything Exa returned this query.
+      this.controlPlaneStore.recordLiveExaDomainOccurrences(returnedOccurrenceEntries);
 
       completedQueries += 1;
       returnedResultsCount += queryReturnedResults;

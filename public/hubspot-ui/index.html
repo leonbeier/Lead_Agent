@@ -2716,8 +2716,23 @@ ${message.content || ""}`).join("\n\n");
       document.getElementById("run-preview").addEventListener("click", () => triggerRun("/api/lead-jobs/preview"));
       document.getElementById("run-live-legacy").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger-legacy"));
       document.getElementById("run-live-new").addEventListener("click", () => triggerRun("/api/hubspot/workflow-trigger-new"));
-      restartLiveRunPolling().catch((error) => {
-        liveRunOutput.textContent = String(error);
+      restartLiveRunPolling().catch(async (error) => {
+        // Initial poll can hit a transient network blip (e.g. container restart) and throw
+        // "TypeError: Failed to fetch". Retry a few times before surfacing a friendly message
+        // instead of dumping the raw browser error.
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+          try {
+            await restartLiveRunPolling();
+            return;
+          } catch (retryError) {
+            error = retryError;
+          }
+        }
+        const message = String(error).includes("Failed to fetch")
+          ? "Verbindung zum Server unterbrochen. Bitte Seite neu laden oder kurz warten – der Live Run-Status wird automatisch erneut geladen."
+          : String(error);
+        liveRunOutput.textContent = message;
       });
       document.getElementById("clear-live-exa-history").addEventListener("click", () => clearCache("/api/control/cache/live-exa-history/reset", "Exa Suchverlauf wird geloescht"));
       document.getElementById("clear-live-screening-cache").addEventListener("click", () => clearCache("/api/control/cache/company-screening/live/reset", "Live Screening-Cache wird geloescht"));

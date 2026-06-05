@@ -4,6 +4,13 @@ import { buildDebugSearchFilter, normalizeManualWebsites, normalizeWebsiteUrl } 
 import { DebugConsoleService } from "../../src/debug/test-console-service";
 import { ControlPlaneStore } from "../../src/control-plane";
 
+const emptyLiveExaCacheStub = async () => ({
+  entries: [],
+  discoveredDomains: [],
+  recurringDomains: [],
+  recentRecurringDomains: []
+});
+
 function toBasisDomain(value?: string): string | undefined {
   if (!value) {
     return undefined;
@@ -120,6 +127,7 @@ test("runExaCompanySearch executes the requested number of queries even when the
   service.controlPlaneStore = {
     getTestLabExaCache: async () => ({ queryHistory: [], discoveredDomains: [] }),
     getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -174,6 +182,7 @@ test("runExaCompanySearch rejects domains that are already excluded even when Ex
   service.controlPlaneStore = {
     getTestLabExaCache: async () => ({ queryHistory: [], discoveredDomains: [] }),
     getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -267,6 +276,7 @@ test("runExaCompanySearch can route queries through the Azure planner when enabl
     }),
     getTestLabExaCache: async () => ({ queryHistory: ["previous planned query"], discoveredDomains: [] }),
     getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -425,6 +435,7 @@ test("runExaCompanySearch passes live Exa query stats into planner history", asy
       discoveredDomains: []
     }),
     getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -494,6 +505,7 @@ test("runExaCompanySearch avoids repeating the exact previous query when Azure r
     }),
     getTestLabExaCache: async () => ({ queryHistory: ["repeat query"], discoveredDomains: [] }),
     getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -562,6 +574,7 @@ test("runExaCompanySearch falls back to baseline queries after planner timeouts"
     }),
     getTestLabExaCache: async () => ({ queryHistory: [], discoveredDomains: [] }),
     getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -626,6 +639,7 @@ test("runExaCompanySearch passes the Test Lab target-category refinement into th
     getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
     getTestLabExaCache: async () => ({ queryHistory: [], discoveredDomains: [] }),
     getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -716,6 +730,7 @@ test("runExaCompanySearch hard-excludes hubspot and cached Test Lab Exa websites
         }
       ]
     }),
+    getLiveExaCache: emptyLiveExaCacheStub,
     writeTestLabExaCache: async () => undefined
   };
 
@@ -1026,4 +1041,84 @@ test("clearCompanyScreeningCache removes only live exclusions for live scope", a
 
   assert.deepEqual(result.records.map((record: { domain: string }) => record.domain), ["debug.example", "hubspot.example"]);
   assert.deepEqual(writtenDatabase?.records.map((record) => record.domain), ["debug.example", "hubspot.example"]);
+});
+
+test("runExaCompanySearch prioritizes recurring Exa domains over alphabetical HubSpot domains in the request payload", async () => {
+  const service = new DebugConsoleService() as any;
+  const hubSpotDomains = [
+    "aaa-alphabetically-first.example",
+    "bbb-alphabetically-second.example",
+    "ccc-alphabetically-third.example",
+    "zzz-low.example",
+    "priority-one.test",
+    "priority-two.test",
+    "priority-three.test"
+  ];
+  const capturedExcludeDomains: string[][] = [];
+
+  service.exaSearchClient = {
+    runtimeApiKey: "test-api-key",
+    buildQueries: () => ["query one"],
+    runSearch: async () => ({ results: [] }),
+    buildSearchPayload: (_query: string, _numResults: number, excludeDomains?: string[]) => {
+      capturedExcludeDomains.push([...(excludeDomains ?? [])]);
+      return { excludeDomains };
+    },
+    loadKnownExcludedDomains: async () => new Set<string>(hubSpotDomains),
+    toExcludeDomain: (value?: string) => {
+      if (!value) {
+        return undefined;
+      }
+
+      return new URL(value.includes("://") ? value : `https://${value}`).hostname.replace(/^www\./i, "");
+    },
+    normalizeUrl: (url?: string) => url,
+    toCanonicalCompanyDomain: (url: string) => url,
+    deriveCompanyName: (domain: string) => domain,
+    inferCountryFromDomain: () => "Germany",
+    buildDescription: () => "Mock description"
+  };
+
+  service.controlPlaneStore = {
+    getTestLabExaCache: async () => ({ queryHistory: [], discoveredDomains: [] }),
+    getCompanyScreeningDatabase: async () => ({ records: [] }),
+    getLiveExaCache: async () => ({
+      entries: [],
+      discoveredDomains: [],
+      recurringDomains: [
+        { domain: "priority-one.test", occurrences: 12, priority: 12, lastSeenAt: "2026-05-23T14:00:00.000Z" },
+        { domain: "priority-two.test", occurrences: 8, priority: 8, lastSeenAt: "2026-05-23T13:00:00.000Z" },
+        { domain: "priority-three.test", occurrences: 4, priority: 4, lastSeenAt: "2026-05-23T12:00:00.000Z" }
+      ],
+      recentRecurringDomains: []
+    }),
+    writeTestLabExaCache: async () => undefined
+  };
+
+  const result = await service.runExaCompanySearch(
+    {
+      stage: "company_search",
+      targetCategory: "integrator_vision_industrial_ai",
+      targetCategories: ["integrator_vision_industrial_ai"],
+      companySearchMode: "exa_search",
+      exaQueryCount: 1,
+      limit: 20
+    },
+    [buildDebugSearchFilter("integrator_vision_industrial_ai", "Germany")],
+    20
+  );
+
+  const requestPayloadDomains = capturedExcludeDomains[0] ?? [];
+  assert.deepEqual(requestPayloadDomains.slice(0, 3), [
+    "priority-one.test",
+    "priority-two.test",
+    "priority-three.test"
+  ]);
+
+  const payloadExcludeDomains = (result.generatedSearches[0]?.exaRequestPayload as { excludeDomains?: string[] } | undefined)?.excludeDomains ?? [];
+  assert.deepEqual(payloadExcludeDomains.slice(0, 3), [
+    "priority-one.test",
+    "priority-two.test",
+    "priority-three.test"
+  ]);
 });

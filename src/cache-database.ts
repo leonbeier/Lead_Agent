@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { CompanyScreeningDatabase, CompanyScreeningRecord, ExaQueryHistoryInsight, LiveExaCache, RawExaHistoryEntry } from "./types";
+import { CompanyScreeningDatabase, CompanyScreeningRecord, ExaQueryHistoryInsight, LiveExaCache, LiveExaRecurringDomain, RawExaHistoryEntry } from "./types";
 
 type MetadataKey = "screeningMigrated" | "liveExaMigrated" | "testLabExaMigrated";
 
@@ -67,6 +67,16 @@ export class CacheDatabaseStore {
           prompt_messages_json TEXT,
           excluded_domains_json TEXT,
           excluded_domain_details_json TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS live_exa_domain_occurrences (
+          domain TEXT PRIMARY KEY,
+          occurrences INTEGER NOT NULL DEFAULT 0,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          company_name TEXT,
+          discovery_query TEXT,
+          source_filter TEXT
         );
 
         CREATE TABLE IF NOT EXISTS testlab_exa_queries (
@@ -283,6 +293,90 @@ export class CacheDatabaseStore {
           queryRun.excludedDomainDetails ? JSON.stringify(queryRun.excludedDomainDetails) : null
         );
       }
+    });
+  }
+
+  /**
+   * Persistently accumulates how often each domain has been returned by Exa across runs.
+   * This counter is never bulk-deleted (unlike entries/discovered_domains), so historical
+   * occurrence signal survives every new search and feeds the exclude prioritization.
+   */
+  recordLiveExaDomainOccurrences(records: RawExaHistoryEntry[]): void {
+    if (records.length === 0) {
+      return;
+    }
+
+    this.withDatabase((database) => {
+      const statement = database.prepare(`
+        INSERT INTO live_exa_domain_occurrences (domain, occurrences, first_seen_at, last_seen_at, company_name, discovery_query, source_filter)
+        VALUES (?, 1, ?, ?, ?, ?, ?)
+        ON CONFLICT(domain) DO UPDATE SET
+          occurrences = occurrences + 1,
+          last_seen_at = excluded.last_seen_at,
+          company_name = COALESCE(excluded.company_name, company_name),
+          discovery_query = COALESCE(excluded.discovery_query, discovery_query),
+          source_filter = COALESCE(excluded.source_filter, source_filter)
+      `);
+
+      for (const record of records) {
+        const domain = normalizeDomain(record.domain);
+        if (!domain) {
+          continue;
+        }
+
+        const timestamp = record.timestamp?.trim() || new Date().toISOString();
+        statement.run(
+          domain,
+          timestamp,
+          timestamp,
+          record.companyName ?? null,
+          record.discoveryQuery ?? null,
+          record.sourceFilter ?? null
+        );
+      }
+    });
+  }
+
+  readLiveExaDomainOccurrences(): LiveExaRecurringDomain[] {
+    return this.withDatabase((database) => {
+      const rows = database.prepare(`
+        SELECT domain, occurrences, last_seen_at, company_name, discovery_query, source_filter
+        FROM live_exa_domain_occurrences
+        ORDER BY occurrences DESC, last_seen_at DESC, domain ASC
+      `).all() as Array<{
+        domain: string;
+        occurrences: number;
+        last_seen_at: string;
+        company_name: string | null;
+        discovery_query: string | null;
+        source_filter: string | null;
+      }>;
+
+      return rows.map<LiveExaRecurringDomain>((row) => ({
+        domain: row.domain,
+        occurrences: row.occurrences,
+        priority: row.occurrences,
+        lastSeenAt: row.last_seen_at,
+        companyName: row.company_name ?? undefined,
+        discoveryQuery: row.discovery_query ?? undefined,
+        sourceFilter: row.source_filter ?? undefined
+      }));
+    });
+  }
+
+  countLiveExaDomainOccurrences(): { domains: number; totalOccurrences: number } {
+    return this.withDatabase((database) => {
+      const row = database.prepare(`
+        SELECT COUNT(*) AS domains, COALESCE(SUM(occurrences), 0) AS total
+        FROM live_exa_domain_occurrences
+      `).get() as { domains: number; total: number };
+      return { domains: row.domains, totalOccurrences: row.total };
+    });
+  }
+
+  clearLiveExaDomainOccurrences(): void {
+    this.withDatabase((database) => {
+      database.exec("DELETE FROM live_exa_domain_occurrences;");
     });
   }
 

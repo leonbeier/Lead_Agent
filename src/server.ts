@@ -652,6 +652,90 @@ app.get("/api/config/readiness", (_request, response) => {
   });
 });
 
+// Debug: inspect the persistent per-domain occurrence counter and verify that the exclude
+// request order matches the priority (occurrence) order. Used to prove nothing is lost and
+// that historical occurrences accumulate across runs.
+app.get("/api/debug/live-exa-occurrences", async (_request, response, next) => {
+  try {
+    const cache = await controlPlaneStore.getLiveExaCache();
+    const stats = controlPlaneStore.getLiveExaDomainOccurrenceStats();
+    const persisted = controlPlaneStore.readLiveExaDomainOccurrences();
+    const recurring = cache.recurringDomains ?? [];
+
+    // The exclude prompt should list domains in priority (occurrence) order, not alphabetical.
+    const requestOrder = recurring.map((entry) => entry.domain);
+    const priorityOrder = [...recurring]
+      .sort((left, right) => {
+        if (right.priority !== left.priority) {
+          return right.priority - left.priority;
+        }
+        return left.domain.localeCompare(right.domain);
+      })
+      .map((entry) => entry.domain);
+    const orderMatchesPriority = requestOrder.every((domain, index) => domain === priorityOrder[index]);
+    const firstMismatchIndex = requestOrder.findIndex((domain, index) => domain !== priorityOrder[index]);
+
+    response.json({
+      stats,
+      entriesCount: cache.entries.length,
+      recurringCount: recurring.length,
+      persistedOccurrenceCount: persisted.length,
+      orderMatchesPriority,
+      firstMismatchIndex,
+      topPersisted: persisted.slice(0, 20),
+      topRecurring: recurring.slice(0, 20),
+      requestOrderHead: requestOrder.slice(0, 20),
+      priorityOrderHead: priorityOrder.slice(0, 20)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Debug: record synthetic returned domains and re-read to PROVE persistence + accumulation.
+app.post("/api/debug/live-exa-occurrences/record", async (request, response, next) => {
+  try {
+    const body = request.body as { domains?: unknown };
+    const rawDomains = Array.isArray(body?.domains) ? body.domains : [];
+    const domains = rawDomains
+      .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+      .filter((value): value is string => value.length > 0);
+
+    if (domains.length === 0) {
+      response.status(400).json({ error: "Provide a non-empty 'domains' string array." });
+      return;
+    }
+
+    const before = controlPlaneStore.getLiveExaDomainOccurrenceStats();
+    const beforeByDomain = new Map(
+      controlPlaneStore.readLiveExaDomainOccurrences().map((entry) => [entry.domain, entry.occurrences])
+    );
+
+    const timestamp = new Date().toISOString();
+    controlPlaneStore.recordLiveExaDomainOccurrences(
+      domains.map((domain) => ({ timestamp, domain, discoveryQuery: "debug-record", sourceFilter: "debug" }))
+    );
+
+    const after = controlPlaneStore.getLiveExaDomainOccurrenceStats();
+    const afterByDomain = new Map(
+      controlPlaneStore.readLiveExaDomainOccurrences().map((entry) => [entry.domain, entry.occurrences])
+    );
+
+    response.json({
+      recorded: domains,
+      before,
+      after,
+      perDomain: domains.map((domain) => ({
+        domain,
+        before: beforeByDomain.get(domain) ?? 0,
+        after: afterByDomain.get(domain) ?? 0
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/control/cache/live-exa/reset", async (_request, response, next) => {
   try {
     response.json({

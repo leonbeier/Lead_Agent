@@ -627,14 +627,19 @@ export class DebugConsoleService {
     testLabCache.queryInsights = Array.isArray(testLabCache.queryInsights)
       ? testLabCache.queryInsights
       : testLabCache.queryHistory.map((query) => ({ query }));
-    const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
+    const [screeningDatabase, liveExaCache] = await Promise.all([
+      this.controlPlaneStore.getCompanyScreeningDatabase(),
+      this.controlPlaneStore.getLiveExaCache()
+    ]);
     const prioritizedExcludedDomains = this.leadPipelineAgent.buildPrioritizedDirectExaExcludedDomains(
       screeningDatabase,
       request.targetCategories,
       hubSpotExcludedDomains,
       {
         screeningScope: "debug",
-        historicalExaDomains: testLabCache.discoveredDomains
+        historicalExaDomains: testLabCache.discoveredDomains,
+        historicalRecurringDomains: liveExaCache.recurringDomains,
+        currentRunRecurringDomains: liveExaCache.recentRecurringDomains
       }
     );
     const excludedDomains = prioritizedExcludedDomains.localExcludedDomains;

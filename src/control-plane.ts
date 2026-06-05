@@ -24,6 +24,7 @@ import {
   FilterEvaluation,
   LiveExaCache,
   LiveExaExcludedDomainDetail,
+  LiveExaRecurringDomain,
   LatestLeadRunRecord,
   LeadAgentSettings,
   LeadLearningData,
@@ -894,6 +895,62 @@ export function buildLiveExaRecurringDomains(
     .slice(0, 2000);
 }
 
+/**
+ * Merges the persistent per-domain occurrence counter (primary, authoritative cross-run
+ * historical signal) with the entries-derived recurring domains (legacy/backward-compat).
+ * The persistent counter wins on occurrence counts; legacy-only domains are unioned in.
+ */
+export function mergeLiveExaRecurringDomains(
+  persistedOccurrences: LiveExaRecurringDomain[],
+  entriesRecurringDomains: LiveExaRecurringDomain[]
+): NonNullable<LiveExaCache["recurringDomains"]> {
+  const mergedByDomain = new Map<string, LiveExaRecurringDomain>();
+
+  for (const recurring of entriesRecurringDomains) {
+    const domain = recurring.domain?.trim().toLowerCase();
+    if (domain) {
+      mergedByDomain.set(domain, { ...recurring, domain });
+    }
+  }
+
+  for (const occurrence of persistedOccurrences) {
+    const domain = occurrence.domain?.trim().toLowerCase();
+    if (!domain) {
+      continue;
+    }
+
+    const existing = mergedByDomain.get(domain);
+    const occurrences = Math.max(occurrence.occurrences, existing?.occurrences ?? 0);
+    const lastSeenAt = existing?.lastSeenAt && Date.parse(existing.lastSeenAt) > Date.parse(occurrence.lastSeenAt)
+      ? existing.lastSeenAt
+      : occurrence.lastSeenAt;
+    mergedByDomain.set(domain, {
+      domain,
+      occurrences,
+      priority: occurrences,
+      lastSeenAt,
+      companyName: occurrence.companyName ?? existing?.companyName,
+      discoveryQuery: occurrence.discoveryQuery ?? existing?.discoveryQuery,
+      sourceFilter: occurrence.sourceFilter ?? existing?.sourceFilter
+    });
+  }
+
+  return Array.from(mergedByDomain.values())
+    .sort((left, right) => {
+      if (right.priority !== left.priority) {
+        return right.priority - left.priority;
+      }
+
+      const timestampDelta = Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt);
+      if (timestampDelta !== 0) {
+        return timestampDelta;
+      }
+
+      return left.domain.localeCompare(right.domain);
+    })
+    .slice(0, 2000);
+}
+
 export function buildRecentLiveExaRecurringDomains(
   entries: RawExaHistoryEntry[],
   queryRuns: NonNullable<LiveExaCache["queryRuns"]> = []
@@ -1314,7 +1371,13 @@ export class ControlPlaneStore {
   async getLiveExaCache(): Promise<LiveExaCache> {
     const cache = await this.readLiveExaCacheFromDatabase();
     const queryRuns = normalizeLiveExaQueryRuns(cache.queryRuns);
-    const recurringDomains = buildLiveExaRecurringDomains(cache.entries, cache.discoveredDomains);
+    // Historical recurring signal comes primarily from the persistent per-domain occurrence
+    // counter (counts EVERY domain Exa returns, including excluded ones, and never gets
+    // bulk-deleted). Entries-based recurring is unioned in for backward compatibility with
+    // caches recorded before the counter existed.
+    const persistedOccurrences = this.liveCacheDatabase.readLiveExaDomainOccurrences();
+    const entriesRecurringDomains = buildLiveExaRecurringDomains(cache.entries, cache.discoveredDomains);
+    const recurringDomains = mergeLiveExaRecurringDomains(persistedOccurrences, entriesRecurringDomains);
     const recentRecurringDomains = buildRecentLiveExaRecurringDomains(cache.entries, queryRuns);
     return liveExaCacheSchema.parse({
       ...defaultLiveExaCache,
@@ -1377,8 +1440,26 @@ export class ControlPlaneStore {
     return this.getLiveExaCache();
   }
 
+  /**
+   * Persistently records that Exa returned these domains, incrementing the per-domain
+   * occurrence counter. Used for EVERY returned domain (excluded or accepted) so the
+   * historical recurring signal accumulates across runs and drives exclude prioritization.
+   */
+  recordLiveExaDomainOccurrences(entries: RawExaHistoryEntry[]): void {
+    this.liveCacheDatabase.recordLiveExaDomainOccurrences(entries);
+  }
+
+  readLiveExaDomainOccurrences(): LiveExaRecurringDomain[] {
+    return this.liveCacheDatabase.readLiveExaDomainOccurrences();
+  }
+
+  getLiveExaDomainOccurrenceStats(): { domains: number; totalOccurrences: number } {
+    return this.liveCacheDatabase.countLiveExaDomainOccurrences();
+  }
+
   async clearLiveExaCache(): Promise<LiveExaCache> {
     await this.writeLiveExaCache(defaultLiveExaCache);
+    this.liveCacheDatabase.clearLiveExaDomainOccurrences();
     return defaultLiveExaCache;
   }
 
