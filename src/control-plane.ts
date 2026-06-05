@@ -42,6 +42,7 @@ const selectableCategorySchema = z.enum([
   "industrial_end_customer_scaled",
   "camera_manufacturer_partner",
   "machine_builder_ai_enablement",
+  "machine_builder_vision_ai",
   "software_platform_embedding"
 ]);
 
