@@ -1056,9 +1056,9 @@ test("findPublicContactsFromPages returns official website contacts without wait
       }
     ]
   });
-  client["discoverWebSearchContacts"] = async () => {
-    throw new Error("web search fallback should not run when official website contacts are already available");
-  };
+  // LinkedIn-supplement path may be called to add people from LinkedIn on top of website contacts.
+  // It should return nothing here so the result is still just the 1 named website contact.
+  client["discoverWebSearchContacts"] = async () => [];
 
   const contacts = await client["findPublicContactsFromPages"](
     company,

@@ -1151,6 +1151,28 @@ export class HubSpotClient {
     const websiteFallbackContacts = reachableWebsiteFallbackContacts;
 
     if (normalizedAzureContacts.length > 0) {
+      // When the AI extracted contacts from website pages but none have a LinkedIn profile,
+      // supplement with LinkedIn people via the Foundry bing_grounding agent so named employees
+      // (e.g. Norbert Kalkert GF for tesium.com) are added on top of /kontakt/ page contacts.
+      const hasLinkedInProfile = normalizedAzureContacts.some(
+        (contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl)
+      );
+      const spotsLeft = 4 - Math.min(normalizedAzureContacts.length, 4);
+      if (!hasLinkedInProfile && spotsLeft > 0) {
+        const linkedInPeople = (await this.withTimeout(
+          this.discoverWebSearchContacts(company, pages, normalizedAzureContacts, officialWebsiteProfile),
+          PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
+          [] as PublicContactCandidate[]
+        ))
+          .filter((contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl))
+          .slice(0, spotsLeft);
+        if (linkedInPeople.length > 0) {
+          return this.composeFinalPublicContacts(
+            this.mergeDiscoveredContacts(linkedInPeople, normalizedAzureContacts).slice(0, 4),
+            this.mergeDiscoveredContacts(normalizedAzureContacts, websiteFallbackContacts)
+          ).slice(0, 4);
+        }
+      }
       return this.composeFinalPublicContacts(
         normalizedAzureContacts.slice(0, 4),
         this.mergeDiscoveredContacts(normalizedAzureContacts, websiteFallbackContacts)
@@ -1214,6 +1236,15 @@ export class HubSpotClient {
     // Agent-first: let the Foundry query planner propose the LinkedIn people-search queries from
     // the website evidence and the validated company aliases. The deterministic combinatorial
     // builder only supplements/falls back when the planner is unavailable.
+    //
+    // When the original company.name is a descriptive marketing label (e.g. "LabVIEW Freelancer &
+    // Experte für Prüfstandautomatisierung"), the Foundry planner tends to build LinkedIn queries
+    // using that label instead of the actual legal entity name. Pass the best non-descriptive alias
+    // (e.g. "AK-concept") as the effective company name so the agent searches for the right entity.
+    const bestEntityAlias = aliases.find((alias) => alias.length >= 3 && !this.looksLikeDescriptiveCompanyLabel(alias));
+    const foundryCompany = bestEntityAlias && this.looksLikeDescriptiveCompanyLabel(company.name)
+      ? { ...company, name: bestEntityAlias }
+      : company;
     const queryPlanningEvidence = [
       normalizedWebsitePages
         .map((page) => page.evidenceSnippet)
@@ -1223,7 +1254,7 @@ export class HubSpotClient {
       aliases.length > 0 ? `Company aliases: ${aliases.join(" | ")}` : undefined
     ].filter(Boolean).join("\n\n");
     const suggestedLinkedInQueries = (await this.withTimeout(
-      this.foundryAgentsClient.suggestPublicContactQueries(company, queryPlanningEvidence, false),
+      this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false),
       PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
       [] as string[]
     )).filter((query) => /site:linkedin\.com\/in/i.test(query));
@@ -1498,6 +1529,14 @@ export class HubSpotClient {
     officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
   ): Promise<PublicContactCandidate[]> {
     const companyAliases = this.extractCompanySearchAliases(company, pages, officialWebsiteProfile);
+    // Use the best legal-entity alias as the effective company name for Foundry agents when the
+    // original company.name is a descriptive marketing label. The Foundry planner builds queries
+    // from company.name first, so passing the correct entity name ("AK-concept", "Tesium GmbH")
+    // instead of a descriptive label ("LabVIEW Freelancer & Experte...") gives much better results.
+    const bestEntityAlias = companyAliases.find((alias) => alias.length >= 3 && !this.looksLikeDescriptiveCompanyLabel(alias));
+    const foundryCompany = bestEntityAlias && this.looksLikeDescriptiveCompanyLabel(company.name)
+      ? { ...company, name: bestEntityAlias }
+      : company;
     const websiteEvidence = pages
       .map((page) => this.buildWebsiteEvidenceSnippet(page.url, page.html))
       .filter(Boolean)
@@ -1516,7 +1555,7 @@ export class HubSpotClient {
       knownContactEvidence ? `Known website contacts:\n${knownContactEvidence}` : undefined,
       companyAliases.length > 0 ? `Company aliases: ${companyAliases.join(" | ")}` : undefined
     ].filter(Boolean).join("\n\n");
-    const suggestedQueries = await this.foundryAgentsClient.suggestPublicContactQueries(company, queryPlanningEvidence, false);
+    const suggestedQueries = await this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false);
     const preferredQueries = this.buildPublicContactSearchQueries(company, companyAliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
     const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 4);
@@ -1542,9 +1581,8 @@ export class HubSpotClient {
       searchEvidence ? `Web search evidence:\n${searchEvidence}` : undefined
     ].filter(Boolean).join("\n\n");
     const strongHeuristicContacts = heuristicContacts.filter((contact) => this.isNamedEmployeeContact(contact));
-    const hasKnownWebsiteReachableContact = knownContacts.some((contact) => Boolean(contact.email || contact.phone));
-    const foundryContacts = evidence.trim() && !hasKnownWebsiteReachableContact && strongHeuristicContacts.length < 2
-      ? await this.foundryAgentsClient.discoverPublicContacts(company, evidence, false)
+    const foundryContacts = evidence.trim() && strongHeuristicContacts.length < 2
+      ? await this.foundryAgentsClient.discoverPublicContacts(foundryCompany, evidence, false)
       : [];
     const mergedContacts = this.mergeDiscoveredContacts(foundryContacts, heuristicContacts);
 
