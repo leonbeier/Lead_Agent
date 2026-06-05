@@ -46,6 +46,7 @@ const RELEVANT_CATEGORIES: LeadCategory[] = [
   "industrial_end_customer_scaled",
   "camera_manufacturer_partner",
   "machine_builder_ai_enablement",
+  "machine_builder_vision_ai",
   "software_platform_embedding"
 ];
 
@@ -58,6 +59,7 @@ const FILTER_CATEGORY_FALLBACKS: Array<{ match: RegExp; categories: LeadCategory
   { match: /scaled industrial end customers/i, categories: ["industrial_end_customer_scaled"] },
   { match: /camera manufacturers/i, categories: ["camera_manufacturer_partner"] },
   { match: /machine builders for ai options/i, categories: ["machine_builder_ai_enablement"] },
+  { match: /machine builders with vision ai/i, categories: ["machine_builder_vision_ai"] },
   { match: /software platforms for embedding/i, categories: ["software_platform_embedding"] }
 ];
 
@@ -1891,7 +1893,7 @@ export class LeadPipelineAgent {
     const wantsGeneralAISignals = targetCategories.includes("integrator_general_ai");
     const wantsVisionSignals = targetCategories.includes("integrator_vision_industrial_ai");
     const wantsConsultingSignals = targetCategories.includes("integrator_vision_ai_consulting");
-    const wantsMachineBuilderSignals = targetCategories.includes("machine_builder_ai_enablement");
+    const wantsMachineBuilderSignals = targetCategories.includes("machine_builder_ai_enablement") || targetCategories.includes("machine_builder_vision_ai");
     const wantsIndustrialEndCustomers = targetCategories.includes("industrial_end_customer_scaled");
     const wantsPlatformSignals = targetCategories.includes("software_platform_embedding");
     const wantsBroadCategoryMix =

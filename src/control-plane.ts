@@ -465,7 +465,11 @@ const templateSchema = z.object({
   emailBody: z.string().min(1),
   linkedInConnectionRequest: z.string().min(1),
   linkedInMessage: z.string().min(1),
-  phoneScript: z.string().min(1)
+  phoneScript: z.string().min(1),
+  subjectEn: z.string().optional(),
+  emailBodyEn: z.string().optional(),
+  linkedInConnectionRequestEn: z.string().optional(),
+  linkedInMessageEn: z.string().optional()
 });
 
 const templateUpdateSchema = templateSchema.omit({ key: true }).partial();

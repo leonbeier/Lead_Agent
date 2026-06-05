@@ -249,6 +249,7 @@ function createEmptyCategoryBreakdown(): Record<LeadCategory, number> {
     industrial_end_customer_scaled: 0,
     camera_manufacturer_partner: 0,
     machine_builder_ai_enablement: 0,
+    machine_builder_vision_ai: 0,
     software_platform_embedding: 0,
     irrelevant: 0,
     other: 0
