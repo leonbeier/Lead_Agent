@@ -24,7 +24,7 @@ type ExaSearchResponse = {
 
 export type ExaSearchRequestPayload = {
   query: string;
-  type: "auto";
+  type: "fast";
   category?: "company";
   numResults: number;
   excludeDomains?: string[];
@@ -260,7 +260,7 @@ export class ExaSearchClient {
 
     return {
       query,
-      type: "auto",
+      type: "fast",
       ...(this.includeCompanyCategoryFilter ? { category: "company" as const } : {}),
       numResults: Math.min(MAX_EXA_RESULTS_PER_QUERY, Math.max(1, numResults)),
       ...(this.includeExcludeDomains ? { excludeDomains: normalizedExcludeDomains } : {}),
