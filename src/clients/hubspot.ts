@@ -167,6 +167,12 @@ const PUBLIC_CONTACT_MANAGER_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_
 const PUBLIC_CONTACT_DEVELOPER_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_DEVELOPER_PATTERNS);
 const PUBLIC_CONTACT_EXCLUDED_REGEX = /\b(hr|human resources|recruit(ing|er)|talent|people ops|finance|legal|support|customer support|student|intern|marketing|sdr|bdr|account executive|sales representative)\b/i;
 const HIGH_PRIORITY_PAGE_PATTERNS = ["contact", "kontakt", "impressum", "imprint", "legal", "legal notice", "legal-notice", "about", "team", "management", "ansprechpartner", "leadership", "people", "staff", "employee", "employees", "profil", "profile", "ueber-uns", "ueber uns", "about-us", "about us"];
+// Legal/contact pages (impressum, imprint, contact) are frequently hosted on a separate
+// company domain for sole proprietors, freelancers, and agencies (e.g. labview-freiberufler.de
+// links its impressum at ak-concept.de/impressum). These are the only cross-domain links we
+// allow the AI to see and follow, so the official legal entity, address, and reachable contacts
+// are not lost behind a same-domain restriction.
+const CROSS_DOMAIN_LEGAL_CONTACT_PATTERNS = ["impressum", "imprint", "legal-notice", "legal_notice", "legalnotice", "legal notice", "mentions-legales", "kontakt", "contact", "ansprechpartner"];
 const MEDIUM_PRIORITY_PAGE_PATTERNS = [
   "software",
   "service",
@@ -1275,7 +1281,13 @@ export class HubSpotClient {
     const namedWebsiteContacts: PublicContactCandidate[] = [];
 
     for (const page of pages) {
-      const emails = this.extractEmails(page.html, allowedEmailDomains);
+      // Allow emails on the page's own domain too: a deliberately-followed cross-domain
+      // legal/contact page (e.g. ak-concept.de/impressum) carries the real operating
+      // company's inbox, which the root-domain-only filter would otherwise drop.
+      const pageAllowedEmailDomains = this.isSameCompanyWebsiteUrl(rootUrl, page.url)
+        ? allowedEmailDomains
+        : new Set([...allowedEmailDomains, ...this.buildAllowedEmailDomains(page.url)]);
+      const emails = this.extractEmails(page.html, pageAllowedEmailDomains);
       const phones = this.extractPhones(page.html);
       const primaryPhone = phones[0];
 
@@ -2970,11 +2982,15 @@ export class HubSpotClient {
     }
 
     const allowedEmailDomains = this.buildAllowedEmailDomains(this.normalizeCompanyUrl(company.domain));
+    const rootUrl = this.normalizeCompanyUrl(company.domain);
     const contactsByEmail = new Map<string, PublicContactCandidate>();
     const phoneOnlyContacts: PublicContactCandidate[] = [];
 
     for (const page of pages) {
-      const emails = this.extractEmails(page.html, allowedEmailDomains);
+      const pageAllowedEmailDomains = this.isSameCompanyWebsiteUrl(rootUrl, page.url)
+        ? allowedEmailDomains
+        : new Set([...allowedEmailDomains, ...this.buildAllowedEmailDomains(page.url)]);
+      const emails = this.extractEmails(page.html, pageAllowedEmailDomains);
       const phones = this.extractPhones(page.html);
       const primaryPhone = phones[0];
 
@@ -3047,7 +3063,7 @@ export class HubSpotClient {
       false
     );
     const followUpUrls = Array.from(new Set(homepageAnalysis?.followUpUrls ?? []))
-      .filter((url) => this.isSameCompanyWebsiteUrl(rootUrl, url))
+      .filter((url) => this.isSameCompanyWebsiteUrl(rootUrl, url) || this.isLegalOrContactPageUrl(url))
       .slice(0, 5);
     const followUpPages = await Promise.all(
       followUpUrls.map(async (url) => {
@@ -3110,13 +3126,19 @@ export class HubSpotClient {
     }
 
     const legalEntityName = this.extractLegalEntityNameFromLine(companyName);
-    if (!legalEntityName) {
-      return false;
+    if (legalEntityName) {
+      const normalizedLegalEntityName = this.normalizeCompanyComparisonValue(legalEntityName);
+      const normalizedShortName = this.normalizeCompanyComparisonValue(company.name);
+      return normalizedLegalEntityName !== normalizedShortName || /\b(gmbh|mbh|ag|kg|kgaa|llc|inc|corp|corporation|limited|ltd|oy|ab|as|srl|spa|bv|nv)\b/i.test(companyName);
     }
 
-    const normalizedLegalEntityName = this.normalizeCompanyComparisonValue(legalEntityName);
-    const normalizedShortName = this.normalizeCompanyComparisonValue(company.name);
-    return normalizedLegalEntityName !== normalizedShortName || /\b(gmbh|mbh|ag|kg|kgaa|llc|inc|corp|corporation|limited|ltd|oy|ab|as|srl|spa|bv|nv)\b/i.test(companyName);
+    // Sole proprietors, freelancers, and agencies often have no legal-form suffix
+    // (e.g. "Anton Kopylow Software Engineering", "Danny de Waard"). Trust the AI's
+    // exact_operating_entity verdict for a multi-word name only when it was sourced from
+    // this company's own impressum/legal/contact page, so a marketing slogan is not adopted.
+    const hasLegalSource = (profile.sourceUrls ?? []).some((url) => this.isLegalOrContactPageUrl(url));
+    const wordCount = companyName.split(/\s+/).filter(Boolean).length;
+    return hasLegalSource && wordCount >= 2 && companyName.length <= 80;
   }
 
   private isPlausibleCompanyAddress(address: ExtractedCompanyAddress): boolean {
@@ -3133,11 +3155,13 @@ export class HubSpotClient {
         const url = new URL(match[1], root).toString();
         const parsedUrl = new URL(url);
         const normalizedHost = this.normalizeDomain(parsedUrl.host) ?? parsedUrl.host.replace(/^www\./i, "").toLowerCase();
-        if (normalizedHost !== normalizedRootHost) {
+        const anchorText = this.decodeHtmlEntities(this.stripHtml(match[2] ?? "")).replace(/\s+/g, " ").trim();
+        // Keep same-domain links, plus cross-domain legal/contact pages (impressum often lives
+        // on a separate company domain) so the AI can choose to read them for the legal entity.
+        if (normalizedHost !== normalizedRootHost && !this.isLegalOrContactPageUrl(url, anchorText)) {
           continue;
         }
 
-        const anchorText = this.decodeHtmlEntities(this.stripHtml(match[2] ?? "")).replace(/\s+/g, " ").trim();
         linkMap.set(url, { url, anchorText });
       } catch {
         continue;
@@ -3226,6 +3250,19 @@ export class HubSpotClient {
     }
   }
 
+  // True when a URL clearly points to an official legal/contact page (impressum, imprint,
+  // legal notice, kontakt, contact, ansprechpartner). Used to let the AI see and follow such
+  // pages even when they are hosted on a different domain than the company's marketing site.
+  private isLegalOrContactPageUrl(candidateUrl: string, anchorText?: string): boolean {
+    try {
+      const candidate = new URL(candidateUrl);
+      const haystack = `${candidate.pathname} ${candidate.search} ${candidate.hash} ${anchorText ?? ""}`.toLowerCase();
+      return CROSS_DOMAIN_LEGAL_CONTACT_PATTERNS.some((pattern) => haystack.includes(pattern));
+    } catch {
+      return false;
+    }
+  }
+
   private buildLikelyContactPageUrls(rootUrl: string): string[] {
     try {
       const root = new URL(rootUrl);
@@ -3256,7 +3293,9 @@ export class HubSpotClient {
           const url = new URL(link.href, root).toString();
           const parsedUrl = new URL(url);
           const normalizedParsedHost = this.normalizeDomain(parsedUrl.host) ?? parsedUrl.host.replace(/^www\./i, "").toLowerCase();
-          if (normalizedParsedHost !== normalizedRootHost) {
+          // Keep same-domain links, plus cross-domain legal/contact pages (impressum/kontakt is
+          // frequently hosted on a separate company domain) so reachable contacts are not lost.
+          if (normalizedParsedHost !== normalizedRootHost && !this.isLegalOrContactPageUrl(url, link.anchorText)) {
             return null;
           }
 
