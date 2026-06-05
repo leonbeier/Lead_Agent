@@ -3729,14 +3729,21 @@ export class HubSpotClient {
   private async launchBrowserForWebTasks() {
     const { chromium } = await import("playwright");
 
+    // --disable-dev-shm-usage avoids Chromium crashing in containers where /dev/shm defaults to
+    // 64MB (Railway/Docker); --no-sandbox is required because the container runs as a constrained
+    // user. Without these the browser process is SIGKILLed mid-search and the request 502s.
+    const launchArgs = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"];
+
     try {
       return await chromium.launch({
         headless: true,
-        channel: "chromium"
+        channel: "chromium",
+        args: launchArgs
       });
     } catch {
       return chromium.launch({
-        headless: true
+        headless: true,
+        args: launchArgs
       });
     }
   }
