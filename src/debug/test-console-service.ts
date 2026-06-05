@@ -129,6 +129,12 @@ export interface DebugConsoleOutreachPrepResult {
 
 export interface DebugConsoleContactAnalysis extends DebugConsoleOutreachAnalysis {
   publicContactDebug: Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>> | null;
+  companyIdentityDebug?: {
+    extractedAddress: Awaited<ReturnType<HubSpotClient["resolveCompanyAddress"]>>;
+    officialWebsiteProfile: Awaited<ReturnType<HubSpotClient["debugResolveCompanyIdentity"]>>["officialWebsiteProfile"];
+    legalEntityCandidates: string[];
+    isTrustedOfficialWebsiteProfile: boolean;
+  } | null;
 }
 
 export interface DebugConsoleContactDiscoveryResult {
@@ -422,6 +428,14 @@ export class DebugConsoleService {
     try {
       const extractedAddress = await this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany);
       const canonicalCompany = this.applyResolvedCompanyIdentity(baseAnalysis.categorizedCompany, extractedAddress);
+      const companyIdentityDebug = {
+        extractedAddress,
+        ...(await this.hubspotClient.debugResolveCompanyIdentity(baseAnalysis.categorizedCompany).catch(() => ({
+          officialWebsiteProfile: null,
+          legalEntityCandidates: [],
+          isTrustedOfficialWebsiteProfile: false
+        })))
+      };
 
       const emptyContactDebug: Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>> = {
         aliases: [],
@@ -467,6 +481,7 @@ export class DebugConsoleService {
         categorizedCompany: canonicalCompany,
         researchBrief: researchBrief ? this.toResearchBriefPreview(researchBrief) : null,
         publicContactDebug,
+        companyIdentityDebug,
         hubspotPreview
       };
     } catch (error) {

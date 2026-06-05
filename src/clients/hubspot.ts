@@ -407,6 +407,26 @@ export class HubSpotClient {
     return this.extractCompanyAddress(company);
   }
 
+  async debugResolveCompanyIdentity(company: PreCategorizedCompany): Promise<{
+    officialWebsiteProfile: OfficialWebsiteCompanyProfile | null;
+    legalEntityCandidates: string[];
+    isTrustedOfficialWebsiteProfile: boolean;
+  }> {
+    const officialWebsiteProfile = company.domain
+      ? await this.getOfficialWebsiteCompanyProfile(company).catch(() => null)
+      : null;
+    const pages = company.domain
+      ? await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain)).catch(() => [] as Array<{ url: string; html: string }>)
+      : [];
+    return {
+      officialWebsiteProfile,
+      legalEntityCandidates: this.extractLegalEntityCandidatesFromPages(company, pages),
+      isTrustedOfficialWebsiteProfile: officialWebsiteProfile
+        ? this.isTrustedOfficialWebsiteProfile(officialWebsiteProfile, company)
+        : false
+    };
+  }
+
   async debugPublicContactDiscovery(
     company: PreCategorizedCompany,
     options: { selectedContactsTimeoutMs?: number } = {}
