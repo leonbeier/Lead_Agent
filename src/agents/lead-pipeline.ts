@@ -131,6 +131,7 @@ type DirectExaExcludeDomainSources = {
   historicalExaDomains?: string[];
   historicalRecentRecurringDomains?: LiveExaRecurringDomain[];
   historicalRecurringDomains?: LiveExaRecurringDomain[];
+  canonicalDomainOrder?: string[];
 };
 
 type DirectExaExcludedDomainCategory = "hubspot" | "rejected_website" | "current_run_cache" | "historical_exa";
@@ -3871,7 +3872,7 @@ export class LeadPipelineAgent {
     const plannerQueryCount = Math.min(defaultQueries.length, Math.max(1, maxQueryCount, 4));
     let queryGenerationPromptMessages: Array<{ role: string; content: string }> | undefined;
     const forcedQueries = Array.from(new Set((queryPlanningContext.forcedQueries ?? []).map((query) => query.trim()).filter(Boolean)));
-    const queries = (forcedQueries.length > 0
+    const plannedQueryList = forcedQueries.length > 0
       ? forcedQueries
       : useAzureQueryPlanner
         ? await this.resolveDirectExaPlannerQueries(
@@ -3885,11 +3886,15 @@ export class LeadPipelineAgent {
             queryGenerationPromptMessages = promptMessages;
           }
         )
-        : defaultQueries).slice(0, Math.max(1, maxQueryCount));
+        : defaultQueries;
+    // Keep the full planned set (deduped) so the worker can rotate through the remaining
+    // queries across subsequent batches. Only the executed slice is truncated to maxQueryCount.
+    const dedupedPlannedQueryList = Array.from(new Set(plannedQueryList.map((query) => query.trim()).filter(Boolean)));
+    const queries = dedupedPlannedQueryList.slice(0, Math.max(1, maxQueryCount));
     const debugUpdateBase = {
       filterName: filter.name,
       defaultQueries: queryPlanningContext.plannedQueryMetadata?.defaultQueries ?? defaultQueries.slice(0, plannerQueryCount),
-      plannedQueries: queryPlanningContext.plannedQueryMetadata?.plannedQueries ?? queries,
+      plannedQueries: queryPlanningContext.plannedQueryMetadata?.plannedQueries ?? dedupedPlannedQueryList,
       promptMessages: queryPlanningContext.plannedQueryMetadata?.promptMessages ?? queryGenerationPromptMessages
     };
     onQueryProgress?.({

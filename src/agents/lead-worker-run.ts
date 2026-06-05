@@ -486,11 +486,20 @@ export class LeadWorkerRunService {
     };
 
     const bufferedLiveRawCompanies: CompanySample[] = [];
-    const ingestRawCompanies = (rawCompanies: CompanySample[], searchId?: string) => {
+    const ingestRawCompanies = (rawCompanies: CompanySample[], searchId?: string, options: { countDuplicates?: boolean } = {}) => {
+      const countDuplicates = options.countDuplicates ?? true;
+      const aggregate = searchId ? searchAggregates.get(searchId) : undefined;
       const uniqueRawCompanies: CompanySample[] = [];
       for (const company of rawCompanies) {
         const key = buildCompanyKey(company);
         if (seenCompanyKeys.has(key)) {
+          if (countDuplicates) {
+            metrics.exaDuplicatesRemoved += 1;
+            const query = company.discoveryQuery?.trim();
+            if (aggregate && query) {
+              getOrCreateQueryStat(aggregate, query).duplicates += 1;
+            }
+          }
           continue;
         }
 
@@ -1321,7 +1330,9 @@ export class LeadWorkerRunService {
           metrics.exaFilteredByExcludedDomains += aggregate.filteredByExcludedDomains ?? 0;
           let uniqueRawCompanies: CompanySample[];
           if (receivedStreamedRawCompanies) {
-            uniqueRawCompanies = ingestRawCompanies(rawCompanies, searchId);
+            // These companies were already ingested (and any duplicates already counted) while the
+            // search was streaming results. Re-running ingestion here must not re-count them as duplicates.
+            uniqueRawCompanies = ingestRawCompanies(rawCompanies, searchId, { countDuplicates: false });
           } else {
             uniqueRawCompanies = [];
             for (const company of rawCompanies) {

@@ -64,6 +64,35 @@ test("resolveLeadAgentDataPaths honors explicit runtime directories", () => {
   assert.equal(paths.debugCacheDatabasePath, path.join(path.resolve(cacheDir), "testlab-cache.sqlite"));
 });
 
+test("resolveLeadAgentDataPaths uses the Railway volume mount path when no explicit data dir is set", () => {
+  const cwd = path.join(path.sep, "workspace", "lead-agent");
+  const volumePath = path.join(path.sep, "railway-volume");
+  const paths = resolveLeadAgentDataPaths({
+    cwd,
+    railwayVolumeMountPath: volumePath,
+    hasMountedDataDir: false
+  });
+
+  assert.equal(paths.runtimeDataDirectory, path.resolve(volumePath));
+  assert.equal(paths.cacheDatabaseDirectory, path.join(path.resolve(volumePath), "cache-db"));
+  assert.equal(paths.liveCacheDatabasePath, path.join(path.resolve(volumePath), "cache-db", "live-run-cache.sqlite"));
+  assert.notEqual(paths.runtimeDataDirectory, paths.seedDataDirectory);
+});
+
+test("resolveLeadAgentDataPaths prefers an explicit data dir over the Railway volume mount path", () => {
+  const cwd = path.join(path.sep, "workspace", "lead-agent");
+  const runtimeDir = path.join(cwd, ".runtime-data");
+  const volumePath = path.join(path.sep, "railway-volume");
+  const paths = resolveLeadAgentDataPaths({
+    cwd,
+    dataDirEnv: runtimeDir,
+    railwayVolumeMountPath: volumePath,
+    hasMountedDataDir: false
+  });
+
+  assert.equal(paths.runtimeDataDirectory, path.resolve(runtimeDir));
+});
+
 test("buildLiveExaRecurringDomains raises priority for repeated websites and sorts them to the top", () => {
   const recurringDomains = buildLiveExaRecurringDomains([
     {

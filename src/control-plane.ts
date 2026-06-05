@@ -237,16 +237,20 @@ export function resolveLeadAgentDataPaths(options: {
   cwd?: string;
   dataDirEnv?: string;
   cacheDirEnv?: string;
+  railwayVolumeMountPath?: string;
   hasMountedDataDir?: boolean;
 } = {}): LeadAgentDataPaths {
   const cwd = options.cwd ?? process.cwd();
   const seedDataDirectory = path.join(cwd, "data");
   const explicitRuntimeDataDirectory = options.dataDirEnv?.trim();
+  const railwayVolumeMountPath = options.railwayVolumeMountPath?.trim();
   const runtimeDataDirectory = explicitRuntimeDataDirectory
     ? path.resolve(explicitRuntimeDataDirectory)
-    : (options.hasMountedDataDir ?? existsSync(DEFAULT_RUNTIME_DATA_DIRECTORY))
-      ? DEFAULT_RUNTIME_DATA_DIRECTORY
-      : seedDataDirectory;
+    : railwayVolumeMountPath
+      ? path.resolve(railwayVolumeMountPath)
+      : (options.hasMountedDataDir ?? existsSync(DEFAULT_RUNTIME_DATA_DIRECTORY))
+        ? DEFAULT_RUNTIME_DATA_DIRECTORY
+        : seedDataDirectory;
   const cacheDatabaseDirectory = options.cacheDirEnv?.trim()
     ? path.resolve(options.cacheDirEnv.trim())
     : path.join(runtimeDataDirectory, "cache-db");
@@ -284,8 +288,20 @@ export function resolveLeadAgentDataPaths(options: {
 
 const controlPlanePaths = resolveLeadAgentDataPaths({
   dataDirEnv: process.env.LEAD_AGENT_DATA_DIR,
-  cacheDirEnv: process.env.LEAD_AGENT_CACHE_DIR
+  cacheDirEnv: process.env.LEAD_AGENT_CACHE_DIR,
+  railwayVolumeMountPath: process.env.RAILWAY_VOLUME_MOUNT_PATH
 });
+
+const usingPersistentRuntimeDataDirectory = controlPlanePaths.runtimeDataDirectory !== controlPlanePaths.seedDataDirectory;
+if (usingPersistentRuntimeDataDirectory) {
+  console.info(`[control-plane] Persistent runtime data directory: ${controlPlanePaths.runtimeDataDirectory}`);
+} else {
+  console.warn(
+    "[control-plane] No persistent data volume detected. Runtime data is stored in the ephemeral repo 'data' directory "
+    + "and will be lost on every redeploy (live Exa history, screening cache, etc. reset to 0). "
+    + "Mount a Railway volume (sets RAILWAY_VOLUME_MOUNT_PATH) or set LEAD_AGENT_DATA_DIR to a persistent path."
+  );
+}
 
 export function getLeadAgentRuntimeDataDirectory(): string {
   return controlPlanePaths.runtimeDataDirectory;
