@@ -371,7 +371,6 @@ export class LeadWorkerRunService {
     const outreachConcurrency = Math.max(1, request.outreachPrepConcurrency ?? 6);
     const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 8);
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 4);
-    this.leadPipelineAgent.configureDirectExaSearchMode(request.exaSearchMode);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const learning = typeof this.controlPlaneStore.getLearning === "function"
       ? await this.controlPlaneStore.getLearning()
@@ -1214,6 +1213,7 @@ export class LeadWorkerRunService {
                   searchStrategyContext: request.searchStrategyContext,
                   recentQueryHistory: Array.from(currentRunQueryHistory.values()),
                   prequalification: request.prequalification,
+                  exaSearchMode: request.exaSearchMode,
                   forcedQueries: usingPendingQueryPlan ? forcedQueries : undefined,
                   plannedQueryMetadata: usingPendingQueryPlan
                     ? {

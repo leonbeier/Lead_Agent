@@ -165,6 +165,7 @@ type DirectExaQueryPlanningContext = {
   recentQueryHistory?: ExaQueryHistoryInsight[];
   prequalification?: PrequalificationConfig;
   useAzureQueryPlanner?: boolean;
+  exaSearchMode?: ExaSearchModeSetting;
   forcedQueries?: string[];
   plannedQueryMetadata?: {
     defaultQueries?: string[];
@@ -3846,6 +3847,9 @@ export class LeadPipelineAgent {
       buildDescription: (result: { title?: string; highlights?: string[]; summary?: string; text?: string }, filter: OrganizationFilter) => string;
       loadKnownExcludedDomains: () => Promise<Set<string>>;
     };
+    if (queryPlanningContext.exaSearchMode) {
+      this.exaPreviewClient.setSearchPayloadOptions(resolveExaSearchMode(queryPlanningContext.exaSearchMode));
+    }
     const apiKey = exaClient.runtimeApiKey ?? env.EXA_API_KEY;
     if (!apiKey) {
       return [];
@@ -4168,10 +4172,6 @@ export class LeadPipelineAgent {
       || /Exa query planner diversity rewrite timed out/i.test(error.message)
       || /temporarily unavailable/i.test(error.message)
       || /fetch failed/i.test(error.message);
-  }
-
-  configureDirectExaSearchMode(mode: ExaSearchModeSetting | undefined): void {
-    this.exaPreviewClient.setSearchPayloadOptions(resolveExaSearchMode(mode));
   }
 
   async discoverDirectExaCompaniesForExecution(
