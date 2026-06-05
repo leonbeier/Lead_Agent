@@ -488,6 +488,16 @@ export const defaultFilters: OrganizationFilter[] = [
     notes: "Prefer builders with modular products and clear customer integration pathways."
   },
   {
+    name: "DACH Vision AI Machine Builders",
+    persona: "Machine builder or OEM where Vision AI, machine vision, or optical inspection is the primary purpose of the shipped product",
+    industries: ["Machinery", "Industrial Automation", "Electrical Manufacturing", "Robotics", "Computer Vision"],
+    keywords: ["aoi", "inspection system", "optical inspection", "machine vision", "visual quality control", "inline inspection", "vision system", "imaging system"],
+    locations: ["Germany", "Austria", "Switzerland"],
+    employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
+    targetCategories: ["machine_builder_vision_ai"],
+    notes: "Target companies where Vision AI or optical inspection is the core product, not a side feature."
+  },
+  {
     name: "Europe Software Platforms For Embedding",
     persona: "Software platform where model generation can be embedded as capability layer",
     industries: ["Computer Software", "Developer Tools", "Industrial Software", "Cloud Services"],
