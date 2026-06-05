@@ -363,6 +363,7 @@ const prequalificationConfigSchema = z.object({
     industrial_end_customer_scaled: prequalificationCategoryContextSchema.optional(),
     camera_manufacturer_partner: prequalificationCategoryContextSchema.optional(),
     machine_builder_ai_enablement: prequalificationCategoryContextSchema.optional(),
+    machine_builder_vision_ai: prequalificationCategoryContextSchema.optional(),
     software_platform_embedding: prequalificationCategoryContextSchema.optional()
   }).optional()
 });
@@ -376,6 +377,7 @@ const executionContextsSchema = z.object({
   industrial_end_customer_scaled: executionCategoryContextSchema.optional(),
   camera_manufacturer_partner: executionCategoryContextSchema.optional(),
   machine_builder_ai_enablement: executionCategoryContextSchema.optional(),
+  machine_builder_vision_ai: executionCategoryContextSchema.optional(),
   software_platform_embedding: executionCategoryContextSchema.optional()
 });
 

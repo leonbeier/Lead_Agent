@@ -4308,6 +4308,8 @@ export class AzureOpenAIClient {
         return { customer: 2, serviceProvider: 3, partner: 10 };
       case "machine_builder_ai_enablement":
         return { customer: 5, serviceProvider: 2, partner: 9 };
+      case "machine_builder_vision_ai":
+        return { customer: 3, serviceProvider: 5, partner: 8 };
       case "software_platform_embedding":
         return { customer: 2, serviceProvider: 4, partner: 9 };
       default:
@@ -4337,6 +4339,8 @@ export class AzureOpenAIClient {
         return 150000 * signalMultiplier;
       case "machine_builder_ai_enablement":
         return 250000 * signalMultiplier;
+      case "machine_builder_vision_ai":
+        return 180000 * signalMultiplier;
       case "software_platform_embedding":
         return 120000 * signalMultiplier;
       default:
@@ -4377,6 +4381,8 @@ export class AzureOpenAIClient {
         return "Industrial imaging, machine vision, and camera manufacturing";
       case "machine_builder_ai_enablement":
         return "Machinery, OEM equipment, and industrial production systems";
+      case "machine_builder_vision_ai":
+        return "Machine vision, optical inspection, AOI systems, and visual quality control equipment";
       case "software_platform_embedding":
         return "Vision software platforms, developer tools, and workflow platforms";
       default:
@@ -4402,6 +4408,8 @@ export class AzureOpenAIClient {
         return "Industrial cameras, imaging components, machine vision hardware";
       case "machine_builder_ai_enablement":
         return "Machines, OEM equipment, fixtures, and automation systems";
+      case "machine_builder_vision_ai":
+        return "AOI machines, inline inspection systems, optical quality control equipment, and machine vision systems";
       case "software_platform_embedding":
         return "Software platform, APIs, workflows, and embeddable vision tooling";
       default:
