@@ -53,6 +53,7 @@ const SIDEBAR_CATEGORY_OPTIONS: CategoryOption[] = [
   { value: "industrial_end_customer_scaled", label: "Industrie-Endkunden mit ausreichender Projektgroesse" },
   { value: "camera_manufacturer_partner", label: "Kamera-/Imaging-Hersteller als Partner" },
   { value: "machine_builder_ai_enablement", label: "Maschinenbauer mit AI-Option Potenzial" },
+  { value: "machine_builder_vision_ai", label: "Maschinenbauer mit Vision AI als Kernprodukt" },
   { value: "software_platform_embedding", label: "Softwareplattformen fuer Embedding-Partnerschaften" }
 ];
 
