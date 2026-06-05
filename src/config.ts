@@ -25,6 +25,7 @@ const envSchema = z.object({
   EXA_API_KEY: z.string().optional(),
   EXA_MAX_BUDGET_USD: z.coerce.number().nonnegative().default(20),
   EXA_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(90_000),
+  EXA_MIN_REQUEST_INTERVAL_MS: z.coerce.number().int().nonnegative().default(250),
   DIFFBOT_TOKEN: z.string().optional(),
   OPENAI_WEB_SEARCH_MODEL: z.string().default("gpt-5.4-mini"),
   OPENAI_PRE_RESEARCH_MODEL: z.string().optional(),

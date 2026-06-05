@@ -2,6 +2,7 @@ import { OrganizationFilter, CompanySample, CompanySearchMode } from "../types";
 import { DiffbotSearchClient } from "./diffbot-search";
 import { DiffbotTestDataClient } from "./diffbot-test-data";
 import { WebSearchAgent } from "./web-search-agent";
+import type { ExaSearchType } from "./exa-search";
 
 export class CompanySearchClient {
   private readonly webSearchAgent = new WebSearchAgent();
@@ -16,7 +17,7 @@ export class CompanySearchClient {
     this.webSearchAgent.setExaExcludedDomains(domains);
   }
 
-  setExaSearchPayloadOptions(options: { includeExcludeDomains?: boolean; includeCompanyCategoryFilter?: boolean; maxQueryCount?: number }): void {
+  setExaSearchPayloadOptions(options: { includeExcludeDomains?: boolean; includeCompanyCategoryFilter?: boolean; maxQueryCount?: number; searchType?: ExaSearchType; systemPrompt?: string | null }): void {
     this.webSearchAgent.setExaSearchPayloadOptions(options);
   }
 

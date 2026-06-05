@@ -2,11 +2,11 @@ import { env, readiness } from "../config";
 import { LeadPipelineAgent } from "../agents/lead-pipeline";
 import { AzureOpenAIClient } from "../clients/azure-openai";
 import { DiffbotSearchClient } from "../clients/diffbot-search";
-import { ExaSearchClient } from "../clients/exa-search";
+import { ExaSearchClient, resolveExaSearchMode } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { WebSearchAgent } from "../clients/web-search-agent";
 import { ControlPlaneStore } from "../control-plane";
-import { OrganizationFilter, CompanySample, ExaQueryHistoryInsight, LeadCategory, LiveExaExcludedDomainDetail, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
+import { OrganizationFilter, CompanySample, ExaQueryHistoryInsight, ExaSearchModeSetting, LeadCategory, LiveExaExcludedDomainDetail, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
 import { buildDebugSearchFilter, DebugConsoleSearchMode, normalizeManualWebsites } from "./test-console";
 
 export type DebugConsoleStage = "company_search" | "ai_prefilter" | "outreach_prep" | "contact_discovery";
@@ -19,6 +19,7 @@ export interface DebugConsoleRunRequest {
   region?: string;
   companySearchMode: DebugConsoleSearchMode;
   exaQueryCount?: number;
+  exaSearchMode?: ExaSearchModeSetting;
   limit: number;
   useExaExcludeDomains?: boolean;
   useExaCompanyCategory?: boolean;
@@ -205,7 +206,8 @@ export class DebugConsoleService {
       this.exaSearchClient.setApiKey(request.exaApiKey);
       this.exaSearchClient.setSearchPayloadOptions({
         includeExcludeDomains: request.useExaExcludeDomains ?? true,
-        includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false
+        includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
+        ...resolveExaSearchMode(request.exaSearchMode)
       });
     }
 

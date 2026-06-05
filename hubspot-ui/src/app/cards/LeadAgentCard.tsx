@@ -13,6 +13,7 @@ import {
   StatusTag,
   Text,
   TextArea,
+  Select,
   hubspot
 } from "@hubspot/ui-extensions";
 
@@ -57,6 +58,24 @@ const SIDEBAR_CATEGORY_OPTIONS: CategoryOption[] = [
 
 const SIDEBAR_DEFAULT_TARGET_LEADS = 20;
 const SIDEBAR_DEFAULT_EXA_QUERY_COUNT = 4;
+const SIDEBAR_DEFAULT_EXA_SEARCH_MODE: ExaSearchMode = "fast";
+
+type ExaSearchMode =
+  | "auto"
+  | "auto_system"
+  | "deep_lite"
+  | "deep_lite_system"
+  | "fast"
+  | "fast_system";
+
+const EXA_SEARCH_MODE_OPTIONS: Array<{ value: ExaSearchMode; label: string }> = [
+  { value: "fast", label: "Fast" },
+  { value: "fast_system", label: "Fast + System Prompt" },
+  { value: "auto", label: "Auto" },
+  { value: "auto_system", label: "Auto + System Prompt" },
+  { value: "deep_lite", label: "Deep-Lite" },
+  { value: "deep_lite_system", label: "Deep-Lite + System Prompt" }
+];
 
 type SettingsPayload = {
   settings?: {
@@ -67,6 +86,7 @@ type SettingsPayload = {
     companySearchMode?: "internet_research" | "open_crawler_search" | "apollo_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
     syncToHubSpot?: boolean;
     exaQueryCount?: number;
+    exaSearchMode?: ExaSearchMode;
     exaApiKey?: string;
     diffbotToken?: string;
     maxRuntimeMs?: number;
@@ -389,6 +409,7 @@ function buildSidebarSettingsPayload(input: {
   companySearchMode: SidebarSearchMode;
   syncToHubSpot: boolean;
   exaQueryCount: number;
+  exaSearchMode: ExaSearchMode;
   exaApiKey: string;
   diffbotToken: string;
   maxRuntimeMinutes: number;
@@ -404,6 +425,7 @@ function buildSidebarSettingsPayload(input: {
     companySearchMode: input.companySearchMode,
     syncToHubSpot: input.syncToHubSpot,
     exaQueryCount: Math.max(1, input.exaQueryCount),
+    exaSearchMode: input.exaSearchMode,
     exaApiKey: input.exaApiKey.trim(),
     diffbotToken: input.diffbotToken.trim(),
     maxRuntimeMs: Math.round(Math.min(180, Math.max(1, input.maxRuntimeMinutes || 20)) * 60_000),
@@ -430,6 +452,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
   const [successMessage, setSuccessMessage] = React.useState<string>("");
   const [syncToHubSpot, setSyncToHubSpot] = React.useState(true);
   const [exaQueryCount, setExaQueryCount] = React.useState<number>(SIDEBAR_DEFAULT_EXA_QUERY_COUNT);
+  const [exaSearchMode, setExaSearchMode] = React.useState<ExaSearchMode>(SIDEBAR_DEFAULT_EXA_SEARCH_MODE);
   const [exaApiKey, setExaApiKey] = React.useState("");
   const [diffbotToken, setDiffbotToken] = React.useState("");
   const [maxRuntimeMinutes, setMaxRuntimeMinutes] = React.useState<number>(20);
@@ -504,6 +527,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
     companySearchMode,
     syncToHubSpot,
     exaQueryCount,
+    exaSearchMode,
     exaApiKey,
     diffbotToken,
     maxRuntimeMinutes,
@@ -517,6 +541,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
     diffbotToken,
     exaApiKey,
     exaQueryCount,
+    exaSearchMode,
     market,
     maxRuntimeMinutes,
     outreachPrepConcurrency,
@@ -575,6 +600,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
         setTargetCategoryRefinement(settingsPayload.settings?.targetCategoryRefinement ?? "");
         setSyncToHubSpot(settingsPayload.settings?.syncToHubSpot ?? true);
         setExaQueryCount(settingsPayload.settings?.exaQueryCount ?? SIDEBAR_DEFAULT_EXA_QUERY_COUNT);
+        setExaSearchMode(settingsPayload.settings?.exaSearchMode ?? SIDEBAR_DEFAULT_EXA_SEARCH_MODE);
         setExaApiKey(settingsPayload.settings?.exaApiKey ?? "");
         setDiffbotToken(settingsPayload.settings?.diffbotToken ?? "");
         setMaxRuntimeMinutes(Math.max(1, Math.round((settingsPayload.settings?.maxRuntimeMs ?? 1_200_000) / 60_000)));
@@ -590,6 +616,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           companySearchMode: normalizeSidebarSearchMode(settingsPayload.settings?.companySearchMode),
           syncToHubSpot: settingsPayload.settings?.syncToHubSpot ?? true,
           exaQueryCount: settingsPayload.settings?.exaQueryCount ?? SIDEBAR_DEFAULT_EXA_QUERY_COUNT,
+          exaSearchMode: settingsPayload.settings?.exaSearchMode ?? SIDEBAR_DEFAULT_EXA_SEARCH_MODE,
           exaApiKey: settingsPayload.settings?.exaApiKey ?? "",
           diffbotToken: settingsPayload.settings?.diffbotToken ?? "",
           maxRuntimeMinutes: Math.max(1, Math.round((settingsPayload.settings?.maxRuntimeMs ?? 1_200_000) / 60_000)),
@@ -755,6 +782,7 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           syncToHubSpot,
           reuseQualifiedCompanyCache: true,
           exaQueryCount,
+          exaSearchMode,
           exaApiKey: exaApiKey.trim() || undefined,
           diffbotToken: diffbotToken.trim() || undefined,
           maxRuntimeMs: Math.round(Math.min(180, Math.max(1, maxRuntimeMinutes || 20)) * 60_000),
@@ -985,6 +1013,14 @@ function LeadAgentCard({ openIframe, portalId, baseUrl, sharedKey }: LeadAgentCa
           step={1}
           value={exaQueryCount}
           onChange={(value) => setExaQueryCount(Math.max(1, Math.min(12, Number(value) || SIDEBAR_DEFAULT_EXA_QUERY_COUNT)))}
+          readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
+        />
+        <Select
+          label="Exa Modus"
+          name="exaSearchMode"
+          options={EXA_SEARCH_MODE_OPTIONS}
+          value={exaSearchMode}
+          onChange={(value) => setExaSearchMode((value as ExaSearchMode) || SIDEBAR_DEFAULT_EXA_SEARCH_MODE)}
           readOnly={!canFetch || isLoading || Boolean(runStatus?.running)}
         />
         <NumberInput

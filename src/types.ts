@@ -15,6 +15,13 @@ export type SelectableLeadCategory = Exclude<LeadCategory, "irrelevant" | "other
 
 export type CompanySearchMode = "internet_research" | "open_crawler_search" | "apollo_search" | "exa_search" | "diffbot_search" | "diffbot_test_data";
 export type SearchStrategyPreset = "default" | "optimized_vision_integrators";
+export type ExaSearchModeSetting =
+  | "auto"
+  | "auto_system"
+  | "deep_lite"
+  | "deep_lite_system"
+  | "fast"
+  | "fast_system";
 
 export interface EditablePrequalificationCategoryContext {
   classificationRules?: string[];
@@ -175,6 +182,7 @@ export interface LeadAgentSettings {
   exaApiKey?: string;
   diffbotToken?: string;
   exaQueryCount?: number;
+  exaSearchMode?: ExaSearchModeSetting;
   useAzureQueryPlanner?: boolean;
   useExaExcludeDomains?: boolean;
   excludePreviouslyFoundExaDomains?: boolean;
@@ -494,6 +502,7 @@ export interface LeadJobRequest {
   exaApiKey?: string;
   diffbotToken?: string;
   exaQueryCount?: number;
+  exaSearchMode?: ExaSearchModeSetting;
   useAzureQueryPlanner?: boolean;
   useExaExcludeDomains?: boolean;
   excludePreviouslyFoundExaDomains?: boolean;

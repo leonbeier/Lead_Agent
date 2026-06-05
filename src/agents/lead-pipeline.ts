@@ -6,7 +6,7 @@ import { buildSuggestedFilters, extractExplicitMarketLocality, isGermanyFocusedM
 import { ApolloClient } from "../clients/apollo";
 import { CompanySearchClient } from "../clients/company-search";
 import { AzureOpenAIClient } from "../clients/azure-openai";
-import { ExaSearchClient } from "../clients/exa-search";
+import { ExaSearchClient, resolveExaSearchMode } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { ControlPlaneStore, getLeadAgentRuntimeDataDirectory } from "../control-plane";
 import { buildDebugSearchFilter, resolveSearchFilterBase } from "../debug/test-console";
@@ -16,6 +16,7 @@ import {
   CompanyScreeningRecord,
   CompanySample,
   ExaQueryHistoryInsight,
+  ExaSearchModeSetting,
   FilterEvaluation,
   GeneratedLeadRecord,
   LeadCategory,
@@ -286,13 +287,15 @@ export class LeadPipelineAgent {
     this.companySearchClient.setExaSearchPayloadOptions({
       includeExcludeDomains: request.useExaExcludeDomains ?? true,
       includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
-      maxQueryCount: request.exaQueryCount ?? 4
+      maxQueryCount: request.exaQueryCount ?? 4,
+      ...resolveExaSearchMode(request.exaSearchMode)
     });
     this.exaPreviewClient.setApiKey(request.exaApiKey);
     this.exaPreviewClient.setSearchPayloadOptions({
       includeExcludeDomains: request.useExaExcludeDomains ?? true,
       includeCompanyCategoryFilter: request.useExaCompanyCategory ?? false,
-      maxQueryCount: request.exaQueryCount ?? 4
+      maxQueryCount: request.exaQueryCount ?? 4,
+      ...resolveExaSearchMode(request.exaSearchMode)
     });
     const deadlineAt = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? DEFAULT_MAX_RUNTIME_MS);
     const wasStopped = () => Boolean(options?.shouldStop?.());
@@ -4165,6 +4168,10 @@ export class LeadPipelineAgent {
       || /Exa query planner diversity rewrite timed out/i.test(error.message)
       || /temporarily unavailable/i.test(error.message)
       || /fetch failed/i.test(error.message);
+  }
+
+  configureDirectExaSearchMode(mode: ExaSearchModeSetting | undefined): void {
+    this.exaPreviewClient.setSearchPayloadOptions(resolveExaSearchMode(mode));
   }
 
   async discoverDirectExaCompaniesForExecution(

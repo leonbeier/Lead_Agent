@@ -22,12 +22,15 @@ type ExaSearchResponse = {
   };
 };
 
+export type ExaSearchType = "auto" | "fast" | "deep-lite";
+
 export type ExaSearchRequestPayload = {
   query: string;
-  type: "fast";
+  type: ExaSearchType;
   category?: "company";
   numResults: number;
   excludeDomains?: string[];
+  systemPrompt?: string;
   contents: {
     summary: true;
     highlights: true;
@@ -38,16 +41,55 @@ type ExaSearchPayloadOptions = {
   includeExcludeDomains?: boolean;
   includeCompanyCategoryFilter?: boolean;
   maxQueryCount?: number;
+  searchType?: ExaSearchType;
+  systemPrompt?: string | null;
 };
 
 type ExaQueryBuildOptions = {
   targetCategoryRefinement?: string;
 };
 
+// Novelty/dedup guidance for the "+ system prompt" modes. Soft, natural-language steer (Exa systemPrompt
+// is best-effort, not a hard filter) to surface lesser-known regional specialists over repeat large vendors.
+export const EXA_NOVELTY_SYSTEM_PROMPT =
+  "Return diverse, distinct companies. Avoid well-known large vendors and domains that are likely already widely surfaced; prioritize lesser-known regional specialists that precisely match the query.";
+
+export const EXA_SEARCH_MODES = [
+  "auto",
+  "auto_system",
+  "deep_lite",
+  "deep_lite_system",
+  "fast",
+  "fast_system"
+] as const;
+
+export type ExaSearchMode = (typeof EXA_SEARCH_MODES)[number];
+
+export function resolveExaSearchMode(mode: ExaSearchMode | undefined): { searchType: ExaSearchType; systemPrompt: string | null } {
+  switch (mode) {
+    case "auto":
+      return { searchType: "auto", systemPrompt: null };
+    case "auto_system":
+      return { searchType: "auto", systemPrompt: EXA_NOVELTY_SYSTEM_PROMPT };
+    case "deep_lite":
+      return { searchType: "deep-lite", systemPrompt: null };
+    case "deep_lite_system":
+      return { searchType: "deep-lite", systemPrompt: EXA_NOVELTY_SYSTEM_PROMPT };
+    case "fast_system":
+      return { searchType: "fast", systemPrompt: EXA_NOVELTY_SYSTEM_PROMPT };
+    case "fast":
+    default:
+      return { searchType: "fast", systemPrompt: null };
+  }
+}
+
 const EXA_ENDPOINT = "https://api.exa.ai/search";
 const MAX_EXA_RESULTS_PER_QUERY = 20;
 const MAX_EXA_EXCLUDE_DOMAINS = 1200;
-const EXA_MIN_REQUEST_INTERVAL_MS = 250;
+const EXA_MIN_REQUEST_INTERVAL_MS = env.EXA_MIN_REQUEST_INTERVAL_MS;
+// Retry backoff has a fixed floor so disabling steady-state pacing (interval=0) still backs off on 429s.
+const EXA_RETRY_BACKOFF_BASE_MS = Math.max(250, EXA_MIN_REQUEST_INTERVAL_MS);
+const DEFAULT_EXA_SEARCH_TYPE: ExaSearchType = "fast";
 const EXA_MAX_RETRIES = 3;
 const EXA_QUERY_CONCURRENCY = 3;
 const EXA_REQUEST_TIMEOUT_MS = env.EXA_REQUEST_TIMEOUT_MS;
@@ -78,6 +120,10 @@ export class ExaSearchClient {
 
   private maxQueryCount = Number.POSITIVE_INFINITY;
 
+  private searchType: ExaSearchType = DEFAULT_EXA_SEARCH_TYPE;
+
+  private searchSystemPrompt?: string;
+
   setApiKey(apiKey: string | undefined): void {
     this.runtimeApiKey = apiKey?.trim() || undefined;
   }
@@ -93,6 +139,15 @@ export class ExaSearchClient {
 
     if (typeof options.maxQueryCount === "number") {
       this.maxQueryCount = Math.max(1, Math.floor(options.maxQueryCount ?? 1));
+    }
+
+    if (typeof options.searchType === "string") {
+      this.searchType = options.searchType;
+    }
+
+    if (options.systemPrompt !== undefined) {
+      const trimmed = typeof options.systemPrompt === "string" ? options.systemPrompt.trim() : "";
+      this.searchSystemPrompt = trimmed.length > 0 ? trimmed : undefined;
     }
   }
 
@@ -232,7 +287,7 @@ export class ExaSearchClient {
           throw new Error(`Exa search request failed: ${message}`);
         }
 
-        await this.sleep(EXA_MIN_REQUEST_INTERVAL_MS * attempt * 2);
+        await this.sleep(EXA_RETRY_BACKOFF_BASE_MS * attempt * 2);
         continue;
       }
 
@@ -245,7 +300,7 @@ export class ExaSearchClient {
         throw new Error(`Exa search failed: ${response.status} ${errorText}`);
       }
 
-      await this.sleep(EXA_MIN_REQUEST_INTERVAL_MS * attempt * 2);
+      await this.sleep(EXA_RETRY_BACKOFF_BASE_MS * attempt * 2);
     }
 
     throw new Error("Exa search failed after exhausting retries.");
@@ -260,10 +315,11 @@ export class ExaSearchClient {
 
     return {
       query,
-      type: "fast",
+      type: this.searchType,
       ...(this.includeCompanyCategoryFilter ? { category: "company" as const } : {}),
       numResults: Math.min(MAX_EXA_RESULTS_PER_QUERY, Math.max(1, numResults)),
       ...(this.includeExcludeDomains ? { excludeDomains: normalizedExcludeDomains } : {}),
+      ...(this.searchSystemPrompt ? { systemPrompt: this.searchSystemPrompt } : {}),
       contents: {
         summary: true,
         highlights: true
@@ -368,6 +424,11 @@ export class ExaSearchClient {
   }
 
   private async waitForRateLimitSlot(): Promise<void> {
+    if (EXA_MIN_REQUEST_INTERVAL_MS <= 0) {
+      // Rate limiting disabled via EXA_MIN_REQUEST_INTERVAL_MS=0.
+      return;
+    }
+
     const previousRequest = ExaSearchClient.requestChain;
     let releaseRequest = () => {};
     ExaSearchClient.requestChain = new Promise<void>((resolve) => {

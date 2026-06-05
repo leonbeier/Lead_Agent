@@ -1,6 +1,6 @@
 import { OrganizationFilter, CompanySample, CompanySearchMode, CrawledWebsiteProfile, PreCategorizedCompany } from "../types";
 import { DiffbotSearchClient } from "./diffbot-search";
-import { ExaSearchClient } from "./exa-search";
+import { ExaSearchClient, ExaSearchType } from "./exa-search";
 import { OpenCrawlerDiscoveryMetrics, OpenCrawlerSearchClient } from "./open-crawler-search";
 
 interface SearchEvidence {
@@ -23,7 +23,7 @@ export class WebSearchAgent {
     this.exaSearchClient.setAdditionalExcludedDomains(domains);
   }
 
-  setExaSearchPayloadOptions(options: { includeExcludeDomains?: boolean; includeCompanyCategoryFilter?: boolean; maxQueryCount?: number }): void {
+  setExaSearchPayloadOptions(options: { includeExcludeDomains?: boolean; includeCompanyCategoryFilter?: boolean; maxQueryCount?: number; searchType?: ExaSearchType; systemPrompt?: string | null }): void {
     this.exaSearchClient.setSearchPayloadOptions(options);
   }
 

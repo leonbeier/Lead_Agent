@@ -326,7 +326,7 @@ export class HubSpotClient {
       [] as Array<{ url: string; html: string }>
     );
     const websiteContacts = await this.withTimeout(
-      this.extractWebsiteContactsFromPages(company, pages).catch(() => [] as PublicContactCandidate[]),
+      this.extractWebsiteContactsFromPages(company, pages, undefined, { includeOfficialWebsiteSearch: false }).catch(() => [] as PublicContactCandidate[]),
       EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS,
       [] as PublicContactCandidate[]
     );
@@ -336,15 +336,17 @@ export class HubSpotClient {
       ...fallbackSelectedContacts
     ]);
 
-    if (options.selectedContactsTimeoutMs) {
-      return this.withTimeout(
-        this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback),
-        options.selectedContactsTimeoutMs,
-        contactDiscoveryFallback
-      );
-    }
+    const selectedContacts = options.selectedContactsTimeoutMs
+      ? await this.withTimeout(
+          this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback),
+          options.selectedContactsTimeoutMs,
+          contactDiscoveryFallback
+        )
+      : await this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback);
 
-    return this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback);
+    // Guarantee the reachable website mailbox/phone is never lost when the richer LinkedIn/named
+    // discovery times out or returns empty: fall back to the deterministic website contact.
+    return selectedContacts.length > 0 ? selectedContacts : contactDiscoveryFallback;
   }
 
   async previewHubSpotSync(
@@ -1258,11 +1260,14 @@ export class HubSpotClient {
   private async extractWebsiteContactsFromPages(
     company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
     pages: Array<{ url: string; html: string }>,
-    officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null
+    officialWebsiteProfile?: OfficialWebsiteCompanyProfile | null,
+    options: { includeOfficialWebsiteSearch?: boolean } = {}
   ): Promise<PublicContactCandidate[]> {
     if (!company.domain) {
       return [];
     }
+
+    const includeOfficialWebsiteSearch = options.includeOfficialWebsiteSearch ?? true;
 
     const rootUrl = this.normalizeCompanyUrl(company.domain);
     const allowedEmailDomains = this.buildAllowedEmailDomains(rootUrl);
@@ -1304,6 +1309,14 @@ export class HubSpotClient {
       [...candidates.values()].filter((candidate) => !this.isLowValueMailbox(candidate.email ?? "")),
       namedWebsiteContacts
     );
+
+    if (!includeOfficialWebsiteSearch) {
+      // Deterministic regex-only website contacts (emails/phones from already-fetched HTML).
+      // Skips the slow official-website AI profile so the cheap reachable contact is never
+      // starved by an AI/browser call under a tight execution timeout.
+      return websiteContacts;
+    }
+
     const officialWebsiteSearchContacts = await this.discoverOfficialWebsiteSearchContacts(company, officialWebsiteProfile);
 
     return this.mergeDiscoveredContacts(officialWebsiteSearchContacts, websiteContacts);

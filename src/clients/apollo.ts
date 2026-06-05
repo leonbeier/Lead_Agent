@@ -3,6 +3,7 @@ import { ApolloContactCandidate, OrganizationFilter, CompanySample, CompanySearc
 import { DiffbotSearchClient } from "./diffbot-search";
 import { DiffbotTestDataClient } from "./diffbot-test-data";
 import { WebSearchAgent } from "./web-search-agent";
+import type { ExaSearchType } from "./exa-search";
 
 interface ApolloResolvedOrganization {
   id?: string;
@@ -29,7 +30,7 @@ export class ApolloClient {
     this.webSearchAgent.setExaExcludedDomains(domains);
   }
 
-  setExaSearchPayloadOptions(options: { includeExcludeDomains?: boolean; includeCompanyCategoryFilter?: boolean; maxQueryCount?: number }): void {
+  setExaSearchPayloadOptions(options: { includeExcludeDomains?: boolean; includeCompanyCategoryFilter?: boolean; maxQueryCount?: number; searchType?: ExaSearchType; systemPrompt?: string | null }): void {
     this.webSearchAgent.setExaSearchPayloadOptions(options);
   }
 

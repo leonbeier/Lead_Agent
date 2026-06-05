@@ -200,7 +200,7 @@ const SEARCH_RESULT_HEADROOM = 4;
 const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
-const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 240_000;
+const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 280_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
 const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
 const MIN_EXA_BATCH_REQUESTS = 2;
@@ -371,6 +371,7 @@ export class LeadWorkerRunService {
     const outreachConcurrency = Math.max(1, request.outreachPrepConcurrency ?? 6);
     const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 8);
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 4);
+    this.leadPipelineAgent.configureDirectExaSearchMode(request.exaSearchMode);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const learning = typeof this.controlPlaneStore.getLearning === "function"
       ? await this.controlPlaneStore.getLearning()
@@ -1000,7 +1001,7 @@ export class LeadWorkerRunService {
           try {
             contactDebug = await Promise.race<ContactDebugResult>([
               this.debugConsoleService.discoverContactsForExecution(state.company, {
-                selectedContactsTimeoutMs: 120_000
+                selectedContactsTimeoutMs: 200_000
               }),
               timeoutPromise
             ]);

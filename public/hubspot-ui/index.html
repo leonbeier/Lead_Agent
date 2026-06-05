@@ -490,6 +490,17 @@
               Exa Suchversuche
               <input id="exaQueryCount" name="exaQueryCount" type="number" min="1" max="50" required />
             </label>
+            <label>
+              Exa Modus
+              <select id="exaSearchMode" name="exaSearchMode">
+                <option value="fast">Fast</option>
+                <option value="fast_system">Fast + System Prompt</option>
+                <option value="auto">Auto</option>
+                <option value="auto_system">Auto + System Prompt</option>
+                <option value="deep_lite">Deep-Lite</option>
+                <option value="deep_lite_system">Deep-Lite + System Prompt</option>
+              </select>
+            </label>
             <label id="exaApiKeyField" style="grid-column: 1 / -1; display: none;">
               Exa API Key
               <input id="exaApiKey" name="exaApiKey" type="password" autocomplete="off" placeholder="Optional fuer Exa Search. Lauf endet bei Lead-Ziel, Zeitlimit oder fehlenden Credits." />
@@ -632,6 +643,17 @@
               <label>
                 Exa Suchversuche
                 <input id="debug-exaQueryCount" name="debug-exaQueryCount" type="number" min="1" max="50" value="1" />
+              </label>
+              <label>
+                Exa Modus
+                <select id="debug-exaSearchMode" name="debug-exaSearchMode">
+                  <option value="fast">Fast</option>
+                  <option value="fast_system">Fast + System Prompt</option>
+                  <option value="auto">Auto</option>
+                  <option value="auto_system">Auto + System Prompt</option>
+                  <option value="deep_lite">Deep-Lite</option>
+                  <option value="deep_lite_system">Deep-Lite + System Prompt</option>
+                </select>
               </label>
               <label>
                 KI Vorfilter parallel
@@ -908,6 +930,7 @@
             dryRun: false,
             syncToHubSpot: true,
             exaQueryCount: 4,
+            exaSearchMode: "fast",
             aiPrefilterConcurrency: 8,
             outreachPrepConcurrency: 6,
             contactSearchConcurrency: 8,
@@ -1119,6 +1142,7 @@
         document.getElementById("companySearchMode").value = normalizedSearchMode;
         document.getElementById("maxRuntimeMinutes").value = String(Math.max(1, Math.round((settings.maxRuntimeMs || 10800000) / 60000)));
         document.getElementById("exaQueryCount").value = settings.exaQueryCount || 1;
+        document.getElementById("exaSearchMode").value = settings.exaSearchMode || "fast";
         document.getElementById("exaApiKey").value = settings.exaApiKey || "";
         document.getElementById("diffbotToken").value = settings.diffbotToken || "";
         document.getElementById("mainContext").value = settings.mainContext || "";
@@ -1131,6 +1155,7 @@
         document.getElementById("excludePreviouslyFoundExaDomains").checked = settings.excludePreviouslyFoundExaDomains !== false;
         document.getElementById("useExaCompanyCategory").checked = Boolean(settings.useExaCompanyCategory);
         document.getElementById("debug-exaQueryCount").value = settings.exaQueryCount || 1;
+        document.getElementById("debug-exaSearchMode").value = settings.exaSearchMode || "fast";
         document.getElementById("debug-targetCategoryRefinement").value = settings.targetCategoryRefinement || "";
         document.getElementById("debug-aiPrefilterConcurrency").value = debugAiPrefilterConcurrency;
         document.getElementById("debug-outreachPrepConcurrency").value = settings.outreachPrepConcurrency || 20;
@@ -1184,6 +1209,7 @@
           exaApiKey: document.getElementById("exaApiKey").value.trim() || undefined,
           diffbotToken: document.getElementById("diffbotToken").value.trim() || undefined,
           exaQueryCount: Number(document.getElementById("exaQueryCount").value) || 1,
+          exaSearchMode: document.getElementById("exaSearchMode").value || "fast",
           useExaExcludeDomains: document.getElementById("useExaExcludeDomains").checked,
           excludePreviouslyFoundExaDomains: document.getElementById("excludePreviouslyFoundExaDomains").checked,
           useExaCompanyCategory: document.getElementById("useExaCompanyCategory").checked,
@@ -2131,6 +2157,7 @@ ${message.content || ""}`).join("\n\n");
           region: document.getElementById("debug-region").value.trim() || undefined,
           companySearchMode: document.getElementById("debug-companySearchMode").value,
           exaQueryCount: Number(document.getElementById("debug-exaQueryCount").value) || 3,
+          exaSearchMode: document.getElementById("debug-exaSearchMode").value || "fast",
           limit: Number(document.getElementById("debug-limit").value) || 4,
           useExaExcludeDomains: document.getElementById("debug-useExaExcludeDomains").checked,
           useExaCompanyCategory: document.getElementById("debug-useExaCompanyCategory").checked,
