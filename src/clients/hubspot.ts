@@ -1569,30 +1569,25 @@ export class HubSpotClient {
       queries.map((query) => async () => this.searchBingResults(query, 5)),
       PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
     );
-    const hits = hitGroups.flat();
-    const relevantHits = hits.filter((hit) =>
-      this.isRelevantCompanyHit(
-        company,
-        companyAliases,
-        [hit.title, hit.snippet].filter(Boolean).join(" | ")
-      )
-    );
-    const searchEvidence = relevantHits
+    // Agent-first: pass all search hits directly to the AI agents. Do not filter hits with
+    // isRelevantCompanyHit or extract names/titles via regex heuristics. The Foundry discovery
+    // agent reads raw evidence and uses bing_grounding to find and evaluate real contacts.
+    const allHits = hitGroups.flat();
+    const searchEvidence = allHits
       .map((hit) => `Query: ${hit.query}\nTitle: ${hit.title}\nURL: ${hit.url}\nSnippet: ${hit.snippet}`)
       .join("\n\n");
-    const heuristicContacts = this.extractContactsFromSearchHits(company, relevantHits, companyAliases);
     const evidence = [
       websiteEvidence ? `Official website evidence:\n${websiteEvidence}` : undefined,
       knownContactEvidence ? `Known website contacts:\n${knownContactEvidence}` : undefined,
       searchEvidence ? `Web search evidence:\n${searchEvidence}` : undefined
     ].filter(Boolean).join("\n\n");
-    const strongHeuristicContacts = heuristicContacts.filter((contact) => this.isNamedEmployeeContact(contact));
-    const foundryContacts = evidence.trim() && strongHeuristicContacts.length < 2
+    // Foundry bing_grounding agent is the primary discovery path: it reads the full evidence and
+    // performs additional web searches as needed. Only skip when there is no evidence at all.
+    const foundryContacts = evidence.trim()
       ? await this.foundryAgentsClient.discoverPublicContacts(foundryCompany, evidence, false)
       : [];
-    const mergedContacts = this.mergeDiscoveredContacts(foundryContacts, heuristicContacts);
 
-    return mergedContacts.map((contact) => ({
+    return foundryContacts.map((contact) => ({
       ...contact,
       jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
       linkedinUrl: this.normalizeLinkedInUrl(contact.linkedinUrl),
@@ -1801,190 +1796,6 @@ export class HubSpotClient {
       .replace(/[^a-z0-9]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-  }
-
-  private extractContactsFromSearchHits(
-    company: Pick<PreCategorizedCompany, "name" | "domain">,
-    hits: WebSearchHit[],
-    aliases: string[] = []
-  ): PublicContactCandidate[] {
-    const contacts: PublicContactCandidate[] = [];
-
-    for (const hit of hits) {
-      const linkedinUrl = this.normalizeLinkedInUrl(hit.url);
-      const title = this.decodeHtmlEntities(this.stripHtml(hit.title)).replace(/\s+/g, " ").trim();
-      const snippet = this.decodeHtmlEntities(this.stripHtml(hit.snippet)).replace(/\s+/g, " ").trim();
-      const relevantText = [title, snippet].filter(Boolean).join(" | ");
-
-      if (!this.isRelevantCompanyHit(company, aliases, relevantText)) {
-        continue;
-      }
-
-      if (linkedinUrl && /linkedin\.com\/in\//i.test(linkedinUrl)) {
-        const name = this.extractNameFromSearchTitle(title);
-        if (!name.firstName && !name.lastName) {
-          continue;
-        }
-
-        contacts.push({
-          ...name,
-          jobTitle: this.extractJobTitleFromSearchText(title, snippet),
-          linkedinConnectionCount: this.extractLinkedInConnectionCount(snippet),
-          linkedinUrl,
-          sourceUrl: linkedinUrl,
-          sourceQuery: hit.query,
-          sourceSnippet: snippet,
-          label: "linkedin_profile"
-        });
-        continue;
-      }
-
-      const name = this.extractNameFromSearchTitle(title);
-      if (!name.firstName && !name.lastName) {
-        continue;
-      }
-
-      contacts.push({
-        ...name,
-        jobTitle: this.extractJobTitleFromSearchText(title, snippet),
-        linkedinConnectionCount: this.extractLinkedInConnectionCount(snippet),
-        sourceUrl: hit.url,
-        sourceQuery: hit.query,
-        sourceSnippet: snippet,
-        label: "web_search_contact"
-      });
-    }
-
-    return contacts;
-  }
-
-  private isRelevantCompanyHit(
-    company: Pick<PreCategorizedCompany, "name" | "domain">,
-    aliases: string[],
-    text: string
-  ): boolean {
-    const haystack = text.toLowerCase();
-    const normalizedHaystack = haystack.replace(/[^a-z0-9]+/g, " ");
-    const normalizedDomain = this.normalizeDomain(company.domain);
-    const primaryToken = normalizedDomain?.split(".")[0]?.split(/[-_]+/).find((token) => token && token.length >= 4);
-    if (/(wikipedia|wiktionary|dictionary|cambridge dictionary|collins dictionary|definition\b|meaning\b|translation\b)/i.test(haystack)) {
-      return false;
-    }
-
-    if (primaryToken && this.looksLikeDescriptiveCompanyLabel(company.name) && !normalizedHaystack.includes(primaryToken.toLowerCase())) {
-      return false;
-    }
-
-    const exactAliases = aliases
-      .map((alias) => alias.trim().toLowerCase())
-      .filter((alias) => alias.split(/\s+/).length >= 2 || /(gmbh|ag|ug|ltd|llc|inc)/i.test(alias));
-    if (exactAliases.some((alias) => haystack.includes(alias))) {
-      return true;
-    }
-
-    const normalizedPhrases = Array.from(
-      new Set(
-        [
-          company.name,
-          company.name.replace(/\b(gmbh|ag|ug|ltd|llc|inc)\b/gi, " "),
-          ...aliases,
-          this.normalizeDomain(company.domain)?.split(".")[0]?.replace(/[-_]+/g, " ")
-        ]
-          .filter((value): value is string => Boolean(value))
-          .map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim())
-          .filter((value) => value.length >= 6)
-      )
-    );
-    if (normalizedPhrases.some((phrase) => normalizedHaystack.includes(phrase))) {
-      return true;
-    }
-    const companyTokens = Array.from(
-      new Set(
-        [company.name, normalizedDomain ?? ""]
-          .flatMap((value) => value.split(/[^a-z0-9]+/i))
-          .map((token) => token.toLowerCase())
-          .filter((token) => token.length >= 4 && !/^(https|www|linkedin|company|people|jobs|team|group|gmbh|ag|ug|ltd|llc|inc)$/i.test(token))
-      )
-    );
-
-    if (companyTokens.length < 2) {
-      return false;
-    }
-
-    return companyTokens.filter((token) => haystack.includes(token)).length >= Math.min(2, companyTokens.length);
-  }
-
-  private extractNameFromSearchTitle(title: string): { firstName?: string; lastName?: string } {
-    const primarySegment = title
-      .replace(/\|\s*LinkedIn.*$/i, "")
-      .split(" - ")[0]
-      ?.trim();
-    if (!primarySegment) {
-      return {};
-    }
-
-    const nameParts = primarySegment
-      .split(/\s+/)
-      .map((part) => part.replace(/[^A-Za-zÄÖÜäöüß'’-]/g, ""))
-      .filter(Boolean);
-    if (nameParts.length < 2) {
-      return {};
-    }
-
-    const firstName = this.normalizeNamePart(nameParts[0]);
-    const lastName = this.normalizeNamePart(nameParts[1]);
-    if (!firstName || !lastName) {
-      return {};
-    }
-
-    return { firstName, lastName };
-  }
-
-  private extractJobTitleFromSearchText(title: string, snippet: string): string | undefined {
-    const directRole = PUBLIC_CONTACT_ROLE_PATTERNS.find((role) => new RegExp(`\\b${this.escapeRegex(role)}\\b`, "i").test(`${title} ${snippet}`));
-    if (directRole) {
-      return this.normalizeJobTitle(directRole);
-    }
-
-    if (/\b(founded|founder|co-founder|gruender|gr[uü]ndete)\b/i.test(snippet)) {
-      return "Founder";
-    }
-
-    const snippetSegments = snippet
-      .split(/\s+[·|]\s+|\s+-\s+/)
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-    const likelySnippetTitle = snippetSegments.find((segment) => this.looksLikeJobTitle(segment));
-    if (likelySnippetTitle) {
-      return this.normalizeJobTitle(likelySnippetTitle) ?? likelySnippetTitle;
-    }
-
-    const titleSegments = title.split(" - ").map((segment) => segment.trim()).filter(Boolean);
-    const likelyTitle = titleSegments.find((segment, index) => index > 0 && this.looksLikeJobTitle(segment) && !/linkedin/i.test(segment));
-    return likelyTitle ? (this.normalizeJobTitle(likelyTitle) ?? likelyTitle) : undefined;
-  }
-
-  private extractLinkedInConnectionCount(snippet: string): number | undefined {
-    const match = snippet.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\+?\s*(?:connections|kontakte)\b/i);
-    if (!match) {
-      return undefined;
-    }
-
-    const numericValue = Number(match[1].replace(/[.,]/g, ""));
-    return Number.isFinite(numericValue) ? numericValue : undefined;
-  }
-
-  private looksLikeJobTitle(value: string): boolean {
-    if (!value || value.split(/\s+/).length > 8) {
-      return false;
-    }
-
-    if (PUBLIC_CONTACT_EXCLUDED_REGEX.test(value)) {
-      return false;
-    }
-
-    return PUBLIC_CONTACT_ROLE_REGEX.test(value)
-      || /\b(founder|owner|lead|manager|director|engineer|developer|architect|product|operations|technology|innovation)\b/i.test(value);
   }
 
   private async searchBingResults(query: string, maxResults: number): Promise<WebSearchHit[]> {

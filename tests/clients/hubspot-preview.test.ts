@@ -633,28 +633,30 @@ test("company alias extraction ignores contact CTA phrases from page text", () =
   assert.ok(!aliases.includes("Kontaktieren Sie AISLab GmbH"));
 });
 
-test("descriptive company labels reject LinkedIn hits that do not mention the domain token", () => {
+test("discoverWebSearchContacts always calls foundry with all search evidence", async () => {
   const client = new HubSpotClient();
-  const relevant = client["isRelevantCompanyHit"](
-    {
-      name: "Intelligent Machine Vision for Industrial Marking Vision AI",
-      domain: "https://geott.de"
-    },
-    ["Geott"],
-    "Nicolas March | LinkedIn | AI4Robotics machine vision founder"
-  );
+  const company = buildSampleCompany();
+  let foundryEvidence = "";
 
-  const domainMatched = client["isRelevantCompanyHit"](
+  client["foundryAgentsClient"]["suggestPublicContactQueries"] = async () => [];
+  client["searchBingResults"] = async () => ([
     {
-      name: "Intelligent Machine Vision for Industrial Marking Vision AI",
-      domain: "https://geott.de"
-    },
-    ["Geott"],
-    "Marcus Lessmann | LinkedIn | GEOTT Deutschland machine vision"
-  );
+      query: `${company.name} site:linkedin.com/in`,
+      url: "https://www.linkedin.com/in/max-muster",
+      title: "Max Muster - Sample Automation GmbH | LinkedIn",
+      snippet: "Experience: Sample Automation GmbH"
+    }
+  ]);
+  client["foundryAgentsClient"]["discoverPublicContacts"] = async (_company: unknown, evidence: string) => {
+    foundryEvidence = evidence;
+    return [];
+  };
 
-  assert.equal(relevant, false);
-  assert.equal(domainMatched, true);
+  await client["discoverWebSearchContacts"](company, [], []);
+
+  // Agent-first: Foundry must always be called with the full evidence including search hits
+  assert.ok(foundryEvidence.includes("Max Muster"), "Foundry should receive search hit evidence");
+  assert.ok(foundryEvidence.includes("Web search evidence"), "Evidence should contain search section");
 });
 
 test("LinkedIn search queries prioritize exact legal aliases before generic short names", () => {
@@ -1242,7 +1244,7 @@ test("discoverPublicContactsForExecution falls back to official company contact 
   assert.equal(contacts[0]?.label, "public_generic_mailbox");
 });
 
-test("discoverWebSearchContacts skips foundry when LinkedIn heuristics already provide enough contacts", async () => {
+test("discoverWebSearchContacts returns foundry contacts from search evidence", async () => {
   const client = new HubSpotClient();
   const company = buildSampleCompany();
   let foundryCalled = false;
@@ -1254,42 +1256,26 @@ test("discoverWebSearchContacts skips foundry when LinkedIn heuristics already p
       url: "https://www.linkedin.com/in/max-muster",
       title: "Max Muster - Sample Automation GmbH | LinkedIn",
       snippet: "Experience: Sample Automation GmbH"
-    },
-    {
-      query: `${company.name} site:linkedin.com/in`,
-      url: "https://www.linkedin.com/in/anna-muster",
-      title: "Anna Muster - Sample Automation GmbH | LinkedIn",
-      snippet: "Experience: Sample Automation GmbH"
-    },
-    {
-      query: `${company.name} site:linkedin.com/in`,
-      url: "https://www.linkedin.com/in/paul-muster",
-      title: "Paul Muster - Sample Automation GmbH | LinkedIn",
-      snippet: "Experience: Sample Automation GmbH"
-    },
-    {
-      query: `${company.name} site:linkedin.com/in`,
-      url: "https://www.linkedin.com/in/lisa-muster",
-      title: "Lisa Muster - Sample Automation GmbH | LinkedIn",
-      snippet: "Experience: Sample Automation GmbH"
     }
   ]);
   client["foundryAgentsClient"]["discoverPublicContacts"] = async () => {
     foundryCalled = true;
     return [
-    {
-      email: "info@sample-automation.de",
-      phone: "+49 30 123456",
-      sourceUrl: "https://sample-automation.de/kontakt",
-      label: "public_generic_mailbox"
-    }
+      {
+        firstName: "Max",
+        lastName: "Muster",
+        linkedinUrl: "https://www.linkedin.com/in/max-muster",
+        sourceUrl: "https://www.linkedin.com/in/max-muster",
+        label: "linkedin_profile"
+      }
     ];
   };
 
   const contacts = await client["discoverWebSearchContacts"](company, [], []);
 
-  assert.equal(foundryCalled, false);
-  assert.equal(contacts.filter((contact) => contact.label === "linkedin_profile").length, 4);
+  // Agent-first: Foundry is always called when evidence is available
+  assert.equal(foundryCalled, true);
+  assert.equal(contacts.filter((contact) => contact.label === "linkedin_profile").length, 1);
 });
 
 test("contact page extraction includes ansprechpartner-style menu links", () => {
