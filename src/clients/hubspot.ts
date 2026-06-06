@@ -1187,10 +1187,10 @@ export class HubSpotClient {
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
       .slice(0, Math.max(0, 4 - expandedWebsiteFallbackContacts.length));
 
-    if (pages.length > 0 && (expandedWebsiteFallbackContacts.length > 0 || namedWebsiteFallbackContacts.length > 0)) {
-      return this.mergeDiscoveredContacts(namedWebsiteFallbackContacts, expandedWebsiteFallbackContacts).slice(0, 4);
-    }
-
+    // Always attempt LinkedIn discovery even when we already have generic website contacts.
+    // A generic info@ mailbox must not block named employee profiles from Bing/LinkedIn.
+    const knownFallbackContacts = this.mergeDiscoveredContacts(namedWebsiteFallbackContacts, expandedWebsiteFallbackContacts);
+    const spotsLeft = 4 - knownFallbackContacts.length;
     const webSearchContacts = await this.withTimeout(
       this.discoverWebSearchContacts(company, pages, websiteContacts, officialWebsiteProfile),
       PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
@@ -1198,7 +1198,7 @@ export class HubSpotClient {
     );
     const linkedInFallbackContacts = webSearchContacts
       .filter((contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl))
-      .slice(0, Math.max(0, 4 - expandedWebsiteFallbackContacts.length - namedWebsiteFallbackContacts.length));
+      .slice(0, Math.max(0, spotsLeft));
 
     return this.mergeDiscoveredContacts(
       namedWebsiteFallbackContacts,
