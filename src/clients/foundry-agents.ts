@@ -346,7 +346,7 @@ export class FoundryAgentsClient {
           `Company: ${company.name}`,
           company.domain ? `Website: ${company.domain}` : "Website: unknown",
           company.country ? `Country: ${company.country}` : "Country: unknown",
-          "Target roles: CEO, CTO, COO, Innovation Manager, Partner Manager, Technology Manager, Operations Manager, Managing Director.",
+          "Target roles: CEO, CTO, COO, Geschäftsführer, Inhaber, Managing Director, Innovation Manager, Partner Manager, Technology Manager, Operations Manager.",
           evidence
         ].join("\n\n")
       );
