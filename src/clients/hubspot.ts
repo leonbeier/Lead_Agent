@@ -3071,9 +3071,10 @@ export class HubSpotClient {
   }
 
   private extractVisibleEmailsForAi(html: string): string[] {
+    const stripped = this.normalizeObfuscatedContactText(html).replace(/<[^>]+>/g, "");
     return Array.from(
       new Set(
-        [...this.normalizeObfuscatedContactText(html).matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+        [...stripped.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
           .map((match) => match[0].toLowerCase())
           .filter((email) => !email.endsWith(".png") && !email.endsWith(".jpg") && !email.endsWith(".jpeg") && !email.endsWith(".webp"))
       )
@@ -3268,10 +3269,10 @@ export class HubSpotClient {
   }
 
   private extractEmails(html: string, allowedDomains: Set<string>): string[] {
-    const decodedHtml = this.normalizeObfuscatedContactText(html);
+    const stripped = this.normalizeObfuscatedContactText(html).replace(/<[^>]+>/g, "");
     return Array.from(
       new Set(
-        [...decodedHtml.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+        [...stripped.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
           .map((match) => match[0].toLowerCase())
           .filter((email) => !email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.jpeg') && !email.endsWith('.webp'))
           .filter((email) => this.isAllowedCompanyEmail(email, allowedDomains))
