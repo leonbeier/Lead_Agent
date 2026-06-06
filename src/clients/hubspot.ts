@@ -3672,6 +3672,8 @@ export class HubSpotClient {
           return 9;
         case "machine_builder_ai_enablement":
           return 9;
+        case "machine_builder_vision_ai":
+          return 8;
         case "integrator_vision_industrial_ai":
         case "integrator_relevant_focus":
           return 5;
@@ -3707,6 +3709,8 @@ export class HubSpotClient {
         case "industrial_end_customer_scaled":
         case "machine_builder_ai_enablement":
           return 2;
+        case "machine_builder_vision_ai":
+          return 5;
         default:
           return 1;
       }
@@ -3717,6 +3721,8 @@ export class HubSpotClient {
         return 9;
       case "machine_builder_ai_enablement":
         return 5;
+      case "machine_builder_vision_ai":
+        return 3;
       case "integrator_vision_industrial_ai":
       case "integrator_relevant_focus":
         return 4;
@@ -3958,6 +3964,8 @@ export class HubSpotClient {
         return "camera_manufacturer_partner";
       case "machine_builder_ai_enablement":
         return "machine_builder_ai_enablement";
+      case "machine_builder_vision_ai":
+        return "machine_builder_vision_ai";
       case "software_platform_embedding":
         return "software_platform_embedding";
       case "other":
