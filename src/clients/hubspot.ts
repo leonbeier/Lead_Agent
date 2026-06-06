@@ -951,25 +951,17 @@ export class HubSpotClient {
   }
 
   private buildCompanyDomainSearchVariants(domain: string | undefined): string[] {
-    const rawDomain = domain?.trim().replace(/\/+$/, "");
     const normalizedDomain = this.normalizeDomain(domain);
-    const variants = new Set<string>();
-
-    if (rawDomain) {
-      variants.add(rawDomain);
-    }
-
     if (!normalizedDomain) {
-      return [...variants];
+      return [];
     }
 
+    // HubSpot stores the domain property without scheme; searching the bare domain
+    // (and www-prefixed variant) covers virtually all cases. The full URL variants
+    // produced excessive serialized search requests causing 429 rate-limit cascades.
+    const variants = new Set<string>();
     variants.add(normalizedDomain);
     variants.add(`www.${normalizedDomain}`);
-    variants.add(`https://${normalizedDomain}`);
-    variants.add(`https://www.${normalizedDomain}`);
-    variants.add(`http://${normalizedDomain}`);
-    variants.add(`http://www.${normalizedDomain}`);
-
     return [...variants];
   }
 

@@ -804,13 +804,20 @@ export class ExaSearchClient {
   private deriveCompanyName(domain: string, title?: string): string {
     const hostname = new URL(domain).hostname.replace(/^www\./i, "");
     const base = hostname.split(".")[0] ?? hostname;
-    const titleCandidate = title
-      ?.replace(/\s*[|\-].*$/, "")
-      .replace(/\b(home|homepage|startseite)\b/gi, "")
-      .trim();
 
-    if (titleCandidate && !GENERIC_COMPANY_NAMES.has(titleCandidate.toLowerCase()) && this.looksLikeCompanyName(titleCandidate, base)) {
-      return titleCandidate;
+    if (title) {
+      // Split on common title separators including em dash (\u2013) and en dash (\u2014).
+      // Try each part in order — for reverse-order titles like "Products & Services \u2013 EvoTegra"
+      // the company name appears as the LAST segment, not the first.
+      const parts = title
+        .split(/\s*[|\u2013\u2014\-]\s*/)
+        .map((part) => part.replace(/\b(home|homepage|startseite)\b/gi, "").trim())
+        .filter(Boolean);
+      for (const part of parts) {
+        if (!GENERIC_COMPANY_NAMES.has(part.toLowerCase()) && this.looksLikeCompanyName(part, base)) {
+          return part;
+        }
+      }
     }
 
     return base
