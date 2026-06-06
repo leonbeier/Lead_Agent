@@ -714,9 +714,10 @@ export class HubSpotClient {
 
   private normalizeContactForHubSpot(contact: PublicContactCandidate): PublicContactCandidate | null {
     const rawEmail = contact.email?.trim().toLowerCase();
-    // Reject emails with percent-encoded characters in the local part (e.g. %20khe@...) — these
-    // are URL-encoding artifacts scraped from href="mailto:..." attributes, not real addresses.
-    const email = rawEmail && /%[0-9a-f]{2}/i.test(rawEmail.split("@")[0] ?? "") ? undefined : rawEmail;
+    // Reject emails with percent-encoded characters or non-ASCII/non-standard whitespace in the local part.
+    // Covers artifacts like "%20khe@..." (URL-encoded) and "\u00a0info@..." (&nbsp; from HTML).
+    const emailLocalPart = rawEmail?.split("@")[0] ?? "";
+    const email = rawEmail && (/%[0-9a-f]{2}/i.test(emailLocalPart) || /[^\x20-\x7e]/.test(emailLocalPart)) ? undefined : rawEmail;
     const linkedinUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
     const firstName = this.normalizeNamePart(contact.firstName);
     const lastName = this.normalizeNamePart(contact.lastName);
