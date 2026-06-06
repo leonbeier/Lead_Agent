@@ -627,7 +627,14 @@ export class HubSpotClient {
     brief: ResearchBrief | undefined,
     availableProperties: Set<string>
   ): Promise<HubSpotObjectResponse> {
-    const extractedAddress = await this.extractCompanyAddress(company);
+    // Cap address extraction so that slow Azure AI retries or hung browser fetches
+    // do not consume the entire HubSpot worker budget (360 s).  Address data is
+    // enrichment; missing it is acceptable — the company record must still be written.
+    const extractedAddress = await this.withTimeout(
+      this.extractCompanyAddress(company),
+      90_000,
+      null
+    );
 
     const properties = this.pickAvailableProperties(
       this.buildRawCompanyProperties(company, brief, extractedAddress),

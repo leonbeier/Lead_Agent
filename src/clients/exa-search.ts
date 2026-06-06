@@ -806,11 +806,11 @@ export class ExaSearchClient {
     const base = hostname.split(".")[0] ?? hostname;
 
     if (title) {
-      // Split on common title separators including em dash (\u2013) and en dash (\u2014).
-      // Try each part in order — for reverse-order titles like "Products & Services \u2013 EvoTegra"
-      // the company name appears as the LAST segment, not the first.
+      // Split on common title separators including em dash (\u2013), en dash (\u2014),
+      // and guillemets (\u00bb, \u203a). Try each part in order — for reverse-order titles
+      // like "Products & Services – EvoTegra" the company name appears as the LAST segment.
       const parts = title
-        .split(/\s*[|\u2013\u2014\-]\s*/)
+        .split(/\s*[|\u2013\u2014\u00bb\u203a\-]\s*/)
         .map((part) => part.replace(/\b(home|homepage|startseite)\b/gi, "").trim())
         .filter(Boolean);
       for (const part of parts) {
