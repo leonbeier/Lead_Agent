@@ -685,6 +685,62 @@ export class AzureOpenAIClient {
     }
   }
 
+  /**
+   * Given a crawled page and all links found on it, ask Azure AI to select the URLs most
+   * likely to contain named employees, management contacts, impressum, or team information.
+   * Returns up to `maxLinks` URLs ordered by priority.
+   */
+  async selectLinksForCrawl(
+    pageUrl: string,
+    pageSnippet: string,
+    candidateLinks: Array<{ url: string; anchorText: string }>,
+    maxLinks: number,
+    dryRun: boolean
+  ): Promise<string[]> {
+    if (dryRun || !readiness.azureConfigured || candidateLinks.length === 0) {
+      return [];
+    }
+
+    try {
+      const content = await this.runChat([
+        {
+          role: "system",
+          content: [
+            "You are a web crawl assistant for a B2B lead generation system.",
+            "Your goal is to find pages that contain: named employees or managers, contact details (email/phone), impressum (legal notice), team or about-us pages.",
+            "Given a crawled page URL, a short content snippet, and a list of candidate links with anchor texts, select up to " + maxLinks + " URLs most likely to reveal contact persons or the legal company entity.",
+            "Prioritize in this order:",
+            "1. Impressum / legal notice / imprint pages (contain the legal company name)",
+            "2. Kontakt / contact / ansprechpartner pages (named contact persons, emails, phones)",
+            "3. Team / über-uns / about / management / geschäftsführung pages",
+            "4. Other pages with anchor texts suggesting named individuals or roles",
+            "Exclude: product pages, news, blog, jobs, career, privacy, cookie, login, newsletter, shop, download, PDF links.",
+            "Return strict JSON: {\"urls\": [\"https://...\", ...]}"
+          ].join("\n")
+        },
+        {
+          role: "user",
+          content: [
+            `Current page: ${pageUrl}`,
+            `Page snippet: ${pageSnippet.slice(0, 800)}`,
+            `Candidate links (${candidateLinks.length}): ${JSON.stringify(candidateLinks.slice(0, 40))}`
+          ].join("\n\n")
+        }
+      ], { maxTokens: 400 });
+
+      const parsed = this.parseJsonObject<{ urls?: unknown }>(content);
+      if (!Array.isArray(parsed.urls)) {
+        return [];
+      }
+
+      return (parsed.urls as unknown[])
+        .filter((value): value is string => typeof value === "string" && value.startsWith("http"))
+        .slice(0, maxLinks);
+    } catch {
+      return [];
+    }
+  }
+
   getUsageTotals(): AzureUsageCost {
     return { ...this.usageTotals };
   }

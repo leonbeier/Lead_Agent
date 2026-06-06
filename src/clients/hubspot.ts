@@ -115,7 +115,7 @@ const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 30000;
-const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 5000;
+const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
 const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
@@ -1564,7 +1564,7 @@ export class HubSpotClient {
     const suggestedQueries = await this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false);
     const preferredQueries = this.buildPublicContactSearchQueries(company, companyAliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
-    const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 4);
+    const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 6);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => this.searchBingResults(query, 5)),
       PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
@@ -2917,9 +2917,15 @@ export class HubSpotClient {
       },
       false
     );
-    const followUpUrls = Array.from(new Set(homepageAnalysis?.followUpUrls ?? []))
+    // Always probe impressum/contact pages proactively so the legal entity name is reliably
+    // sourced from the impressum even when the AI homepage analysis does not suggest them.
+    const proactiveUrls = this.buildLikelyContactPageUrls(rootUrl);
+    const followUpUrls = Array.from(new Set([
+      ...proactiveUrls,
+      ...(homepageAnalysis?.followUpUrls ?? [])
+    ]))
       .filter((url) => this.isSameCompanyWebsiteUrl(rootUrl, url) || this.isLegalOrContactPageUrl(url))
-      .slice(0, 5);
+      .slice(0, 7);
     const followUpPages = await Promise.all(
       followUpUrls.map(async (url) => {
         const html = await this.openAIWebSearchClient.fetchOfficialWebsitePageHtml(url);
@@ -3048,19 +3054,15 @@ export class HubSpotClient {
     );
   }
 
-  private async collectCandidatePages(rootUrl: string): Promise<Array<{ url: string; html: string }>> {
+  private async collectCandidatePages(rootUrl: string, dryRun = false): Promise<Array<{ url: string; html: string }>> {
     const visited = new Set<string>();
-    const crawlProfile = await this.openAIWebSearchClient.crawlCompanyWebsite(rootUrl);
-    const allowedEmailDomains = this.buildAllowedEmailDomains(rootUrl);
     const queue = Array.from(new Set([
       rootUrl,
-      crawlProfile?.landingUrl,
-      ...this.buildLikelyContactPageUrls(rootUrl),
-      ...(crawlProfile?.relevantUrls ?? [])
-    ].filter((value): value is string => Boolean(value))));
+      ...this.buildLikelyContactPageUrls(rootUrl)
+    ]));
     const pages: Array<{ url: string; html: string }> = [];
 
-    while (queue.length > 0 && pages.length < 6) {
+    while (queue.length > 0 && pages.length < 12) {
       const url = queue.shift();
       if (!url || visited.has(url)) {
         continue;
@@ -3070,7 +3072,7 @@ export class HubSpotClient {
       let html = await this.fetchHtml(url);
       if (
         this.isLikelyContactPageUrl(rootUrl, url)
-        && (!html || (this.extractEmails(html, allowedEmailDomains).length === 0 && this.extractPhones(html).length === 0))
+        && (!html || (this.extractEmails(html, this.buildAllowedEmailDomains(rootUrl)).length === 0 && this.extractPhones(html).length === 0))
       ) {
         const officialHtml = await this.openAIWebSearchClient.fetchOfficialWebsitePageHtml(url);
         if (officialHtml) {
@@ -3084,14 +3086,62 @@ export class HubSpotClient {
 
       pages.push({ url, html });
 
-      for (const link of this.extractRelevantLinks(rootUrl, html)) {
-        if (!visited.has(link) && queue.length + pages.length < 12) {
-          queue.push(link);
+      if (queue.length + pages.length < 20) {
+        const candidateLinks = this.extractAllCandidateLinks(rootUrl, html);
+        if (candidateLinks.length > 0) {
+          const snippet = this.stripHtml(html).replace(/\s+/g, " ").slice(0, 800);
+          const aiLinks = await this.azureOpenAIClient.selectLinksForCrawl(url, snippet, candidateLinks, 8, dryRun);
+          for (const link of aiLinks) {
+            if (!visited.has(link) && queue.length + pages.length < 20) {
+              queue.push(link);
+            }
+          }
+          // Fall back to heuristic selection if AI returned nothing (dry-run or API unavailable)
+          if (aiLinks.length === 0) {
+            for (const link of this.extractRelevantLinks(rootUrl, html)) {
+              if (!visited.has(link) && queue.length + pages.length < 20) {
+                queue.push(link);
+              }
+            }
+          }
         }
       }
     }
 
     return pages;
+  }
+
+  /** Extract all internal same-domain links (+ cross-domain legal/contact pages) without heuristic scoring. */
+  private extractAllCandidateLinks(rootUrl: string, html: string): Array<{ url: string; anchorText: string }> {
+    const root = new URL(rootUrl);
+    const normalizedRootHost = this.normalizeDomain(root.host) ?? root.host.replace(/^www\./i, "").toLowerCase();
+    return [...html.matchAll(/<a[^>]+href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+      .map((match) => ({
+        href: match[1],
+        anchorText: this.decodeHtmlEntities(this.stripHtml(match[2] ?? "")).replace(/\s+/g, " ").trim()
+      }))
+      .flatMap((link) => {
+        try {
+          const url = new URL(link.href, root).toString();
+          const parsedUrl = new URL(url);
+          const normalizedParsedHost = this.normalizeDomain(parsedUrl.host) ?? parsedUrl.host.replace(/^www\./i, "").toLowerCase();
+          if (normalizedParsedHost !== normalizedRootHost && !this.isLegalOrContactPageUrl(url, link.anchorText)) {
+            return [];
+          }
+          // Skip anchor-only fragment links on the same page
+          if (parsedUrl.pathname === root.pathname && parsedUrl.hash) {
+            return [];
+          }
+          // Exclude obvious non-content resources
+          const ext = parsedUrl.pathname.split(".").pop()?.toLowerCase();
+          if (ext && ["pdf", "zip", "png", "jpg", "jpeg", "gif", "webp", "svg", "css", "js"].includes(ext)) {
+            return [];
+          }
+          return [{ url, anchorText: link.anchorText }];
+        } catch {
+          return [];
+        }
+      });
   }
 
   private isLikelyContactPageUrl(rootUrl: string, candidateUrl: string): boolean {
