@@ -122,7 +122,7 @@ const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
 const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 12000;
 // Amount of real visible page text handed to the AI website profiler so it can read the legal
 // company entity, postal address, and contact block itself (agent-first, no role-keyword pre-filter).
-const WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT = 2600;
+const WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT = 4000;
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -244,6 +244,7 @@ export class HubSpotClient {
   private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();
   private readonly officialWebsiteProfileCache = new Map<string, Promise<OfficialWebsiteCompanyProfile | null>>();
   private readonly candidatePagesCache = new Map<string, Promise<Array<{ url: string; html: string }>>>();
+  private readonly fetchHtmlCache = new Map<string, Promise<string | null>>();
   private readonly apolloClient = new ApolloClient();
 
   private readonly azureOpenAIClient = new AzureOpenAIClient();
@@ -3590,6 +3591,16 @@ export class HubSpotClient {
   }
 
   private async fetchHtml(url: string): Promise<string | null> {
+    const cached = this.fetchHtmlCache.get(url);
+    if (cached) {
+      return cached;
+    }
+    const task = this.doFetchHtml(url);
+    this.fetchHtmlCache.set(url, task);
+    return task;
+  }
+
+  private async doFetchHtml(url: string): Promise<string | null> {
     try {
       const response = await fetch(url, {
         headers: {
