@@ -133,6 +133,12 @@ const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "Founder",
   "Co-Founder",
   "Owner",
+  "Inhaber",
+  "Geschäftsführer",
+  "Geschäftsführerin",
+  "Geschäftsführung",
+  "Geschäftsleitung",
+  "Vertreten durch",
   "Innovation Manager",
   "Partner Manager",
   "Technology Manager",
@@ -1570,7 +1576,7 @@ export class HubSpotClient {
     const suggestedQueries = await this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false);
     const preferredQueries = this.buildPublicContactSearchQueries(company, companyAliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
-    const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 6);
+    const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 8);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => this.searchBingResults(query, 5)),
       PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
@@ -2104,7 +2110,7 @@ export class HubSpotClient {
           .map((match) => match[0].trim())
           .filter(Boolean)
       )
-    ).slice(0, 4);
+    ).slice(0, 6);
     const linkedInUrls = Array.from(new Set((html.match(/https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/[^"]+/gi) ?? []).slice(0, 4)));
     const emails = Array.from(new Set([
       ...this.extractVisibleEmailsForAi(html),
