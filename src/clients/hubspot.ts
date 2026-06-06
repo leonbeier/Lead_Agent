@@ -1715,7 +1715,10 @@ export class HubSpotClient {
 
           const normalizedCandidate = this.normalizeCompanyComparisonValue(candidate);
           const matchedTokens = comparisonTokens.filter((token) => normalizedCandidate.includes(token)).length;
-          if (comparisonTokens.length > 0 && matchedTokens === 0) {
+          // Allow impressum-sourced candidates even when they don't share tokens with the known
+          // short name (e.g. "Aulbach Automation GmbH" for domain "abk-pressenbau.de").
+          const isImpressumPage = /(impressum|imprint|legal)/i.test(page.url);
+          if (comparisonTokens.length > 0 && matchedTokens === 0 && !isImpressumPage) {
             return null;
           }
 
@@ -2072,13 +2075,22 @@ export class HubSpotClient {
   }
 
   private buildWebsiteEvidenceSnippet(url: string, html: string): string {
-    const plainText = this.decodeHtmlEntities(this.stripHtml(html)).replace(/\s+/g, " ").trim();
+    // For impressum/contact/legal pages, prefer the main content block over the full page
+    // (navigation menus at the top can easily overwhelm the 2600-char window).
+    const looksLikeLegalPage = /\/(impressum|imprint|kontakt|contact|legal|ansprechpartner|team)/i.test(url);
+    let sourceHtml = html;
+    if (looksLikeLegalPage) {
+      // Extract <main>, <article>, or the first large <section> to skip navigation
+      const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+        ?? html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+        ?? html.match(/<div[^>]+(?:class|id)=["'][^"']*(?:content|main|impressum|kontakt|page)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+      if (mainMatch?.[1] && mainMatch[1].length > 200) {
+        sourceHtml = mainMatch[1];
+      }
+    }
+    const plainText = this.decodeHtmlEntities(this.stripHtml(sourceHtml)).replace(/\s+/g, " ").trim();
     // Agent-first: hand the model the actual visible page text so it can read the legal company
-    // entity, postal address, and contact block itself. The leading section of a company/contact/
-    // impressum page almost always carries this identity information. We no longer pre-filter the
-    // page down to role-keyword fragments (which previously starved the model of the company name
-    // and address). Role-adjacent snippets are still appended so deeper people/role context for
-    // LinkedIn contact discovery is preserved even on long pages.
+    // entity, postal address, and contact block itself.
     const visibleText = plainText.slice(0, WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT);
     const roleAdjacentText = Array.from(
       new Set(
