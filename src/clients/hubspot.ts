@@ -114,7 +114,7 @@ const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
-const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 30000;
+const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 90_000;
 const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
@@ -1265,7 +1265,7 @@ export class HubSpotClient {
     const deterministicLinkedInQueries = this.buildPublicContactSearchQueries(company, aliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
     const queries = Array.from(new Set([...suggestedLinkedInQueries, ...deterministicLinkedInQueries]))
-      .slice(0, 4);
+      .slice(0, 8);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => ({
         query,
@@ -2928,7 +2928,8 @@ export class HubSpotClient {
       .slice(0, 7);
     const followUpPages = await Promise.all(
       followUpUrls.map(async (url) => {
-        const html = await this.openAIWebSearchClient.fetchOfficialWebsitePageHtml(url);
+        // Use fetchHtml (with Playwright fallback) so JS-rendered pages (e.g. impressum) are retrieved.
+        const html = await this.fetchHtml(url);
         return html ? { url, html } : null;
       })
     );
@@ -3055,60 +3056,52 @@ export class HubSpotClient {
   }
 
   private async collectCandidatePages(rootUrl: string, dryRun = false): Promise<Array<{ url: string; html: string }>> {
-    const visited = new Set<string>();
-    const queue = Array.from(new Set([
-      rootUrl,
-      ...this.buildLikelyContactPageUrls(rootUrl)
-    ]));
-    const pages: Array<{ url: string; html: string }> = [];
+    // Phase 1: Fetch seed pages in parallel (homepage + proactive contact/impressum URLs).
+    const seedUrls = Array.from(new Set([rootUrl, ...this.buildLikelyContactPageUrls(rootUrl)]));
+    const seedResults = await Promise.all(
+      seedUrls.map(async (url) => {
+        const html = await this.fetchHtml(url);
+        return html ? { url, html } : null;
+      })
+    );
+    const seedPages = seedResults.filter((page): page is { url: string; html: string } => Boolean(page));
 
-    while (queue.length > 0 && pages.length < 12) {
-      const url = queue.shift();
-      if (!url || visited.has(url)) {
-        continue;
-      }
-
-      visited.add(url);
-      let html = await this.fetchHtml(url);
-      if (
-        this.isLikelyContactPageUrl(rootUrl, url)
-        && (!html || (this.extractEmails(html, this.buildAllowedEmailDomains(rootUrl)).length === 0 && this.extractPhones(html).length === 0))
-      ) {
-        const officialHtml = await this.openAIWebSearchClient.fetchOfficialWebsitePageHtml(url);
-        if (officialHtml) {
-          html = officialHtml;
-        }
-      }
-
-      if (!html) {
-        continue;
-      }
-
-      pages.push({ url, html });
-
-      if (queue.length + pages.length < 20) {
-        const candidateLinks = this.extractAllCandidateLinks(rootUrl, html);
-        if (candidateLinks.length > 0) {
-          const snippet = this.stripHtml(html).replace(/\s+/g, " ").slice(0, 800);
-          const aiLinks = await this.azureOpenAIClient.selectLinksForCrawl(url, snippet, candidateLinks, 8, dryRun);
-          for (const link of aiLinks) {
-            if (!visited.has(link) && queue.length + pages.length < 20) {
-              queue.push(link);
-            }
-          }
-          // Fall back to heuristic selection if AI returned nothing (dry-run or API unavailable)
-          if (aiLinks.length === 0) {
-            for (const link of this.extractRelevantLinks(rootUrl, html)) {
-              if (!visited.has(link) && queue.length + pages.length < 20) {
-                queue.push(link);
-              }
-            }
-          }
+    // Collect all candidate links from seed pages (deduplicated by URL).
+    const linkMap = new Map<string, { url: string; anchorText: string }>();
+    for (const page of seedPages) {
+      for (const link of this.extractAllCandidateLinks(rootUrl, page.html)) {
+        if (!linkMap.has(link.url)) {
+          linkMap.set(link.url, link);
         }
       }
     }
+    const allCandidateLinks = Array.from(linkMap.values());
 
-    return pages;
+    // Phase 2: One AI call to select the best follow-up URLs from all seed page links.
+    const visitedUrls = new Set(seedPages.map((page) => page.url));
+    let followUpUrls: string[] = [];
+    if (allCandidateLinks.length > 0) {
+      const combinedSnippet = seedPages
+        .map((page) => this.stripHtml(page.html).replace(/\s+/g, " ").slice(0, 300))
+        .join("\n");
+      const aiLinks = await this.azureOpenAIClient.selectLinksForCrawl(
+        rootUrl, combinedSnippet, allCandidateLinks, 10, dryRun
+      );
+      followUpUrls = aiLinks.length > 0
+        ? aiLinks.filter((url) => !visitedUrls.has(url))
+        : this.extractRelevantLinks(rootUrl, seedPages[0]?.html ?? "").filter((url) => !visitedUrls.has(url));
+    }
+
+    // Phase 3: Fetch follow-up pages in parallel.
+    const followUpResults = await Promise.all(
+      followUpUrls.slice(0, 10).map(async (url) => {
+        const html = await this.fetchHtml(url);
+        return html ? { url, html } : null;
+      })
+    );
+    const followUpPages = followUpResults.filter((page): page is { url: string; html: string } => Boolean(page));
+
+    return [...seedPages, ...followUpPages].slice(0, 14);
   }
 
   /** Extract all internal same-domain links (+ cross-domain legal/contact pages) without heuristic scoring. */
