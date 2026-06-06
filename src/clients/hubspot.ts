@@ -2764,7 +2764,8 @@ export class HubSpotClient {
     const officialWebsiteProfile = await this.getOfficialWebsiteCompanyProfile(company).catch(() => null);
     const rootUrl = this.normalizeCompanyUrl(company.domain);
     const pages = await this.collectCandidatePages(rootUrl);
-    const webSearchAddress = await this.extractCompanyAddressWithWebSearch(company);
+    // Pass already-collected pages to avoid a redundant second crawl in extractCompanyAddressWithWebSearch.
+    const webSearchAddress = await this.extractCompanyAddressWithWebSearch(company, pages);
     const legalEntityName = this.extractLegalEntityCandidatesFromPages(company, pages)[0];
     const trustedOfficialWebsiteCompanyName = officialWebsiteProfile && this.isTrustedOfficialWebsiteProfile(officialWebsiteProfile, company)
       ? officialWebsiteProfile.companyName
@@ -2819,13 +2820,13 @@ export class HubSpotClient {
       : null;
   }
 
-  private async extractCompanyAddressWithWebSearch(company: PreCategorizedCompany): Promise<ExtractedCompanyAddress | null> {
+  private async extractCompanyAddressWithWebSearch(company: PreCategorizedCompany, pages?: Array<{ url: string; html: string }>): Promise<ExtractedCompanyAddress | null> {
     if (!company.domain) {
       return null;
     }
 
-    const pages = await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain));
-    for (const page of pages) {
+    const resolvedPages = pages ?? await this.collectCandidatePages(this.normalizeCompanyUrl(company.domain));
+    for (const page of resolvedPages) {
       const extractedAddress = this.extractPostalAddress(page.html, company.country);
       if (!extractedAddress) {
         continue;
