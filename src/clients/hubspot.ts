@@ -3206,7 +3206,11 @@ export class HubSpotClient {
       const root = new URL(rootUrl);
       const candidates = [
         "kontakt/",
+        "kontakt.html",
+        "kontakt.php",
         "impressum/",
+        "impressum.html",
+        "impressum.php",
         "ansprechpartner/",
         "team/",
         "ueber-uns/"
