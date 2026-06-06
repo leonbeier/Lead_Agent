@@ -114,7 +114,7 @@ const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 30000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
-const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 90_000;
+const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 150_000;
 const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
@@ -1269,7 +1269,7 @@ export class HubSpotClient {
     const deterministicLinkedInQueries = this.buildPublicContactSearchQueries(company, aliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
     const queries = Array.from(new Set([...suggestedLinkedInQueries, ...deterministicLinkedInQueries]))
-      .slice(0, 8);
+      .slice(0, 10);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => ({
         query,
@@ -2917,7 +2917,7 @@ export class HubSpotClient {
     }
 
     const rootUrl = this.normalizeCompanyUrl(company.domain);
-    const homepageHtml = await this.openAIWebSearchClient.fetchOfficialWebsitePageHtml(rootUrl);
+    const homepageHtml = await this.fetchHtml(rootUrl);
     if (!homepageHtml) {
       return null;
     }
