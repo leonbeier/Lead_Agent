@@ -243,6 +243,7 @@ export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
   private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();
   private readonly officialWebsiteProfileCache = new Map<string, Promise<OfficialWebsiteCompanyProfile | null>>();
+  private readonly candidatePagesCache = new Map<string, Promise<Array<{ url: string; html: string }>>>();
   private readonly apolloClient = new ApolloClient();
 
   private readonly azureOpenAIClient = new AzureOpenAIClient();
@@ -3073,6 +3074,20 @@ export class HubSpotClient {
   }
 
   private async collectCandidatePages(rootUrl: string, dryRun = false): Promise<Array<{ url: string; html: string }>> {
+    // Use per-run cache so contact discovery and address extraction share the same crawl result.
+    if (!dryRun) {
+      const cached = this.candidatePagesCache.get(rootUrl);
+      if (cached) {
+        return cached;
+      }
+      const task = this.doCollectCandidatePages(rootUrl, false);
+      this.candidatePagesCache.set(rootUrl, task);
+      return task;
+    }
+    return this.doCollectCandidatePages(rootUrl, dryRun);
+  }
+
+  private async doCollectCandidatePages(rootUrl: string, dryRun = false): Promise<Array<{ url: string; html: string }>> {
     // Phase 1: Fetch seed pages in parallel (homepage + proactive contact/impressum URLs).
     const seedUrls = Array.from(new Set([rootUrl, ...this.buildLikelyContactPageUrls(rootUrl)]));
     const seedResults = await Promise.all(
