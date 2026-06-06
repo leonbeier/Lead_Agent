@@ -490,7 +490,7 @@ export class AzureOpenAIClient {
             `Raw contact evidence JSON: ${JSON.stringify(evidencePayload)}`
           ].filter(Boolean).join("\n\n")
         }
-      ], { maxTokens: 900 });
+      ], { maxTokens: 1200 });
 
       const parsed = this.parseJsonObject<{ contacts?: PublicContactCandidate[] }>(content);
       return (parsed.contacts ?? [])
