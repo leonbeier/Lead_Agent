@@ -352,11 +352,17 @@ export class HubSpotClient {
 
     const selectedContacts = options.selectedContactsTimeoutMs
       ? await this.withTimeout(
-          this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback),
+          this.findPublicContactsFromPages(company, pages, websiteContacts).catch((err) => {
+            console.error(`[discoverPublicContactsForExecution] findPublicContactsFromPages error for ${company.name}: ${err instanceof Error ? err.message : String(err)}`);
+            return contactDiscoveryFallback;
+          }),
           options.selectedContactsTimeoutMs,
           contactDiscoveryFallback
         )
-      : await this.findPublicContactsFromPages(company, pages, websiteContacts).catch(() => contactDiscoveryFallback);
+      : await this.findPublicContactsFromPages(company, pages, websiteContacts).catch((err) => {
+          console.error(`[discoverPublicContactsForExecution] findPublicContactsFromPages error for ${company.name}: ${err instanceof Error ? err.message : String(err)}`);
+          return contactDiscoveryFallback;
+        });
 
     // Guarantee the reachable website mailbox/phone is never lost when the richer LinkedIn/named
     // discovery times out or returns empty: fall back to the deterministic website contact.
