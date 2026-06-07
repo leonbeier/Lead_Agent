@@ -1045,13 +1045,19 @@ export class HubSpotClient {
     const rawExtractedName = extractedAddress?.companyName?.trim();
     // Reject extracted company names that are longer than 120 chars or contain sentence-like
     // boilerplate text (e.g. Impressum paragraphs mistakenly captured as company name).
-    // Reject names that are clearly sentence fragments: contain sentence-ending punctuation,
-    // are very long, or have too many space-separated words (real company names rarely exceed 6).
+    // Reject names that are clearly sentence fragments: contain sentence-ending punctuation
+    // (period/exclamation/question mark followed by a space and another word, indicating prose),
+    // are very long, or have too many space-separated words (real company names rarely exceed 8).
+    // Note: "CO. KG", "GmbH & Co. KG", "e.K." etc. contain periods that are part of the legal
+    // form abbreviation and must NOT be rejected.
     const wordCount = rawExtractedName ? rawExtractedName.trim().split(/\s+/).length : 0;
+    const looksLikeSentence = rawExtractedName
+      ? /[.!?]\s+[a-zäöü]/.test(rawExtractedName) || /^[a-zäöü]/.test(rawExtractedName)
+      : false;
     const isPlausibleExtractedName = rawExtractedName
       && rawExtractedName.length <= 80
-      && wordCount <= 6
-      && !/[.!?]/.test(rawExtractedName);
+      && wordCount <= 8
+      && !looksLikeSentence;
     const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined) || company.name;
 
     return {
@@ -3378,11 +3384,9 @@ export class HubSpotClient {
       };
     }
 
-    if (separators.length === 1 && this.isLikelyPersonNameToken(separators[0])) {
-      return {
-        firstName: this.toTitleCase(separators[0])
-      };
-    }
+    // Single-token emails (e.g. "vertrieb@", "hoffmann@", "amichel@") cannot reliably be split
+    // into a person's first and last name. Skip single-token inference entirely to avoid
+    // storing role names, city names, or ambiguous single words as contact first names.
 
     return {};
   }
@@ -3548,7 +3552,9 @@ export class HubSpotClient {
 
   private isLikelyPersonNameToken(value: string): boolean {
     const token = value.trim().toLowerCase();
-    if (!/^[a-z]{2,20}$/.test(token)) {
+    // Person name tokens are typically 2–14 characters (e.g. "thomas", "schreier").
+    // Anything longer is almost certainly a compound word, location, or role name.
+    if (!/^[a-z]{2,14}$/.test(token)) {
       return false;
     }
 
