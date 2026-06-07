@@ -112,9 +112,9 @@ const HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS = 250;
 const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
-const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 30000;
+const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 120_000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
-const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 150_000;
+const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 60_000;
 const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
@@ -963,13 +963,16 @@ export class HubSpotClient {
       return [];
     }
 
-    // HubSpot stores the domain property without scheme; searching the bare domain
-    // (and www-prefixed variant) covers virtually all cases. The full URL variants
-    // produced excessive serialized search requests causing 429 rate-limit cascades.
-    const variants = new Set<string>();
-    variants.add(normalizedDomain);
-    variants.add(`www.${normalizedDomain}`);
-    return [...variants];
+    // HubSpot stores the domain property without scheme in modern records, but older records
+    // may have been stored with a protocol or www prefix. Search the four most common forms.
+    // Capped at 4 variants (down from 7) to avoid 429 rate-limit cascades from serialized
+    // HubSpot search requests.
+    return [
+      normalizedDomain,
+      `www.${normalizedDomain}`,
+      `https://${normalizedDomain}`,
+      `https://www.${normalizedDomain}`
+    ];
   }
 
   private async getAvailableProperties(objectType: "companies" | "contacts"): Promise<Set<string>> {
@@ -3272,15 +3275,20 @@ export class HubSpotClient {
   }
 
   private extractEmails(html: string, allowedDomains: Set<string>): string[] {
-    const stripped = this.normalizeObfuscatedContactText(html).replace(/<[^>]+>/g, "");
+    const decoded = this.normalizeObfuscatedContactText(html);
+    // Extract emails from href="mailto:..." attributes BEFORE stripping tags — entity-encoded
+    // addresses (e.g. &#105;&#110;&#102;&#111;&#64;...) survive entity-decode but get erased
+    // when the wrapping <a> tag is stripped.
+    const hrefEmails = [...decoded.matchAll(/href=["']mailto:([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})["']/gi)]
+      .map((match) => match[1].toLowerCase());
+    const stripped = decoded.replace(/<[^>]+>/g, "");
+    const textEmails = [...stripped.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+      .map((match) => match[0].toLowerCase());
     return Array.from(
-      new Set(
-        [...stripped.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
-          .map((match) => match[0].toLowerCase())
-          .filter((email) => !email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.jpeg') && !email.endsWith('.webp'))
-          .filter((email) => this.isAllowedCompanyEmail(email, allowedDomains))
-      )
-    );
+      new Set([...hrefEmails, ...textEmails])
+    )
+      .filter((email) => !email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.jpeg') && !email.endsWith('.webp'))
+      .filter((email) => this.isAllowedCompanyEmail(email, allowedDomains));
   }
 
   private extractPhones(html: string): string[] {

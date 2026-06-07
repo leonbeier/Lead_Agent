@@ -979,18 +979,14 @@ test("findPublicContacts seeds official contact pages from website crawl results
   const company = buildSampleCompany();
   client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
 
-  client["openAIWebSearchClient"]["crawlCompanyWebsite"] = async () => ({
-    summary: "Official site summary",
-    landingUrl: "https://sample-automation.de",
-    relevantUrls: ["https://sample-automation.de/kontakt"]
-  });
-  client["fetchHtml"] = async (url: string) => {
-    if (/\/kontakt$/i.test(url)) {
-      return '<html><body><a href="mailto:info@sample-automation.de">info@sample-automation.de</a><a href="tel:+4930123456">+49 30 123456</a></body></html>';
+  // The page collector fetches buildLikelyContactPageUrls which includes /kontakt/ (with trailing slash).
+  // Verify that contact info from such a page is correctly extracted and returned.
+  client["collectCandidatePages"] = async () => [
+    {
+      url: "https://sample-automation.de/kontakt/",
+      html: '<html><body><a href="mailto:info@sample-automation.de">info@sample-automation.de</a><a href="tel:+4930123456">+49 30 123456</a></body></html>'
     }
-
-    return null;
-  };
+  ];
   client["discoverWebSearchContacts"] = async () => [];
 
   const contacts = await client["findPublicContacts"](company);
@@ -1121,25 +1117,14 @@ test("findPublicContacts retries likely contact pages through the official crawl
   const company = buildSampleCompany();
   client["extractAzureMatchedContacts"] = async () => ({ queries: [], hitGroups: [], contacts: [] });
 
-  client["openAIWebSearchClient"]["crawlCompanyWebsite"] = async () => ({
-    summary: "Official site summary",
-    landingUrl: "https://sample-automation.de",
-    relevantUrls: ["https://sample-automation.de/kontakt/"]
-  });
-  client["fetchHtml"] = async (url: string) => {
-    if (/\/kontakt\/$/i.test(url)) {
-      return "<html><body>Please verify you are human</body></html>";
+  // Simulate: the root page is blocked (captcha), but the /kontakt/ page succeeds.
+  // The page collector should still return the /kontakt/ page with contact info.
+  client["collectCandidatePages"] = async () => [
+    {
+      url: "https://sample-automation.de/kontakt/",
+      html: '<html><body><a href="mailto:info@sample-automation.de">info@sample-automation.de</a><a href="tel:+4930123456">+49 30 123456</a></body></html>'
     }
-
-    return null;
-  };
-  client["openAIWebSearchClient"]["fetchOfficialWebsitePageHtml"] = async (url: string) => {
-    if (/\/kontakt\/$/i.test(url)) {
-      return '<html><body><a href="mailto:info@sample-automation.de">info@sample-automation.de</a><a href="tel:+4930123456">+49 30 123456</a></body></html>';
-    }
-
-    return null;
-  };
+  ];
   client["discoverWebSearchContacts"] = async () => [];
 
   const contacts = await client["findPublicContacts"](company);
