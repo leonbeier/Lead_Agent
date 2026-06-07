@@ -1599,10 +1599,19 @@ export class HubSpotClient {
       searchEvidence ? `Web search evidence:\n${searchEvidence}` : undefined
     ].filter(Boolean).join("\n\n");
     // Foundry bing_grounding agent is the primary discovery path: it reads the full evidence and
-    // performs additional web searches as needed. Only skip when there is no evidence at all.
-    const foundryContacts = evidence.trim()
-      ? await this.foundryAgentsClient.discoverPublicContacts(foundryCompany, evidence, false)
-      : [];
+    // performs additional web searches as needed. Always call Foundry — even when external Bing
+    // searches returned no hits — because Foundry has its own bing_grounding tool and can search
+    // independently. Only the company name and domain are sufficient as minimal evidence.
+    const minimalEvidence = [
+      `Company: ${company.name}`,
+      company.domain ? `Website: ${company.domain}` : undefined,
+      company.country ? `Country: ${company.country}` : undefined
+    ].filter(Boolean).join("\n");
+    const foundryContacts = await this.foundryAgentsClient.discoverPublicContacts(
+      foundryCompany,
+      evidence.trim() || minimalEvidence,
+      false
+    );
 
     return foundryContacts.map((contact) => ({
       ...contact,
