@@ -200,7 +200,7 @@ const SEARCH_RESULT_HEADROOM = 4;
 const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
-const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 420_000;
+const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 510_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
 const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
 const MIN_EXA_BATCH_REQUESTS = 2;
@@ -1001,7 +1001,7 @@ export class LeadWorkerRunService {
           try {
             contactDebug = await Promise.race<ContactDebugResult>([
               this.debugConsoleService.discoverContactsForExecution(state.company, {
-                selectedContactsTimeoutMs: 290_000
+                selectedContactsTimeoutMs: 370_000
               }),
               timeoutPromise
             ]);

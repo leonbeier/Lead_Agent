@@ -206,42 +206,102 @@ A task is done only when:
 
 ## Mandatory HubSpot quality check after every live run
 
-**Before marking any task as complete, always run this check using the HubSpot API** (`api-eu1.hubapi.com`, token from `HUBSPOT_PRIVATE_APP_TOKEN` env variable):
+**You MUST run this check before calling task_complete — no exceptions.**
 
-### Step 1 — Minimum company count
-Query the last 5 created companies. If fewer than 5 were written in the most recent run, investigate and fix before stopping.
+Use the HubSpot API (`api-eu1.hubapi.com`, token from `HUBSPOT_PRIVATE_APP_TOKEN` env variable).
+
+Run the following Node.js script directly in the terminal after every Railway run:
 
 ```js
-// Node.js snippet
+node -e "
 const https = require('https');
 const token = process.env.HUBSPOT_PRIVATE_APP_TOKEN;
-// POST /crm/v3/objects/companies/search with sort=-createdate, limit=5
-// properties: name, domain, city, country, description, phone
+function get(path) {
+  return new Promise(resolve => https.get({ hostname:'api-eu1.hubapi.com', path, headers:{Authorization:'Bearer '+token} }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>resolve(JSON.parse(d))); }));
+}
+function post(path, body) {
+  return new Promise(resolve => {
+    const b = JSON.stringify(body);
+    const req = https.request({ hostname:'api-eu1.hubapi.com', path, method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','Content-Length':Buffer.byteLength(b)} }, res => { let d=''; res.on('data',c=>d+=c); res.on('end',()=>resolve(JSON.parse(d))); });
+    req.write(b); req.end();
+  });
+}
+async function main() {
+  const since = Date.now() - 30*60*1000;
+  const cts = await post('/crm/v3/objects/contacts/search', {
+    filterGroups:[{filters:[{propertyName:'createdate',operator:'GTE',value:String(since)}]}],
+    properties:['firstname','lastname','email','jobtitle','hs_linkedin_url'],
+    sorts:[{propertyName:'createdate',direction:'DESCENDING'}], limit:20
+  });
+  console.log('=== CONTACTS last 30min: '+cts.results.length+' ===');
+  let emailAsName=0, companyLi=0, personalLi=0;
+  cts.results.forEach(c => {
+    const p = c.properties;
+    const li = p.hs_linkedin_url || 'none';
+    const liOk = li.includes('/company/') ? 'COMPANY-LI!' : li.includes('/in/') ? 'PERSONAL-LI-OK' : 'no-li';
+    const nameOk = p.firstname && !p.firstname.includes('@') ? 'name-ok' : p.firstname ? 'EMAIL-AS-NAME!' : 'no-name';
+    if (liOk==='COMPANY-LI!') companyLi++;
+    if (liOk==='PERSONAL-LI-OK') personalLi++;
+    if (nameOk==='EMAIL-AS-NAME!') emailAsName++;
+    console.log(p.firstname+' '+p.lastname+' | '+p.email+' | '+nameOk+' | '+liOk);
+  });
+  const cos = await post('/crm/v3/objects/companies/search', {
+    filterGroups:[{filters:[{propertyName:'createdate',operator:'GTE',value:String(since)}]}],
+    properties:['name','domain','city','country'],
+    sorts:[{propertyName:'createdate',direction:'DESCENDING'}], limit:10
+  });
+  console.log('\n=== COMPANIES last 30min: '+cos.results.length+' ===');
+  let badNames=[], companiesWithContacts=0, companiesWithLinkedIn=0;
+  for (const c of cos.results) {
+    const p = c.properties;
+    const assoc = await get('/crm/v3/objects/companies/'+c.id+'/associations/contacts');
+    const cnt = (assoc.results||[]).length;
+    const startsLower = /^[a-z]/.test(p.name||'');
+    const flag = startsLower ? 'BAD-NAME!' : '';
+    if (flag) badNames.push(p.name);
+    if (cnt > 0) companiesWithContacts++;
+    console.log(p.name+' | '+p.domain+' | city='+(p.city||'null')+' | contacts='+cnt+' '+flag);
+  }
+  // fetch contacts to count LinkedIn per company
+  for (const c of cos.results) {
+    const assoc = await get('/crm/v3/objects/companies/'+c.id+'/associations/contacts');
+    const ids = (assoc.results||[]).map(r=>r.id);
+    for (const id of ids) {
+      const ct = await get('/crm/v3/objects/contacts/'+id+'?properties=hs_linkedin_url');
+      if ((ct.properties?.hs_linkedin_url||'').includes('/in/')) { companiesWithLinkedIn++; break; }
+    }
+  }
+  const total = cos.results.length;
+  console.log('\n--- QUALITY GATE ---');
+  console.log('Companies: '+total);
+  console.log('Companies with contacts: '+companiesWithContacts+'/'+total);
+  console.log('Companies with personal LinkedIn: '+companiesWithLinkedIn+'/'+total);
+  console.log('Bad company names: '+badNames.length);
+  console.log('EMAIL-AS-NAME: '+emailAsName);
+  console.log('COMPANY-LI: '+companyLi);
+  const majorityHasLinkedIn = companiesWithLinkedIn >= Math.ceil(total / 2);
+  const pass = total>=5 && badNames.length===0 && emailAsName===0 && companyLi===0 && majorityHasLinkedIn;
+  console.log('majorityHasLinkedIn: '+majorityHasLinkedIn+' ('+companiesWithLinkedIn+'/'+total+')');
+  console.log('PASS: '+pass);
+  if (!pass) {
+    if (total < 5) console.log('FAIL: fewer than 5 companies written');
+    if (badNames.length) console.log('FAIL: bad company names: '+badNames.join(', '));
+    if (emailAsName) console.log('FAIL: email-as-firstname in contacts');
+    if (companyLi) console.log('FAIL: company LinkedIn URL in contact field');
+    if (!majorityHasLinkedIn) console.log('FAIL: less than half of companies have a personal LinkedIn contact — investigate Foundry/timeout root cause');
+  }
+}
+main();
+"
 ```
 
-### Step 2 — Company data quality (for each of the 5 companies)
-Check ALL of these. If any fail, fix the root cause:
-- **Name is a real legal identity** (e.g. `MSM Markier-Sensor-Systeme GmbH`, not `Msm Technik` or generic labels)
-- **domain is set** (not empty)
-- **country is set**
-- **description is a real company description**, not `"Manual debug website input."`
-- **city is set** (missing city means address extraction failed — investigate)
-- **phone is set** (missing phone means contact page crawl missed it — investigate)
+### Quality gate rules — all must pass before task_complete
 
-### Step 3 — Contact quality (for each company, fetch associated contacts)
-For each company, query `/crm/v3/objects/companies/{id}/associations/contacts` then fetch each contact with properties: `firstname, lastname, email, jobtitle, hs_linkedin_url, phone`.
+1. **≥5 companies written** in the most recent run window. If not, investigate root cause (screening too strict, Exa quality, write errors) and fix.
+2. **Every company has ≥1 contact** — even a generic `info@` is acceptable as a fallback. If a company has 0 contacts, investigate crawl/extraction failure.
+3. **Majority (≥50%) of companies have a personal LinkedIn contact** — `hs_linkedin_url` contains `/in/` (not `/company/`). If not, investigate Foundry timeout, query planning, or contact filtering bugs and fix the root cause.
+4. **All company names are real legal identities** — no lowercase-start fragments (impressum boilerplate), no generic labels like `Ai`, `Company`, `Web Dev`, etc.
+5. **No email-as-firstname** — `firstname` must never contain an `@` sign.
+6. **No company LinkedIn URL in contact `hs_linkedin_url`** — `linkedin.com/company/...` must never appear there.
 
-Check ALL of these. If any fail, fix the root cause:
-- **Every company has at least 1 contact** (even a generic info@ is acceptable as fallback)
-- **Majority of companies have a LinkedIn contact** — a contact where `hs_linkedin_url` contains `/in/` (personal profile, NOT `/company/`)
-- **Contacts with a personal name** (firstname + lastname are real person names, NOT email addresses like `info@...` or `Mailinfo`)
-- **No company LinkedIn URLs stored as contact `hs_linkedin_url`** — `linkedin.com/company/...` must never appear in this field
-- **Generic mailboxes (info@, kontakt@, etc.) must NOT have firstname set to the email address** — they should either be skipped or stored with empty firstname/lastname
-
-### Step 4 — Verdict
-Only stop when:
-1. ≥5 companies written in last run
-2. All 5 have real legal names, domain, country
-3. Majority have a LinkedIn contact with personal `/in/` URL
-4. No generic mailbox stored with email-as-firstname
-5. No company LinkedIn URL in contact field
+**If the check fails on any point, do not stop. Identify the root cause and fix it, then re-run a Railway lead run and re-check until all points pass.**
