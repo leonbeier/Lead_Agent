@@ -1042,7 +1042,13 @@ export class HubSpotClient {
     extractedAddress: ExtractedCompanyAddress | null
   ): Record<string, string | undefined> {
     const companyDescription = this.buildCompanyDescription(company, brief);
-    const canonicalCompanyName = extractedAddress?.companyName?.trim() || company.name;
+    const rawExtractedName = extractedAddress?.companyName?.trim();
+    // Reject extracted company names that are longer than 120 chars or contain sentence-like
+    // boilerplate text (e.g. Impressum paragraphs mistakenly captured as company name).
+    const isPlausibleExtractedName = rawExtractedName
+      && rawExtractedName.length <= 120
+      && !/[.!?]/.test(rawExtractedName);
+    const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined) || company.name;
 
     return {
       name: canonicalCompanyName,
@@ -3600,7 +3606,21 @@ export class HubSpotClient {
       "group",
       "company",
       "corp",
-      "pcb"
+      "pcb",
+      "anfrage",
+      "anfragen",
+      "bestellung",
+      "post",
+      "webmaster",
+      "newsletter",
+      "press",
+      "presse",
+      "media",
+      "vertrieb",
+      "verkauf",
+      "technik",
+      "technical",
+      "it"
     ].includes(token)) {
       return false;
     }
