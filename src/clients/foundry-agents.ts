@@ -325,7 +325,8 @@ export class FoundryAgentsClient {
           } satisfies PublicContactCandidate;
         })
         .filter((contact): contact is PublicContactCandidate => contact !== null);
-    } catch {
+    } catch (err) {
+      console.error(`[FoundryAgents.discoverPublicContacts] error for ${company.name}: ${err instanceof Error ? err.message : String(err)}`);
       return [];
     }
   }

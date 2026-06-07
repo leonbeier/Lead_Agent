@@ -1629,6 +1629,12 @@ export class HubSpotClient {
       false
     );
 
+    const withLinkedIn = foundryContacts.filter((c) => c.linkedinUrl && /\/in\//i.test(c.linkedinUrl));
+    console.log(`[discoverWebSearchContacts] ${company.name}: foundry returned ${foundryContacts.length} contacts, ${withLinkedIn.length} with /in/ LinkedIn`);
+    if (foundryContacts.length > 0 && withLinkedIn.length === 0) {
+      console.log(`[discoverWebSearchContacts] ${company.name}: foundry contacts WITHOUT LinkedIn: ${foundryContacts.map(c => `${c.firstName||''} ${c.lastName||''} label=${c.label} li=${c.linkedinUrl||'none'}`).join('; ')}`);
+    }
+
     return foundryContacts.map((contact) => ({
       ...contact,
       jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
