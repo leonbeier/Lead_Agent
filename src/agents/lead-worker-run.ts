@@ -370,7 +370,7 @@ export class LeadWorkerRunService {
     const deadlineMs = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? 10 * 60_000);
     const aiConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? 2);
     const outreachConcurrency = Math.max(1, request.outreachPrepConcurrency ?? 6);
-    const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 8);
+    const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 3);
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 4);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const learning = typeof this.controlPlaneStore.getLearning === "function"
