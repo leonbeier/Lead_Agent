@@ -203,3 +203,45 @@ A task is done only when:
 	- Mailbox-only contacts that have neither a person name nor a role signal and are not needed as explicit fallback evidence.
 	- Runs reported as successful without writing at least one high-quality contact path for the batch (personal LinkedIn or clearly named reachable contact).
 - When running `hs project upload` in this repo and the CLI shows the profile picker with `leon [146645418]` preselected, press Enter immediately to accept the default profile.
+
+## Mandatory HubSpot quality check after every live run
+
+**Before marking any task as complete, always run this check using the HubSpot API** (`api-eu1.hubapi.com`, token from `HUBSPOT_PRIVATE_APP_TOKEN` env variable):
+
+### Step 1 — Minimum company count
+Query the last 5 created companies. If fewer than 5 were written in the most recent run, investigate and fix before stopping.
+
+```js
+// Node.js snippet
+const https = require('https');
+const token = process.env.HUBSPOT_PRIVATE_APP_TOKEN;
+// POST /crm/v3/objects/companies/search with sort=-createdate, limit=5
+// properties: name, domain, city, country, description, phone
+```
+
+### Step 2 — Company data quality (for each of the 5 companies)
+Check ALL of these. If any fail, fix the root cause:
+- **Name is a real legal identity** (e.g. `MSM Markier-Sensor-Systeme GmbH`, not `Msm Technik` or generic labels)
+- **domain is set** (not empty)
+- **country is set**
+- **description is a real company description**, not `"Manual debug website input."`
+- **city is set** (missing city means address extraction failed — investigate)
+- **phone is set** (missing phone means contact page crawl missed it — investigate)
+
+### Step 3 — Contact quality (for each company, fetch associated contacts)
+For each company, query `/crm/v3/objects/companies/{id}/associations/contacts` then fetch each contact with properties: `firstname, lastname, email, jobtitle, hs_linkedin_url, phone`.
+
+Check ALL of these. If any fail, fix the root cause:
+- **Every company has at least 1 contact** (even a generic info@ is acceptable as fallback)
+- **Majority of companies have a LinkedIn contact** — a contact where `hs_linkedin_url` contains `/in/` (personal profile, NOT `/company/`)
+- **Contacts with a personal name** (firstname + lastname are real person names, NOT email addresses like `info@...` or `Mailinfo`)
+- **No company LinkedIn URLs stored as contact `hs_linkedin_url`** — `linkedin.com/company/...` must never appear in this field
+- **Generic mailboxes (info@, kontakt@, etc.) must NOT have firstname set to the email address** — they should either be skipped or stored with empty firstname/lastname
+
+### Step 4 — Verdict
+Only stop when:
+1. ≥5 companies written in last run
+2. All 5 have real legal names, domain, country
+3. Majority have a LinkedIn contact with personal `/in/` URL
+4. No generic mailbox stored with email-as-firstname
+5. No company LinkedIn URL in contact field

@@ -736,9 +736,6 @@ export class HubSpotClient {
     const linkedinUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
     const firstName = this.normalizeNamePart(contact.firstName);
     const lastName = this.normalizeNamePart(contact.lastName);
-    const mailboxNameFallback = email && this.isGenericMailbox(email) && !firstName && !lastName
-      ? email
-      : undefined;
     const hasReachableIdentity = Boolean(email || linkedinUrl || firstName || lastName);
     if (!hasReachableIdentity) {
       return null;
@@ -748,7 +745,7 @@ export class HubSpotClient {
       ...contact,
       email,
       linkedinUrl,
-      firstName: firstName ?? mailboxNameFallback,
+      firstName,
       lastName
     };
   }
@@ -2498,6 +2495,11 @@ export class HubSpotClient {
       const parsed = new URL(trimmed);
       const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
       if (hostname !== "linkedin.com" && hostname !== "de.linkedin.com" && hostname !== "www.linkedin.com") {
+        return undefined;
+      }
+
+      // Reject company pages — only personal /in/ profiles are valid contact LinkedIn URLs
+      if (/^\/company\//i.test(parsed.pathname)) {
         return undefined;
       }
 
