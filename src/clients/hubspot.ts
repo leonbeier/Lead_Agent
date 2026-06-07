@@ -1045,8 +1045,12 @@ export class HubSpotClient {
     const rawExtractedName = extractedAddress?.companyName?.trim();
     // Reject extracted company names that are longer than 120 chars or contain sentence-like
     // boilerplate text (e.g. Impressum paragraphs mistakenly captured as company name).
+    // Reject names that are clearly sentence fragments: contain sentence-ending punctuation,
+    // are very long, or have too many space-separated words (real company names rarely exceed 6).
+    const wordCount = rawExtractedName ? rawExtractedName.trim().split(/\s+/).length : 0;
     const isPlausibleExtractedName = rawExtractedName
-      && rawExtractedName.length <= 120
+      && rawExtractedName.length <= 80
+      && wordCount <= 6
       && !/[.!?]/.test(rawExtractedName);
     const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined) || company.name;
 
@@ -3620,7 +3624,29 @@ export class HubSpotClient {
       "verkauf",
       "technik",
       "technical",
-      "it"
+      "it",
+      "karriere",
+      "server",
+      "frankfurt",
+      "berlin",
+      "munich",
+      "hamburg",
+      "muenchen",
+      "holding",
+      "headquarters",
+      "hq",
+      "branch",
+      "office",
+      "geschaeftsfuehrung",
+      "geschaeftsleitung",
+      "sekretariat",
+      "empfang",
+      "reception",
+      "orders",
+      "order",
+      "shipping",
+      "logistics",
+      "logistik"
     ].includes(token)) {
       return false;
     }
