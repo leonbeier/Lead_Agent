@@ -43,6 +43,61 @@ interface BuildResearchBriefOptions {
 const MAX_AZURE_RETRIES = 6;
 const AZURE_RETRY_DELAYS_MS = [2000, 4000, 8000, 12000, 20000, 30000];
 const AZURE_REQUEST_TIMEOUT_MS = 60000;
+
+/**
+ * Self-tuning sliding-window rate limiter for Azure OpenAI chat requests.
+ *
+ * The Azure deployment advertises its own per-minute request ceiling via the
+ * `x-ratelimit-limit-requests` response header (e.g. 10 RPM on a small deployment). Firing the
+ * many concurrent classification/extraction calls a single website analysis needs blows straight
+ * past that ceiling and Azure returns 429, which previously bubbled up as silently-dropped
+ * contacts. This limiter spaces request dispatch so the app stays under the advertised ceiling,
+ * and re-reads the header on every successful response so the pace auto-increases when the
+ * operator raises the deployment quota — no code change required.
+ */
+class AzureChatRateLimiter {
+  private recent: number[] = [];
+  private tail: Promise<void> = Promise.resolve();
+
+  constructor(private maxPerWindow: number, private readonly windowMs = 60_000) {}
+
+  /** Serialize slot acquisition so concurrent callers cannot race past the ceiling together. */
+  acquire(): Promise<void> {
+    const result = this.tail.then(() => this.waitForSlot());
+    this.tail = result.catch(() => undefined);
+    return result;
+  }
+
+  /** Adopt the deployment's advertised request ceiling, leaving 20% headroom for other callers. */
+  updateLimitFromHeader(limitRequestsHeader: string | null): void {
+    if (!limitRequestsHeader) {
+      return;
+    }
+    const advertised = Number.parseInt(limitRequestsHeader, 10);
+    if (Number.isFinite(advertised) && advertised > 0) {
+      this.maxPerWindow = Math.max(1, Math.floor(advertised * 0.8));
+    }
+  }
+
+  private async waitForSlot(): Promise<void> {
+    for (;;) {
+      const now = Date.now();
+      this.recent = this.recent.filter((timestamp) => now - timestamp < this.windowMs);
+      if (this.recent.length < this.maxPerWindow) {
+        this.recent.push(now);
+        return;
+      }
+      const oldest = this.recent[0] ?? now;
+      const waitMs = Math.max(50, this.windowMs - (now - oldest) + 50);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+}
+
+// Start conservative (8 RPM) — below the smallest known deployment ceiling (10 RPM) — then
+// auto-tune upward from the live x-ratelimit-limit-requests header on the first success.
+const azureChatRateLimiter = new AzureChatRateLimiter(8);
+
 const EXA_QUERY_PLANNER_TIMEOUT_MS = 45000;
 const CLASSIFIER_DEPLOYMENT = env.AZURE_OPENAI_CLASSIFIER_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT;
 const COMPANY_CLASSIFIER_INPUT_LIMIT = 700;
@@ -3879,6 +3934,7 @@ export class AzureOpenAIClient {
 
     for (let attempt = 0; attempt <= MAX_AZURE_RETRIES; attempt += 1) {
       try {
+        await azureChatRateLimiter.acquire();
         response = await fetch(url, {
           method: "POST",
           headers: {
@@ -3904,6 +3960,7 @@ export class AzureOpenAIClient {
       }
 
       if (response.ok) {
+        azureChatRateLimiter.updateLimitFromHeader(response.headers.get("x-ratelimit-limit-requests"));
         break;
       }
 
