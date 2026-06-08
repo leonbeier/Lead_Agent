@@ -2544,11 +2544,20 @@ export class LeadPipelineAgent {
       };
     }
 
+    const aoiFastSignals = [
+      "aoi", "automated optical inspection", "optical inspection system",
+      "optical inspection machine", "visual inspection machine", "vision inspection system",
+      "visual quality control machine", "machine vision system", "machine vision product",
+      "inline inspection machine", "lidar sensor", "lidar system"
+    ];
+    const aoiFastHits = aoiFastSignals.filter((s) => text.includes(s)).length;
     if (machineBuilderHits >= 2 && industrialHits >= 2) {
       return {
-        category: "machine_builder_ai_enablement",
+        category: aoiFastHits >= 1 ? "machine_builder_vision_ai" : "machine_builder_ai_enablement",
         relevanceScore: Math.min(78, 42 + machineBuilderHits * 6 + industrialHits),
-        rationale: "Company profile indicates a machine builder or OEM with industrial automation, inspection, or AI-option potential."
+        rationale: aoiFastHits >= 1
+          ? "Company profile indicates a machine builder or OEM where Vision AI or optical inspection is the core product."
+          : "Company profile indicates a machine builder or OEM with industrial automation, inspection, or AI-option potential."
       };
     }
 

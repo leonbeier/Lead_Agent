@@ -139,7 +139,7 @@ export const DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS: Record<SelectableLeadCa
   },
   machine_builder_vision_ai: {
     addOnContext:
-      "Treat as relevant only when Vision AI, machine vision, optical inspection, or computer vision is the primary purpose and core value proposition of the machines or systems the company ships. Examples: AOI machines, inline optical inspection systems, automated visual quality-control equipment, or machine-vision inspection stations where the visual AI capability is what the machine is sold for. The key distinction from machine_builder_ai_enablement is that Vision AI must be what the machine IS, not just a feature that could be added. ONE WARE fits by improving model accuracy, handling difficult datasets, and enabling customer-specific model variants. Do not use this category when Vision AI is only a minor add-on on a machine whose primary purpose is something else such as packaging, CNC, assembly, or material handling."
+      "Treat as relevant when Vision AI, machine vision, optical inspection, or computer vision is the primary purpose and core value proposition of the machines or systems the company ships. Examples: AOI machines, inline optical inspection systems, automated visual quality-control equipment, LiDAR sensing systems, 3D measurement systems, or machine-vision inspection stations where the visual sensing capability is what the machine is sold for. The key distinction from machine_builder_ai_enablement is that Vision AI must be what the machine IS, not just a feature that could be added. If the company's core product is an AOI machine, optical inspection station, LiDAR system, or machine vision product \u2014 even if they do not explicitly use the term 'Vision AI' \u2014 this is the right category. ONE WARE fits by improving model accuracy, handling difficult datasets, and enabling customer-specific model variants. Do not use this category when Vision AI is only a minor add-on on a machine whose primary purpose is something else such as packaging, CNC, assembly, or material handling. When in doubt between this category and machine_builder_ai_enablement, prefer machine_builder_vision_ai if optical inspection, AOI, or machine vision sensing is the dominant product description."
   },
   software_platform_embedding: {
     addOnContext:
@@ -446,12 +446,13 @@ export const CATEGORY_PREQUALIFICATION_CONTEXT: Record<LeadCategory, CategoryPre
     category: "machine_builder_vision_ai",
     label: "Machine builders with existing Vision AI",
     classificationRules: [
-      "Relevant when Vision AI, machine vision, optical inspection, or computer vision is the primary purpose and core value proposition of the machines or systems the company ships.",
-      "Examples: AOI systems, inline optical inspection machines, automated visual quality-control equipment, machine-vision inspection stations branded around AI-based image analysis.",
-      "Distinct from machine_builder_ai_enablement: here Vision AI is what the machine IS, not something that could be added later. The company actively faces challenges with model accuracy, edge cases, or customer-specific variants.",
+      "Relevant when Vision AI, machine vision, optical inspection, LiDAR sensing, or computer vision is the primary purpose and core value proposition of the machines or systems the company ships.",
+      "Examples: AOI systems, inline optical inspection machines, automated visual quality-control equipment, LiDAR sensor systems, 3D measurement machines, machine-vision inspection stations branded around camera- or AI-based image analysis.",
+      "Do NOT require the explicit term 'Vision AI' — if the product is an AOI machine, optical inspection station, or machine vision system, this category applies even when the company uses classical/non-AI imaging language.",
+      "Distinct from machine_builder_ai_enablement: here Vision AI or machine vision sensing IS what the machine IS, not something that could be added later. The company actively faces challenges with model accuracy, edge cases, or customer-specific variants.",
       "Do not use when Vision AI is only a minor add-on feature of a machine whose primary function is something else such as packaging, assembly, CNC, or material handling."
     ],
-    disqualifiers: ["Machine builder where Vision AI is not the primary purpose of the product", "Pure service integrator with no own shipped machine", "Hardware vendor without Vision AI as a core product feature", "Machine where Vision AI is only an optional or minor add-on"]
+    disqualifiers: ["Machine builder where Vision AI is not the primary purpose of the product", "Pure service integrator with no own shipped machine", "Hardware vendor without Vision AI or machine vision as a core product feature", "Machine where Vision AI is only an optional or minor add-on"]
   },
   software_platform_embedding: {
     category: "software_platform_embedding",
