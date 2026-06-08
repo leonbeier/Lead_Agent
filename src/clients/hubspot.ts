@@ -112,7 +112,7 @@ const HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS = 250;
 const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
-const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 240_000;
+const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 120_000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 60_000;
 const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
@@ -1290,11 +1290,10 @@ export class HubSpotClient {
         .join("\n\n"),
       aliases.length > 0 ? `Company aliases: ${aliases.join(" | ")}` : undefined
     ].filter(Boolean).join("\n\n");
-    // Query planning only — 60 s is ample. Do not use the full web-search timeout here or
-    // the budget is consumed before discoverWebSearchContacts even starts.
+    // Query planning only — 20 s is enough. Deterministic queries fill in the rest.
     const suggestedLinkedInQueries = (await this.withTimeout(
       this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false),
-      60_000,
+      20_000,
       [] as string[]
     )).filter((query) => /site:linkedin\.com\/in/i.test(query));
     const deterministicLinkedInQueries = this.buildPublicContactSearchQueries(company, aliases)
@@ -1630,15 +1629,15 @@ export class HubSpotClient {
       company.domain ? `Website: ${company.domain}` : undefined,
       company.country ? `Country: ${company.country}` : undefined
     ].filter(Boolean).join("\n");
-    // Foundry contact discovery — allow up to 200 s. Longer runs are not useful and would
-    // push the total contact-selection budget past its limit.
+    // Foundry contact discovery — allow up to 80 s. The query-planner already ran above (20 s),
+    // so this is the main discovery budget. Total discoverWebSearchContacts ≤ 100 s.
     const foundryContacts = await this.withTimeout(
       this.foundryAgentsClient.discoverPublicContacts(
         foundryCompany,
         evidence.trim() || minimalEvidence,
         false
       ),
-      200_000,
+      80_000,
       [] as Awaited<ReturnType<typeof this.foundryAgentsClient.discoverPublicContacts>>
     );
 
