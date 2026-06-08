@@ -2418,7 +2418,7 @@ ${message.content || ""}`).join("\n\n");
           const result = await requestJson("/api/debug/test-console", {
             method: "POST",
             body: JSON.stringify(requestPayload),
-            timeoutMs: 180000
+            timeoutMs: 480000
           });
 
           if (stage === "company_search") {

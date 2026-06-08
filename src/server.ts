@@ -26,7 +26,7 @@ type LeadRunStatus = LeadRunProgress & {
 };
 
 const STALE_LEAD_RUN_THRESHOLD_MS = 90_000;
-const DEBUG_CONSOLE_TIMEOUT_MS = 270_000;
+const DEBUG_CONSOLE_TIMEOUT_MS = 480_000;
 
 const leadRunStatus: LeadRunStatus = {
   running: false,

@@ -142,9 +142,9 @@ export interface DebugConsoleContactDiscoveryResult {
   analyzedWebsites: DebugConsoleContactAnalysis[];
 }
 
-const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 240_000;
+const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 460_000;
 
-const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 240_000;
+const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 420_000;
 
 const DEBUG_RESEARCH_BRIEF_TIMEOUT_MS = 120_000;
 
@@ -169,7 +169,7 @@ export class DebugConsoleService {
 
   private readonly defaultOutreachPrepConcurrency = 6;
 
-  private readonly defaultContactSearchConcurrency = 8;
+  private readonly defaultContactSearchConcurrency = 2;
 
   createManualCompanyForWebsite(website: string, filter: OrganizationFilter): CompanySample {
     return this.buildManualCompany(website, filter);

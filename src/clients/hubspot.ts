@@ -1290,9 +1290,11 @@ export class HubSpotClient {
         .join("\n\n"),
       aliases.length > 0 ? `Company aliases: ${aliases.join(" | ")}` : undefined
     ].filter(Boolean).join("\n\n");
+    // Query planning only — 60 s is ample. Do not use the full web-search timeout here or
+    // the budget is consumed before discoverWebSearchContacts even starts.
     const suggestedLinkedInQueries = (await this.withTimeout(
       this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false),
-      PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
+      60_000,
       [] as string[]
     )).filter((query) => /site:linkedin\.com\/in/i.test(query));
     const deterministicLinkedInQueries = this.buildPublicContactSearchQueries(company, aliases)
@@ -1594,7 +1596,12 @@ export class HubSpotClient {
       knownContactEvidence ? `Known website contacts:\n${knownContactEvidence}` : undefined,
       companyAliases.length > 0 ? `Company aliases: ${companyAliases.join(" | ")}` : undefined
     ].filter(Boolean).join("\n\n");
-    const suggestedQueries = await this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false);
+    // Query planning only — 60 s is ample.
+    const suggestedQueries = await this.withTimeout(
+      this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false),
+      60_000,
+      [] as string[]
+    );
     const preferredQueries = this.buildPublicContactSearchQueries(company, companyAliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
     const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 8);
@@ -1623,10 +1630,16 @@ export class HubSpotClient {
       company.domain ? `Website: ${company.domain}` : undefined,
       company.country ? `Country: ${company.country}` : undefined
     ].filter(Boolean).join("\n");
-    const foundryContacts = await this.foundryAgentsClient.discoverPublicContacts(
-      foundryCompany,
-      evidence.trim() || minimalEvidence,
-      false
+    // Foundry contact discovery — allow up to 200 s. Longer runs are not useful and would
+    // push the total contact-selection budget past its limit.
+    const foundryContacts = await this.withTimeout(
+      this.foundryAgentsClient.discoverPublicContacts(
+        foundryCompany,
+        evidence.trim() || minimalEvidence,
+        false
+      ),
+      200_000,
+      [] as Awaited<ReturnType<typeof this.foundryAgentsClient.discoverPublicContacts>>
     );
 
     const withLinkedIn = foundryContacts.filter((c) => c.linkedinUrl && /\/in\//i.test(c.linkedinUrl));
