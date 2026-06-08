@@ -144,7 +144,10 @@ export interface DebugConsoleContactDiscoveryResult {
 
 const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 240_000;
 
-const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 200_000;
+// Must be < DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS minus the time spent on page collection +
+// extractAzureMatchedContacts (~120 s) so the inner timeout fires and returns the
+// llmContacts fallback BEFORE the outer fires and returns emptyContactDebug.
+const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 100_000;
 
 const DEBUG_RESEARCH_BRIEF_TIMEOUT_MS = 120_000;
 
