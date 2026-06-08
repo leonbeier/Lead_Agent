@@ -490,7 +490,7 @@ export class AzureOpenAIClient {
             `Raw contact evidence JSON: ${JSON.stringify(evidencePayload)}`
           ].filter(Boolean).join("\n\n")
         }
-      ], { maxTokens: 1200 });
+      ], { maxTokens: 2800 });
 
       const parsed = this.parseJsonObject<{ contacts?: PublicContactCandidate[] }>(content);
       return (parsed.contacts ?? [])
@@ -503,7 +503,8 @@ export class AzureOpenAIClient {
           || contact.lastName
         ))
         .slice(0, 6);
-    } catch {
+    } catch (error) {
+      console.error(`[AzureOpenAI.extractPublicContactsFromEvidence] failed for ${company.name}: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   }
