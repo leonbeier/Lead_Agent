@@ -374,17 +374,7 @@ export class FoundryAgentsClient {
     input: string
   ): Promise<{ text: string; citations: string[] }> {
     const agent = await this.ensureAgent(kind);
-    const response = await this.openAI.responses.create(
-      {
-        input
-      },
-      {
-        body: {
-          agent: { name: agent.name, type: "agent_reference" },
-          tool_choice: kind === "research" ? "auto" : undefined
-        }
-      }
-    );
+    const response = await this.createAgentResponseWithRetry(kind, agent, input);
 
     const citations = Array.from(
       new Set(
@@ -400,6 +390,66 @@ export class FoundryAgentsClient {
       text: response.output_text ?? "",
       citations
     };
+  }
+
+  // The Azure AI Foundry responses endpoint (and its bing_grounding tool) intermittently
+  // returns transient gateway failures such as "upstream error", 429/5xx, or dropped
+  // connections. These are not content problems, so a bounded retry recovers the agent
+  // call instead of silently returning no contacts/research. Permanent errors (auth,
+  // bad request) are not retried.
+  private async createAgentResponseWithRetry(
+    kind: AgentKind,
+    agent: CachedAgentReference,
+    input: string
+  ): Promise<AgentTextResponse> {
+    const maxAttempts = 3;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.openAI.responses.create(
+          {
+            input
+          },
+          {
+            body: {
+              agent: { name: agent.name, type: "agent_reference" },
+              tool_choice: kind === "research" ? "auto" : undefined
+            }
+          }
+        );
+      } catch (error) {
+        lastError = error;
+        if (attempt >= maxAttempts || !this.isTransientFoundryError(error)) {
+          throw error;
+        }
+
+        const backoffMs = 1000 * attempt;
+        console.warn(
+          `[FoundryAgents.${kind}] transient error on attempt ${attempt}/${maxAttempts}, retrying in ${backoffMs}ms: ${error instanceof Error ? error.message : String(error)}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private isTransientFoundryError(error: unknown): boolean {
+    const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+    const status = (error as { status?: number; statusCode?: number } | undefined)?.status
+      ?? (error as { statusCode?: number } | undefined)?.statusCode;
+
+    if (typeof status === "number" && (status === 408 || status === 429 || status >= 500)) {
+      return true;
+    }
+
+    return /upstream error/.test(message)
+      || /\b(429|500|502|503|504)\b/.test(message)
+      || /rate limit|throttl/.test(message)
+      || /timed out|timeout/.test(message)
+      || /temporarily unavailable|service unavailable|bad gateway|gateway timeout/.test(message)
+      || /econnreset|econnrefused|etimedout|socket hang up|fetch failed|network/.test(message);
   }
 
   private async ensureAgent(kind: AgentKind): Promise<CachedAgentReference> {
