@@ -799,6 +799,7 @@ app.get("/hubspot/ui", (request, response) => {
   const html = readFileSync(hubSpotConsolePath, "utf8");
   const sharedKey = typeof request.query.key === "string" ? request.query.key : "";
 
+  response.setHeader("Cache-Control", "no-store");
   response.type("html").send(
     html
       .replace(/__LEAD_AGENT_SHARED_KEY__/g, sharedKey)

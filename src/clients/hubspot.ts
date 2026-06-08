@@ -453,20 +453,22 @@ export class HubSpotClient {
     company: PreCategorizedCompany,
     options: { selectedContactsTimeoutMs?: number } = {}
   ): Promise<PublicContactDebugResult> {
-    const pages = company.domain
-      ? await this.withTimeout(
-          this.collectCandidatePages(this.normalizeCompanyUrl(company.domain)).catch(() => [] as Array<{ url: string; html: string }>),
-          EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
-          [] as Array<{ url: string; html: string }>
-        )
-      : [];
-    const officialWebsiteProfile = company.domain
-      ? await this.withTimeout(
-          this.getOfficialWebsiteCompanyProfile(company).catch(() => null),
-          EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
-          null as OfficialWebsiteCompanyProfile | null
-        )
-      : null;
+    // Run page collection and website profile concurrently — they are independent and both
+    // do network I/O. Running them sequentially wastes ~40-60 s on every call.
+    const [pages, officialWebsiteProfile] = company.domain
+      ? await Promise.all([
+          this.withTimeout(
+            this.collectCandidatePages(this.normalizeCompanyUrl(company.domain)).catch(() => [] as Array<{ url: string; html: string }>),
+            EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
+            [] as Array<{ url: string; html: string }>
+          ),
+          this.withTimeout(
+            this.getOfficialWebsiteCompanyProfile(company).catch(() => null),
+            EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
+            null as OfficialWebsiteCompanyProfile | null
+          )
+        ])
+      : [[], null] as [Array<{ url: string; html: string }>, OfficialWebsiteCompanyProfile | null];
     const aliases = this.extractCompanySearchAliases(company, pages, officialWebsiteProfile);
     const websitePages = this.buildWebsitePageDebugEntries(company, pages);
     const { queries, hitGroups, contacts: llmContacts } = await this.extractAzureMatchedContacts(company, pages, aliases, websitePages);
