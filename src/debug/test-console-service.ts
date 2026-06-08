@@ -142,12 +142,15 @@ export interface DebugConsoleContactDiscoveryResult {
   analyzedWebsites: DebugConsoleContactAnalysis[];
 }
 
-const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 240_000;
+// Outer wrapper around buildDetailedContactDebug. Must leave enough room after
+// the parallel init steps (~50 s) and previewHubSpotSync (~10 s) to fit within
+// the 290 s server limit: 50 + 190 + 10 = 250 s.
+const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 190_000;
 
-// Must be < DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS minus the time spent on page collection +
-// extractAzureMatchedContacts (~120 s) so the inner timeout fires and returns the
-// llmContacts fallback BEFORE the outer fires and returns emptyContactDebug.
-const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 100_000;
+// Must be < DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS minus the time spent on page
+// collection + extractAzureMatchedContacts (~120 s) so the inner timeout fires
+// BEFORE the outer: 190 - 120 = 70 s budget → use 60 s.
+const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 60_000;
 
 const DEBUG_RESEARCH_BRIEF_TIMEOUT_MS = 120_000;
 
@@ -419,7 +422,20 @@ export class DebugConsoleService {
   }
 
   private async buildContactAnalysis(company: CompanySample): Promise<DebugConsoleContactAnalysis> {
-    const baseAnalysis = await this.classifyWebsite(company);
+    // Run website classification, address resolution, and identity debug in parallel.
+    // All three only need company.domain and are independent of each other.
+    // getOfficialWebsiteCompanyProfile is cached by domain key so there is no duplicate
+    // crawl when resolveCompanyAddress and debugResolveCompanyIdentity run concurrently.
+    const stubCompany: PreCategorizedCompany = { ...company, category: "other", relevanceScore: 0, rationale: "" };
+    const [baseAnalysis, extractedAddress, identityDebugBase] = await Promise.all([
+      this.classifyWebsite(company),
+      this.hubspotClient.resolveCompanyAddress(stubCompany).catch(() => null),
+      this.hubspotClient.debugResolveCompanyIdentity(stubCompany).catch(() => ({
+        officialWebsiteProfile: null,
+        legalEntityCandidates: [] as string[],
+        isTrustedOfficialWebsiteProfile: false
+      }))
+    ]);
 
     if (baseAnalysis.error) {
       return {
@@ -431,15 +447,10 @@ export class DebugConsoleService {
     }
 
     try {
-      const extractedAddress = await this.hubspotClient.resolveCompanyAddress(baseAnalysis.categorizedCompany);
       const canonicalCompany = this.applyResolvedCompanyIdentity(baseAnalysis.categorizedCompany, extractedAddress);
       const companyIdentityDebug = {
         extractedAddress,
-        ...(await this.hubspotClient.debugResolveCompanyIdentity(baseAnalysis.categorizedCompany).catch(() => ({
-          officialWebsiteProfile: null,
-          legalEntityCandidates: [],
-          isTrustedOfficialWebsiteProfile: false
-        })))
+        ...identityDebugBase
       };
 
       const emptyContactDebug: Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>> = {
