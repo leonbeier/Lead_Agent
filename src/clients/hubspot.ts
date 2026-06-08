@@ -536,8 +536,8 @@ export class HubSpotClient {
         let companyWriteSucceeded = false;
 
         try {
-          const syncedCompany = await this.upsertCompany(company, brief, companyProperties);
-          companySyncedCount = 1;
+          const { company: syncedCompany, wasCreated } = await this.upsertCompany(company, brief, companyProperties);
+          companySyncedCount = wasCreated ? 1 : 0;
           companyWriteSucceeded = true;
 
           const selectedContacts = contactsByCompany.get(this.getCompanyKey(company)) ?? [];
@@ -635,7 +635,7 @@ export class HubSpotClient {
     company: PreCategorizedCompany,
     brief: ResearchBrief | undefined,
     availableProperties: Set<string>
-  ): Promise<HubSpotObjectResponse> {
+  ): Promise<{ company: HubSpotObjectResponse; wasCreated: boolean }> {
     // Cap address extraction so that slow Azure AI retries or hung browser fetches
     // do not consume the entire HubSpot worker budget (360 s).  Address data is
     // enrichment; missing it is acceptable — the company record must still be written.
@@ -656,19 +656,21 @@ export class HubSpotClient {
 
     const existingCompany = await this.findExistingCompany(company);
     if (existingCompany) {
-      return this.requestJson<HubSpotObjectResponse>(
+      const updated = await this.requestJson<HubSpotObjectResponse>(
         `${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies/${existingCompany.id}`,
         {
           method: "PATCH",
           body: JSON.stringify({ properties })
         }
       );
+      return { company: updated, wasCreated: false };
     }
 
-    return this.requestJson<HubSpotObjectResponse>(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies`, {
+    const created = await this.requestJson<HubSpotObjectResponse>(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies`, {
       method: "POST",
       body: JSON.stringify({ properties })
     });
+    return { company: created, wasCreated: true };
   }
 
   private async upsertContact(
@@ -3567,7 +3569,7 @@ export class HubSpotClient {
   }
 
   private isGenericMailbox(email: string): boolean {
-    return /^(info|sales|office|kontakt|contact|hello|team|support|service|mail)@/i.test(email);
+    return /^(info|sales|office|kontakt|contact|hello|team|support|service|mail|post|noreply|no-reply|newsletter|news|marketing|anfrage|anfragen|bestellung|orders|order|welcome|hallo|greetings|admin|webmaster|hq)@/i.test(email);
   }
 
   private isLowValueMailbox(email: string): boolean {
@@ -4071,7 +4073,7 @@ export class HubSpotClient {
 
   private formatContactDisplayName(contact: PublicContactCandidate): string {
     const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
-    return fullName || contact.email || contact.label;
+    return fullName || "[Name]";
   }
 
   private personalizeOutreachMessage(
