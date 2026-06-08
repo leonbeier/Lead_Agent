@@ -514,9 +514,24 @@ export class DebugConsoleService {
 
     return {
       ...company,
-      ...(canonicalName ? { name: canonicalName } : {}),
+      ...(canonicalName && this.isPlausibleCanonicalCompanyName(canonicalName) ? { name: canonicalName } : {}),
       ...(canonicalCountry ? { country: canonicalCountry } : {})
     };
+  }
+
+  // Guards the AI-extracted canonical name before it overwrites the discovered company name.
+  // The impressum/address extractor occasionally returns a bare legal-form or country fragment
+  // (e.g. "De", "AG", "GmbH") which must not replace the real domain-derived company name.
+  private isPlausibleCanonicalCompanyName(name: string): boolean {
+    const compact = name.replace(/[^a-z0-9]+/gi, "");
+    if (compact.length < 3) {
+      return false;
+    }
+
+    const bareTokens = new Set([
+      "de", "en", "eu", "ag", "ug", "kg", "gmbh", "ohg", "gbr", "ltd", "llc", "inc", "co", "corp", "plc", "bv", "nv", "sa", "srl", "spa", "oy", "ab", "as"
+    ]);
+    return !bareTokens.has(name.trim().toLowerCase());
   }
 
   private buildManualCompany(website: string, filter: OrganizationFilter): CompanySample {
