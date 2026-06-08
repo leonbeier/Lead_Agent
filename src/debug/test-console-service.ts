@@ -142,15 +142,11 @@ export interface DebugConsoleContactDiscoveryResult {
   analyzedWebsites: DebugConsoleContactAnalysis[];
 }
 
-// Outer wrapper around buildDetailedContactDebug. Must leave enough room after
-// the parallel init steps (~50 s) and previewHubSpotSync (~10 s) to fit within
-// the 290 s server limit: 50 + 190 + 10 = 250 s.
-const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 190_000;
-
-// Must be < DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS minus the time spent on page
-// collection + extractAzureMatchedContacts (~120 s) so the inner timeout fires
-// BEFORE the outer: 190 - 120 = 70 s budget → use 60 s.
-const DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS = 60_000;
+// Outer wrapper around buildDetailedContactDebug. Pipeline budget:
+// 20s planner + 2 queries×70s/timeout = 70s + 20s Azure = 110s page+search.
+// Total per domain: 35s init + 170s pipeline = 205s. Outer must be > 170s.
+// Set to 240s: 35s init + 240s outer + 10s preview = 285s < 290s server.
+const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 240_000;
 
 const DEBUG_RESEARCH_BRIEF_TIMEOUT_MS = 120_000;
 
@@ -474,9 +470,7 @@ export class DebugConsoleService {
           null
         ),
         this.withTimeoutValue(
-          this.buildDetailedContactDebug(canonicalCompany, {
-            selectedContactsTimeoutMs: DEBUG_CONTACT_DISCOVERY_SELECTION_TIMEOUT_MS
-          }),
+          this.buildDetailedContactDebug(canonicalCompany),
           DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS,
           emptyContactDebug
         )
@@ -1043,10 +1037,9 @@ export class DebugConsoleService {
   }
 
   private async buildDetailedContactDebug(
-    company: PreCategorizedCompany,
-    options: { selectedContactsTimeoutMs?: number } = {}
+    company: PreCategorizedCompany
   ): Promise<Awaited<ReturnType<HubSpotClient["debugPublicContactDiscovery"]>>> {
-    const baseDebug = await this.hubspotClient.debugPublicContactDiscovery(company, options);
+    const baseDebug = await this.hubspotClient.debugPublicContactDiscovery(company);
     return baseDebug;
   }
 

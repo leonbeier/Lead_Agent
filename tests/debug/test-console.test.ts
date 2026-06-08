@@ -884,9 +884,9 @@ test("buildContactAnalysis runs research and contact debug together and keeps pr
     companyName: "Senswork GmbH",
     city: "Burghausen"
   });
-  service.hubspotClient.debugPublicContactDiscovery = async (resolvedCompany: { name: string }, options: { selectedContactsTimeoutMs?: number }) => {
+  service.hubspotClient.debugPublicContactDiscovery = async (resolvedCompany: { name: string }) => {
     assert.equal(resolvedCompany.name, "Senswork GmbH");
-    assert.equal(options.selectedContactsTimeoutMs, 60_000);
+    assert.ok(resolvedCompany.name.length > 0);
     return {
       aliases: ["Senswork"],
       queries: [],

@@ -473,16 +473,12 @@ export class HubSpotClient {
     const websitePages = this.buildWebsitePageDebugEntries(company, pages);
     const { queries, hitGroups, contacts: llmContacts } = await this.extractAzureMatchedContacts(company, pages, aliases, websitePages);
     const websiteContacts = await this.extractWebsiteContactsFromPages(company, pages);
-    const fallbackSelectedContacts = llmContacts.length > 0
+    // In debug mode skip findPublicContactsFromPages (which can run a 120s Foundry agent call).
+    // extractAzureMatchedContacts already ran the Bing+LinkedIn searches — llmContacts contains
+    // the named people found. Fall back to reachable website contacts when no LinkedIn found.
+    const selectedContacts = llmContacts.length > 0
       ? llmContacts.slice(0, 4)
       : this.selectReachableWebsiteFallbackContacts(websiteContacts).slice(0, 4);
-    const selectedContacts = options.selectedContactsTimeoutMs
-      ? await this.withTimeout(
-          this.findPublicContactsFromPages(company, pages, websiteContacts, llmContacts),
-          options.selectedContactsTimeoutMs,
-          fallbackSelectedContacts
-        )
-      : await this.findPublicContactsFromPages(company, pages, websiteContacts, llmContacts);
 
     return {
       aliases,
@@ -1300,12 +1296,15 @@ export class HubSpotClient {
     )).filter((query) => /site:linkedin\.com\/in/i.test(query));
     const deterministicLinkedInQueries = this.buildPublicContactSearchQueries(company, aliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
+    // Cap at 2 queries: 1 batch at concurrency-2 × ~50 s/browser-search = 50 s.
+    // Pipeline budget: 60 s pages + 20 s planner + 70 s per-search-timeout (parallel) + 20 s azure = 170 s.
+    // With 240 s outer and ~35 s init: 35 + 170 + 10 preview = 215 s < 290 s server ✓
     const queries = Array.from(new Set([...suggestedLinkedInQueries, ...deterministicLinkedInQueries]))
-      .slice(0, 10);
+      .slice(0, 2);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => ({
         query,
-        hits: await this.searchBingResults(query, 5)
+        hits: await this.withTimeout(this.searchBingResults(query, 5), 70_000, [] as WebSearchHit[])
       })),
       PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
     );
