@@ -471,8 +471,13 @@ export class HubSpotClient {
       : [[], null] as [Array<{ url: string; html: string }>, OfficialWebsiteCompanyProfile | null];
     const aliases = this.extractCompanySearchAliases(company, pages, officialWebsiteProfile);
     const websitePages = this.buildWebsitePageDebugEntries(company, pages);
-    const { queries, hitGroups, contacts: llmContacts } = await this.extractAzureMatchedContacts(company, pages, aliases, websitePages);
-    const websiteContacts = await this.extractWebsiteContactsFromPages(company, pages);
+    // Run LinkedIn search and website contact extraction in parallel — both only need
+    // `pages` which is already available. extractWebsiteContactsFromPages takes ~1-5s
+    // and would otherwise wait behind the 70-110s LinkedIn search pipeline.
+    const [{ queries, hitGroups, contacts: llmContacts }, websiteContacts] = await Promise.all([
+      this.extractAzureMatchedContacts(company, pages, aliases, websitePages),
+      this.extractWebsiteContactsFromPages(company, pages)
+    ]);
     // In debug mode skip findPublicContactsFromPages (which can run a 120s Foundry agent call).
     // extractAzureMatchedContacts already ran the Bing+LinkedIn searches — llmContacts contains
     // the named people found. Fall back to reachable website contacts when no LinkedIn found.
