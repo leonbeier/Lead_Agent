@@ -1529,6 +1529,20 @@ export class HubSpotClient {
       .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
       .slice(0, Math.max(0, 4 - websiteFallbackContacts.length));
 
+    // Reserve at least one slot for a personal LinkedIn /in/ profile when one is available.
+    // Generic-mailbox named officers with priority titles otherwise outscore LinkedIn-only
+    // contacts and crowd every personal LinkedIn profile out of the final set.
+    const hasPersonalLinkedIn = prioritizedEmployees.some((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl));
+    if (!hasPersonalLinkedIn && prioritizedEmployees.length > 0) {
+      const topLinkedInContact = this.mergeDiscoveredContacts(selectedEmployees, supplementalLinkedInContacts)
+        .filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl))
+        .filter((contact) => !this.isExcludedContact(contact))
+        .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))[0];
+      if (topLinkedInContact && !prioritizedEmployees.some((existing) => this.getPublicContactIdentity(existing) === this.getPublicContactIdentity(topLinkedInContact))) {
+        prioritizedEmployees[prioritizedEmployees.length - 1] = topLinkedInContact;
+      }
+    }
+
     return this.mergeDiscoveredContacts(prioritizedEmployees, websiteFallbackContacts)
       .slice(0, 4);
   }
