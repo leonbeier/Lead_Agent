@@ -1059,14 +1059,32 @@ export class HubSpotClient {
     const looksLikeSentence = rawExtractedName
       ? /[.!?]\s+[a-zäöü]/.test(rawExtractedName) || /^[a-zäöü]/.test(rawExtractedName)
       : false;
+    // Reject bare legal-form or country fragments (e.g. "De", "AG", "GmbH") that the address
+    // extractor occasionally returns instead of the full operating entity name. These would
+    // otherwise overwrite the good domain-derived company name with meaningless tokens.
+    const compactExtractedName = rawExtractedName?.replace(/[^a-z0-9]+/gi, "") ?? "";
+    const bareNameTokens = new Set([
+      "de", "en", "eu", "ag", "ug", "kg", "gmbh", "ohg", "gbr", "ltd", "llc", "inc",
+      "co", "corp", "plc", "bv", "nv", "sa", "srl", "spa", "oy", "ab", "as"
+    ]);
+    const isBareFragment = compactExtractedName.length < 3
+      || bareNameTokens.has((rawExtractedName ?? "").trim().toLowerCase());
     const isPlausibleExtractedName = rawExtractedName
       && rawExtractedName.length <= 80
       && wordCount <= 8
-      && !looksLikeSentence;
+      && !looksLikeSentence
+      && !isBareFragment;
     const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined) || company.name;
+    // Final safety net: never write a blank company name to HubSpot. Derive a readable
+    // name from the domain's first label when no usable name is available.
+    const fallbackFromDomain = this.normalizeDomain(company.domain)?.split(".")[0]
+      ?.split(/[-_]+/).filter(Boolean)
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(" ");
+    const resolvedCompanyName = canonicalCompanyName?.trim() || fallbackFromDomain || canonicalCompanyName;
 
     return {
-      name: canonicalCompanyName,
+      name: resolvedCompanyName,
       domain: this.normalizeDomain(company.domain),
       country: extractedAddress?.country ?? company.country,
       address: extractedAddress?.address,
