@@ -54,10 +54,16 @@ const AZURE_REQUEST_TIMEOUT_MS = 60000;
  * contacts. This limiter spaces request dispatch so the app stays under the advertised ceiling,
  * and re-reads the header on every successful response so the pace auto-increases when the
  * operator raises the deployment quota — no code change required.
+ *
+ * It is also reactive: a 429 means the small TPM/RPM budget is exhausted (a single large contact
+ * extraction can consume most of a 10K-tokens-per-minute deployment on its own), so the limiter
+ * imposes a global cooldown honoring the server's retry-after hint. That makes every caller wait
+ * out the window together instead of hammering the deployment and losing data.
  */
 class AzureChatRateLimiter {
   private recent: number[] = [];
   private tail: Promise<void> = Promise.resolve();
+  private cooldownUntil = 0;
 
   constructor(private maxPerWindow: number, private readonly windowMs = 60_000) {}
 
@@ -79,8 +85,19 @@ class AzureChatRateLimiter {
     }
   }
 
+  /** On a 429, pause all dispatch until the server-advised retry window (bounded) elapses. */
+  registerThrottle(retryAfterMs: number): void {
+    const boundedMs = Math.min(Math.max(retryAfterMs, 1_000), this.windowMs);
+    this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + boundedMs);
+  }
+
   private async waitForSlot(): Promise<void> {
     for (;;) {
+      const cooldownRemaining = this.cooldownUntil - Date.now();
+      if (cooldownRemaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, cooldownRemaining + 50));
+        continue;
+      }
       const now = Date.now();
       this.recent = this.recent.filter((timestamp) => now - timestamp < this.windowMs);
       if (this.recent.length < this.maxPerWindow) {
@@ -3969,7 +3986,13 @@ export class AzureOpenAIClient {
         throw new Error(`Azure OpenAI request failed: ${response.status} ${errorText}`);
       }
 
-      await this.delay(this.resolveAzureRetryDelayMs(response, attempt));
+      const retryDelayMs = this.resolveAzureRetryDelayMs(response, attempt);
+      if (response.status === 429) {
+        // Quota exhausted for this minute — make every concurrent caller wait the window out
+        // together instead of repeatedly re-hitting the throttled deployment.
+        azureChatRateLimiter.registerThrottle(retryDelayMs);
+      }
+      await this.delay(retryDelayMs);
     }
 
     if (!response?.ok) {
