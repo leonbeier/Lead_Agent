@@ -1308,7 +1308,7 @@ export class HubSpotClient {
       })),
       PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
     );
-    const contacts = await this.azureOpenAIClient.extractPublicContactsFromEvidence(company, {
+    const contacts = await this.azureOpenAIClient.extractPublicContactsFromEvidence(foundryCompany, {
       websitePages: normalizedWebsitePages.map((page) => ({
         url: page.url,
         evidenceSnippet: page.evidenceSnippet,
