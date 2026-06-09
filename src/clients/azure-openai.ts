@@ -565,7 +565,7 @@ export class AzureOpenAIClient {
       ], { maxTokens: 2800 });
 
       const parsed = this.parseJsonObject<{ contacts?: PublicContactCandidate[] }>(content);
-      return (parsed.contacts ?? [])
+      const usableContacts = (parsed.contacts ?? [])
         .filter((contact) => Boolean(
           contact.sourceUrl
           || contact.linkedinUrl
@@ -573,12 +573,80 @@ export class AzureOpenAIClient {
           || contact.phone
           || contact.firstName
           || contact.lastName
-        ))
-        .slice(0, 6);
+        ));
+      return this.dedupePublicContacts(usableContacts).slice(0, 6);
     } catch (error) {
       console.error(`[AzureOpenAI.extractPublicContactsFromEvidence] failed for ${company.name}: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
+  }
+
+  /**
+   * Collapse contacts the model emitted more than once for the same person. The extraction prompt
+   * occasionally returns the same LinkedIn profile (or the same named person) twice, which would
+   * otherwise waste a selection slot and create a duplicate HubSpot contact. Merge on the strongest
+   * shared identity (normalized LinkedIn /in/ URL, then email, then full name) and keep the richest
+   * field from each duplicate so no reachable channel is lost.
+   */
+  private dedupePublicContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
+    const byKey = new Map<string, PublicContactCandidate>();
+    const order: string[] = [];
+
+    const normalizeLinkedIn = (url?: string): string | undefined => {
+      if (!url) {
+        return undefined;
+      }
+      const match = url.toLowerCase().match(/linkedin\.com\/in\/([^/?#]+)/);
+      return match ? `in:${match[1]}` : undefined;
+    };
+    const identityKey = (contact: PublicContactCandidate): string | undefined => {
+      const linkedinKey = normalizeLinkedIn(contact.linkedinUrl);
+      if (linkedinKey) {
+        return linkedinKey;
+      }
+      const email = contact.email?.trim().toLowerCase();
+      if (email) {
+        return `email:${email}`;
+      }
+      const fullName = [contact.firstName, contact.lastName]
+        .map((part) => part?.trim().toLowerCase())
+        .filter(Boolean)
+        .join(" ");
+      return fullName ? `name:${fullName}` : undefined;
+    };
+
+    for (const contact of contacts) {
+      const key = identityKey(contact);
+      if (!key) {
+        // No stable identity to merge on — keep as-is under a unique key.
+        const uniqueKey = `unique:${order.length}`;
+        byKey.set(uniqueKey, contact);
+        order.push(uniqueKey);
+        continue;
+      }
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, contact);
+        order.push(key);
+        continue;
+      }
+      byKey.set(key, {
+        ...existing,
+        firstName: existing.firstName ?? contact.firstName,
+        lastName: existing.lastName ?? contact.lastName,
+        jobTitle: existing.jobTitle ?? contact.jobTitle,
+        email: existing.email ?? contact.email,
+        phone: existing.phone ?? contact.phone,
+        linkedinUrl: existing.linkedinUrl ?? contact.linkedinUrl,
+        linkedinConnectionCount: existing.linkedinConnectionCount ?? contact.linkedinConnectionCount,
+        sourceUrl: existing.sourceUrl ?? contact.sourceUrl,
+        sourceQuery: existing.sourceQuery ?? contact.sourceQuery,
+        sourceSnippet: existing.sourceSnippet ?? contact.sourceSnippet,
+        label: existing.label ?? contact.label
+      });
+    }
+
+    return order.map((key) => byKey.get(key)!).filter(Boolean);
   }
 
   async analyzeCompanyHomepage(
