@@ -1084,7 +1084,16 @@ export class LeadWorkerRunService {
               clearTimeout(timeoutHandle);
             }
           }
-          if (syncResult.companySyncedCount === 0) {
+          // A company write is successful when the record was created OR updated.
+          // companySyncedCount only counts NEW creations, so re-syncing a company that already
+          // exists in HubSpot returns 0 there even though the upsert succeeded. successfulCompanyKeys
+          // reflects created-or-updated writes; prefer it and fall back to companySyncedCount for
+          // callers/tests that do not populate the keys, so a successful update is never mistaken
+          // for a failure.
+          const successfulCompanyWrites = Array.isArray(syncResult.successfulCompanyKeys) && syncResult.successfulCompanyKeys.length > 0
+            ? syncResult.successfulCompanyKeys.length
+            : (syncResult.companySyncedCount ?? 0);
+          if (successfulCompanyWrites === 0) {
             const syncErrors = Array.isArray(syncResult.errors) ? syncResult.errors.filter(Boolean) : [];
             if (syncErrors.length > 0) {
               throw new Error(`HubSpot sync produced 0 company writes. ${syncErrors.slice(0, 3).join(" | ")}`);
@@ -1095,7 +1104,7 @@ export class LeadWorkerRunService {
           state.hubspotStatus = "done";
           state.pipelineAssigned = false;
           state.completedAt = new Date().toISOString();
-          metrics.hubspotWritten += syncResult.companySyncedCount;
+          metrics.hubspotWritten += successfulCompanyWrites;
           const syncErrorCount = Array.isArray(syncResult.errors) ? syncResult.errors.length : 0;
           if (syncErrorCount > 0) {
             log(`HubSpot Sync Warnungen fuer ${state.company.name}: ${syncErrorCount}`);
@@ -1104,7 +1113,7 @@ export class LeadWorkerRunService {
             stopping = true;
           }
           screeningQueue.enqueue({ type: "remove", key: state.key });
-          log(`HubSpot fertig: ${state.company.name} (companySynced=${syncResult.companySyncedCount}, contactSynced=${syncResult.contactSyncedCount})`);
+          log(`HubSpot fertig: ${state.company.name} (companySynced=${successfulCompanyWrites}, contactSynced=${syncResult.contactSyncedCount})`);
           maybePromoteStandby();
         } catch (error) {
           state.hubspotStatus = "failed";
