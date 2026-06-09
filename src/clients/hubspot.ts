@@ -989,9 +989,19 @@ export class HubSpotClient {
       return cached;
     }
 
+    // Cache the in-flight promise so concurrent callers share one request, but evict it on
+    // rejection. Otherwise a single timeout under worker load poisons the cache permanently:
+    // every later syncQualifiedCompanies awaits the same rejected promise and fails instantly,
+    // pinning hubspotWritten at 0 for the whole run.
     const propertiesPromise = this.requestJson<{ results?: HubSpotPropertyDefinition[] }>(
       `${env.HUBSPOT_BASE_URL}/crm/v3/properties/${objectType}`
     ).then((response) => new Set((response.results ?? []).map((property) => property.name)));
+
+    propertiesPromise.catch(() => {
+      if (this.availableProperties.get(objectType) === propertiesPromise) {
+        this.availableProperties.delete(objectType);
+      }
+    });
 
     this.availableProperties.set(objectType, propertiesPromise);
     return propertiesPromise;
