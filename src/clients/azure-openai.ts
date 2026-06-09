@@ -583,15 +583,14 @@ export class AzureOpenAIClient {
 
   /**
    * Collapse contacts the model emitted more than once for the same person. The extraction prompt
-   * occasionally returns the same LinkedIn profile (or the same named person) twice, which would
-   * otherwise waste a selection slot and create a duplicate HubSpot contact. Merge on the strongest
-   * shared identity (normalized LinkedIn /in/ URL, then email, then full name) and keep the richest
-   * field from each duplicate so no reachable channel is lost.
+   * occasionally returns the same person twice — for example once as a standalone LinkedIn /in/
+   * profile (URL but no email) and once as a named website contact (email/source but no URL) — which
+   * would otherwise waste a selection slot and create a duplicate HubSpot contact. Each contact can
+   * be identified by several keys (normalized LinkedIn /in/ URL, email, and full name); when a
+   * contact shares any key with an already-seen contact they are merged into one, keeping the richest
+   * value of every field so no reachable channel (URL, email, phone, source) is lost.
    */
   private dedupePublicContacts(contacts: PublicContactCandidate[]): PublicContactCandidate[] {
-    const byKey = new Map<string, PublicContactCandidate>();
-    const order: string[] = [];
-
     const normalizeLinkedIn = (url?: string): string | undefined => {
       if (!url) {
         return undefined;
@@ -599,54 +598,72 @@ export class AzureOpenAIClient {
       const match = url.toLowerCase().match(/linkedin\.com\/in\/([^/?#]+)/);
       return match ? `in:${match[1]}` : undefined;
     };
-    const identityKey = (contact: PublicContactCandidate): string | undefined => {
+    const candidateKeys = (contact: PublicContactCandidate): string[] => {
+      const keys: string[] = [];
       const linkedinKey = normalizeLinkedIn(contact.linkedinUrl);
       if (linkedinKey) {
-        return linkedinKey;
+        keys.push(linkedinKey);
       }
       const email = contact.email?.trim().toLowerCase();
       if (email) {
-        return `email:${email}`;
+        keys.push(`email:${email}`);
       }
       const fullName = [contact.firstName, contact.lastName]
         .map((part) => part?.trim().toLowerCase())
         .filter(Boolean)
         .join(" ");
-      return fullName ? `name:${fullName}` : undefined;
+      // Only treat a full (multi-token) name as an identity — a lone first name is too weak and
+      // could collapse two different people.
+      if (fullName.includes(" ")) {
+        keys.push(`name:${fullName}`);
+      }
+      return keys;
     };
+    const pick = <T>(primary: T | undefined, fallback: T | undefined): T | undefined => {
+      if (typeof primary === "string") {
+        return primary.trim() ? primary : (fallback ?? primary);
+      }
+      return primary ?? fallback;
+    };
+    const mergeContacts = (existing: PublicContactCandidate, incoming: PublicContactCandidate): PublicContactCandidate => ({
+      ...existing,
+      firstName: pick(existing.firstName, incoming.firstName),
+      lastName: pick(existing.lastName, incoming.lastName),
+      jobTitle: pick(existing.jobTitle, incoming.jobTitle),
+      email: pick(existing.email, incoming.email),
+      phone: pick(existing.phone, incoming.phone),
+      linkedinUrl: pick(existing.linkedinUrl, incoming.linkedinUrl),
+      linkedinConnectionCount: existing.linkedinConnectionCount ?? incoming.linkedinConnectionCount,
+      sourceUrl: pick(existing.sourceUrl, incoming.sourceUrl),
+      sourceQuery: pick(existing.sourceQuery, incoming.sourceQuery),
+      sourceSnippet: pick(existing.sourceSnippet, incoming.sourceSnippet),
+      label: pick(existing.label, incoming.label)
+    });
+
+    const clusters: PublicContactCandidate[] = [];
+    const keyToCluster = new Map<string, number>();
 
     for (const contact of contacts) {
-      const key = identityKey(contact);
-      if (!key) {
-        // No stable identity to merge on — keep as-is under a unique key.
-        const uniqueKey = `unique:${order.length}`;
-        byKey.set(uniqueKey, contact);
-        order.push(uniqueKey);
+      const keys = candidateKeys(contact);
+      const targetIndex = keys.map((key) => keyToCluster.get(key)).find((index) => index !== undefined);
+      if (targetIndex === undefined) {
+        const newIndex = clusters.length;
+        clusters.push(contact);
+        for (const key of keys) {
+          keyToCluster.set(key, newIndex);
+        }
         continue;
       }
-      const existing = byKey.get(key);
-      if (!existing) {
-        byKey.set(key, contact);
-        order.push(key);
-        continue;
+      clusters[targetIndex] = mergeContacts(clusters[targetIndex], contact);
+      // Register any new keys this contact contributes so later duplicates also collapse here.
+      for (const key of candidateKeys(clusters[targetIndex])) {
+        if (!keyToCluster.has(key)) {
+          keyToCluster.set(key, targetIndex);
+        }
       }
-      byKey.set(key, {
-        ...existing,
-        firstName: existing.firstName ?? contact.firstName,
-        lastName: existing.lastName ?? contact.lastName,
-        jobTitle: existing.jobTitle ?? contact.jobTitle,
-        email: existing.email ?? contact.email,
-        phone: existing.phone ?? contact.phone,
-        linkedinUrl: existing.linkedinUrl ?? contact.linkedinUrl,
-        linkedinConnectionCount: existing.linkedinConnectionCount ?? contact.linkedinConnectionCount,
-        sourceUrl: existing.sourceUrl ?? contact.sourceUrl,
-        sourceQuery: existing.sourceQuery ?? contact.sourceQuery,
-        sourceSnippet: existing.sourceSnippet ?? contact.sourceSnippet,
-        label: existing.label ?? contact.label
-      });
     }
 
-    return order.map((key) => byKey.get(key)!).filter(Boolean);
+    return clusters;
   }
 
   async analyzeCompanyHomepage(
