@@ -608,8 +608,11 @@ export class AzureOpenAIClient {
       if (email) {
         keys.push(`email:${email}`);
       }
+      // Normalize the name to Unicode NFC and collapse internal whitespace so the same person does
+      // not split into two clusters when one source uses a precomposed umlaut (ö = U+00F6) and the
+      // other a decomposed one (o + U+0308) — common with German names across LinkedIn vs website.
       const fullName = [contact.firstName, contact.lastName]
-        .map((part) => part?.trim().toLowerCase())
+        .map((part) => part?.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " "))
         .filter(Boolean)
         .join(" ");
       // Only treat a full (multi-token) name as an identity — a lone first name is too weak and
