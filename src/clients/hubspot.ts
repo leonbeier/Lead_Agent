@@ -109,7 +109,7 @@ const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
 const HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS = 250;
-const HUBSPOT_REQUEST_TIMEOUT_MS = 15000;
+const HUBSPOT_REQUEST_TIMEOUT_MS = 30000;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 120_000;
@@ -4219,15 +4219,26 @@ export class HubSpotClient {
 
   private async requestJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {
     for (let attempt = 0; attempt <= HUBSPOT_MAX_RETRIES; attempt += 1) {
-      const response = await fetch(url, {
-        ...init,
-        signal: AbortSignal.timeout(HUBSPOT_REQUEST_TIMEOUT_MS),
-        headers: {
-          Authorization: `Bearer ${env.HUBSPOT_PRIVATE_APP_TOKEN}`,
-          "Content-Type": "application/json",
-          ...(init?.headers ?? {})
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          ...init,
+          signal: AbortSignal.timeout(HUBSPOT_REQUEST_TIMEOUT_MS),
+          headers: {
+            Authorization: `Bearer ${env.HUBSPOT_PRIVATE_APP_TOKEN}`,
+            "Content-Type": "application/json",
+            ...(init?.headers ?? {})
+          }
+        });
+      } catch (error) {
+        if (this.isTransientRequestError(error) && attempt < HUBSPOT_MAX_RETRIES) {
+          const delayMs = HUBSPOT_RETRY_DELAYS_MS[Math.min(attempt, HUBSPOT_RETRY_DELAYS_MS.length - 1)];
+          await this.delay(delayMs);
+          continue;
         }
-      });
+
+        throw error;
+      }
 
       if (response.ok) {
         if (response.status === 204) {
@@ -4238,7 +4249,7 @@ export class HubSpotClient {
       }
 
       const errorText = await response.text();
-      if (response.status === 429 && attempt < HUBSPOT_MAX_RETRIES) {
+      if ((response.status === 429 || response.status >= 500) && attempt < HUBSPOT_MAX_RETRIES) {
         const retryAfterHeader = response.headers.get("retry-after");
         const retryAfterMs = retryAfterHeader ? Number.parseFloat(retryAfterHeader) * 1000 : Number.NaN;
         const delayMs = Number.isFinite(retryAfterMs)
@@ -4254,6 +4265,28 @@ export class HubSpotClient {
 
     throw new Error("HubSpot request failed after retries.");
   }
+
+  private isTransientRequestError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    if (error.name === "TimeoutError" || error.name === "AbortError") {
+      return true;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes("operation was aborted")
+      || message.includes("aborted due to timeout")
+      || message.includes("fetch failed")
+      || message.includes("network")
+      || message.includes("econnreset")
+      || message.includes("etimedout")
+      || message.includes("und_err")
+    );
+  }
+
 
   private async delay(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
