@@ -637,10 +637,10 @@ export class AzureOpenAIClient {
       phone: pick(existing.phone, incoming.phone),
       linkedinUrl: pick(existing.linkedinUrl, incoming.linkedinUrl),
       linkedinConnectionCount: existing.linkedinConnectionCount ?? incoming.linkedinConnectionCount,
-      sourceUrl: pick(existing.sourceUrl, incoming.sourceUrl),
+      sourceUrl: pick(existing.sourceUrl, incoming.sourceUrl) ?? existing.sourceUrl,
       sourceQuery: pick(existing.sourceQuery, incoming.sourceQuery),
       sourceSnippet: pick(existing.sourceSnippet, incoming.sourceSnippet),
-      label: pick(existing.label, incoming.label)
+      label: pick(existing.label, incoming.label) ?? existing.label
     });
 
     const clusters: PublicContactCandidate[] = [];
