@@ -97,6 +97,12 @@ export interface DebugConsoleWebsiteAnalysis {
   } | null;
   azureEvaluation: DebugConsoleAzureEvaluation;
   categorizedCompany: PreCategorizedCompany;
+  /**
+   * True when the company's website returned no HTTP response at all on any of its canonical
+   * homepage URLs (a hung/dead origin). Consumers should drop such companies instead of trusting
+   * stale search-index snapshots. Undefined/false means the site answered or was not probed.
+   */
+  websiteUnreachable?: boolean;
   error?: string;
 }
 
@@ -151,6 +157,10 @@ const DEBUG_CONTACT_DISCOVERY_TIMEOUT_MS = 240_000;
 const DEBUG_RESEARCH_BRIEF_TIMEOUT_MS = 120_000;
 
 const DEBUG_EXA_PLANNER_RETRY_TIMEOUT_MS = 90_000;
+
+// Per-attempt timeout for the homepage reachability probe. Generous on purpose: a slow-but-alive
+// origin must still count as reachable; only a server that never answers is treated as unreachable.
+const WEBSITE_REACHABILITY_TIMEOUT_MS = 15_000;
 
 export class DebugConsoleService {
   private readonly exaSearchClient = new ExaSearchClient();
@@ -296,6 +306,58 @@ export class DebugConsoleService {
     };
   }
 
+  /**
+   * Returns true when the website answers with any HTTP response (even 4xx/5xx) on at least one of
+   * its canonical homepage URLs. Returns false only when every candidate URL fails to produce any
+   * response at all (DNS failure, refused connection, or a server that accepts the connection but
+   * never sends an HTTP reply). Only the homepage variants are checked, so a single broken subpage
+   * never marks an otherwise-reachable site as dead.
+   */
+  private async isWebsiteReachable(domain: string): Promise<boolean> {
+    let hostname: string;
+    try {
+      const normalized = domain.trim().startsWith("http") ? domain.trim() : `https://${domain.trim()}`;
+      hostname = new URL(normalized).hostname.replace(/^www\./i, "");
+    } catch {
+      return false;
+    }
+
+    if (!hostname) {
+      return false;
+    }
+
+    const candidateUrls = Array.from(new Set([
+      `https://${hostname}`,
+      `https://www.${hostname}`,
+      `http://${hostname}`
+    ]));
+
+    const attempts = candidateUrls.map(async (url) => {
+      const response = await fetch(url, {
+        method: "GET",
+        redirect: "follow",
+        signal: AbortSignal.timeout(WEBSITE_REACHABILITY_TIMEOUT_MS),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0; +https://one-ware.com)"
+        }
+      });
+      // We only need to know the server answered; release the body so the socket can close.
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Ignore body-cancel errors; the response itself already proves reachability.
+      }
+      return true;
+    });
+
+    try {
+      await Promise.any(attempts);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async classifyWebsite(
     company: CompanySample,
     options: { annotateDebugStage?: boolean } = {}
@@ -314,6 +376,13 @@ export class DebugConsoleService {
         sourceFilter
       };
 
+      // When the crawler produced no profile the site may simply be slow to parse, or it may be a
+      // dead origin that never answers. Probe the homepage directly (only in this suspicious case)
+      // so a single failing subpage never disqualifies an otherwise-reachable site.
+      const websiteUnreachable = !websiteProfile && company.domain
+        ? !(await this.isWebsiteReachable(company.domain))
+        : false;
+
       return {
         company,
         websiteParser: websiteProfile
@@ -323,6 +392,7 @@ export class DebugConsoleService {
               relevantUrls: websiteProfile.relevantUrls
             }
           : null,
+        websiteUnreachable,
         azureEvaluation,
         categorizedCompany
       };

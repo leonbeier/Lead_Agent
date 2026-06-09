@@ -38,6 +38,7 @@ interface WorkerRunMetrics {
   aiAccepted: number;
   aiRejectedDifferentCategory: number;
   aiRejectedOther: number;
+  aiRejectedUnreachable: number;
   outreachCompleted: number;
   outreachFailed: number;
   contactCompleted: number;
@@ -407,6 +408,7 @@ export class LeadWorkerRunService {
       aiAccepted: 0,
       aiRejectedDifferentCategory: 0,
       aiRejectedOther: 0,
+      aiRejectedUnreachable: 0,
       outreachCompleted: 0,
       outreachFailed: 0,
       contactCompleted: 0,
@@ -855,6 +857,20 @@ export class LeadWorkerRunService {
             annotateDebugStage: false
           });
           const categorizedCompany = analysis.categorizedCompany;
+
+          // Reachability gate: drop companies whose website does not load at all. classifyWebsite
+          // sets websiteUnreachable=true only when every homepage URL fails to answer (a dead/hung
+          // origin), never for a single failing subpage. Such companies are skipped entirely so no
+          // qualified lead or non-target record is created from a stale search-index snapshot.
+          if (analysis.websiteUnreachable) {
+            metrics.aiRejectedUnreachable += 1;
+            if (categorizedCompany.domain) {
+              currentRunExcludedDomains.add(categorizedCompany.domain.trim().toLowerCase());
+            }
+            log(`Aussortiert (Website nicht erreichbar): ${categorizedCompany.name} (${categorizedCompany.domain})`);
+            continue;
+          }
+
           screeningQueue.enqueue({
             type: "upsert",
             record: buildScreeningRecord(categorizedCompany)
