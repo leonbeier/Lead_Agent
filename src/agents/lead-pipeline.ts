@@ -4598,7 +4598,8 @@ export class LeadPipelineAgent {
     targetCategories: LeadCategory[],
     syncToHubSpot: boolean
   ): Promise<{ companies: CompanySample[]; filteredByCacheCount: number; filteredByHubSpotCount: number }> {
-    if (dryRun || disableHubSpotDeduplication || syncToHubSpot || companies.length === 0) {
+    void syncToHubSpot;
+    if (dryRun || disableHubSpotDeduplication || companies.length === 0) {
       const filteredByCache = this.excludeCachedScreenedCompanies(companies, targetCategories);
       return {
         companies: filteredByCache,
@@ -4654,7 +4655,8 @@ export class LeadPipelineAgent {
     disableHubSpotDeduplication: boolean,
     syncToHubSpot: boolean
   ): Promise<PreCategorizedCompany[]> {
-    if (dryRun || disableHubSpotDeduplication || syncToHubSpot || companies.length === 0) {
+    void syncToHubSpot;
+    if (dryRun || disableHubSpotDeduplication || companies.length === 0) {
       return companies;
     }
 
@@ -4671,7 +4673,7 @@ export class LeadPipelineAgent {
     }
 
     return companies.filter((company) => {
-      const normalizedDomain = company.domain?.trim().toLowerCase();
+      const normalizedDomain = this.normalizeDomain(company.domain);
       return !normalizedDomain || !existingDomains.has(normalizedDomain);
     });
   }
