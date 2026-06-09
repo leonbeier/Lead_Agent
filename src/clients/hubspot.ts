@@ -2192,6 +2192,14 @@ export class HubSpotClient {
     // Agent-first: hand the model the actual visible page text so it can read the legal company
     // entity, postal address, and contact block itself.
     const visibleText = plainText.slice(0, WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT);
+    // The registered company name and copyright line live in the page footer, which on long,
+    // cookie-consent-heavy homepages sits far beyond the visible-text window (e.g. smtmachineline's
+    // "© 2026 Dongguan ICT Technology Co.,Ltd." at character ~14500). Always hand the footer block
+    // to the agent so the legal entity is never truncated out of the evidence.
+    const footerText = this.extractFooterEvidenceText(html);
+    const footerEvidence = footerText && !visibleText.includes(footerText.slice(0, 60))
+      ? footerText
+      : "";
     const roleAdjacentText = Array.from(
       new Set(
         [...plainText.matchAll(new RegExp(`[^.!?]{0,120}(?:${PUBLIC_CONTACT_ROLE_PATTERNS.join("|")})[^.!?]{0,120}`, "gi"))]
@@ -2208,10 +2216,27 @@ export class HubSpotClient {
     return [
       `Page: ${url}`,
       visibleText.length > 0 ? `Visible page text: ${visibleText}` : undefined,
+      footerEvidence.length > 0 ? `Footer / legal block: ${footerEvidence}` : undefined,
       roleAdjacentText.length > 0 ? `Role mentions: ${roleAdjacentText.join(" | ")}` : undefined,
       linkedInUrls.length > 0 ? `LinkedIn URLs: ${linkedInUrls.join(" | ")}` : undefined,
       emails.length > 0 ? `Emails: ${emails.join(" | ")}` : undefined
     ].filter(Boolean).join("\n");
+  }
+
+  // Extracts the page footer text (registered company name, copyright line, legal entity) so the
+  // agent always receives it even when the main visible-text window is consumed by long banners.
+  // Structural HTML sectioning only, consistent with the <main>/<article> extraction above; the
+  // agent still decides the company identity.
+  private extractFooterEvidenceText(html: string): string {
+    const footerBlocks = [...html.matchAll(/<footer[^>]*>([\s\S]*?)<\/footer>/gi)].map((match) => match[1] ?? "");
+    if (footerBlocks.length === 0) {
+      return "";
+    }
+
+    return this.decodeHtmlEntities(this.stripHtml(footerBlocks.join(" \n ")))
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 1200);
   }
 
   private mergeDiscoveredContacts(
@@ -2879,7 +2904,7 @@ export class HubSpotClient {
         city: officialWebsiteProfile?.city ?? webSearchAddress?.city,
         zip: officialWebsiteProfile?.zip ?? webSearchAddress?.zip,
         state: officialWebsiteProfile?.state ?? webSearchAddress?.state,
-        country: this.normalizeCountryName(officialWebsiteProfile?.country) ?? webSearchAddress?.country ?? company.country
+        country: this.normalizeCountryName(officialWebsiteProfile?.country, { preserveUnknown: true }) ?? webSearchAddress?.country ?? company.country
       };
     }
 
@@ -2892,7 +2917,7 @@ export class HubSpotClient {
           city: extractedAddress.city ?? officialWebsiteProfile?.city,
           zip: extractedAddress.zip ?? officialWebsiteProfile?.zip,
           state: extractedAddress.state ?? officialWebsiteProfile?.state,
-          country: extractedAddress.country ?? this.normalizeCountryName(officialWebsiteProfile?.country) ?? company.country
+          country: extractedAddress.country ?? this.normalizeCountryName(officialWebsiteProfile?.country, { preserveUnknown: true }) ?? company.country
         };
       }
     }
@@ -2905,7 +2930,7 @@ export class HubSpotClient {
         city: officialWebsiteProfile?.city ?? apolloAddress.city,
         zip: officialWebsiteProfile?.zip ?? apolloAddress.zip,
         state: officialWebsiteProfile?.state ?? apolloAddress.state,
-        country: this.normalizeCountryName(officialWebsiteProfile?.country) ?? this.normalizeCountryName(apolloAddress.country) ?? company.country
+        country: this.normalizeCountryName(officialWebsiteProfile?.country, { preserveUnknown: true }) ?? this.normalizeCountryName(apolloAddress.country, { preserveUnknown: true }) ?? company.country
       };
     }
 
@@ -2916,7 +2941,7 @@ export class HubSpotClient {
           city: officialWebsiteProfile?.city,
           zip: officialWebsiteProfile?.zip,
           state: officialWebsiteProfile?.state,
-          country: this.normalizeCountryName(officialWebsiteProfile?.country) ?? company.country
+          country: this.normalizeCountryName(officialWebsiteProfile?.country, { preserveUnknown: true }) ?? company.country
         }
       : null;
   }
@@ -3043,7 +3068,7 @@ export class HubSpotClient {
       ...(homepageAnalysis?.followUpUrls ?? [])
     ]))
       .filter((url) => this.isSameCompanyWebsiteUrl(rootUrl, url) || this.isLegalOrContactPageUrl(url))
-      .slice(0, 7);
+      .slice(0, 10);
     const followUpPages = await Promise.all(
       followUpUrls.map(async (url) => {
         // Use fetchHtml (with Playwright fallback) so JS-rendered pages (e.g. impressum) are retrieved.
@@ -3297,16 +3322,23 @@ export class HubSpotClient {
   private buildLikelyContactPageUrls(rootUrl: string): string[] {
     try {
       const root = new URL(rootUrl);
+      // Identity-bearing pages first so they survive the follow-up slice: impressum/contact carry
+      // the legal entity, and about/company pages carry the registered name and headquarters
+      // country (e.g. "ALeader Europe Ltd. ... Headquartered in Israel").
       const candidates = [
-        "kontakt/",
-        "kontakt.html",
-        "kontakt.php",
         "impressum/",
-        "impressum.html",
-        "impressum.php",
+        "kontakt/",
+        "about-us/",
+        "about/",
+        "company/",
+        "ueber-uns/",
         "ansprechpartner/",
         "team/",
-        "ueber-uns/"
+        "about-us.html",
+        "impressum.html",
+        "impressum.php",
+        "kontakt.html",
+        "kontakt.php"
       ];
 
       return candidates.map((path) => new URL(path, root).toString());
@@ -3417,13 +3449,35 @@ export class HubSpotClient {
     return new Set([hostname, registrableDomain]);
   }
 
+  private extractDomainBrandLabel(domain: string): string | undefined {
+    const labels = domain.toLowerCase().replace(/^www\./, "").split(".").filter(Boolean);
+    if (labels.length < 2) {
+      return undefined;
+    }
+    return labels[labels.length - 2];
+  }
+
   private isAllowedCompanyEmail(email: string, allowedDomains: Set<string>): boolean {
     const domain = email.split("@")[1]?.toLowerCase();
     if (!domain || domain === "example.com") {
       return false;
     }
 
-    return [...allowedDomains].some((allowedDomain) => domain === allowedDomain || domain.endsWith(`.${allowedDomain}`));
+    if ([...allowedDomains].some((allowedDomain) => domain === allowedDomain || domain.endsWith(`.${allowedDomain}`))) {
+      return true;
+    }
+
+    // A company's public mailbox frequently lives on a sibling TLD of its website
+    // (e.g. website premosys.de but email sales@premosys.com). Accept an email whose
+    // registrable brand label exactly matches the website brand, even when the public
+    // suffix differs. Third-party platform inboxes (wixpress.com, sentry.io, …) carry a
+    // different brand label and stay filtered.
+    const emailBrand = this.extractDomainBrandLabel(domain);
+    if (!emailBrand || emailBrand.length < 3) {
+      return false;
+    }
+
+    return [...allowedDomains].some((allowedDomain) => this.extractDomainBrandLabel(allowedDomain) === emailBrand);
   }
 
   private inferNameFromEmail(email: string): { firstName?: string; lastName?: string } {
@@ -3529,11 +3583,16 @@ export class HubSpotClient {
           const inlineCompany = inlineSegments.slice(0, Math.max(0, postalSegmentIndex - 1)).join(", ").trim();
           const inlineCountry = inlineSegments[postalSegmentIndex + 1] ?? "";
           return {
-            companyName: this.extractLegalEntityNameFromLine(inlineCompany) ?? (inlineCompany || undefined),
+            // Only adopt an inline company name when it carries a recognizable legal form. The raw
+            // segment before the address is frequently cookie-consent or marketing text (e.g.
+            // "will allow us to process data such as"), which must never become the company name.
+            companyName: this.extractLegalEntityNameFromLine(inlineCompany) ?? undefined,
             address: inlineAddress,
             zip: postalMatch[1].replace(/\s+/g, " ").trim(),
             city: postalMatch[2].trim(),
-            country: this.normalizeCountryName(inlineCountry) ?? fallbackCountry
+            // The trailing comma segment of an inline address is structured, so a non-mapped
+            // country (e.g. Israel, China) may be preserved rather than discarded.
+            country: this.normalizeCountryName(inlineCountry, { preserveUnknown: true }) ?? fallbackCountry
           };
         }
       }
@@ -3555,9 +3614,10 @@ export class HubSpotClient {
     return null;
   }
 
-  private normalizeCountryName(value: string | undefined): string | undefined {
-    const normalized = value?.trim().toLowerCase();
-    if (!normalized) {
+  private normalizeCountryName(value: string | undefined, options: { preserveUnknown?: boolean } = {}): string | undefined {
+    const trimmed = value?.trim();
+    const normalized = trimmed?.toLowerCase();
+    if (!normalized || !trimmed) {
       return undefined;
     }
 
@@ -3597,7 +3657,24 @@ export class HubSpotClient {
       return "Switzerland";
     }
 
-    return undefined;
+    // Preserve any other plausible country/region the agent (or a website footer/address line)
+    // already determined, instead of discarding it and silently falling back to the unverified
+    // seed country. Without this, agent-extracted countries like China, Israel, or South Korea
+    // were dropped and replaced by the manual debug default. Reject non-country fragments
+    // (phone/email/url lines, digits, long sentences) so the postal-line path stays safe.
+    // Preserve any other plausible country/region the agent (or a website footer/address line)
+    // already determined, instead of discarding it and silently falling back to the unverified
+    // seed country. Without this, agent-extracted countries like China, Israel, or South Korea
+    // were dropped and replaced by the manual debug default. Only enabled for trusted/structured
+    // sources (agent profile, Apollo, comma-separated address tail); the free-text postal line
+    // path stays strict so labels like "Kontakt" never leak in as a country.
+    if (!options.preserveUnknown) {
+      return undefined;
+    }
+    const looksLikeCountry = /^[\p{L}][\p{L}\s.'\-]{1,39}$/u.test(trimmed)
+      && trimmed.split(/\s+/).length <= 4
+      && !/(tel|fax|mail|http|www|@|\d)/i.test(trimmed);
+    return looksLikeCountry ? trimmed : undefined;
   }
 
   private isGenericMailbox(email: string): boolean {

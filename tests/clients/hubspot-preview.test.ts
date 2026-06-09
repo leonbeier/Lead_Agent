@@ -606,6 +606,21 @@ test("email extraction decodes HTML entity obfuscation", () => {
   assert.deepEqual(emails, ["info@geott.de"]);
 });
 
+test("email extraction accepts a sibling-TLD company mailbox but rejects third-party platforms", () => {
+  const client = new HubSpotClient();
+  const allowed = client["buildAllowedEmailDomains"]("https://premosys.de");
+  const emails = client["extractEmails"](
+    `<a href="mailto:sales@premosys.com">Kontakt</a>
+     <span>9123@sentry.wixpress.com</span>
+     <span>noise@premosys.de</span>`,
+    allowed
+  );
+
+  assert.ok(emails.includes("sales@premosys.com"));
+  assert.ok(emails.includes("noise@premosys.de"));
+  assert.ok(!emails.some((email) => email.includes("wixpress.com")));
+});
+
 test("descriptive company labels still produce domain-token aliases for LinkedIn search", () => {
   const client = new HubSpotClient();
   const aliases = client["extractCompanySearchAliases"]({
