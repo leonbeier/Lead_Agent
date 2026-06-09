@@ -96,6 +96,39 @@ const EXA_REQUEST_TIMEOUT_MS = env.EXA_REQUEST_TIMEOUT_MS;
 const HUBSPOT_EXCLUDED_DOMAIN_FETCH_TIMEOUT_MS = 10_000;
 const COMMON_COMPOUND_TLDS = new Set(["co.uk", "com.au", "com.br", "co.jp", "co.kr", "co.in", "com.mx", "com.tr", "com.pl", "com.sg"]);
 const GENERIC_COMPANY_NAMES = new Set(["home", "homepage", "startseite", "services", "solutions", "products", "company"]);
+// Infrastructure / file-asset / CDN hosts that are never a company's own website. Exa sometimes
+// returns deep-links into these (e.g. a HubSpot-hosted marketing PDF), which previously produced
+// junk "companies" named after an asset id (e.g. hubspotusercontent-eu1.net / "24855078" instead of
+// the real firm INTRAVIS). These are skipped at the URL-normalization chokepoint so no candidate is
+// ever derived from them.
+const NON_COMPANY_HOST_SUFFIXES = [
+  // HubSpot-hosted user content / forms / CDN
+  "hubspotusercontent.net",
+  "hubspotusercontent-na1.net",
+  "hubspotusercontent-eu1.net",
+  "hubspotusercontent00.net",
+  "hubspotusercontent10.net",
+  "hubspotusercontent20.net",
+  "hubspotusercontent30.net",
+  "hubspotusercontent40.net",
+  "hs-sites.com",
+  "hsforms.com",
+  "hubspot.net",
+  // Generic cloud storage / CDN providers
+  "amazonaws.com",
+  "cloudfront.net",
+  "googleusercontent.com",
+  "blob.core.windows.net",
+  "azureedge.net",
+  "akamaihd.net",
+  "akamaized.net",
+  "cloudinary.com",
+  // Document / slide / file hosting
+  "scribd.com",
+  "slideshare.net",
+  "issuu.com",
+  "yumpu.com"
+];
 const COMPANY_NAME_STOP_WORDS = new Set(["ai", "the", "and", "for", "with", "vision", "industrial", "automation", "machine", "marking", "robotics", "solutions", "systems", "services"]);
 export class ExaSearchClient {
   private static requestChain: Promise<void> = Promise.resolve();
@@ -860,6 +893,9 @@ export class ExaSearchClient {
 
     try {
       const parsed = new URL(url);
+      if (this.isNonCompanyHost(parsed.hostname)) {
+        return undefined;
+      }
       parsed.protocol = "https:";
       parsed.hash = "";
       parsed.search = "";
@@ -868,6 +904,13 @@ export class ExaSearchClient {
     } catch {
       return undefined;
     }
+  }
+
+  private isNonCompanyHost(hostname: string): boolean {
+    const host = hostname.toLowerCase().replace(/^www\./, "");
+    return NON_COMPANY_HOST_SUFFIXES.some(
+      (suffix) => host === suffix || host.endsWith(`.${suffix}`)
+    );
   }
 
   private toCanonicalCompanyDomain(domain: string): string {

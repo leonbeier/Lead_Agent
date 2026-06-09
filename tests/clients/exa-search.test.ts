@@ -85,6 +85,22 @@ test("buildQueries interleaves countries early for Europe-wide vision integrator
   assert.ok(!queries[1]?.includes("Germany"));
 });
 
+test("normalizeUrl drops infrastructure/CDN hosts so they never become companies", () => {
+  const client = new ExaSearchClient();
+  const normalize = (url: string) => client["normalizeUrl"](url) as string | undefined;
+
+  // The concrete bug: a HubSpot-hosted marketing PDF (asset id 24855078) for INTRAVIS must not
+  // produce a "company" named after the asset on hubspotusercontent-eu1.net.
+  assert.equal(normalize("https://24855078.fs1.hubspotusercontent-eu1.net/hubfs/24855078/INTRAVIS-Preforms.pdf"), undefined);
+  assert.equal(normalize("https://cdn.example.s3.amazonaws.com/brochure.pdf"), undefined);
+  assert.equal(normalize("https://files.cloudfront.net/asset.png"), undefined);
+  assert.equal(normalize("https://www.scribd.com/document/123/whitepaper"), undefined);
+
+  // Real company websites must still pass through unchanged.
+  assert.equal(normalize("https://www.intravis.com/en/products"), "https://www.intravis.com");
+  assert.equal(normalize("https://evotegra.de/about"), "https://evotegra.de");
+});
+
 test("buildQueries uses machine-builder specific language for machine_builder_ai_enablement", () => {
   const client = new ExaSearchClient();
   const queries = client["buildQueries"]({
