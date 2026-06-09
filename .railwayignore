@@ -8,3 +8,13 @@ scripts/__pycache__/
 data/diffbot/*
 !data/diffbot/eu_ai_machine_vision_integrators_100.csv
 data/lead-run-discovery-checkpoints/
+debug-*.txt
+debug-*.json
+local-spie*.txt
+spie-*.json
+spie-*.txt
+test-out*.txt
+railway-3domains.txt
+response.json
+result.txt
+scripts/_tmp_*.ts
