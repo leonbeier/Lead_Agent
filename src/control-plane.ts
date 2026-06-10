@@ -1075,6 +1075,11 @@ export class ControlPlaneStore {
   private readonly liveCacheDatabase = new CacheDatabaseStore(controlPlanePaths.liveCacheDatabasePath);
   private readonly debugCacheDatabase = new CacheDatabaseStore(controlPlanePaths.debugCacheDatabasePath);
 
+  // Seeding only needs to happen once per process. Re-running the ~14 fs/SQLite seed checks on
+  // every getSettings/getTemplates call starves the event loop while a lead run saturates the
+  // container, which made the control-plane endpoints (settings save) time out and 502.
+  private seedDataPromise: Promise<void> | undefined;
+
   private normalizeLegacyCategory(category: string | undefined): string | undefined {
     if (category === "integrator_vision_ai_consulting_freelancer") {
       return "integrator_vision_ai_consulting";
@@ -1143,6 +1148,18 @@ export class ControlPlaneStore {
   }
 
   private async ensureSeedData(): Promise<void> {
+    if (!this.seedDataPromise) {
+      this.seedDataPromise = this.runSeedData().catch((error) => {
+        // Allow a later call to retry if the one-time seed failed.
+        this.seedDataPromise = undefined;
+        throw error;
+      });
+    }
+
+    return this.seedDataPromise;
+  }
+
+  private async runSeedData(): Promise<void> {
     await ensureFile(controlPlanePaths.settingsPath, defaultSettings, controlPlanePaths.seedSettingsPath);
     await ensureFile(controlPlanePaths.templatesPath, OUTREACH_TEMPLATES, controlPlanePaths.seedTemplatesPath);
     await ensureFile(controlPlanePaths.learningPath, defaultLearning, controlPlanePaths.seedLearningPath);
