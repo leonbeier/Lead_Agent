@@ -10,6 +10,22 @@ function normalizeDomain(value?: string): string | undefined {
   return normalized ? normalized : undefined;
 }
 
+/**
+ * Parses a JSON column value, returning `undefined` if the value is null/empty or
+ * if the stored JSON is corrupted (e.g. truncated by an interrupted write). A single
+ * poisoned historical row must not crash the whole cache read and fail an entire run.
+ */
+function safeParseJsonColumn<T>(value: string | null | undefined): T | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildScreeningKey(record: CompanyScreeningRecord): string {
   return normalizeDomain(record.normalizedDomain ?? record.domain) || `name:${record.normalizedName.trim().toLowerCase()}`;
 }
@@ -248,15 +264,11 @@ export class CacheDatabaseStore {
           timestamp: entry.timestamp,
           filterName: entry.filter_name,
           query: entry.query,
-          plannedQueries: entry.planned_queries_json ? JSON.parse(entry.planned_queries_json) as string[] : undefined,
-          promptMessages: entry.prompt_messages_json ? JSON.parse(entry.prompt_messages_json) as Array<{ role: string; content: string }> : undefined,
-          excludedDomains: entry.excluded_domains_json ? JSON.parse(entry.excluded_domains_json) as string[] : undefined,
-          excludedDomainDetails: entry.excluded_domain_details_json
-            ? JSON.parse(entry.excluded_domain_details_json) as NonNullable<LiveExaCache["queryRuns"]>[number]["excludedDomainDetails"]
-            : undefined,
-          queryStats: entry.query_stats_json
-            ? JSON.parse(entry.query_stats_json) as NonNullable<LiveExaCache["queryRuns"]>[number]["queryStats"]
-            : undefined
+          plannedQueries: safeParseJsonColumn<string[]>(entry.planned_queries_json),
+          promptMessages: safeParseJsonColumn<Array<{ role: string; content: string }>>(entry.prompt_messages_json),
+          excludedDomains: safeParseJsonColumn<string[]>(entry.excluded_domains_json),
+          excludedDomainDetails: safeParseJsonColumn<NonNullable<LiveExaCache["queryRuns"]>[number]["excludedDomainDetails"]>(entry.excluded_domain_details_json),
+          queryStats: safeParseJsonColumn<NonNullable<LiveExaCache["queryRuns"]>[number]["queryStats"]>(entry.query_stats_json)
         }))
       };
     });
@@ -426,9 +438,7 @@ export class CacheDatabaseStore {
         queryInsights: queryHistory.map((entry) => ({
           query: entry.query,
           timestamp: entry.created_at,
-          detectedCategories: entry.detected_categories_json
-            ? JSON.parse(entry.detected_categories_json) as ExaQueryHistoryInsight["detectedCategories"]
-            : undefined,
+          detectedCategories: safeParseJsonColumn<ExaQueryHistoryInsight["detectedCategories"]>(entry.detected_categories_json),
           note: entry.note ?? undefined
         })),
         discoveredDomains: discoveredDomains.map((entry) => entry.domain)

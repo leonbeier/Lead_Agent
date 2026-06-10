@@ -311,7 +311,8 @@ export class DebugConsoleService {
    * its canonical homepage URLs. Returns false only when every candidate URL fails to produce any
    * response at all (DNS failure, refused connection, or a server that accepts the connection but
    * never sends an HTTP reply). Only the homepage variants are checked, so a single broken subpage
-   * never marks an otherwise-reachable site as dead.
+   * never marks an otherwise-reachable site as dead. The probe is retried once before giving up so a
+   * transient network blip (e.g. a one-off undici connect timeout) never marks a live site as dead.
    */
   private async isWebsiteReachable(domain: string): Promise<boolean> {
     let hostname: string;
@@ -332,30 +333,39 @@ export class DebugConsoleService {
       `http://${hostname}`
     ]));
 
-    const attempts = candidateUrls.map(async (url) => {
-      const response = await fetch(url, {
-        method: "GET",
-        redirect: "follow",
-        signal: AbortSignal.timeout(WEBSITE_REACHABILITY_TIMEOUT_MS),
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0; +https://one-ware.com)"
+    const probeOnce = async (): Promise<boolean> => {
+      const attempts = candidateUrls.map(async (url) => {
+        const response = await fetch(url, {
+          method: "GET",
+          redirect: "follow",
+          signal: AbortSignal.timeout(WEBSITE_REACHABILITY_TIMEOUT_MS),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0; +https://one-ware.com)"
+          }
+        });
+        // We only need to know the server answered; release the body so the socket can close.
+        try {
+          await response.body?.cancel();
+        } catch {
+          // Ignore body-cancel errors; the response itself already proves reachability.
         }
+        return true;
       });
-      // We only need to know the server answered; release the body so the socket can close.
-      try {
-        await response.body?.cancel();
-      } catch {
-        // Ignore body-cancel errors; the response itself already proves reachability.
-      }
-      return true;
-    });
 
-    try {
-      await Promise.any(attempts);
+      try {
+        await Promise.any(attempts);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    // Two passes: only declare a site dead when every homepage URL fails twice. This protects
+    // genuinely-alive-but-slow or briefly-flaky origins from a single transient connect timeout.
+    if (await probeOnce()) {
       return true;
-    } catch {
-      return false;
     }
+    return probeOnce();
   }
 
   private async classifyWebsite(
