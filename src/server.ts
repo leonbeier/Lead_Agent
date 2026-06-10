@@ -901,6 +901,16 @@ app.get("/api/control/latest-lead-run", async (_request, response, next) => {
   }
 });
 
+app.get("/api/control/run-errors", async (_request, response, next) => {
+  try {
+    response.json({
+      errors: await controlPlaneStore.getRunErrors()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/control/cache/testlab-exa", async (_request, response, next) => {
   try {
     response.json({
