@@ -109,6 +109,15 @@ const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
 const HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS = 250;
+// Number of Chromium instances allowed to run concurrently for website/contact crawling.
+// The browser is the throughput bottleneck (each contact search legitimately takes ~95-110s).
+// Each instance launches with --disable-dev-shm-usage so shared memory does not hit the 64MB
+// /dev/shm ceiling that caused earlier OOM/502s. Keep this small (1-2) to stay memory-safe on
+// Railway; override via WEBSITE_BROWSER_CONCURRENCY only after verifying no OOM under load.
+const HUBSPOT_BROWSER_TASK_CONCURRENCY = Math.max(
+  1,
+  Math.min(3, Number.parseInt(process.env.WEBSITE_BROWSER_CONCURRENCY ?? "2", 10) || 2)
+);
 const HUBSPOT_REQUEST_TIMEOUT_MS = 30000;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
@@ -261,7 +270,11 @@ export class HubSpotClient {
   private readonly openAIWebSearchClient = new OpenAIWebSearchClient();
 
   private searchRequestQueue = Promise.resolve();
-  private browserTaskQueue = Promise.resolve();
+  private browserTaskLanes: Promise<void>[] = Array.from(
+    { length: HUBSPOT_BROWSER_TASK_CONCURRENCY },
+    () => Promise.resolve()
+  );
+  private nextBrowserLaneIndex = 0;
 
   async getAllCompanyDomains(): Promise<Set<string>> {
     if (!readiness.hubspotConfigured) {
@@ -4030,10 +4043,17 @@ export class HubSpotClient {
   }
 
   private async scheduleBrowserTask<T>(task: () => Promise<T>): Promise<T> {
-    const previousTask = this.browserTaskQueue;
+    // Run with a bounded number of concurrent Chromium instances. Each lane is its own serial
+    // chain with a tail delay so we never burst-launch browsers. Round-robin lane selection
+    // spreads work across lanes, raising crawl throughput above a single serial lane while
+    // staying memory-safe (every launch uses --disable-dev-shm-usage).
+    const laneIndex = this.nextBrowserLaneIndex;
+    this.nextBrowserLaneIndex = (this.nextBrowserLaneIndex + 1) % this.browserTaskLanes.length;
+
+    const previousTask = this.browserTaskLanes[laneIndex] ?? Promise.resolve();
     let releaseQueue: (() => void) | undefined;
 
-    this.browserTaskQueue = new Promise<void>((resolve) => {
+    this.browserTaskLanes[laneIndex] = new Promise<void>((resolve) => {
       releaseQueue = resolve;
     });
 
