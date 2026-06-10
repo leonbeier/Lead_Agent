@@ -1020,9 +1020,12 @@ export class LeadWorkerRunService {
         emitProgress();
         try {
           let contactDebug: ContactDebugResult = { selectedContacts: [] } as ContactDebugResult;
-          // Retry contact discovery while it yields zero contacts. A site that genuinely exposes
-          // staff/contacts but returns nothing is almost always a transient crawl failure under
-          // load; with failed fetches no longer cached, a re-attempt actually re-crawls the site.
+          // Retry contact discovery only when an attempt actually FAILS (throws/times out). A
+          // completed crawl that returns zero contacts is a valid terminal result - many sites
+          // legitimately expose no public staff contacts - so we must not re-crawl them. Because
+          // the browser is globally serialized, retrying on empty would multiply crawl cost and
+          // starve the whole pipeline, so retries are reserved for genuine failures.
+          let lastError: unknown;
           for (let attempt = 1; attempt <= CONTACT_DISCOVERY_MAX_ATTEMPTS; attempt += 1) {
             let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
             const timeoutPromise = new Promise<never>((_, reject) => {
@@ -1038,21 +1041,25 @@ export class LeadWorkerRunService {
                 }),
                 timeoutPromise
               ]);
+              lastError = undefined;
+              break;
+            } catch (attemptError) {
+              lastError = attemptError;
+              if (attempt < CONTACT_DISCOVERY_MAX_ATTEMPTS) {
+                log(`Kontaktsuche fehlgeschlagen fuer ${state.company.name} (Versuch ${attempt}/${CONTACT_DISCOVERY_MAX_ATTEMPTS}) - erneuter Versuch: ${attemptError instanceof Error ? attemptError.message : String(attemptError)}`);
+                await delay(CONTACT_DISCOVERY_RETRY_DELAY_MS);
+              }
             } finally {
               if (timeoutHandle) {
                 clearTimeout(timeoutHandle);
               }
             }
-
-            if ((contactDebug.selectedContacts ?? []).length > 0) {
-              break;
-            }
-
-            if (attempt < CONTACT_DISCOVERY_MAX_ATTEMPTS) {
-              log(`Keine Kontakte fuer ${state.company.name} (Versuch ${attempt}/${CONTACT_DISCOVERY_MAX_ATTEMPTS}) - erneuter Versuch`);
-              await delay(CONTACT_DISCOVERY_RETRY_DELAY_MS);
-            }
           }
+
+          if (lastError) {
+            throw lastError;
+          }
+
           state.contacts = contactDebug.selectedContacts ?? [];
           state.contactStatus = "done";
           metrics.contactCompleted += 1;
