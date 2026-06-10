@@ -172,13 +172,14 @@ const PUBLIC_CONTACT_ROLE_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_ROL
 const PUBLIC_CONTACT_MANAGER_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_MANAGER_PATTERNS);
 const PUBLIC_CONTACT_DEVELOPER_REGEX = buildPublicContactRoleRegex(PUBLIC_CONTACT_DEVELOPER_PATTERNS);
 const PUBLIC_CONTACT_EXCLUDED_REGEX = /\b(hr|human resources|recruit(ing|er)|talent|people ops|finance|legal|support|customer support|student|intern|marketing|sdr|bdr|account executive|sales representative)\b/i;
-const HIGH_PRIORITY_PAGE_PATTERNS = ["contact", "kontakt", "impressum", "imprint", "legal", "legal notice", "legal-notice", "about", "team", "management", "ansprechpartner", "leadership", "people", "staff", "employee", "employees", "profil", "profile", "ueber-uns", "ueber uns", "about-us", "about us"];
+const HIGH_PRIORITY_PAGE_PATTERNS = ["contact", "kontakt", "contacto", "contatti", "impressum", "imprint", "legal", "legal notice", "legal-notice", "aviso-legal", "aviso legal", "mentions-legales", "chi-siamo", "about", "team", "management", "ansprechpartner", "leadership", "people", "staff", "employee", "employees", "profil", "profile", "ueber-uns", "ueber uns", "about-us", "about us", "quienes-somos", "qui-sommes-nous", "empresa", "azienda"];
 // Legal/contact pages (impressum, imprint, contact) are frequently hosted on a separate
 // company domain for sole proprietors, freelancers, and agencies (e.g. labview-freiberufler.de
 // links its impressum at ak-concept.de/impressum). These are the only cross-domain links we
 // allow the AI to see and follow, so the official legal entity, address, and reachable contacts
-// are not lost behind a same-domain restriction.
-const CROSS_DOMAIN_LEGAL_CONTACT_PATTERNS = ["impressum", "imprint", "legal-notice", "legal_notice", "legalnotice", "legal notice", "mentions-legales", "kontakt", "contact", "ansprechpartner"];
+// are not lost behind a same-domain restriction. Spanish/French/Italian sites use locale slugs
+// (aviso-legal, mentions-legales, contacto, chi-siamo), so those carry the legal entity too.
+const CROSS_DOMAIN_LEGAL_CONTACT_PATTERNS = ["impressum", "imprint", "legal-notice", "legal_notice", "legalnotice", "legal notice", "mentions-legales", "mentions légales", "aviso-legal", "aviso legal", "kontakt", "contact", "contacto", "contatti", "ansprechpartner", "chi-siamo", "quienes-somos"];
 const MEDIUM_PRIORITY_PAGE_PATTERNS = [
   "software",
   "service",
@@ -1870,7 +1871,7 @@ export class HubSpotClient {
       .replace(/^(impressum|firma|company|legal name|diensteanbieter|anbieter|betreiber(?:in)?|inhaber(?:in)?)\s*[:\-]\s*/i, "")
       .replace(/^(?:©|\(c\))?\s*(?:19|20)\d{2}(?:\s*[-\/]\s*(?:19|20)\d{2})?\s+/i, "")
       .trim();
-    const match = cleanedLine.match(/\b([A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?(?:\s+[A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?){0,6}\s+(?:GmbH\s*&\s*Co\.\s*KG|GmbH\s*&\s*Co\.\s*KGaA|GmbH|UG\s*\(haftungsbeschr(?:a|ä)nkt\)|UG|AG|SE|e\.\s*K\.?|e\.\s*Kfm\.?|KG|OHG|GbR|Ltd\.?|LLC|Inc\.?|AS|ASA|A\/S|AB|OY|OYJ))\b/i);
+    const match = cleanedLine.match(/\b([A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?(?:\s+[A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?){0,6}\s+(?:GmbH\s*&\s*Co\.\s*KG|GmbH\s*&\s*Co\.\s*KGaA|GmbH|UG\s*\(haftungsbeschr(?:a|ä)nkt\)|UG|AG|SE|e\.\s*K\.?|e\.\s*Kfm\.?|KG|OHG|GbR|Ltd\.?|LLC|Inc\.?|S\.?A\.?S\.?U|S\.?A\.?R\.?L|S\.?A\.?S|S\.?A\.?U|S\.?A|S\.?L\.?N\.?E|S\.?L\.?U|S\.?L\.?P|S\.?L|E\.?U\.?R\.?L|S\.?R\.?L\.?S|S\.?R\.?L|S\.?p\.?A|S\.?N\.?C|S\.?C\.?I|S\.?C\.?A|B\.?V\.?B\.?A|B\.?V|N\.?V|S\.?P\.?R\.?L|Lda\.?|P\.?L\.?C|L\.?L\.?P|ApS|Kft\.?|Zrt\.?|Nyrt\.?|Bt\.?|AS|ASA|A\/S|AB|OY|OYJ))\b/i);
     if (!match?.[1]) {
       return null;
     }
@@ -3144,7 +3145,7 @@ export class HubSpotClient {
     if (legalEntityName) {
       const normalizedLegalEntityName = this.normalizeCompanyComparisonValue(legalEntityName);
       const normalizedShortName = this.normalizeCompanyComparisonValue(company.name);
-      return normalizedLegalEntityName !== normalizedShortName || /\b(gmbh|mbh|ag|kg|kgaa|llc|inc|corp|corporation|limited|ltd|oy|ab|as|srl|spa|bv|nv)\b/i.test(companyName);
+      return normalizedLegalEntityName !== normalizedShortName || /\b(gmbh|mbh|ag|kg|kgaa|llc|inc|corp|corporation|limited|ltd|oy|ab|as|srl|srls|spa|snc|sci|sca|bv|bvba|nv|sprl|sl|slu|slp|slne|sa|sau|sas|sasu|sarl|eurl|lda|plc|llp|aps|kft|zrt|nyrt|bt)\b/i.test(companyName);
     }
 
     // Sole proprietors, freelancers, and agencies often have no legal-form suffix
@@ -3338,10 +3339,18 @@ export class HubSpotClient {
       const candidates = [
         "impressum/",
         "kontakt/",
+        "aviso-legal/",
+        "mentions-legales/",
+        "contacto/",
+        "contatti/",
         "about-us/",
         "about/",
         "company/",
         "ueber-uns/",
+        "quienes-somos/",
+        "qui-sommes-nous/",
+        "chi-siamo/",
+        "empresa/",
         "ansprechpartner/",
         "team/",
         "about-us.html",

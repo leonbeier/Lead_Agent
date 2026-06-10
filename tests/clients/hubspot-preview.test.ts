@@ -327,6 +327,55 @@ test("extractCompanyAddress captures legal entity names from impressum pages", a
   assert.equal(extracted?.companyName, "BERND MÜNSTERMANN GMBH & CO. KG");
 });
 
+test("extractCompanyAddress captures non-German legal entity suffixes (Spanish SLU footer)", async () => {
+  const client = new HubSpotClient();
+  client["getOfficialWebsiteCompanyProfile"] = async () => null;
+  client["collectCandidatePages"] = async () => ([
+    {
+      url: "https://www.geprom.com",
+      html: `
+        <html>
+          <body>
+            <footer>
+              <p>© 2026 Geprom Software Engineering SLU – Todos los derechos reservados.</p>
+            </footer>
+          </body>
+        </html>
+      `
+    }
+  ]);
+  client["apolloClient"] = {
+    getOrganizationAddress: async () => null
+  };
+  client["extractCompanyAddressWithWebSearch"] = async () => null;
+
+  const extracted = await client["extractCompanyAddress"]({
+    name: "Geprom",
+    domain: "https://www.geprom.com",
+    country: "Spain"
+  });
+
+  assert.equal(extracted?.companyName, "Geprom Software Engineering SLU");
+});
+
+test("isTrustedOfficialWebsiteProfile trusts a homepage-sourced name with a non-German legal form", () => {
+  const client = new HubSpotClient();
+  const trusted = client["isTrustedOfficialWebsiteProfile"](
+    {
+      companyName: "Geprom Software Engineering SLU",
+      entityScope: "exact_operating_entity",
+      searchAliases: [],
+      emails: [],
+      phones: [],
+      linkedInUrls: [],
+      sourceUrls: ["https://www.geprom.com"]
+    },
+    { name: "Geprom", domain: "https://www.geprom.com", country: "Spain" }
+  );
+
+  assert.equal(trusted, true);
+});
+
 test("extractCompanyAddress captures legal entity names from long mixed website lines", async () => {
   const client = new HubSpotClient();
   client["getOfficialWebsiteCompanyProfile"] = async () => null;
