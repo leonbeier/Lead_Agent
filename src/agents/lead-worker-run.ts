@@ -206,6 +206,19 @@ const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
 const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
 const MIN_EXA_BATCH_REQUESTS = 2;
 
+// Hard safe ceilings for per-stage parallelism. The lead-agent runs on a single small container;
+// unbounded request-supplied concurrency (settings have historically stored 200) saturates the
+// event loop and the shared browser, which is the real root cause of empty name/country/contact
+// extraction under load. These caps bound the damage regardless of what the request asks for.
+const MAX_AI_CONCURRENCY = 6;
+const MAX_OUTREACH_CONCURRENCY = 6;
+const MAX_CONTACT_CONCURRENCY = 4;
+// When contact discovery returns zero contacts we re-attempt a bounded number of times before
+// accepting an empty result, so a single load-induced crawl failure does not strand a company
+// without any reachable contact.
+const CONTACT_DISCOVERY_MAX_ATTEMPTS = 3;
+const CONTACT_DISCOVERY_RETRY_DELAY_MS = 1_500;
+
 function getExaDiscoveryTimeoutMs(queryCount: number): number {
   return Math.max(
     DEFAULT_EXA_DISCOVERY_TIMEOUT_MS,
@@ -369,9 +382,9 @@ export class LeadWorkerRunService {
 
     const targetLeadCount = Math.max(1, request.targetLeadCount ?? 1);
     const deadlineMs = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? 10 * 60_000);
-    const aiConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? 2);
-    const outreachConcurrency = Math.max(1, request.outreachPrepConcurrency ?? 6);
-    const contactConcurrency = Math.max(1, request.contactSearchConcurrency ?? 3);
+    const aiConcurrency = Math.min(MAX_AI_CONCURRENCY, Math.max(1, request.aiPrefilterConcurrency ?? 2));
+    const outreachConcurrency = Math.min(MAX_OUTREACH_CONCURRENCY, Math.max(1, request.outreachPrepConcurrency ?? 6));
+    const contactConcurrency = Math.min(MAX_CONTACT_CONCURRENCY, Math.max(1, request.contactSearchConcurrency ?? 3));
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 4);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const learning = typeof this.controlPlaneStore.getLearning === "function"
@@ -1006,24 +1019,38 @@ export class LeadWorkerRunService {
         state.contactStatus = "running";
         emitProgress();
         try {
-          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            timeoutHandle = setTimeout(() => {
-              reject(new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`));
-            }, this.contactTaskTimeoutMs);
-          });
+          let contactDebug: ContactDebugResult = { selectedContacts: [] } as ContactDebugResult;
+          // Retry contact discovery while it yields zero contacts. A site that genuinely exposes
+          // staff/contacts but returns nothing is almost always a transient crawl failure under
+          // load; with failed fetches no longer cached, a re-attempt actually re-crawls the site.
+          for (let attempt = 1; attempt <= CONTACT_DISCOVERY_MAX_ATTEMPTS; attempt += 1) {
+            let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              timeoutHandle = setTimeout(() => {
+                reject(new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`));
+              }, this.contactTaskTimeoutMs);
+            });
 
-          let contactDebug: ContactDebugResult;
-          try {
-            contactDebug = await Promise.race<ContactDebugResult>([
-              this.debugConsoleService.discoverContactsForExecution(state.company, {
-                selectedContactsTimeoutMs: 370_000
-              }),
-              timeoutPromise
-            ]);
-          } finally {
-            if (timeoutHandle) {
-              clearTimeout(timeoutHandle);
+            try {
+              contactDebug = await Promise.race<ContactDebugResult>([
+                this.debugConsoleService.discoverContactsForExecution(state.company, {
+                  selectedContactsTimeoutMs: 370_000
+                }),
+                timeoutPromise
+              ]);
+            } finally {
+              if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+              }
+            }
+
+            if ((contactDebug.selectedContacts ?? []).length > 0) {
+              break;
+            }
+
+            if (attempt < CONTACT_DISCOVERY_MAX_ATTEMPTS) {
+              log(`Keine Kontakte fuer ${state.company.name} (Versuch ${attempt}/${CONTACT_DISCOVERY_MAX_ATTEMPTS}) - erneuter Versuch`);
+              await delay(CONTACT_DISCOVERY_RETRY_DELAY_MS);
             }
           }
           state.contacts = contactDebug.selectedContacts ?? [];
@@ -1634,6 +1661,20 @@ export class LeadWorkerRunService {
           : "search_exhausted"),
       costs: undefined
     };
+
+    if (errorMessages.length > 0) {
+      try {
+        await this.controlPlaneStore.appendRunErrors(
+          errorMessages.map((message) => ({
+            timestamp: new Date().toISOString(),
+            scope: "worker_run",
+            message
+          }))
+        );
+      } catch (persistError) {
+        log(`Fehler beim Speichern der Run-Fehler: ${persistError instanceof Error ? persistError.message : String(persistError)}`);
+      }
+    }
 
     await this.controlPlaneStore.writeLatestLeadRun({
       createdAt: new Date().toISOString(),

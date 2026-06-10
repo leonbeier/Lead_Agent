@@ -213,6 +213,7 @@ export interface LeadAgentDataPaths {
   templatesPath: string;
   learningPath: string;
   latestLeadRunPath: string;
+  runErrorsPath: string;
   latestOutreachReviewPath: string;
   apolloSearchCursorPath: string;
   companyScreeningDatabasePath: string;
@@ -265,6 +266,7 @@ export function resolveLeadAgentDataPaths(options: {
     templatesPath: path.join(runtimeDataDirectory, "outreach-templates.json"),
     learningPath: path.join(runtimeDataDirectory, "lead-agent-learning.json"),
     latestLeadRunPath: path.join(runtimeDataDirectory, "latest-lead-run.json"),
+    runErrorsPath: path.join(runtimeDataDirectory, "lead-run-errors.json"),
     latestOutreachReviewPath: path.join(runtimeDataDirectory, "latest-outreach-review.json"),
     apolloSearchCursorPath: path.join(runtimeDataDirectory, "apollo-search-cursors.json"),
     companyScreeningDatabasePath: path.join(runtimeDataDirectory, "company-screening-database.json"),
@@ -741,6 +743,16 @@ const liveExaCacheSchema = z.object({
 type ScreeningCacheScope = "all" | "live" | "debug";
 type CacheDatabaseScope = "live" | "debug";
 
+export interface RunErrorRecord {
+  timestamp: string;
+  scope: string;
+  company?: string;
+  domain?: string;
+  message: string;
+}
+
+const RUN_ERROR_HISTORY_LIMIT = 500;
+
 const defaultSettings: LeadAgentSettings = {
   targetLeadCount: 20,
   market: "DE",
@@ -775,6 +787,9 @@ const defaultSettings: LeadAgentSettings = {
   dryRun: false,
   syncToHubSpot: true,
   exaQueryCount: 4,
+  aiPrefilterConcurrency: 6,
+  outreachPrepConcurrency: 6,
+  contactSearchConcurrency: 4,
   exaSearchMode: "fast",
   useAzureQueryPlanner: true,
   useExaExcludeDomains: true,
@@ -1312,6 +1327,24 @@ export class ControlPlaneStore {
       })),
       searchHistory: latestLeadRun.searchHistory.map((entry) => this.normalizeSearchHistoryEntry(entry))
     }) as LatestLeadRunRecord;
+  }
+
+  async getRunErrors(): Promise<RunErrorRecord[]> {
+    try {
+      const stored = await readJsonFile<{ errors?: RunErrorRecord[] }>(controlPlanePaths.runErrorsPath);
+      return Array.isArray(stored?.errors) ? stored.errors : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async appendRunErrors(errors: RunErrorRecord[]): Promise<void> {
+    if (errors.length === 0) {
+      return;
+    }
+    const existing = await this.getRunErrors();
+    const combined = [...errors, ...existing].slice(0, RUN_ERROR_HISTORY_LIMIT);
+    await writeJsonFile(controlPlanePaths.runErrorsPath, { errors: combined });
   }
 
   async clearLatestLeadRunSearchHistory(companySearchMode?: CompanySearchMode): Promise<LatestLeadRunRecord> {
