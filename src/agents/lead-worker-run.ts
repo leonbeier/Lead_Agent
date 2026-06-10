@@ -1168,6 +1168,7 @@ export class LeadWorkerRunService {
     }
 
     const exaWorkers = Array.from({ length: exaConcurrency }, () => (async () => {
+      try {
       while (!stopping && Date.now() < deadlineMs && metrics.hubspotWritten < targetLeadCount) {
         maybePromoteStandby();
         if (neededCompanies() <= 0) {
@@ -1460,12 +1461,20 @@ export class LeadWorkerRunService {
           emitProgress();
         }
       }
-
-      completedExaWorkers += 1;
-      if (completedExaWorkers >= exaWorkers.length) {
-        searchCompleted = true;
-        aiQueue.close();
-        emitProgress();
+      } catch (error) {
+        // A fatal error in one exa worker must never strand the whole run. If a worker threw
+        // (e.g. the re-thrown non-Exa error above) without counting toward completion,
+        // completedExaWorkers would stay below the worker count, searchCompleted would never
+        // flip to true, and the finalization loop would spin forever with idle queues. Log it
+        // and let the finally below mark this worker done so the run can finalize gracefully.
+        logError(`Exa-Worker abgebrochen: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        completedExaWorkers += 1;
+        if (completedExaWorkers >= exaWorkers.length) {
+          searchCompleted = true;
+          aiQueue.close();
+          emitProgress();
+        }
       }
     })());
 
