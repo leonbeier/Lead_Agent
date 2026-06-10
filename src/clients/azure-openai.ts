@@ -1058,7 +1058,7 @@ export class AzureOpenAIClient {
 
     const content = await this.runChatWithTimeout(
       promptMessages,
-      { maxTokens: 900 },
+      { maxTokens: 2000 },
       plannerTimeoutMs,
       "Exa query planner"
     );
@@ -1100,7 +1100,7 @@ export class AzureOpenAIClient {
             )
           }
         ],
-        { maxTokens: 900 },
+        { maxTokens: 2000 },
         plannerTimeoutMs,
         "Exa query planner diversity rewrite"
       );
