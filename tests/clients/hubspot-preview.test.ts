@@ -167,6 +167,22 @@ test("previewHubSpotSync prefers a legal entity name resolved from official page
   assert.equal(preview.companyProperties.name, "BERND MÜNSTERMANN GMBH & CO. KG");
 });
 
+test("previewHubSpotSync falls back to the domain-derived name when extraction fails and the source name is a generic web label", async () => {
+  const client = new HubSpotClient();
+  // Simulate website extraction failing under load (no company name resolved).
+  client["extractCompanyAddress"] = async () => null;
+
+  const preview = await client.previewHubSpotSync({
+    ...buildSampleCompany(),
+    name: "Mail",
+    domain: "https://interelectronic.com"
+  }, buildSampleBrief(), [], { includeAddressLookup: true });
+
+  // "Mail" is a generic navigation/UI label, never a real operating-entity name, so it must not
+  // be written as the record name; the readable domain-derived name is used instead.
+  assert.equal(preview.companyProperties.name, "Interelectronic");
+});
+
 test("extractCompanyAddress prefers the AI website company profile before weaker web-search data", async () => {
   const client = new HubSpotClient();
   client["getOfficialWebsiteCompanyProfile"] = async () => ({
