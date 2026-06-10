@@ -176,7 +176,7 @@ async function startManagedLeadRun(
   leadRunStatus.timedOut = false;
   leadRunStatus.updatedAt = new Date().toISOString();
 
-  const runPromise = variant === "worker_v2"
+  const attemptRun = () => variant === "worker_v2"
     ? leadWorkerRunService.run(payload, {
         signal: runAbortController.signal,
         onProgress: (progress) => applyLeadRunProgress(progress, runAbortController.signal.aborted)
@@ -185,6 +185,35 @@ async function startManagedLeadRun(
         shouldStop: () => runAbortController.signal.aborted,
         onProgress: (progress) => applyLeadRunProgress(progress, runAbortController.signal.aborted)
       });
+
+  const MAX_RUN_ATTEMPTS = 3;
+  const RUN_RETRY_DELAY_MS = 2_000;
+
+  const runPromise = (async () => {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_RUN_ATTEMPTS; attempt += 1) {
+      if (runAbortController.signal.aborted) {
+        throw lastError ?? new Error("Lead-Run wurde vor Abschluss gestoppt.");
+      }
+      try {
+        return await attemptRun();
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Lead run attempt ${attempt}/${MAX_RUN_ATTEMPTS} failed`, error);
+        if (runAbortController.signal.aborted || attempt === MAX_RUN_ATTEMPTS) {
+          break;
+        }
+        leadRunStatus.stage = "retrying";
+        leadRunStatus.stageLabel = "Erneuter Versuch";
+        leadRunStatus.progressDescription = `Versuch ${attempt}/${MAX_RUN_ATTEMPTS} fehlgeschlagen. Neuer Versuch...`;
+        leadRunStatus.detail = `Fehler: ${message}`;
+        leadRunStatus.updatedAt = new Date().toISOString();
+        await new Promise((resolve) => setTimeout(resolve, RUN_RETRY_DELAY_MS));
+      }
+    }
+    throw lastError ?? new Error("Lead-Run fehlgeschlagen.");
+  })();
 
   void runPromise
     .then((result) => {
@@ -249,6 +278,16 @@ async function startManagedLeadRun(
       leadRunStatus.finishedAt = new Date().toISOString();
       leadRunStatus.lastError = error instanceof Error ? error.message : "Unknown error";
       console.error("Lead run failed", error);
+
+      void controlPlaneStore
+        .appendRunErrors([
+          {
+            timestamp: new Date().toISOString(),
+            scope: "lead_run",
+            message: error instanceof Error ? error.message : "Unknown error"
+          }
+        ])
+        .catch(() => undefined);
     });
 
   response.status(202).json({

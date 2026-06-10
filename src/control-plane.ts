@@ -1083,7 +1083,20 @@ export async function readJsonFileWithRecovery<T>(filePath: string, defaultValue
 }
 
 async function writeJsonFile<T>(filePath: string, value: T): Promise<void> {
-  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  // Write atomically: serialize to a temp file in the same directory, then rename. rename(2) is
+  // atomic on the same filesystem, so a crash/redeploy mid-write can never leave a truncated
+  // ("Unterminated string in JSON") file behind. Non-atomic fs.writeFile previously corrupted the
+  // ~1.5MB learning file when the container was restarted mid-write, crashing the next run.
+  const serialized = `${JSON.stringify(value, null, 2)}\n`;
+  const tempPath = `${filePath}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+
+  try {
+    await fs.writeFile(tempPath, serialized, "utf8");
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export class ControlPlaneStore {
@@ -1287,7 +1300,10 @@ export class ControlPlaneStore {
 
   async getLearning(): Promise<LeadLearningData> {
     await this.ensureSeedData();
-    const learning = await readJsonFile<Partial<LeadLearningData>>(controlPlanePaths.learningPath);
+    const learning = await readJsonFileWithRecovery<Partial<LeadLearningData>>(
+      controlPlanePaths.learningPath,
+      { ...defaultLearning }
+    );
     const normalizedSearchHistoryByMode = Object.fromEntries(
       Object.entries(learning.searchHistoryByMode ?? {}).map(([mode, modeLearning]) => [
         mode,
