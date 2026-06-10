@@ -153,6 +153,9 @@ test("stopped direct exa runs still sync already qualified companies", async () 
     discoveryQuery: "robofunktion vision"
   }];
   agent.categorizeCompanies = async () => [qualifiedCompany];
+  // The sync-prep step resolves a canonical company identity via the HubSpot client; stub it so the
+  // test stays deterministic and off the network instead of waiting out the 45s resolution timeout.
+  agent.hubspotClient.resolveCompanyAddress = async () => null;
   agent.controlPlaneStore.getLearning = async () => ({ filterPerformance: {}, searchHistory: [], modes: {} });
   agent.controlPlaneStore.getCompanyScreeningDatabase = async () => ({ records: [] });
   agent.controlPlaneStore.getLiveExaCache = async () => ({ entries: [], discoveredDomains: [] });

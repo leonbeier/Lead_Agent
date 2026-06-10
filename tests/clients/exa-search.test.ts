@@ -158,6 +158,8 @@ test("buildQueries uses freelancer-specific language for solo vision AI speciali
 test("discoverCompanies requests 20 Exa results per query regardless of lead limit", async () => {
   const client = new ExaSearchClient();
   client.setApiKey("test-key");
+  // discoverCompanies loads the HubSpot excluded-domain set; stub it so the test stays off the network.
+  client["loadKnownExcludedDomains"] = async () => new Set<string>();
 
   const requestedCounts: number[] = [];
   client["runSearch"] = async (_apiKey: string, query: string, numResults: number) => {
@@ -213,6 +215,8 @@ test("buildSearchPayload can enable category company and disable excludeDomains"
 test("discoverCompanies keeps duplicate valid Exa company URLs for downstream Azure review", async () => {
   const client = new ExaSearchClient();
   client.setApiKey("test-key");
+  // discoverCompanies loads the HubSpot excluded-domain set; stub it so the test stays off the network.
+  client["loadKnownExcludedDomains"] = async () => new Set<string>();
   let callCount = 0;
   client["runSearch"] = async () => {
     callCount += 1;
@@ -251,6 +255,8 @@ test("discoverCompanies keeps duplicate valid Exa company URLs for downstream Az
 test("discoverCompanies canonicalizes Exa results to the root company domain", async () => {
   const client = new ExaSearchClient();
   client.setApiKey("test-key");
+  // discoverCompanies loads the HubSpot excluded-domain set; stub it so the test stays off the network.
+  client["loadKnownExcludedDomains"] = async () => new Set<string>();
   client["runSearch"] = async () => ({
     results: [
       {

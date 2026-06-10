@@ -966,6 +966,9 @@ test("findPublicContactsFromPages keeps an official website mailbox alongside Az
   const client = new HubSpotClient();
   const company = buildSampleCompany();
 
+  // No pages are passed, so the official-website search fallback runs; stub it to keep the test
+  // deterministic and off the network (the assertion only covers the mailbox + Azure LinkedIn merge).
+  client["discoverOfficialWebsiteSearchContacts"] = async () => [];
   client["extractAzureMatchedContacts"] = async () => ({
     queries: [],
     hitGroups: [],
@@ -1140,6 +1143,9 @@ test("findPublicContactsFromPages returns official website contacts without wait
   // Agent-first: named website people are extracted by the Azure contact agent from raw page
   // evidence, not by a text heuristic. When the agent already returns a named website contact,
   // the deterministic web-search fallback must not run.
+  // Stub the official-website profile/search lookups so the test stays deterministic and off the network.
+  client["getOfficialWebsiteCompanyProfile"] = async () => null;
+  client["discoverOfficialWebsiteSearchContacts"] = async () => [];
   client["extractAzureMatchedContacts"] = async () => ({
     queries: [],
     hitGroups: [],

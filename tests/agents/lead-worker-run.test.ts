@@ -180,7 +180,12 @@ test("worker run keeps live screening seeds when HubSpot sync does not succeed",
     } as any,
     leadPipelineAgent: {
       buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
-      discoverDirectExaCompaniesForExecution: async () => []
+      // The only company is the failing seed; Exa supplies no fresh companies. Signal credits
+      // exhaustion so the run stops cleanly instead of spinning the exa workers until the 60s
+      // minimum-runtime floor (the seed assertion below is unaffected by why the search stops).
+      discoverDirectExaCompaniesForExecution: async () => {
+        throw new Error("Exa search failed: no_more_credits");
+      }
     } as any
   });
 

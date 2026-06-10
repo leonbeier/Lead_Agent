@@ -884,6 +884,13 @@ test("buildContactAnalysis runs research and contact debug together and keeps pr
     companyName: "Senswork GmbH",
     city: "Burghausen"
   });
+  // Identity debug runs in parallel with classification and only needs the domain; stub it so the
+  // test stays deterministic and off the network instead of waiting out the resolution timeout.
+  service.hubspotClient.debugResolveCompanyIdentity = async () => ({
+    officialWebsiteProfile: null,
+    legalEntityCandidates: [],
+    isTrustedOfficialWebsiteProfile: false
+  });
   service.hubspotClient.debugPublicContactDiscovery = async (resolvedCompany: { name: string }) => {
     assert.equal(resolvedCompany.name, "Senswork GmbH");
     assert.ok(resolvedCompany.name.length > 0);
