@@ -920,7 +920,7 @@ export class ExaSearchClient {
 
   private inferCountryFromDomain(domain: string, result: ExaSearchResult, fallbackLocation?: string): string | undefined {
     const hostname = new URL(domain).hostname.toLowerCase();
-    if (hostname.endsWith(".de") || hostname.includes("gmbh")) {
+    if (hostname.endsWith(".de")) {
       return "Germany";
     }
 

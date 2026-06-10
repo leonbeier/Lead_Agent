@@ -1085,14 +1085,30 @@ export class HubSpotClient {
       && wordCount <= 8
       && !looksLikeSentence
       && !isBareFragment;
-    const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined) || company.name;
+    // Reject literal junk values that occasionally arrive as a discovered company name
+    // (e.g. the string "null" / "undefined" produced upstream). These must never reach HubSpot
+    // as the record name; fall back to the domain-derived name instead.
+    const isJunkName = (value: string | undefined): boolean => {
+      const normalized = value?.trim().toLowerCase();
+      return !normalized
+        || normalized === "null"
+        || normalized === "undefined"
+        || normalized === "n/a"
+        || normalized === "na"
+        || normalized === "none"
+        || normalized === "-";
+    };
+    const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined)
+      || (isJunkName(company.name) ? undefined : company.name);
     // Final safety net: never write a blank company name to HubSpot. Derive a readable
     // name from the domain's first label when no usable name is available.
     const fallbackFromDomain = this.normalizeDomain(company.domain)?.split(".")[0]
       ?.split(/[-_]+/).filter(Boolean)
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
       .join(" ");
-    const resolvedCompanyName = canonicalCompanyName?.trim() || fallbackFromDomain || canonicalCompanyName;
+    const resolvedCompanyName = (!isJunkName(canonicalCompanyName) ? canonicalCompanyName?.trim() : undefined)
+      || fallbackFromDomain
+      || canonicalCompanyName;
 
     return {
       name: resolvedCompanyName,
@@ -3046,6 +3062,19 @@ export class HubSpotClient {
 
     const task = this.extractOfficialWebsiteCompanyProfile(company);
     this.officialWebsiteProfileCache.set(companyKey, task);
+    // Never cache a null profile from a transient (load-induced) crawl failure, otherwise the
+    // company is permanently left without a verified name/country for the rest of the run.
+    void task
+      .then((profile) => {
+        if (!profile && this.officialWebsiteProfileCache.get(companyKey) === task) {
+          this.officialWebsiteProfileCache.delete(companyKey);
+        }
+      })
+      .catch(() => {
+        if (this.officialWebsiteProfileCache.get(companyKey) === task) {
+          this.officialWebsiteProfileCache.delete(companyKey);
+        }
+      });
     return task;
   }
 
@@ -3217,6 +3246,20 @@ export class HubSpotClient {
       }
       const task = this.doCollectCandidatePages(rootUrl, false);
       this.candidatePagesCache.set(rootUrl, task);
+      // A transient homepage-fetch failure under load yields an empty page set. Caching that empty
+      // result would deny both the company name and the contacts for the whole run. Drop the entry
+      // on empty/failure so a later consumer can re-crawl when the event loop is no longer starved.
+      void task
+        .then((pages) => {
+          if ((!pages || pages.length === 0) && this.candidatePagesCache.get(rootUrl) === task) {
+            this.candidatePagesCache.delete(rootUrl);
+          }
+        })
+        .catch(() => {
+          if (this.candidatePagesCache.get(rootUrl) === task) {
+            this.candidatePagesCache.delete(rootUrl);
+          }
+        });
       return task;
     }
     return this.doCollectCandidatePages(rootUrl, dryRun);
@@ -3836,6 +3879,21 @@ export class HubSpotClient {
     }
     const task = this.doFetchHtml(url);
     this.fetchHtmlCache.set(url, task);
+    // Do not let a transient empty/failed fetch poison the entire run. When the event loop is
+    // saturated during a live run the initial fetch can abort prematurely; caching that null
+    // would make every later consumer (address extraction, contact discovery) reuse the empty
+    // result. Drop the cache entry on null/failure so a subsequent call can retry once load eases.
+    void task
+      .then((html) => {
+        if (!html && this.fetchHtmlCache.get(url) === task) {
+          this.fetchHtmlCache.delete(url);
+        }
+      })
+      .catch(() => {
+        if (this.fetchHtmlCache.get(url) === task) {
+          this.fetchHtmlCache.delete(url);
+        }
+      });
     return task;
   }
 
@@ -3846,7 +3904,10 @@ export class HubSpotClient {
           "User-Agent": "Mozilla/5.0 (compatible; LeadAgent/1.0; +https://leadagent-production-4555.up.railway.app)"
         },
         redirect: "follow",
-        signal: AbortSignal.timeout(10000)
+        // 20s (not 10s) so an otherwise-fast website fetch is not aborted prematurely when the
+        // event loop is saturated during a live run. The timer is wall-clock, so a busy event
+        // loop can fire it before a quick network response is even processed.
+        signal: AbortSignal.timeout(20000)
       });
 
       const html = await response.text();
