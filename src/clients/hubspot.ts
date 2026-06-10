@@ -1871,7 +1871,7 @@ export class HubSpotClient {
       .replace(/^(impressum|firma|company|legal name|diensteanbieter|anbieter|betreiber(?:in)?|inhaber(?:in)?)\s*[:\-]\s*/i, "")
       .replace(/^(?:©|\(c\))?\s*(?:19|20)\d{2}(?:\s*[-\/]\s*(?:19|20)\d{2})?\s+/i, "")
       .trim();
-    const match = cleanedLine.match(/\b([A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?(?:\s+[A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?){0,6}\s+(?:GmbH\s*&\s*Co\.\s*KG|GmbH\s*&\s*Co\.\s*KGaA|GmbH|UG\s*\(haftungsbeschr(?:a|ä)nkt\)|UG|AG|SE|e\.\s*K\.?|e\.\s*Kfm\.?|KG|OHG|GbR|Ltd\.?|LLC|Inc\.?|S\.?A\.?S\.?U|S\.?A\.?R\.?L|S\.?A\.?S|S\.?A\.?U|S\.?A|S\.?L\.?N\.?E|S\.?L\.?U|S\.?L\.?P|S\.?L|E\.?U\.?R\.?L|S\.?R\.?L\.?S|S\.?R\.?L|S\.?p\.?A|S\.?N\.?C|S\.?C\.?I|S\.?C\.?A|B\.?V\.?B\.?A|B\.?V|N\.?V|S\.?P\.?R\.?L|Lda\.?|P\.?L\.?C|L\.?L\.?P|ApS|Kft\.?|Zrt\.?|Nyrt\.?|Bt\.?|AS|ASA|A\/S|AB|OY|OYJ))\b/i);
+    const match = cleanedLine.match(/\b([A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?(?:\s+[A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?){0,6}\s+(?:GmbH\s*&\s*Co\.\s*KG|GmbH\s*&\s*Co\.\s*KGaA|GmbH|UG\s*\(haftungsbeschr(?:a|ä)nkt\)|UG|AG|SE|e\.\s*K\.?|e\.\s*Kfm\.?|KG|OHG|GbR|Ltd\.?|LLC|Inc\.?|AS|ASA|A\/S|AB|OY|OYJ))\b/i);
     if (!match?.[1]) {
       return null;
     }
@@ -3135,26 +3135,24 @@ export class HubSpotClient {
     };
   }
 
-  private isTrustedOfficialWebsiteProfile(profile: OfficialWebsiteCompanyProfile, company: PreCategorizedCompany): boolean {
+  private isTrustedOfficialWebsiteProfile(profile: OfficialWebsiteCompanyProfile, _company: PreCategorizedCompany): boolean {
     const companyName = profile.companyName?.trim();
+    // Agent-first: the Azure website profiler already determines the entity scope from the page
+    // evidence. When it labels the extracted name as this domain's exact operating entity, that
+    // name is the contract — trust it directly, including non-German legal forms (e.g. SLU, SARL,
+    // S.r.l., BV) and names taken from the homepage footer/copyright line. The prompt withholds
+    // the name (empty companyName with the matching entityScope) for parent groups, umbrella
+    // brands, and marketing slogans, so no country-specific legal-form regex or impressum-page
+    // re-validation is needed here — those would only discard correct AI output (e.g. dropping
+    // "Geprom Software Engineering SLU" because SLU is not a German legal form).
     if (!companyName || profile.entityScope !== "exact_operating_entity") {
       return false;
     }
 
-    const legalEntityName = this.extractLegalEntityNameFromLine(companyName);
-    if (legalEntityName) {
-      const normalizedLegalEntityName = this.normalizeCompanyComparisonValue(legalEntityName);
-      const normalizedShortName = this.normalizeCompanyComparisonValue(company.name);
-      return normalizedLegalEntityName !== normalizedShortName || /\b(gmbh|mbh|ag|kg|kgaa|llc|inc|corp|corporation|limited|ltd|oy|ab|as|srl|srls|spa|snc|sci|sca|bv|bvba|nv|sprl|sl|slu|slp|slne|sa|sau|sas|sasu|sarl|eurl|lda|plc|llp|aps|kft|zrt|nyrt|bt)\b/i.test(companyName);
-    }
-
-    // Sole proprietors, freelancers, and agencies often have no legal-form suffix
-    // (e.g. "Anton Kopylow Software Engineering", "Danny de Waard"). Trust the AI's
-    // exact_operating_entity verdict for a multi-word name only when it was sourced from
-    // this company's own impressum/legal/contact page, so a marketing slogan is not adopted.
-    const hasLegalSource = (profile.sourceUrls ?? []).some((url) => this.isLegalOrContactPageUrl(url));
-    const wordCount = companyName.split(/\s+/).filter(Boolean).length;
-    return hasLegalSource && wordCount >= 2 && companyName.length <= 80;
+    // System-boundary garbage bound only: a real company name is never an empty string or a
+    // long block of captured prose. Anything within a sane length that the profiler labelled as
+    // the exact operating entity is trusted as-is.
+    return companyName.length <= 80;
   }
 
   private isPlausibleCompanyAddress(address: ExtractedCompanyAddress): boolean {

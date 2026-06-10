@@ -327,27 +327,34 @@ test("extractCompanyAddress captures legal entity names from impressum pages", a
   assert.equal(extracted?.companyName, "BERND MÜNSTERMANN GMBH & CO. KG");
 });
 
-test("extractCompanyAddress captures non-German legal entity suffixes (Spanish SLU footer)", async () => {
+test("extractCompanyAddress trusts the AI website profile's non-German legal entity from the homepage footer", async () => {
   const client = new HubSpotClient();
-  client["getOfficialWebsiteCompanyProfile"] = async () => null;
-  client["collectCandidatePages"] = async () => ([
-    {
-      url: "https://www.geprom.com",
-      html: `
-        <html>
-          <body>
-            <footer>
-              <p>© 2026 Geprom Software Engineering SLU – Todos los derechos reservados.</p>
-            </footer>
-          </body>
-        </html>
-      `
-    }
-  ]);
-  client["apolloClient"] = {
-    getOrganizationAddress: async () => null
-  };
-  client["extractCompanyAddressWithWebSearch"] = async () => null;
+  // Agent-first: the Azure website profiler extracts the legal entity "Geprom Software
+  // Engineering SLU" from the homepage footer (© line) and labels it exact_operating_entity.
+  // The name must be adopted even though SLU is not a German legal form and the source is the
+  // homepage root (not an impressum/legal page).
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "Geprom Software Engineering SLU",
+    entityScope: "exact_operating_entity",
+    searchAliases: [],
+    address: "Carrer de la Tecnologia 17",
+    city: "Barcelona",
+    zip: "08840",
+    state: undefined,
+    country: "Spain",
+    emails: ["info@geprom.com"],
+    phones: [],
+    linkedInUrls: [],
+    sourceUrls: ["https://www.geprom.com"]
+  });
+  client["collectCandidatePages"] = async () => [];
+  client["extractCompanyAddressWithWebSearch"] = async () => ({
+    companyName: "Geprom",
+    address: "Wrong Street 1",
+    city: "Wrong City",
+    zip: "00000",
+    country: "Spain"
+  });
 
   const extracted = await client["extractCompanyAddress"]({
     name: "Geprom",
@@ -374,6 +381,37 @@ test("isTrustedOfficialWebsiteProfile trusts a homepage-sourced name with a non-
   );
 
   assert.equal(trusted, true);
+});
+
+test("isTrustedOfficialWebsiteProfile rejects a non-operating-entity scope and sentence-like prose", () => {
+  const client = new HubSpotClient();
+  const parentGroup = client["isTrustedOfficialWebsiteProfile"](
+    {
+      companyName: "Some Holding Group AG",
+      entityScope: "parent_group",
+      searchAliases: [],
+      emails: [],
+      phones: [],
+      linkedInUrls: [],
+      sourceUrls: ["https://www.example.com/impressum"]
+    },
+    { name: "Example", domain: "https://www.example.com", country: "Germany" }
+  );
+  const prose = client["isTrustedOfficialWebsiteProfile"](
+    {
+      companyName: "We build great software for the manufacturing industry. Contact us today for a personalized live demo.",
+      entityScope: "exact_operating_entity",
+      searchAliases: [],
+      emails: [],
+      phones: [],
+      linkedInUrls: [],
+      sourceUrls: ["https://www.example.com"]
+    },
+    { name: "Example", domain: "https://www.example.com", country: "Germany" }
+  );
+
+  assert.equal(parentGroup, false);
+  assert.equal(prose, false);
 });
 
 test("extractCompanyAddress captures legal entity names from long mixed website lines", async () => {
