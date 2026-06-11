@@ -207,7 +207,7 @@ const EUROPEAN_COUNTRIES = new Set([
   "lithuania"
 ]);
 
-const EUROPEAN_TLDS = [
+export const EUROPEAN_TLDS = [
   ".de",
   ".at",
   ".ch",

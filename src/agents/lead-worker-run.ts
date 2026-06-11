@@ -1,7 +1,7 @@
 import { ControlPlaneStore } from "../control-plane.js";
 import { DebugConsoleService } from "../debug/test-console-service.js";
 import { HubSpotClient } from "../clients/hubspot.js";
-import { LeadPipelineAgent } from "./lead-pipeline.js";
+import { LeadPipelineAgent, EUROPEAN_TLDS } from "./lead-pipeline.js";
 import { env } from "../config.js";
 import type {
   OrganizationFilter,
@@ -215,8 +215,15 @@ const MIN_EXA_BATCH_REQUESTS = 2;
 // unbounded request-supplied concurrency (settings have historically stored 200) saturates the
 // event loop and the shared browser, which is the real root cause of empty name/country/contact
 // extraction under load. These caps bound the damage regardless of what the request asks for.
-const MAX_AI_CONCURRENCY = 6;
-const MAX_OUTREACH_CONCURRENCY = 6;
+//
+// AI prefilter and outreach are Azure-chat + plain-HTTP bound (they do NOT use the shared
+// Playwright browser): the open-crawler fetches the company's own site directly, and the Azure
+// gpt-4.1-mini deployment serves 100K TPM / ~600 RPM (the global rate-limiter auto-tunes to it).
+// They therefore tolerate higher fan-out and are the stages that most speed up an end-to-end run.
+// Contact discovery and the HubSpot identity crawl DO drive the shared Chromium instance, so they
+// stay low to avoid the documented /dev/shm OOM on Railway.
+const MAX_AI_CONCURRENCY = 12;
+const MAX_OUTREACH_CONCURRENCY = 10;
 const MAX_CONTACT_CONCURRENCY = 4;
 // When contact discovery returns zero contacts we re-attempt a bounded number of times before
 // accepting an empty result, so a single load-induced crawl failure does not strand a company
@@ -286,6 +293,18 @@ function normalizeDomain(input?: string): string | undefined {
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .replace(/\/$/, "");
+}
+
+// A European country-code TLD is a reliable in-region signal on its own. A neutral/global TLD
+// (.com, .io, .ai, .co, ...) carries no locality signal, so a company on such a domain may only be
+// trusted as in-region when its country was positively verified from its own website.
+function hasEuropeanTld(domain?: string): boolean {
+  const normalized = normalizeDomain(domain);
+  if (!normalized) {
+    return false;
+  }
+  const hostname = normalized.split("/")[0];
+  return EUROPEAN_TLDS.some((tld) => hostname.endsWith(tld));
 }
 
 function buildCompanyKey(company: { domain?: string; name: string }): string {
@@ -1103,7 +1122,9 @@ export class LeadWorkerRunService {
         // does not trigger a second full crawl. Locality is a hard constraint: a company whose
         // verified country is outside the target region must never be written.
         const resolveIdentity = (this.hubSpotClient as { resolveCompanyAddress?: unknown }).resolveCompanyAddress;
-        if (typeof resolveIdentity === "function") {
+        const resolverAvailable = typeof resolveIdentity === "function";
+        let countryVerifiedFromWebsite = false;
+        if (resolverAvailable) {
           let identityTimeout: ReturnType<typeof setTimeout> | undefined;
           const resolvedIdentity = await Promise.race([
             this.hubSpotClient.resolveCompanyAddress(state.company),
@@ -1121,14 +1142,25 @@ export class LeadWorkerRunService {
           }
           if (canonicalCountry) {
             state.company.country = canonicalCountry;
+            countryVerifiedFromWebsite = true;
           }
         }
-        if (!isCompanyInScope({ country: state.company.country, domain: state.company.domain }, defaultScopeFilter)) {
+        // Fail CLOSED on locality. The sourcing-time country is a domain/snippet heuristic that is
+        // only reliable for European country-code TLDs. For a neutral/global TLD (.com, .io, .ai,
+        // ...) we must NOT trust the heuristic: a US/non-EU company whose website crawl timed out
+        // (so its country could not be verified) would otherwise pass the scope fallback and leak
+        // into HubSpot. When the identity resolver is wired (always in production), such a company
+        // is written only when its country was positively verified from its own website AND that
+        // country is in region. The !resolverAvailable escape keeps legacy/stub callers unchanged.
+        const inScope = isCompanyInScope({ country: state.company.country, domain: state.company.domain }, defaultScopeFilter);
+        const trustedRegionSignal = !resolverAvailable || countryVerifiedFromWebsite || hasEuropeanTld(state.company.domain);
+        if (!inScope || !trustedRegionSignal) {
           state.hubspotStatus = "skipped";
           state.removed = true;
           state.pipelineAssigned = false;
           metrics.hubspotSkippedOutOfScope += 1;
-          log(`HubSpot uebersprungen (ausserhalb Zielregion): ${state.company.name} (${state.company.country ?? "unbekannt"})`);
+          const skipReason = inScope ? "Region nicht verifiziert" : "ausserhalb Zielregion";
+          log(`HubSpot uebersprungen (${skipReason}): ${state.company.name} (${state.company.country ?? "unbekannt"})`);
           screeningQueue.enqueue({ type: "upsert", record: buildScreeningRecord(state.company) });
           maybePromoteStandby();
           emitProgress();
