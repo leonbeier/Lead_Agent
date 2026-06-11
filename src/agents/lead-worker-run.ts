@@ -1155,9 +1155,23 @@ export class LeadWorkerRunService {
         // (so its country could not be verified) would otherwise pass the scope fallback and leak
         // into HubSpot. When the identity resolver is wired (always in production), such a company
         // is written only when its country was positively verified from its own website AND that
-        // country is in region. The !resolverAvailable escape keeps legacy/stub callers unchanged.
+        // Fail CLOSED on the scope FALLBACK path only. isCompanyInScope returns true in three ways:
+        // (1) a non-empty country that is European, (2) an empty country on a European ccTLD, or
+        // (3) the neutral fallback `filter.locations.every(isEuropean)` when the country is empty
+        // AND the domain has a neutral/global TLD. Path (3) is the fail-open hole: a non-EU company
+        // on a .com/.io with no resolved country leaks through. A NON-EMPTY country is evidence
+        // based (assigned from a European ccTLD or from country/city evidence in the website/snippet
+        // text by inferCountryFromDomain), so it is a trustworthy region signal on its own and must
+        // NOT be dropped just because the browser identity crawl timed out under load (that was
+        // discarding real German/Italian .com companies). Only when the country is empty do we
+        // require positive verification — a European ccTLD or a website-verified country — to close
+        // path (3). The !resolverAvailable escape keeps legacy/stub callers unchanged.
         const inScope = isCompanyInScope({ country: state.company.country, domain: state.company.domain }, defaultScopeFilter);
-        const trustedRegionSignal = !resolverAvailable || countryVerifiedFromWebsite || hasEuropeanTld(state.company.domain);
+        const hasResolvedCountry = (state.company.country ?? "").trim().length > 0;
+        const trustedRegionSignal = !resolverAvailable
+          || hasResolvedCountry
+          || countryVerifiedFromWebsite
+          || hasEuropeanTld(state.company.domain);
         if (!inScope || !trustedRegionSignal) {
           state.hubspotStatus = "skipped";
           state.removed = true;

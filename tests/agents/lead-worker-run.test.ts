@@ -439,7 +439,7 @@ test("worker run skips HubSpot write when the website-verified country is out of
   assert.equal(result.hubspotSync.companySyncedCount, 0);
 });
 
-test("worker run fails closed when a neutral-TLD company's country cannot be verified from its website", async () => {
+test("worker run fails closed when a neutral-TLD company has no resolved country and verification fails", async () => {
   const syncedCompanies: string[] = [];
   let exaCalls = 0;
 
@@ -454,12 +454,12 @@ test("worker run fails closed when a neutral-TLD company's country cannot be ver
       writeLatestLeadRun: async () => undefined
     } as any,
     debugConsoleService: {
-      // Sourcing-time heuristic mislabels this .com company as German, so it passes the
-      // qualification-time scope gate even though its true country is unknown.
+      // No country could be inferred for this .com company at sourcing time, so qualification
+      // scope only passes via the neutral fallback (filter.locations.every(isEuropean)).
       classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
         categorizedCompany: {
           ...company,
-          country: "Germany",
+          country: "",
           category: "integrator_vision_industrial_ai",
           relevanceScore: 0.93,
           rationale: "fit"
@@ -497,7 +497,7 @@ test("worker run fails closed when a neutral-TLD company's country cannot be ver
         return [{
           name: "Unverifiable Vision",
           domain: "unverifiable-vision.com",
-          country: "Germany",
+          country: "",
           shortDescription: "Industrial vision integrator",
           sourceFilter: "exa-filter"
         }];
@@ -522,6 +522,92 @@ test("worker run fails closed when a neutral-TLD company's country cannot be ver
 
   assert.deepEqual(syncedCompanies, []);
   assert.equal(result.hubspotSync.companySyncedCount, 0);
+});
+
+test("worker run still writes an evidence-based EU company on a neutral TLD when the verification crawl fails", async () => {
+  const syncedCompanies: string[] = [];
+  let exaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      // Country was inferred from website/snippet evidence at sourcing time (Germany), so it is a
+      // trustworthy in-region signal even though the domain is a neutral .com TLD.
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          country: "Germany",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.93,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      // The browser identity crawl times out under load and cannot re-verify the country. A real
+      // German .com company must NOT be dropped just because verification failed.
+      resolveCompanyAddress: async () => null,
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncedCompanies.push(companies[0].name);
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: 1,
+          contactSyncedCount: 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      isCompanyInExecutionScope: (company: { country?: string }) => {
+        const country = (company.country ?? "").trim().toLowerCase();
+        return country === "" || country === "germany";
+      },
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        if (exaCalls > 1) {
+          throw new Error("Exa search failed: 503 unavailable");
+        }
+        return [{
+          name: "Real German Vision",
+          domain: "real-german-vision.com",
+          country: "Germany",
+          shortDescription: "Industrial vision integrator",
+          sourceFilter: "exa-filter"
+        }];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    market: "EU",
+    syncToHubSpot: true,
+    dryRun: false,
+    reuseQualifiedCompanyCache: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.deepEqual(syncedCompanies, ["Real German Vision"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
 });
 
 test("worker run promotes standby AI matches when the active company fails downstream", async () => {
