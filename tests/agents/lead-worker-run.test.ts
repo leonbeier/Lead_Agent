@@ -2354,3 +2354,84 @@ test("worker run AI-resolves and stores a location for a category-relevant compa
     .find((record) => record.companyName === "Backfill Vision")?.country;
   assert.equal(recordedCountry, "United States");
 });
+
+test("worker run rejects a region-unverifiable target company at the AI gate before spending contact discovery", async () => {
+  const contactCalls: string[] = [];
+  let exaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      // Prefilter crawl cannot determine a country; the domain is a neutral/global .com.
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          country: "",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.93,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => {
+        contactCalls.push(company.name);
+        return { selectedContacts: createContacts(company.name) };
+      }
+    } as any,
+    hubSpotClient: {
+      // The deeper identity resolver also cannot verify a country (timeout / blocked crawl).
+      resolveCompanyAddress: async () => null,
+      syncQualifiedCompanies: async () => {
+        throw new Error("HubSpot sync should not run for a region-unverifiable company");
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      // The scope check is fail-open for an empty country on a neutral TLD (locations all European),
+      // so without the accept-gate trust requirement this company would proceed into contact
+      // discovery and only be dropped at the write gate. The trust requirement must reject it first.
+      isCompanyInExecutionScopeAsync: async () => true,
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        if (exaCalls > 1) {
+          throw new Error("Exa search failed: 503 unavailable");
+        }
+        return [{
+          name: "Neutral Vision",
+          domain: "neutral-vision.com",
+          country: "",
+          shortDescription: "Industrial vision integrator",
+          sourceFilter: "exa-filter"
+        }];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    market: "Europe",
+    syncToHubSpot: true,
+    dryRun: false,
+    reuseQualifiedCompanyCache: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  // Rejected at the AI accept gate: no contact discovery spent, nothing written to HubSpot.
+  assert.deepEqual(contactCalls, []);
+  assert.equal(result.hubspotSync.companySyncedCount ?? 0, 0);
+  assert.equal(result.shortlistedCompanies.length, 0);
+});

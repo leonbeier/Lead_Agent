@@ -417,6 +417,19 @@ export class LeadWorkerRunService {
       : undefined;
     const filters = this.leadPipelineAgent.buildDirectExaFiltersForExecution(targetCategories, request.market);
     const defaultScopeFilter = filters[0];
+    // The HubSpot write gate fails CLOSED on locality: a company with an empty resolved country and a
+    // neutral/global TLD (.com/.io/.ai) is only written when its country was positively verified or it
+    // sits on a European ccTLD. When the identity resolver is wired (always in production), apply that
+    // SAME trust requirement already at the AI accept gate so region-unverifiable companies are dropped
+    // BEFORE they consume the expensive, globally serialized contact-discovery budget instead of being
+    // skipped only after a full crawl. The AI worker already runs one identity resolution for
+    // empty-country target companies, so requiring trust here does not lose a write the gate would
+    // have allowed — it just stops wasting contact discovery on leads that can never pass the gate.
+    const resolverAvailable = typeof (this.hubSpotClient as { resolveCompanyAddress?: unknown }).resolveCompanyAddress === "function";
+    const hasTrustedRegionSignal = (company: Pick<PreCategorizedCompany, "country" | "domain">): boolean =>
+      !resolverAvailable
+      || (company.country ?? "").trim().length > 0
+      || hasEuropeanTld(company.domain);
     const exaConcurrency = Math.min(2, Math.max(1, filters.length));
     const hubspotConcurrency = 3;
     const aiQueue = new AsyncQueue<{ company: CompanySample; searchId?: string }>();
@@ -988,7 +1001,11 @@ export class LeadWorkerRunService {
           const queryStat = aggregate && query ? getOrCreateQueryStat(aggregate, query) : undefined;
           const scopeFilter = aggregate?.filter ?? defaultScopeFilter;
 
-          if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory) && await isCompanyInScope(categorizedCompany, scopeFilter)) {
+          if (
+            targetCategories.includes(categorizedCompany.category as SelectableLeadCategory)
+            && await isCompanyInScope(categorizedCompany, scopeFilter)
+            && hasTrustedRegionSignal(categorizedCompany)
+          ) {
             if (queryStat) {
               queryStat.accepted += 1;
               queryStat.categoryBreakdown[categorizedCompany.category] += 1;
