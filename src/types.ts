@@ -459,6 +459,13 @@ export interface CompanyScreeningRecord {
   normalizedName: string;
   domain?: string;
   normalizedDomain?: string;
+  /**
+   * Headquarters country as last determined for this company (evidence-based from the website
+   * classifier/identity resolver when available, otherwise the sourcing country). Persisted so a
+   * company that was screened out for being outside the target region is not silently re-admitted
+   * as an in-scope seed on a later run just because the rebuilt seed lost its country.
+   */
+  country?: string;
   category?: LeadCategory;
   relevanceScore?: number;
   rationale?: string;

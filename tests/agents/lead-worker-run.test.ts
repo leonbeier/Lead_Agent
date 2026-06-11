@@ -131,6 +131,87 @@ test("worker run consumes matching live screening seeds before starting Exa", as
   assert.equal(latestRunWrites.at(-1)?.summary?.foundCandidates, 1);
 });
 
+test("worker run does not re-admit a screening seed whose persisted country is out of region", async () => {
+  let exaCalls = 0;
+  let syncCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({
+        records: [{
+          companyName: "Innerspec Technologies",
+          normalizedName: "innerspec technologies",
+          domain: "innerspec.com",
+          normalizedDomain: "innerspec.com",
+          // This company has a matching category but was screened out previously because its
+          // headquarters is in the US. The persisted country must keep it out of scope so it is
+          // not re-admitted as an in-scope seed.
+          country: "United States",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.92,
+          rationale: "Already screened live",
+          sourceFilter: "live-filter"
+        }]
+      }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
+        name: "Innerspec Technologies",
+        domain: website,
+        shortDescription: "Seed company",
+        sourceFilter: filter.name
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => {
+        syncCalls += 1;
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: 1,
+          contactSyncedCount: 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        return [];
+      },
+      isCompanyInExecutionScope: (company: { country?: string }) => {
+        const country = (company.country ?? "").trim().toLowerCase();
+        return country === "" || country === "germany";
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    maxRuntimeMs: 200,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.equal(syncCalls, 0);
+  assert.ok(!result.shortlistedCompanies.some((company) => company.name === "Innerspec Technologies"));
+});
+
 test("worker run keeps live screening seeds when HubSpot sync does not succeed", async () => {
   const screeningWrites: CompanyScreeningDatabase[] = [];
 

@@ -327,6 +327,7 @@ function buildScreeningRecord(company: CompanySample | PreCategorizedCompany): C
     normalizedName: company.name.trim().toLowerCase(),
     domain: company.domain,
     normalizedDomain,
+    country: company.country?.trim() || undefined,
     category: "category" in company ? company.category : undefined,
     relevanceScore: "relevanceScore" in company ? company.relevanceScore : undefined,
     rationale: "rationale" in company ? company.rationale : undefined,
@@ -1284,6 +1285,12 @@ export class LeadWorkerRunService {
           };
       const categorized: PreCategorizedCompany = {
         ...company,
+        // Re-apply the country that was determined when this company was last screened. Without it
+        // the rebuilt seed has no country and isCompanyInScope falls back to the neutral
+        // filter-location path, which would re-admit a company that was screened out for being
+        // outside the target region. Persisting + restoring the country keeps the locality
+        // constraint intact across runs.
+        country: record.country?.trim() || company.country,
         category: record.category ?? filters[0].targetCategories?.[0] ?? targetCategories[0],
         relevanceScore: record.relevanceScore ?? 0.75,
         rationale: record.rationale ?? "Bereits im Live-Screening als passend klassifiziert."
