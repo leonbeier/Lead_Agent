@@ -224,7 +224,7 @@ export class AzureOpenAIClient {
     mainContext?: string,
     prequalification?: PrequalificationConfig,
     learning?: LeadLearningData
-  ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">> {
+  ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale" | "country">> {
     if (dryRun || !readiness.azureConfigured) {
       return this.categorizeDryRun(crawledWebsiteSummary);
     }
@@ -254,18 +254,20 @@ export class AzureOpenAIClient {
           learning,
           false
         ),
-        { maxTokens: 120, deployment: CLASSIFIER_DEPLOYMENT }
+        { maxTokens: 160, deployment: CLASSIFIER_DEPLOYMENT }
       );
 
       const parsed = this.parseJsonObject<{
         category: LeadCategory;
         relevanceScore: number;
         rationale: string;
+        country?: string;
       }>(content);
 
       return {
         ...parsed,
-        category: this.normalizeCategory(parsed.category)
+        category: this.normalizeCategory(parsed.category),
+        country: parsed.country?.trim() || undefined
       };
     } catch {
       try {
@@ -280,18 +282,20 @@ export class AzureOpenAIClient {
             learning,
             true
           ),
-          { maxTokens: 120, deployment: CLASSIFIER_DEPLOYMENT }
+          { maxTokens: 160, deployment: CLASSIFIER_DEPLOYMENT }
         );
 
         const retryParsed = this.parseJsonObject<{
           category: LeadCategory;
           relevanceScore: number;
           rationale: string;
+          country?: string;
         }>(retryContent);
 
         return {
           ...retryParsed,
-          category: this.normalizeCategory(retryParsed.category)
+          category: this.normalizeCategory(retryParsed.category),
+          country: retryParsed.country?.trim() || undefined
         };
       } catch {
         return {
@@ -4208,8 +4212,10 @@ export class AzureOpenAIClient {
       "# Website Task\nClassify the company only from its own crawled website pages.",
       "# Website Decision Rules\nIf the website mainly sells external customer project delivery, choose an integrator category. If it mainly sells its own shipped software product or diagnostic plugin, choose machine_builder_ai_enablement. If it mainly sells a platform or runtime where customers deploy apps, modules, agents, or workflows, choose software_platform_embedding.",
       "# Website Specific Reminders\nA certified PACS/viewer-integrated medical plugin is machine_builder_ai_enablement. A runtime, turnkey appliance, or app-lifecycle platform for OEM digital services is software_platform_embedding even if PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration is mentioned. If the product lets customers launch industrial apps without building the integration stack themselves, prefer software_platform_embedding. A closed municipal or route-planning platform stays other unless customers clearly build on top of it. Broad engineering or MBSE-style capability pages without explicit AI, automation, MES/SCADA, inspection, or embeddable product/platform proof should stay other. Research institutes, Fraunhofer-style institutes, universities, labs, clusters, and publicly funded competence centers are not integrators or customer delivery partners unless the website clearly sells commercial external implementation services as the main business model.",
-      "# Output Reminder\nChoose the closest archetype across all categories. Do not prefer integrators when the fit path is ambiguous."
+      "# Country Rule\nAlso determine the company's headquarters country from the website's own evidence only: a registered office or postal address, an 'impressum'/'legal notice', a 'headquartered in' statement, or an international phone dialing code (e.g. +49 Germany, +43 Austria, +41 Switzerland, +31 Netherlands, +1 United States, +972 Israel, +86 China). Return the English country name. Do NOT infer the country from the domain TLD, the website language, or any supplied hint. If the website shows no reliable country evidence, return an empty string for country. A US/non-European company must be reported with its real country even when the page is in German or English.",
+      "# Output Reminder\nChoose the closest archetype across all categories. Do not prefer integrators when the fit path is ambiguous. Respond with a JSON object: {\"category\": string, \"relevanceScore\": number, \"rationale\": string, \"country\": string}."
     ].join("\n\n");
+
 
     const fullWebsiteContext = [
       compactWebsiteContext,

@@ -86,6 +86,13 @@ export interface DebugConsoleAzureEvaluation {
   category: string;
   relevanceScore: number;
   rationale: string;
+  /**
+   * Headquarters country determined by the classifier from the website's own evidence (postal
+   * address, impressum, "headquartered in" statement, or international dialing code). Empty/omitted
+   * when the page showed no reliable country evidence. This is the authoritative, evidence-based
+   * locality signal used by the worker scope gate, replacing the TLD/keyword sourcing heuristic.
+   */
+  country?: string;
 }
 
 export interface DebugConsoleWebsiteAnalysis {
@@ -378,8 +385,15 @@ export class DebugConsoleService {
       const sourceFilter = options.annotateDebugStage === false
         ? company.sourceFilter
         : `${company.sourceFilter} | debug-stage=ai_prefilter`;
+      // The classifier determined the headquarters country from the website's own evidence. This is
+      // the authoritative locality signal: it overrides the sourcing-time TLD/keyword heuristic
+      // (which mislabels neutral-TLD US companies as European and defaults to the requested market).
+      // When the page showed no reliable country evidence the classifier returns empty, so we keep
+      // the sourcing country as a weaker fallback.
+      const websiteVerifiedCountry = azureEvaluation.country?.trim();
       const categorizedCompany: PreCategorizedCompany = {
         ...company,
+        country: websiteVerifiedCountry || company.country,
         category: azureEvaluation.category as LeadCategory,
         relevanceScore: azureEvaluation.relevanceScore,
         rationale: azureEvaluation.rationale,
@@ -1088,35 +1102,38 @@ export class DebugConsoleService {
         compactRetryUsed: false,
         category: fallback.category,
         relevanceScore: fallback.relevanceScore,
-        rationale: fallback.rationale
+        rationale: fallback.rationale,
+        country: undefined
       };
     }
 
     try {
-      const content = await azureClient.runChat(fullMessages, { maxTokens: 120 });
-      const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string }>(content);
+      const content = await azureClient.runChat(fullMessages, { maxTokens: 160 });
+      const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string; country?: string }>(content);
       return {
         rawInput: fullRawInput,
         promptMessages: fullMessages,
         compactRetryUsed: false,
         category: azureClient.normalizeCategory(parsed.category),
         relevanceScore: parsed.relevanceScore,
-        rationale: parsed.rationale
+        rationale: parsed.rationale,
+        country: parsed.country?.trim() || undefined
       };
     } catch {
       const compactRawInput = azureClient.compactClassificationInput(websiteEvidence, 1500);
       const compactMessages = azureClient.buildWebsiteClassificationMessages(company.name, company.domain, compactRawInput, undefined, undefined, undefined, true);
 
       try {
-        const content = await azureClient.runChat(compactMessages, { maxTokens: 120 });
-        const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string }>(content);
+        const content = await azureClient.runChat(compactMessages, { maxTokens: 160 });
+        const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string; country?: string }>(content);
         return {
           rawInput: compactRawInput,
           promptMessages: compactMessages,
           compactRetryUsed: true,
           category: azureClient.normalizeCategory(parsed.category),
           relevanceScore: parsed.relevanceScore,
-          rationale: parsed.rationale
+          rationale: parsed.rationale,
+          country: parsed.country?.trim() || undefined
         };
       } catch {
         return {
@@ -1125,7 +1142,8 @@ export class DebugConsoleService {
           compactRetryUsed: true,
           category: "other",
           relevanceScore: 25,
-          rationale: "Website evidence could not be classified reliably and should stay in manual-review territory."
+          rationale: "Website evidence could not be classified reliably and should stay in manual-review territory.",
+          country: undefined
         };
       }
     }

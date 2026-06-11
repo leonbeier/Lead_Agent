@@ -828,6 +828,77 @@ test("classifyCompanyForExecution preserves the source filter for live execution
   assert.equal(result.categorizedCompany.sourceFilter, "Europe Vision System Integrators (exa-search: site:.de ...)");
 });
 
+test("classifyCompanyForExecution adopts the website-verified country over the sourcing heuristic", async () => {
+  const service = new DebugConsoleService() as any;
+
+  service.webSearchAgent = {
+    crawlCompanyWebsite: async () => ({
+      summary: "Ultrasonic inspection systems. Headquarters in Forest, Virginia, United States. +1 434 ..."
+    })
+  };
+
+  service.debugCategorizeWebsite = async () => ({
+    rawInput: "Ultrasonic inspection systems",
+    promptMessages: [],
+    compactRetryUsed: false,
+    category: "machine_builder_ai_enablement",
+    relevanceScore: 88,
+    rationale: "US inspection OEM",
+    country: "United States"
+  });
+
+  const result = await service.classifyCompanyForExecution(
+    {
+      name: "Innerspec Technologies",
+      domain: "https://innerspec.com",
+      // Sourcing-time heuristic mislabels this neutral-TLD US company as German.
+      country: "Germany",
+      shortDescription: "Ultrasonic inspection",
+      sourceFilter: "Europe Vision System Integrators"
+    },
+    {
+      annotateDebugStage: false
+    }
+  );
+
+  assert.equal(result.categorizedCompany.country, "United States");
+});
+
+test("classifyCompanyForExecution keeps the sourcing country when the website shows no country evidence", async () => {
+  const service = new DebugConsoleService() as any;
+
+  service.webSearchAgent = {
+    crawlCompanyWebsite: async () => ({
+      summary: "Industrial image processing projects"
+    })
+  };
+
+  service.debugCategorizeWebsite = async () => ({
+    rawInput: "Industrial image processing projects",
+    promptMessages: [],
+    compactRetryUsed: false,
+    category: "integrator_vision_industrial_ai",
+    relevanceScore: 90,
+    rationale: "Strong fit",
+    country: ""
+  });
+
+  const result = await service.classifyCompanyForExecution(
+    {
+      name: "Live Vision GmbH",
+      domain: "https://live-vision.example.com",
+      country: "Germany",
+      shortDescription: "Industrial image processing projects",
+      sourceFilter: "Europe Vision System Integrators"
+    },
+    {
+      annotateDebugStage: false
+    }
+  );
+
+  assert.equal(result.categorizedCompany.country, "Germany");
+});
+
 test("buildContactAnalysis runs research and contact debug together and keeps preview contacts", async () => {
   const service = new DebugConsoleService() as any;
   const company = {
