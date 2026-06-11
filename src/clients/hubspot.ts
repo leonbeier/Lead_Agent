@@ -2662,15 +2662,25 @@ export class HubSpotClient {
       return undefined;
     }
 
+    // Repair malformed values where a second absolute URL is concatenated onto a base URL
+    // (e.g. "http://www.linkedin.com/https://www.linkedin.com/company/acme"). Parsing the raw
+    // value would expose only the base host with the real path pushed into pathname, so the
+    // /company/ guard below would miss an embedded company page. Evaluate the inner absolute URL.
+    const schemeMatches = [...trimmed.matchAll(/https?:\/\//gi)];
+    const candidate = schemeMatches.length > 1 && schemeMatches[schemeMatches.length - 1]?.index !== undefined
+      ? trimmed.slice(schemeMatches[schemeMatches.length - 1]!.index!)
+      : trimmed;
+
     try {
-      const parsed = new URL(trimmed);
+      const parsed = new URL(candidate);
       const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
       if (hostname !== "linkedin.com" && hostname !== "de.linkedin.com" && hostname !== "www.linkedin.com") {
         return undefined;
       }
 
-      // Reject company pages — only personal /in/ profiles are valid contact LinkedIn URLs
-      if (/^\/company\//i.test(parsed.pathname)) {
+      // Reject company pages anywhere in the path — only personal /in/ profiles are valid contact
+      // LinkedIn URLs. Use an unanchored test so repaired/nested company URLs are also caught.
+      if (/\/company\//i.test(parsed.pathname)) {
         return undefined;
       }
 

@@ -87,6 +87,38 @@ test("previewHubSpotSync skips generic mailbox contacts without name or phone, k
   assert.match(preview.contacts[1]?.outreachNote ?? "", /LinkedIn Outreach/);
 });
 
+test("previewHubSpotSync never writes a company LinkedIn URL to a contact, even when malformed/concatenated", async () => {
+  const client = new HubSpotClient();
+  const contacts: PublicContactCandidate[] = [
+    {
+      email: "info@4h-jena.de",
+      firstName: "Michael",
+      lastName: "Boer",
+      jobTitle: "Managing Director",
+      // Malformed value observed in production: a company URL concatenated onto a base host.
+      linkedinUrl: "http://www.linkedin.com/https://www.linkedin.com/company/-4h--jena-engineering-gmbh",
+      sourceUrl: "https://4h-jena.de/contact",
+      label: "linkedin_profile"
+    },
+    {
+      email: "info@example-automation.de",
+      firstName: "Jana",
+      lastName: "Klein",
+      jobTitle: "CTO",
+      linkedinUrl: "https://www.linkedin.com/company/example-automation",
+      sourceUrl: "https://example-automation.de/team",
+      label: "linkedin_profile"
+    }
+  ];
+
+  const preview = await client.previewHubSpotSync(buildSampleCompany(), buildSampleBrief(), contacts, { includeAddressLookup: false });
+
+  // The malformed/concatenated company URL must be dropped, not written as a personal LinkedIn URL.
+  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, undefined);
+  // A plain company LinkedIn URL must also be dropped.
+  assert.equal(preview.contacts[1]?.properties.hs_linkedin_url, undefined);
+});
+
 test("previewHubSpotSync keeps generic mailbox contacts when a phone number is present", async () => {
   const client = new HubSpotClient();
   const contacts: PublicContactCandidate[] = [
