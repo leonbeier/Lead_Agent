@@ -257,6 +257,10 @@ export class LeadPipelineAgent {
 
   private readonly azureClient = new AzureOpenAIClient();
 
+  // Per-process memo for the AI region check, keyed by `${market}::${country}`. The market is
+  // constant for a run, so each distinct headquarters country triggers at most one classifier call.
+  private readonly regionScopeCache = new Map<string, boolean>();
+
   private readonly exaPreviewClient = new ExaSearchClient();
 
   private readonly hubspotClient = new HubSpotClient();
@@ -3682,6 +3686,42 @@ export class LeadPipelineAgent {
     filter: import("../types").OrganizationFilter,
     market?: string
   ): boolean {
+    return this.isCompanyInScope(company, filter, market);
+  }
+
+  /**
+   * AI-backed, flexible variant of isCompanyInExecutionScope. The free-text market description is
+   * interpreted by the classifier instead of a hardcoded country list, so arbitrary markets ("EU und
+   * USA", "DACH", a single country, ...) work. Verdicts are cached per (market, country) for the
+   * process, so each distinct country costs at most one classifier call. Falls back to the
+   * deterministic check when the headquarters country is still unknown (the TLD/locations fallback
+   * lives there) or when the classifier is unavailable, so a config gap never silently widens scope.
+   */
+  async isCompanyInExecutionScopeAsync(
+    company: Pick<PreCategorizedCompany, "country" | "domain">,
+    filter: import("../types").OrganizationFilter,
+    market?: string
+  ): Promise<boolean> {
+    const normalizedMarket = market?.trim();
+    const normalizedCountry = company.country?.trim().toLowerCase();
+
+    if (!normalizedMarket || !normalizedCountry) {
+      return this.isCompanyInScope(company, filter, market);
+    }
+
+    const cacheKey = `${normalizedMarket.toLowerCase()}::${normalizedCountry}`;
+    const cached = this.regionScopeCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const verdicts = await this.azureClient.classifyCountriesInTargetMarket(normalizedMarket, [normalizedCountry]);
+    const verdict = verdicts?.[normalizedCountry];
+    if (typeof verdict === "boolean") {
+      this.regionScopeCache.set(cacheKey, verdict);
+      return verdict;
+    }
+
     return this.isCompanyInScope(company, filter, market);
   }
 

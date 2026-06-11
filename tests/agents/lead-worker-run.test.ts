@@ -2179,3 +2179,178 @@ test("worker run passes selected contacts to HubSpot sync under the normalized c
   assert.equal(syncedContactCount, 1);
   assert.equal(result.hubspotSync.contactSyncedCount, 1);
 });
+
+test("worker run admits an out-of-Europe company when the AI region check says it is in the target market", async () => {
+  const syncedCompanies: string[] = [];
+  const regionChecks: Array<{ country?: string; market?: string }> = [];
+  let exaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          country: "United States",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.93,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      // The website crawl confirms the US headquarters.
+      resolveCompanyAddress: async () => ({ companyName: "Bay Vision Inc", country: "United States" }),
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncedCompanies.push(companies[0].name);
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: 1,
+          contactSyncedCount: 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      // AI-backed flexible region check: the market "EU und USA" includes the United States, so a US
+      // company is in scope. A hardcoded Europe-only list would have wrongly rejected it.
+      isCompanyInExecutionScopeAsync: async (company: { country?: string }, _filter: unknown, market?: string) => {
+        regionChecks.push({ country: company.country, market });
+        const country = (company.country ?? "").trim().toLowerCase();
+        return country === "united states" || country === "germany";
+      },
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        if (exaCalls > 1) {
+          throw new Error("Exa search failed: 503 unavailable");
+        }
+        return [{
+          name: "Bay Vision",
+          domain: "bay-vision.com",
+          country: "United States",
+          shortDescription: "Industrial vision integrator",
+          sourceFilter: "exa-filter"
+        }];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    market: "EU und USA",
+    syncToHubSpot: true,
+    dryRun: false,
+    reuseQualifiedCompanyCache: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.deepEqual(syncedCompanies, ["Bay Vision Inc"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  assert.ok(regionChecks.some((check) => check.market === "EU und USA" && (check.country ?? "").toLowerCase() === "united states"));
+});
+
+test("worker run AI-resolves and stores a location for a category-relevant company with no sourcing-time country", async () => {
+  const screeningWrites: CompanyScreeningDatabase[] = [];
+  let resolveCalls = 0;
+  let exaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async (database: CompanyScreeningDatabase) => {
+        screeningWrites.push(database);
+      },
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      // The prefilter crawl could not determine a country (empty), but the category is relevant.
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          country: "",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.93,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      // Deeper identity resolver finds the headquarters country from the website: outside the EU
+      // market, so the company is screened out — but its location must still be recorded so the
+      // Aussortiert entry shows where it is.
+      resolveCompanyAddress: async () => {
+        resolveCalls += 1;
+        return { companyName: "Backfill Vision Inc", country: "United States" };
+      },
+      syncQualifiedCompanies: async () => {
+        throw new Error("HubSpot sync should not run for an out-of-market company");
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      isCompanyInExecutionScope: (company: { country?: string }) => {
+        const country = (company.country ?? "").trim().toLowerCase();
+        return country === "" || country === "germany";
+      },
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        if (exaCalls > 1) {
+          throw new Error("Exa search failed: 503 unavailable");
+        }
+        return [{
+          name: "Backfill Vision",
+          domain: "backfill-vision.com",
+          country: "",
+          shortDescription: "Industrial vision integrator",
+          sourceFilter: "exa-filter"
+        }];
+      }
+    } as any
+  });
+
+  await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    market: "EU",
+    syncToHubSpot: true,
+    dryRun: false,
+    reuseQualifiedCompanyCache: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.ok(resolveCalls >= 1);
+  const recordedCountry = screeningWrites
+    .flatMap((database) => database.records)
+    .find((record) => record.companyName === "Backfill Vision")?.country;
+  assert.equal(recordedCountry, "United States");
+});

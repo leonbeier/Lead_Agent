@@ -216,6 +216,67 @@ export class AzureOpenAIClient {
     }
   }
 
+  /**
+   * Flexible, AI-based region membership. Given a free-text target-market description (e.g. "DE",
+   * "Europa", "EU und USA", "DACH", "Benelux") and one or more headquarters countries, decides for
+   * each country whether a company headquartered there falls inside the described market. The market
+   * wording is the authoritative scope contract — this replaces hardcoded country lists so arbitrary
+   * market descriptions work without code changes. The whole country list is classified in a single
+   * call, and callers cache by (market, country) so each distinct country costs at most one request.
+   * Returns null when Azure is not configured so callers can fall back to a deterministic check.
+   */
+  async classifyCountriesInTargetMarket(
+    market: string,
+    countries: string[]
+  ): Promise<Record<string, boolean> | null> {
+    const normalizedCountries = Array.from(
+      new Set(countries.map((country) => country.trim()).filter(Boolean))
+    );
+    if (normalizedCountries.length === 0) {
+      return {};
+    }
+    const normalizedMarket = market?.trim();
+    if (!normalizedMarket || !readiness.azureConfigured) {
+      return null;
+    }
+
+    try {
+      const content = await this.runChat(
+        [
+          {
+            role: "system",
+            content: [
+              "You decide whether companies belong to a target sales market based ONLY on their headquarters country.",
+              "The target market is a free-text description and is a HARD constraint. Interpret it precisely and flexibly:",
+              "- A single country code or name means that country only (e.g. 'DE' or 'Germany' = Germany only).",
+              "- Region words include their member countries (e.g. 'Europe'/'EU' = European countries; 'DACH' = Germany, Austria, Switzerland; 'Benelux' = Belgium, Netherlands, Luxembourg; 'Nordics' = Denmark, Sweden, Norway, Finland, Iceland).",
+              "- Combinations joined by 'und'/'and'/'+'/',' are unions (e.g. 'EU und USA' = European countries plus the United States).",
+              "Set inMarket=true only when a company headquartered in that country clearly belongs to the described market.",
+              "Respond as JSON {\"results\":[{\"country\":string,\"inMarket\":boolean}]} with exactly one entry per input country, echoing the country string exactly as given."
+            ].join("\n")
+          },
+          {
+            role: "user",
+            content: [`Target market: ${normalizedMarket}`, `Countries: ${normalizedCountries.join(", ")}`].join("\n")
+          }
+        ],
+        { maxTokens: Math.min(60 + normalizedCountries.length * 14, 600), deployment: CLASSIFIER_DEPLOYMENT }
+      );
+
+      const parsed = this.parseJsonObject<{ results?: Array<{ country?: string; inMarket?: boolean }> }>(content);
+      const verdicts: Record<string, boolean> = {};
+      for (const entry of parsed.results ?? []) {
+        const key = entry.country?.trim().toLowerCase();
+        if (key) {
+          verdicts[key] = entry.inMarket === true;
+        }
+      }
+      return verdicts;
+    } catch {
+      return null;
+    }
+  }
+
   async categorizeWebsiteCrawl(
     name: string,
     domain: string | undefined,

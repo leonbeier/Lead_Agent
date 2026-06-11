@@ -851,9 +851,22 @@ export class LeadWorkerRunService {
       emitProgress();
     };
 
-    const isCompanyInScope = (company: Pick<PreCategorizedCompany, "country" | "domain">, filter = defaultScopeFilter): boolean => {
+    const isCompanyInScope = async (
+      company: Pick<PreCategorizedCompany, "country" | "domain">,
+      filter = defaultScopeFilter
+    ): Promise<boolean> => {
       if (!filter) {
         return true;
+      }
+
+      // Prefer the AI-backed, flexible region check so arbitrary markets ("EU und USA", "DACH", a
+      // single country, ...) are honoured instead of a hardcoded country list. It is cached per
+      // (market, country) on the agent and falls back to the deterministic check internally. Legacy
+      // and test stubs that only expose the sync evaluator keep their existing behaviour.
+      const asyncEvaluator = (this.leadPipelineAgent as { isCompanyInExecutionScopeAsync?: unknown } | undefined)
+        ?.isCompanyInExecutionScopeAsync;
+      if (typeof asyncEvaluator === "function") {
+        return asyncEvaluator.call(this.leadPipelineAgent, company, filter, request.market);
       }
 
       const scopeEvaluator = (this.leadPipelineAgent as { isCompanyInExecutionScope?: unknown } | undefined)?.isCompanyInExecutionScope;
@@ -862,6 +875,30 @@ export class LeadWorkerRunService {
       }
 
       return scopeEvaluator.call(this.leadPipelineAgent, company, filter, request.market);
+    };
+
+    // Resolve a company's headquarters country from its own website via the AI identity resolver
+    // (cached per domain). Used so that category-relevant companies always carry an evidence-based
+    // location on their screening record — including the ones that get screened out — instead of an
+    // empty field that hides the location in the Aussortiert list and risks re-pulling them later.
+    const resolveVerifiedCountry = async (
+      company: Pick<PreCategorizedCompany, "name" | "domain" | "country">
+    ): Promise<string | undefined> => {
+      const resolveIdentity = (this.hubSpotClient as { resolveCompanyAddress?: unknown }).resolveCompanyAddress;
+      if (typeof resolveIdentity !== "function" || !company.domain) {
+        return undefined;
+      }
+      let identityTimeout: ReturnType<typeof setTimeout> | undefined;
+      const resolvedIdentity = await Promise.race([
+        this.hubSpotClient.resolveCompanyAddress(company as PreCategorizedCompany),
+        new Promise<null>((resolve) => {
+          identityTimeout = setTimeout(() => resolve(null), IDENTITY_RESOLUTION_TIMEOUT_MS);
+        })
+      ]).catch(() => null);
+      if (identityTimeout) {
+        clearTimeout(identityTimeout);
+      }
+      return resolvedIdentity?.country?.trim() || undefined;
     };
 
     const maybeQueueHubSpot = (state: QualifiedCompanyState) => {
@@ -910,6 +947,20 @@ export class LeadWorkerRunService {
             continue;
           }
 
+          // Agent-first location backfill: when this is a category-relevant company but the prefilter
+          // crawl could not determine its country, run the deeper AI identity resolver so the
+          // screening record (also for screened-out companies) carries an evidence-based location and
+          // the locality scope decision below runs on a verified country rather than an empty field.
+          if (
+            targetCategories.includes(categorizedCompany.category as SelectableLeadCategory) &&
+            !(categorizedCompany.country ?? "").trim()
+          ) {
+            const verifiedCountry = await resolveVerifiedCountry(categorizedCompany);
+            if (verifiedCountry) {
+              categorizedCompany.country = verifiedCountry;
+            }
+          }
+
           screeningQueue.enqueue({
             type: "upsert",
             record: buildScreeningRecord(categorizedCompany)
@@ -937,7 +988,7 @@ export class LeadWorkerRunService {
           const queryStat = aggregate && query ? getOrCreateQueryStat(aggregate, query) : undefined;
           const scopeFilter = aggregate?.filter ?? defaultScopeFilter;
 
-          if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory) && isCompanyInScope(categorizedCompany, scopeFilter)) {
+          if (targetCategories.includes(categorizedCompany.category as SelectableLeadCategory) && await isCompanyInScope(categorizedCompany, scopeFilter)) {
             if (queryStat) {
               queryStat.accepted += 1;
               queryStat.categoryBreakdown[categorizedCompany.category] += 1;
@@ -1167,7 +1218,7 @@ export class LeadWorkerRunService {
         // discarding real German/Italian .com companies). Only when the country is empty do we
         // require positive verification — a European ccTLD or a website-verified country — to close
         // path (3). The !resolverAvailable escape keeps legacy/stub callers unchanged.
-        const inScope = isCompanyInScope({ country: state.company.country, domain: state.company.domain }, defaultScopeFilter);
+        const inScope = await isCompanyInScope({ country: state.company.country, domain: state.company.domain }, defaultScopeFilter);
         const hasResolvedCountry = (state.company.country ?? "").trim().length > 0;
         const trustedRegionSignal = !resolverAvailable
           || hasResolvedCountry
@@ -1299,7 +1350,7 @@ export class LeadWorkerRunService {
         relevanceScore: record.relevanceScore ?? 0.75,
         rationale: record.rationale ?? "Bereits im Live-Screening als passend klassifiziert."
       };
-      if (!isCompanyInScope(categorized, filters[0])) {
+      if (!(await isCompanyInScope(categorized, filters[0]))) {
         log(`Seed ausserhalb Markt verworfen: ${categorized.name}`);
         continue;
       }
