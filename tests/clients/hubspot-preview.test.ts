@@ -183,6 +183,34 @@ test("previewHubSpotSync falls back to the domain-derived name when extraction f
   assert.equal(preview.companyProperties.name, "Interelectronic");
 });
 
+test("previewHubSpotSync falls back to the domain-derived name when the source name is a template placeholder like 'OUR COMPANY'", async () => {
+  const client = new HubSpotClient();
+  client["extractCompanyAddress"] = async () => null;
+
+  const preview = await client.previewHubSpotSync({
+    ...buildSampleCompany(),
+    name: "OUR COMPANY",
+    domain: "https://abcvision.info"
+  }, buildSampleBrief(), [], { includeAddressLookup: true });
+
+  // "OUR COMPANY" is a CMS template placeholder, never a real operating-entity name.
+  assert.equal(preview.companyProperties.name, "Abcvision");
+});
+
+test("previewHubSpotSync falls back to the domain-derived name when the source name is a bare fragment like 'De'", async () => {
+  const client = new HubSpotClient();
+  client["extractCompanyAddress"] = async () => null;
+
+  const preview = await client.previewHubSpotSync({
+    ...buildSampleCompany(),
+    name: "De",
+    domain: "https://writepcb.com"
+  }, buildSampleBrief(), [], { includeAddressLookup: true });
+
+  // "De" is a bare language/country fragment captured from a subdomain, not a company name.
+  assert.equal(preview.companyProperties.name, "Writepcb");
+});
+
 test("extractCompanyAddress prefers the AI website company profile before weaker web-search data", async () => {
   const client = new HubSpotClient();
   client["getOfficialWebsiteCompanyProfile"] = async () => ({

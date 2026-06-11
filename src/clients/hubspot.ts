@@ -1091,29 +1091,39 @@ export class HubSpotClient {
       "de", "en", "eu", "ag", "ug", "kg", "gmbh", "ohg", "gbr", "ltd", "llc", "inc",
       "co", "corp", "plc", "bv", "nv", "sa", "srl", "spa", "oy", "ab", "as"
     ]);
+    // Reject literal junk values that occasionally arrive as a discovered company name
+    // (e.g. the string "null" / "undefined" produced upstream, or a generic navigation/UI label
+    // such as "Mail" / "Kontakt" / "Home" / "OUR COMPANY" captured from a page title or template
+    // placeholder when website extraction fails under load). These are never real operating-entity
+    // names; falling back to the domain-derived name yields a readable, correct record instead of
+    // a meaningless label.
+    const genericNonNameTokens = new Set([
+      "null", "undefined", "n/a", "na", "none", "-",
+      "mail", "email", "e-mail", "webmail", "kontakt", "contact", "contacto", "contatti",
+      "home", "homepage", "startseite", "start", "menu", "menü", "login", "log in", "anmelden",
+      "suche", "search", "impressum", "datenschutz", "cookie", "cookies", "newsletter",
+      "ueber uns", "über uns", "about", "about us", "aviso legal", "mentions legales",
+      "our company", "your company", "company name", "company", "example", "example company",
+      "lorem ipsum", "website", "webseite", "willkommen", "welcome"
+    ]);
+    // A value is junk when it is empty, a generic UI/placeholder label, or a bare legal-form /
+    // country fragment (e.g. "De", "AG"). This is applied consistently to BOTH the extracted name
+    // and the upstream company.name so neither path can write a meaningless label to HubSpot.
+    const isJunkName = (value: string | undefined): boolean => {
+      const normalized = value?.trim().toLowerCase();
+      if (!normalized) {
+        return true;
+      }
+      return genericNonNameTokens.has(normalized) || bareNameTokens.has(normalized);
+    };
     const isBareFragment = compactExtractedName.length < 3
       || bareNameTokens.has((rawExtractedName ?? "").trim().toLowerCase());
     const isPlausibleExtractedName = rawExtractedName
       && rawExtractedName.length <= 80
       && wordCount <= 8
       && !looksLikeSentence
-      && !isBareFragment;
-    // Reject literal junk values that occasionally arrive as a discovered company name
-    // (e.g. the string "null" / "undefined" produced upstream, or a generic navigation/UI label
-    // such as "Mail" / "Kontakt" / "Home" captured from a page title when website extraction
-    // fails under load). These are never real operating-entity names; falling back to the
-    // domain-derived name yields a readable, correct record instead of a meaningless label.
-    const genericNonNameTokens = new Set([
-      "null", "undefined", "n/a", "na", "none", "-",
-      "mail", "email", "e-mail", "webmail", "kontakt", "contact", "contacto", "contatti",
-      "home", "homepage", "startseite", "start", "menu", "menü", "login", "log in", "anmelden",
-      "suche", "search", "impressum", "datenschutz", "cookie", "cookies", "newsletter",
-      "ueber uns", "über uns", "about", "about us", "aviso legal", "mentions legales"
-    ]);
-    const isJunkName = (value: string | undefined): boolean => {
-      const normalized = value?.trim().toLowerCase();
-      return !normalized || genericNonNameTokens.has(normalized);
-    };
+      && !isBareFragment
+      && !isJunkName(rawExtractedName);
     const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined)
       || (isJunkName(company.name) ? undefined : company.name);
     // Final safety net: never write a blank company name to HubSpot. Derive a readable
