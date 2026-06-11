@@ -44,6 +44,7 @@ interface WorkerRunMetrics {
   contactCompleted: number;
   contactFailed: number;
   hubspotWritten: number;
+  hubspotSkippedOutOfScope: number;
   queueSizes: {
     exaInFlight: number;
     aiWaiting: number;
@@ -203,6 +204,10 @@ const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 510_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
+// Bounds the authoritative identity/locality resolution that runs right before a HubSpot write.
+// The underlying crawl is cached per domain (contact discovery already warmed it), so this is
+// normally near-instant; the cap only guards against a cold or hung origin.
+const IDENTITY_RESOLUTION_TIMEOUT_MS = 90_000;
 const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
 const MIN_EXA_BATCH_REQUESTS = 2;
 
@@ -427,6 +432,7 @@ export class LeadWorkerRunService {
       contactCompleted: 0,
       contactFailed: 0,
       hubspotWritten: 0,
+      hubspotSkippedOutOfScope: 0,
       queueSizes: {
         exaInFlight: 0,
         aiWaiting: 0,
@@ -1086,6 +1092,46 @@ export class LeadWorkerRunService {
         }
 
         if (state.removed || state.hubspotStatus === "done") {
+          continue;
+        }
+
+        // Authoritative locality hard-constraint gate. The qualification-time scope check runs on
+        // the sourcing-time country, which is derived from a domain/snippet heuristic and can
+        // mislabel non-European companies as in-scope. Before any HubSpot write, resolve the
+        // company's real identity from its own website and re-evaluate scope on the AI-determined
+        // country. The crawl is cached per domain (contact discovery already warmed it), so this
+        // does not trigger a second full crawl. Locality is a hard constraint: a company whose
+        // verified country is outside the target region must never be written.
+        const resolveIdentity = (this.hubSpotClient as { resolveCompanyAddress?: unknown }).resolveCompanyAddress;
+        if (typeof resolveIdentity === "function") {
+          let identityTimeout: ReturnType<typeof setTimeout> | undefined;
+          const resolvedIdentity = await Promise.race([
+            this.hubSpotClient.resolveCompanyAddress(state.company),
+            new Promise<null>((resolve) => {
+              identityTimeout = setTimeout(() => resolve(null), IDENTITY_RESOLUTION_TIMEOUT_MS);
+            })
+          ]).catch(() => null);
+          if (identityTimeout) {
+            clearTimeout(identityTimeout);
+          }
+          const canonicalName = resolvedIdentity?.companyName?.trim();
+          const canonicalCountry = resolvedIdentity?.country?.trim();
+          if (canonicalName) {
+            state.company.name = canonicalName;
+          }
+          if (canonicalCountry) {
+            state.company.country = canonicalCountry;
+          }
+        }
+        if (!isCompanyInScope({ country: state.company.country, domain: state.company.domain }, defaultScopeFilter)) {
+          state.hubspotStatus = "skipped";
+          state.removed = true;
+          state.pipelineAssigned = false;
+          metrics.hubspotSkippedOutOfScope += 1;
+          log(`HubSpot uebersprungen (ausserhalb Zielregion): ${state.company.name} (${state.company.country ?? "unbekannt"})`);
+          screeningQueue.enqueue({ type: "upsert", record: buildScreeningRecord(state.company) });
+          maybePromoteStandby();
+          emitProgress();
           continue;
         }
 
