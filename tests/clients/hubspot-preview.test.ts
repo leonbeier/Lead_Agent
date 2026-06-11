@@ -243,6 +243,24 @@ test("previewHubSpotSync falls back to the domain-derived name when the source n
   assert.equal(preview.companyProperties.name, "Writepcb");
 });
 
+test("previewHubSpotSync falls back to the domain-derived name when extraction returns anti-bot block text", async () => {
+  const client = new HubSpotClient();
+  // A blocked crawl returns the access-challenge page text instead of a real company name.
+  client["extractCompanyAddress"] = async () => ({
+    companyName: "sorry, but your current behavior is detected as"
+  });
+
+  const preview = await client.previewHubSpotSync({
+    ...buildSampleCompany(),
+    // Worker overwrote the sourcing name with the same anti-bot text before the HubSpot write.
+    name: "sorry, but your current behavior is detected as",
+    domain: "https://mt.com"
+  }, buildSampleBrief(), [], { includeAddressLookup: true });
+
+  // Anti-bot block-page text must never be written as a company name; fall back to the domain.
+  assert.equal(preview.companyProperties.name, "Mt");
+});
+
 test("extractCompanyAddress prefers the AI website company profile before weaker web-search data", async () => {
   const client = new HubSpotClient();
   client["getOfficialWebsiteCompanyProfile"] = async () => ({

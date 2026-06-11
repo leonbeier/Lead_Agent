@@ -5,6 +5,74 @@ import { FoundryAgentsClient } from "./foundry-agents";
 import { OpenAIWebSearchClient } from "./openai-web-search";
 import { PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../types";
 
+// Bare legal-form or country fragments (e.g. "De", "AG", "GmbH") that the address extractor
+// occasionally returns instead of the full operating entity name.
+const BARE_NAME_TOKENS = new Set([
+  "de", "en", "eu", "ag", "ug", "kg", "gmbh", "ohg", "gbr", "ltd", "llc", "inc",
+  "co", "corp", "plc", "bv", "nv", "sa", "srl", "spa", "oy", "ab", "as"
+]);
+
+// Literal junk / generic navigation-UI labels that arrive as a discovered company name when
+// website extraction fails or captures a template placeholder / menu item.
+const GENERIC_NON_NAME_TOKENS = new Set([
+  "null", "undefined", "n/a", "na", "none", "-",
+  "mail", "email", "e-mail", "webmail", "kontakt", "contact", "contacto", "contatti",
+  "home", "homepage", "startseite", "start", "menu", "menü", "login", "log in", "anmelden",
+  "suche", "search", "impressum", "datenschutz", "cookie", "cookies", "newsletter",
+  "ueber uns", "über uns", "about", "about us", "aviso legal", "mentions legales",
+  "our company", "your company", "company name", "company", "example", "example company",
+  "lorem ipsum", "website", "webseite", "willkommen", "welcome"
+]);
+
+// Anti-bot / access-block interstitial phrases. When a crawl is blocked the page title/body is a
+// challenge message ("sorry, but your current behavior is detected as...", "Access Denied",
+// "Are you a robot?"). Such text must never be adopted as a company name.
+const ANTI_BOT_PHRASES = [
+  "your current behavior", "detected as", "access denied", "are you a robot", "are you human",
+  "verify you are human", "captcha", "cloudflare", "checking your browser", "ddos protection",
+  "request blocked", "rate limited", "too many requests", "forbidden", "not authorized",
+  "enable javascript", "please enable", "unusual traffic", "suspicious activity"
+];
+
+/**
+ * True when `value` is usable as a HubSpot company name. Rejects empty values, generic UI labels,
+ * bare legal-form fragments, prose/sentence fragments (e.g. Impressum paragraphs), overly long or
+ * many-word strings, and anti-bot block-page text. Applied at every boundary that adopts a name
+ * from website extraction so neither the extracted name nor an upstream-overwritten company.name
+ * can write a meaningless label to HubSpot.
+ */
+export function isPlausibleCompanyName(value: string | undefined): boolean {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return false;
+  }
+  const normalized = trimmed.toLowerCase();
+  if (GENERIC_NON_NAME_TOKENS.has(normalized) || BARE_NAME_TOKENS.has(normalized)) {
+    return false;
+  }
+  const compact = trimmed.replace(/[^a-z0-9]+/gi, "");
+  if (compact.length < 3) {
+    return false;
+  }
+  if (trimmed.length > 80) {
+    return false;
+  }
+  if (trimmed.split(/\s+/).length > 8) {
+    return false;
+  }
+  // Sentence/prose: a "." "!" or "?" followed by a space and a lowercase word, or a leading
+  // lowercase letter. ("GmbH & Co. KG", "e.K." are legal forms and stay plausible — no following
+  // lowercase word after the period.)
+  if (/[.!?]\s+[a-zäöü]/.test(trimmed) || /^[a-zäöü]/.test(trimmed)) {
+    return false;
+  }
+  if (ANTI_BOT_PHRASES.some((phrase) => normalized.includes(phrase))) {
+    return false;
+  }
+  return true;
+}
+
+
 interface HubSpotPropertyDefinition {
   name: string;
 }
@@ -1076,69 +1144,22 @@ export class HubSpotClient {
   ): Record<string, string | undefined> {
     const companyDescription = this.buildCompanyDescription(company, brief);
     const rawExtractedName = extractedAddress?.companyName?.trim();
-    // Reject extracted company names that are longer than 120 chars or contain sentence-like
-    // boilerplate text (e.g. Impressum paragraphs mistakenly captured as company name).
-    // Reject names that are clearly sentence fragments: contain sentence-ending punctuation
-    // (period/exclamation/question mark followed by a space and another word, indicating prose),
-    // are very long, or have too many space-separated words (real company names rarely exceed 8).
-    // Note: "CO. KG", "GmbH & Co. KG", "e.K." etc. contain periods that are part of the legal
-    // form abbreviation and must NOT be rejected.
-    const wordCount = rawExtractedName ? rawExtractedName.trim().split(/\s+/).length : 0;
-    const looksLikeSentence = rawExtractedName
-      ? /[.!?]\s+[a-zäöü]/.test(rawExtractedName) || /^[a-zäöü]/.test(rawExtractedName)
-      : false;
-    // Reject bare legal-form or country fragments (e.g. "De", "AG", "GmbH") that the address
-    // extractor occasionally returns instead of the full operating entity name. These would
-    // otherwise overwrite the good domain-derived company name with meaningless tokens.
-    const compactExtractedName = rawExtractedName?.replace(/[^a-z0-9]+/gi, "") ?? "";
-    const bareNameTokens = new Set([
-      "de", "en", "eu", "ag", "ug", "kg", "gmbh", "ohg", "gbr", "ltd", "llc", "inc",
-      "co", "corp", "plc", "bv", "nv", "sa", "srl", "spa", "oy", "ab", "as"
-    ]);
-    // Reject literal junk values that occasionally arrive as a discovered company name
-    // (e.g. the string "null" / "undefined" produced upstream, or a generic navigation/UI label
-    // such as "Mail" / "Kontakt" / "Home" / "OUR COMPANY" captured from a page title or template
-    // placeholder when website extraction fails under load). These are never real operating-entity
-    // names; falling back to the domain-derived name yields a readable, correct record instead of
-    // a meaningless label.
-    const genericNonNameTokens = new Set([
-      "null", "undefined", "n/a", "na", "none", "-",
-      "mail", "email", "e-mail", "webmail", "kontakt", "contact", "contacto", "contatti",
-      "home", "homepage", "startseite", "start", "menu", "menü", "login", "log in", "anmelden",
-      "suche", "search", "impressum", "datenschutz", "cookie", "cookies", "newsletter",
-      "ueber uns", "über uns", "about", "about us", "aviso legal", "mentions legales",
-      "our company", "your company", "company name", "company", "example", "example company",
-      "lorem ipsum", "website", "webseite", "willkommen", "welcome"
-    ]);
-    // A value is junk when it is empty, a generic UI/placeholder label, or a bare legal-form /
-    // country fragment (e.g. "De", "AG"). This is applied consistently to BOTH the extracted name
-    // and the upstream company.name so neither path can write a meaningless label to HubSpot.
-    const isJunkName = (value: string | undefined): boolean => {
-      const normalized = value?.trim().toLowerCase();
-      if (!normalized) {
-        return true;
-      }
-      return genericNonNameTokens.has(normalized) || bareNameTokens.has(normalized);
-    };
-    const isBareFragment = compactExtractedName.length < 3
-      || bareNameTokens.has((rawExtractedName ?? "").trim().toLowerCase());
-    const isPlausibleExtractedName = rawExtractedName
-      && rawExtractedName.length <= 80
-      && wordCount <= 8
-      && !looksLikeSentence
-      && !isBareFragment
-      && !isJunkName(rawExtractedName);
-    const canonicalCompanyName = (isPlausibleExtractedName ? rawExtractedName : undefined)
-      || (isJunkName(company.name) ? undefined : company.name);
+    // A name is usable only when it passes the shared plausibility guard (rejects prose, generic
+    // UI labels, bare legal-form fragments, anti-bot block-page text, overly long/many-word
+    // strings). Applied to BOTH the website-extracted name and the upstream company.name so a name
+    // that was overwritten upstream with block-page text cannot leak into HubSpot. When neither is
+    // usable, fall back to a readable domain-derived name.
+    const canonicalCompanyName = (isPlausibleCompanyName(rawExtractedName) ? rawExtractedName : undefined)
+      || (isPlausibleCompanyName(company.name) ? company.name : undefined);
     // Final safety net: never write a blank company name to HubSpot. Derive a readable
     // name from the domain's first label when no usable name is available.
     const fallbackFromDomain = this.normalizeDomain(company.domain)?.split(".")[0]
       ?.split(/[-_]+/).filter(Boolean)
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
       .join(" ");
-    const resolvedCompanyName = (!isJunkName(canonicalCompanyName) ? canonicalCompanyName?.trim() : undefined)
+    const resolvedCompanyName = canonicalCompanyName?.trim()
       || fallbackFromDomain
-      || canonicalCompanyName;
+      || company.name;
 
     return {
       name: resolvedCompanyName,

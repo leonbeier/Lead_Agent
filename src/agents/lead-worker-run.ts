@@ -1,6 +1,6 @@
 import { ControlPlaneStore } from "../control-plane.js";
 import { DebugConsoleService } from "../debug/test-console-service.js";
-import { HubSpotClient } from "../clients/hubspot.js";
+import { HubSpotClient, isPlausibleCompanyName } from "../clients/hubspot.js";
 import { LeadPipelineAgent, EUROPEAN_TLDS } from "./lead-pipeline.js";
 import { env } from "../config.js";
 import type {
@@ -1137,7 +1137,11 @@ export class LeadWorkerRunService {
           }
           const canonicalName = resolvedIdentity?.companyName?.trim();
           const canonicalCountry = resolvedIdentity?.country?.trim();
-          if (canonicalName) {
+          // Only adopt the website-extracted name when it is a plausible company name. A blocked
+          // crawl returns anti-bot challenge text ("sorry, but your current behavior is detected
+          // as...") and prose fragments; adopting those would overwrite the sourcing name with a
+          // meaningless label that then leaks into HubSpot and outreach.
+          if (canonicalName && isPlausibleCompanyName(canonicalName)) {
             state.company.name = canonicalName;
           }
           if (canonicalCountry) {
