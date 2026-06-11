@@ -3836,7 +3836,13 @@ export class LeadPipelineAgent {
 
     return requestedCategories.map((category) => {
       const { baseFilter, normalizedRegion } = resolveSearchFilterBase(category, market);
-      const liveLocations = normalizedRegion?.toLowerCase() === "europe" && baseFilter.locations.length > 1
+      // For region markets like "Europe", always use the base filter's concrete
+      // country locations (e.g. ["Germany"]) instead of collapsing to the abstract
+      // region token. Collapsing single-location base filters to ["Europe"] made the
+      // Exa query planner receive locality "Europe" while it generated country-specific
+      // queries (e.g. "Germany-based ..."), which the hard locality validator then
+      // rejected as missing the required locality, aborting otherwise valid batches.
+      const liveLocations = normalizedRegion?.toLowerCase() === "europe"
         ? [...baseFilter.locations]
         : normalizedRegion
           ? [normalizedRegion]

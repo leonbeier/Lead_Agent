@@ -89,6 +89,27 @@ test("direct exa path keeps Europe filter country list for Europe market", () =>
   assert.deepEqual(filter.locations.slice(0, 4), ["Germany", "France", "Italy", "Netherlands"]);
 });
 
+test("execution filters never collapse a single-location base filter to the abstract Europe token", () => {
+  const agent = new LeadPipelineAgent();
+
+  const filters = agent.buildDirectExaFiltersForExecution(
+    ["integrator_vision_industrial_ai", "integrator_general_ai", "machine_builder_vision_ai"],
+    "Europe"
+  );
+
+  // Every execution filter must expose concrete country localities so the Exa query
+  // planner's hard locality validator can match the country-specific queries it generates.
+  // Collapsing to ["Europe"] previously aborted otherwise valid "Germany-based ..." batches.
+  for (const filter of filters) {
+    assert.notDeepEqual(filter.locations, ["Europe"], `filter "${filter.name}" collapsed to ["Europe"]`);
+    assert.ok(filter.locations.length > 0, `filter "${filter.name}" has no locations`);
+  }
+
+  const automationFilter = filters.find((filter) => /Automation Software Integrators/i.test(filter.name));
+  assert.ok(automationFilter, "expected the Germany automation software integrators filter");
+  assert.deepEqual(automationFilter!.locations, ["Germany"]);
+});
+
 test("stopped direct exa runs still sync already qualified companies", async () => {
   const agent = new LeadPipelineAgent() as any;
   let stopRequested = false;
