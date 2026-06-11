@@ -60,6 +60,22 @@ export function shouldUseCachedLiveSearchDebug(statusUpdatedAt: string | undefin
   return latestQueryRunMs > statusUpdatedAtMs;
 }
 
+// The /api/control/run-status endpoint is polled every few seconds by the live UI. The Azure planner
+// prompt messages (system prompt + the full query prompt) are by far the largest field in the payload
+// — tens of KB per batch — and the live poll never reads them (the UI renders the planner prompt from
+// the separate search-history source, not from run-status). Returning them on every poll bloats the
+// response so much that, under an active run's event-loop load, the Railway edge proxy times the
+// response out and returns 502 "Application failed to respond". Strip the prompt messages so the live
+// status payload stays small and always responds; all other debug fields the UI consumes are kept.
+export function toLeanRunStatusPayload(runStatus: LeadRunStatus): LeadRunStatus {
+  if (!runStatus.liveSearchDebug?.promptMessages) {
+    return runStatus;
+  }
+
+  const { promptMessages: _omittedPromptMessages, ...leanLiveSearchDebug } = runStatus.liveSearchDebug;
+  return { ...runStatus, liveSearchDebug: leanLiveSearchDebug };
+}
+
 function resetLeadRunStatus(detail: string, stage: LeadRunStatus["stage"] = "idle", stageLabel = "Bereit"): void {
   leadRunStatus.running = false;
   leadRunStatus.stage = stage;
@@ -334,7 +350,7 @@ function clearStaleLeadRunStatusIfNeeded(): void {
 
 async function buildRunStatusResponse(): Promise<{ runStatus: LeadRunStatus }> {
   if (leadRunStatus.liveSearchDebug) {
-    return { runStatus: leadRunStatus };
+    return { runStatus: toLeanRunStatusPayload(leadRunStatus) };
   }
 
   const liveExaCache = await controlPlaneStore.getLiveExaCache();
@@ -353,7 +369,6 @@ async function buildRunStatusResponse(): Promise<{ runStatus: LeadRunStatus }> {
       liveSearchDebug: {
         filterName: latestQueryRun.filterName,
         plannedQueries: latestQueryRun.plannedQueries,
-        promptMessages: latestQueryRun.promptMessages,
         lastExecutedQuery: latestQueryRun.query,
         excludedDomains: latestQueryRun.excludedDomains,
         excludedDomainDetails: latestQueryRun.excludedDomainDetails,
