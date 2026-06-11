@@ -188,7 +188,11 @@ const HIGH_PRIORITY_PAGE_PATTERNS = ["contact", "kontakt", "contacto", "contatti
 // allow the AI to see and follow, so the official legal entity, address, and reachable contacts
 // are not lost behind a same-domain restriction. Spanish/French/Italian sites use locale slugs
 // (aviso-legal, mentions-legales, contacto, chi-siamo), so those carry the legal entity too.
-const CROSS_DOMAIN_LEGAL_CONTACT_PATTERNS = ["impressum", "imprint", "legal-notice", "legal_notice", "legalnotice", "legal notice", "mentions-legales", "mentions légales", "aviso-legal", "aviso legal", "kontakt", "contact", "contacto", "contatti", "ansprechpartner", "chi-siamo", "quienes-somos"];
+// US/non-EU companies have no impressum law and frequently disclose their registered address and
+// switchboard phone only inside the privacy policy or terms of service (e.g. unitxlabs.com lists
+// "3930 Freedom Cir, Suite 130, Santa Clara, CA" and "+1 (888) ..." only on /privacy-policy), so
+// those legal pages must also be followed to recover the company's real country.
+const CROSS_DOMAIN_LEGAL_CONTACT_PATTERNS = ["impressum", "imprint", "legal-notice", "legal_notice", "legalnotice", "legal notice", "mentions-legales", "mentions légales", "aviso-legal", "aviso legal", "kontakt", "contact", "contacto", "contatti", "ansprechpartner", "chi-siamo", "quienes-somos", "privacy", "privacy-policy", "privacy_policy", "datenschutz", "terms", "terms-of-service", "terms-of-use", "terms-and-conditions"];
 const MEDIUM_PRIORITY_PAGE_PATTERNS = [
   "software",
   "service",
@@ -3134,7 +3138,7 @@ export class HubSpotClient {
       ...(homepageAnalysis?.followUpUrls ?? [])
     ]))
       .filter((url) => this.isSameCompanyWebsiteUrl(rootUrl, url) || this.isLegalOrContactPageUrl(url))
-      .slice(0, 10);
+      .slice(0, 14);
     const followUpPages = await Promise.all(
       followUpUrls.map(async (url) => {
         // Use fetchHtml (with Playwright fallback) so JS-rendered pages (e.g. impressum) are retrieved.
@@ -3402,17 +3406,29 @@ export class HubSpotClient {
       const root = new URL(rootUrl);
       // Identity-bearing pages first so they survive the follow-up slice: impressum/contact carry
       // the legal entity, and about/company pages carry the registered name and headquarters
-      // country (e.g. "ALeader Europe Ltd. ... Headquartered in Israel").
+      // country (e.g. "ALeader Europe Ltd. ... Headquartered in Israel"). US/non-EU companies have
+      // no impressum and disclose their registered address + switchboard phone only on the privacy
+      // policy or terms pages, so probe those too to recover the real country for the locality gate.
+      // Order universal + privacy/terms pages ahead of locale-specific slugs so both EU and US
+      // companies are covered within the follow-up fetch budget.
       const candidates = [
         "impressum/",
         "kontakt/",
+        "contact/",
+        "contact-us/",
+        "about-us/",
+        "about/",
+        "company/",
+        "privacy-policy/",
+        "privacy/",
+        "terms-of-service/",
+        "terms/",
+        "legal/",
+        "datenschutz/",
         "aviso-legal/",
         "mentions-legales/",
         "contacto/",
         "contatti/",
-        "about-us/",
-        "about/",
-        "company/",
         "ueber-uns/",
         "quienes-somos/",
         "qui-sommes-nous/",
@@ -3420,6 +3436,7 @@ export class HubSpotClient {
         "empresa/",
         "ansprechpartner/",
         "team/",
+        "terms-of-use/",
         "about-us.html",
         "impressum.html",
         "impressum.php",
