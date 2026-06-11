@@ -160,10 +160,10 @@ export function canonicalizeLiveExaExcludedDomainState(
   };
 }
 
-function normalizeLiveExaQueryRuns(
+export function normalizeLiveExaQueryRuns(
   queryRuns: NonNullable<LiveExaCache["queryRuns"]> | undefined
 ): NonNullable<LiveExaCache["queryRuns"]> {
-  return (queryRuns ?? [])
+  const dedupedRuns = (queryRuns ?? [])
     .reduce<NonNullable<LiveExaCache["queryRuns"]>>((runs, queryRun) => {
       const timestamp = queryRun.timestamp?.trim();
       const filterName = queryRun.filterName?.trim();
@@ -204,6 +204,32 @@ function normalizeLiveExaQueryRuns(
       return runs;
     }, [])
     .slice(0, 1000);
+
+  // The planner-debug payload (promptMessages — which inline the full exclude list — and
+  // excludedDomainDetails, ~800KB combined per run) is only ever rendered for the single most
+  // recent run by the live console's planner debug panel. Older runs are consumed only for their
+  // query text and lightweight stats in the search-history list. Retaining the heavy fields on
+  // every run made /api/control/cache/live-exa balloon to ~180MB after a few hundred runs; the
+  // console polls that endpoint every 5s during a run, so the Railway edge proxy timed the
+  // response out and returned 502 "Application failed to respond". Keep the heavy fields only on
+  // the newest run and strip them from the rest.
+  let newestIndex = -1;
+  let newestTimestampMs = Number.NEGATIVE_INFINITY;
+  dedupedRuns.forEach((run, index) => {
+    const timestampMs = Date.parse(run.timestamp);
+    if (Number.isFinite(timestampMs) && timestampMs > newestTimestampMs) {
+      newestTimestampMs = timestampMs;
+      newestIndex = index;
+    }
+  });
+
+  return dedupedRuns.map((run, index) => {
+    if (index === newestIndex) {
+      return run;
+    }
+    const { promptMessages: _promptMessages, excludedDomainDetails: _excludedDomainDetails, ...leanRun } = run;
+    return leanRun;
+  });
 }
 
 export interface LeadAgentDataPaths {

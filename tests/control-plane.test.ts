@@ -7,6 +7,7 @@ import {
   buildLiveExaRecurringDomains,
   buildRecentLiveExaRecurringDomains,
   canonicalizeLiveExaExcludedDomainState,
+  normalizeLiveExaQueryRuns,
   readJsonFileWithRecovery,
   resolveLeadAgentDataPaths
 } from "../src/control-plane";
@@ -202,4 +203,46 @@ test("canonicalizeLiveExaExcludedDomainState rebuilds stale request indices from
   assert.equal(canonical.excludedDomainDetails?.find((entry) => entry.domain === "hahn-ie.com")?.requestIndex, 1);
   assert.equal(canonical.excludedDomainDetails?.find((entry) => entry.domain === "data-spree.com")?.requestIndex, 2);
   assert.equal(canonical.excludedDomainDetails?.find((entry) => entry.domain === "sciaky.com")?.requestIndex, 3);
+});
+
+test("normalizeLiveExaQueryRuns keeps heavy planner debug only on the newest run", () => {
+  const makeRun = (suffix: string, timestamp: string) => ({
+    timestamp,
+    filterName: "Germany Machine Vision System Integrators",
+    query: `query ${suffix}`,
+    plannedQueries: [`planned ${suffix}`],
+    promptMessages: [{ role: "system", content: `prompt ${suffix}` }],
+    excludedDomains: [`excluded-${suffix}.com`],
+    excludedDomainDetails: [
+      {
+        domain: `excluded-${suffix}.com`,
+        category: "hubspot" as const,
+        includedInRequest: true,
+        requestIndex: 0
+      }
+    ]
+  });
+
+  // Newest run is intentionally NOT first in the input array to prove selection is by timestamp.
+  const normalized = normalizeLiveExaQueryRuns([
+    makeRun("old", "2026-06-04T10:00:00.000Z"),
+    makeRun("new", "2026-06-04T12:00:00.000Z"),
+    makeRun("middle", "2026-06-04T11:00:00.000Z")
+  ]);
+
+  const newest = normalized.find((run) => run.query === "query new");
+  const older = normalized.filter((run) => run.query !== "query new");
+
+  assert.ok(newest);
+  assert.ok(Array.isArray(newest?.promptMessages) && newest.promptMessages.length > 0);
+  assert.ok(Array.isArray(newest?.excludedDomainDetails) && newest.excludedDomainDetails.length > 0);
+
+  assert.equal(older.length, 2);
+  for (const run of older) {
+    assert.equal(run.promptMessages, undefined);
+    assert.equal(run.excludedDomainDetails, undefined);
+    // Lightweight fields the search-history list relies on are retained.
+    assert.ok(run.query);
+    assert.ok(Array.isArray(run.plannedQueries) && run.plannedQueries.length > 0);
+  }
 });
