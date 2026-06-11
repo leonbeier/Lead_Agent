@@ -1289,8 +1289,12 @@ export class LeadWorkerRunService {
         // the rebuilt seed has no country and isCompanyInScope falls back to the neutral
         // filter-location path, which would re-admit a company that was screened out for being
         // outside the target region. Persisting + restoring the country keeps the locality
-        // constraint intact across runs.
-        country: record.country?.trim() || company.country,
+        // constraint intact across runs. We deliberately do NOT fall back to company.country here:
+        // createManualCompanyForWebsite defaults country to the market (e.g. "Germany"), and trusting
+        // that market default is exactly what wrote out-of-region seeds (Mapvision .fi, Chromos .ch,
+        // Innerspec US, ...) into HubSpot as "Germany". When no evidence-based country was persisted,
+        // leave it empty so the fail-closed locality gate verifies it from the website before any write.
+        country: record.country?.trim() || undefined,
         category: record.category ?? filters[0].targetCategories?.[0] ?? targetCategories[0],
         relevanceScore: record.relevanceScore ?? 0.75,
         rationale: record.rationale ?? "Bereits im Live-Screening als passend klassifiziert."

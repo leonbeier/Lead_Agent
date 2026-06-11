@@ -212,6 +212,92 @@ test("worker run does not re-admit a screening seed whose persisted country is o
   assert.ok(!result.shortlistedCompanies.some((company) => company.name === "Innerspec Technologies"));
 });
 
+test("worker run does not fabricate a market-default country for a seed with no persisted country", async () => {
+  let syncCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({
+        records: [{
+          companyName: "Mapvision",
+          normalizedName: "mapvision",
+          // A neutral / non-German domain seed that was screened in for category but never had an
+          // evidence-based country persisted. Previously the seed reuse path fell back to
+          // createManualCompanyForWebsite's market default ("Germany"), which let an out-of-region
+          // company be written to HubSpot as Germany. With no persisted country it must instead be
+          // verified by the fail-closed locality gate, not granted a fake market country.
+          domain: "mapvision.com",
+          normalizedDomain: "mapvision.com",
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.92,
+          rationale: "Already screened live",
+          sourceFilter: "live-filter"
+        }]
+      }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      // Mirror production buildManualCompany, which defaults the country to the first filter
+      // location (e.g. "Germany"). The seed reuse path must NOT trust this fabricated country.
+      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
+        name: "Mapvision",
+        domain: website,
+        shortDescription: "Seed company",
+        sourceFilter: filter.name,
+        country: filter.locations[0]
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async () => {
+        syncCalls += 1;
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: 1,
+          contactSyncedCount: 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async () => [],
+      isCompanyInExecutionScope: (company: { country?: string; domain?: string }) => {
+        const country = (company.country ?? "").trim().toLowerCase();
+        // Germany-focused market scope: a present country must be Germany; an empty country falls
+        // back to a .de domain check. mapvision.com with an empty country is therefore out of scope.
+        if (country) {
+          return country === "germany";
+        }
+        return (company.domain ?? "").toLowerCase().includes(".de");
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    maxRuntimeMs: 200,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.equal(syncCalls, 0);
+  assert.ok(!result.shortlistedCompanies.some((company) => company.name === "Mapvision"));
+});
+
 test("worker run keeps live screening seeds when HubSpot sync does not succeed", async () => {
   const screeningWrites: CompanyScreeningDatabase[] = [];
 
