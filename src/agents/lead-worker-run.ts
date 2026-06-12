@@ -385,8 +385,13 @@ export class LeadWorkerRunService {
 
   constructor(dependencies: LeadWorkerRunDependencies = {}) {
     this.controlPlaneStore = dependencies.controlPlaneStore ?? new ControlPlaneStore();
-    this.debugConsoleService = dependencies.debugConsoleService ?? new DebugConsoleService();
     this.hubSpotClient = dependencies.hubSpotClient ?? new HubSpotClient();
+    // Share the worker's HubSpotClient with the contact-discovery service so both stages use ONE
+    // crawl cache + ONE shared Chromium. Without this they ran two separate HubSpotClient instances
+    // (two browsers, two caches): the pre-write identity crawl re-crawled the same anti-bot sites
+    // the contact crawl had already fetched, doubling browser-lane contention and starving contact
+    // discovery into writing companies with zero contacts under live load.
+    this.debugConsoleService = dependencies.debugConsoleService ?? new DebugConsoleService({ hubspotClient: this.hubSpotClient });
     this.leadPipelineAgent = dependencies.leadPipelineAgent ?? new LeadPipelineAgent();
     this.contactTaskTimeoutMs = Math.max(1, dependencies.contactTaskTimeoutMs ?? DEFAULT_CONTACT_TASK_TIMEOUT_MS);
     this.hubspotTaskTimeoutMs = Math.max(1, dependencies.hubspotTaskTimeoutMs ?? DEFAULT_HUBSPOT_TASK_TIMEOUT_MS);

@@ -178,11 +178,21 @@ export class DebugConsoleService {
 
   private readonly azureOpenAIClient = new AzureOpenAIClient();
 
-  private readonly hubspotClient = new HubSpotClient();
+  private readonly hubspotClient: HubSpotClient;
 
   private readonly leadPipelineAgent = new LeadPipelineAgent();
 
   private readonly controlPlaneStore = new ControlPlaneStore();
+
+  // Accept an injected HubSpotClient so a caller (the worker pipeline) can share ONE instance
+  // across contact discovery AND the pre-write identity/address crawl. A shared instance means a
+  // shared candidatePagesCache and a single shared Chromium: the pre-write resolveCompanyAddress
+  // reuses the pages the contact crawl already collected instead of launching a second browser and
+  // re-crawling the same (often anti-bot) site, which previously doubled browser-lane contention
+  // and starved contact discovery into returning zero contacts under load.
+  constructor(options: { hubspotClient?: HubSpotClient } = {}) {
+    this.hubspotClient = options.hubspotClient ?? new HubSpotClient();
+  }
 
   private readonly defaultAiPrefilterConcurrency = 20;
 
