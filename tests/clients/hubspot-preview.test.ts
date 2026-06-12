@@ -171,6 +171,29 @@ test("extractEmails normalizes bracketed obfuscated mailbox addresses", () => {
   assert.deepEqual(emails, ["info@ceeltec.de"]);
 });
 
+test("extractEmails does not glue adjacent page text onto an address split by markup", () => {
+  const client = new HubSpotClient();
+  const emails = client["extractEmails"](`
+    <html>
+      <body>
+        <a href="#">info@specim.com</a><h3>Press</h3>
+        <div>Geschäftsführer: <b>Takayuki Mukai</b> CEO <span>takayuki.mukai@specim.com</span></div>
+        <p>orders@specim.com</p>
+      </body>
+    </html>
+  `, new Set(["specim.com"]));
+
+  // Tags are stripped with a space so the TLD match stops at the address boundary instead of
+  // absorbing trailing words ("info@specim.compress…") or leading words ("…mukaiceotakayuki…").
+  assert.ok(emails.includes("info@specim.com"));
+  assert.ok(emails.includes("takayuki.mukai@specim.com"));
+  assert.ok(emails.includes("orders@specim.com"));
+  assert.ok(
+    emails.every((email) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}$/.test(email)),
+    `corrupted email present: ${emails.join(", ")}`
+  );
+});
+
 test("extractPhones captures local-format phone numbers in contact contexts", () => {
   const client = new HubSpotClient();
   const phones = client["extractPhones"](`

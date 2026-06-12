@@ -1,4 +1,5 @@
 import { env, readiness } from "../config";
+import type { Browser } from "playwright";
 import { ApolloClient } from "./apollo";
 import { AzureOpenAIClient } from "./azure-openai";
 import { FoundryAgentsClient } from "./foundry-agents";
@@ -177,6 +178,11 @@ const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
 const HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS = 250;
+// How long the shared web-task browser may sit idle (no running browser task) before it is closed.
+// During a company's page burst the browser is reused (the perf win); once the burst ends it shuts
+// down so the Chromium process stops holding memory and never keeps a short-lived process (worker
+// run, script, test) from exiting. The idle timer is unref'd so it itself never blocks exit.
+const SHARED_WEB_TASK_BROWSER_IDLE_MS = 5_000;
 // Number of Chromium instances allowed to run concurrently for website/contact crawling.
 // The browser is the throughput bottleneck (each contact search legitimately takes ~95-110s).
 // Each instance launches with --disable-dev-shm-usage so shared memory does not hit the 64MB
@@ -347,6 +353,17 @@ export class HubSpotClient {
     () => Promise.resolve()
   );
   private nextBrowserLaneIndex = 0;
+  // A single Chromium instance reused across every browser-backed fetch/search in a run. Launching
+  // a fresh browser per URL was the dominant cost of contact discovery: anti-bot (403) or
+  // misconfigured (500) sites force every one of the ~30 probed pages through the browser, and a
+  // per-URL launch+close serialized over the browser lanes blew the 60s page-collection budget,
+  // leaving slow sites with zero contacts. Reusing one process (pages are closed after each task)
+  // is also more memory-safe than repeated launches.
+  private sharedWebTaskBrowser: Promise<Browser> | null = null;
+  // Number of browser tasks currently running, plus the unref'd timer that closes the shared
+  // browser once that count returns to zero and stays there for the idle window.
+  private activeBrowserTaskCount = 0;
+  private sharedBrowserIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
   async getAllCompanyDomains(): Promise<Set<string>> {
     if (!readiness.hubspotConfigured) {
@@ -2090,14 +2107,14 @@ export class HubSpotClient {
   private async searchDuckDuckGoBrowserResults(query: string, maxResults: number): Promise<WebSearchHit[]> {
     try {
       return await this.scheduleBrowserTask(async () => {
-        const browser = await this.launchBrowserForWebTasks();
+        const browser = await this.getSharedWebTaskBrowser();
+
+        const page = await browser.newPage({
+          locale: "de-DE",
+          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
+        });
 
         try {
-          const page = await browser.newPage({
-            locale: "de-DE",
-            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36"
-          });
-
           await page.goto(`https://duckduckgo.com/?q=${encodeURIComponent(query)}&ia=web`, {
             waitUntil: "domcontentloaded",
             timeout: DDG_BROWSER_SEARCH_TIMEOUT_MS
@@ -2156,7 +2173,7 @@ export class HubSpotClient {
             query
           }));
         } finally {
-          await browser.close().catch(() => undefined);
+          await page.close().catch(() => undefined);
         }
       });
     } catch {
@@ -3538,8 +3555,13 @@ export class HubSpotClient {
     // when the wrapping <a> tag is stripped.
     const hrefEmails = [...decoded.matchAll(/href=["']mailto:([A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,})["']/gi)]
       .map((match) => match[1].toLowerCase());
-    const stripped = decoded.replace(/<[^>]+>/g, "");
-    const textEmails = [...stripped.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)]
+    // Strip tags with a SPACE (not an empty string) so adjacent text nodes never glue onto the
+    // address: "<a>info@specim.com</a><h3>Press</h3>" must not become "info@specim.compress". Then
+    // re-collapse whitespace around an "@" so an address split exactly at the @ by markup rejoins.
+    // The TLD is bounded ({2,24}) so the match cannot run past a real top-level domain into trailing
+    // text even when no separator exists.
+    const stripped = decoded.replace(/<[^>]+>/g, " ").replace(/\s*@\s*/g, "@");
+    const textEmails = [...stripped.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,24}/gi)]
       .map((match) => match[0].toLowerCase());
     return Array.from(
       new Set([...hrefEmails, ...textEmails])
@@ -4049,15 +4071,14 @@ export class HubSpotClient {
   private async fetchHtmlWithBrowser(url: string): Promise<string | null> {
     try {
       return await this.scheduleBrowserTask(async () => {
-        const browser = await this.launchBrowserForWebTasks();
+        const browser = await this.getSharedWebTaskBrowser();
+        const page = await browser.newPage({
+          locale: "de-DE",
+          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36",
+          ignoreHTTPSErrors: true
+        });
 
         try {
-          const page = await browser.newPage({
-            locale: "de-DE",
-            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/136.0.0.0 Safari/537.36",
-            ignoreHTTPSErrors: true
-          });
-
           await page.goto(url, {
             waitUntil: "domcontentloaded",
             timeout: WEBSITE_BROWSER_FETCH_TIMEOUT_MS
@@ -4069,7 +4090,7 @@ export class HubSpotClient {
           const html = await page.content();
           return html.trim().length > 0 ? html : null;
         } finally {
-          await browser.close().catch(() => undefined);
+          await page.close().catch(() => undefined);
         }
       });
     } catch (error) {
@@ -4078,6 +4099,45 @@ export class HubSpotClient {
         error: error instanceof Error ? error.message : String(error)
       });
       return null;
+    }
+  }
+
+  // Lazily launch one shared Chromium and reuse it for every browser-backed task. On disconnect
+  // (crash/OOM) the cached promise is cleared so the next caller relaunches a fresh browser. The
+  // container flags live on launchBrowserForWebTasks so every (re)launch stays OOM-safe on Railway.
+  private async getSharedWebTaskBrowser(): Promise<Browser> {
+    const existing = this.sharedWebTaskBrowser;
+    if (existing) {
+      try {
+        const browser = await existing;
+        if (browser.isConnected()) {
+          return browser;
+        }
+      } catch {
+        // Fall through to relaunch a fresh browser below.
+      }
+      if (this.sharedWebTaskBrowser === existing) {
+        this.sharedWebTaskBrowser = null;
+      }
+    }
+
+    const launchPromise = this.launchBrowserForWebTasks().then((browser) => {
+      browser.on("disconnected", () => {
+        if (this.sharedWebTaskBrowser === launchPromise) {
+          this.sharedWebTaskBrowser = null;
+        }
+      });
+      return browser;
+    });
+    this.sharedWebTaskBrowser = launchPromise;
+
+    try {
+      return await launchPromise;
+    } catch (error) {
+      if (this.sharedWebTaskBrowser === launchPromise) {
+        this.sharedWebTaskBrowser = null;
+      }
+      throw error;
     }
   }
 
@@ -4120,12 +4180,52 @@ export class HubSpotClient {
 
     await previousTask;
 
+    this.activeBrowserTaskCount += 1;
+    this.cancelSharedBrowserIdleClose();
+
     try {
       return await task();
     } finally {
       await this.delay(HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS);
+      this.activeBrowserTaskCount -= 1;
+      if (this.activeBrowserTaskCount <= 0) {
+        this.scheduleSharedBrowserIdleClose();
+      }
       releaseQueue?.();
     }
+  }
+
+  // Cancel a pending idle-close because a new browser task just started (the browser is in use).
+  private cancelSharedBrowserIdleClose(): void {
+    if (this.sharedBrowserIdleTimer) {
+      clearTimeout(this.sharedBrowserIdleTimer);
+      this.sharedBrowserIdleTimer = null;
+    }
+  }
+
+  // Close the shared browser after it has been idle for the full window. The timer is unref'd so it
+  // never keeps the event loop alive on its own; the open Chromium child process is what would
+  // otherwise block a short-lived process from exiting, and closing it here releases that handle.
+  private scheduleSharedBrowserIdleClose(): void {
+    this.cancelSharedBrowserIdleClose();
+    if (!this.sharedWebTaskBrowser) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.sharedBrowserIdleTimer = null;
+      if (this.activeBrowserTaskCount > 0) {
+        return;
+      }
+      const pending = this.sharedWebTaskBrowser;
+      this.sharedWebTaskBrowser = null;
+      void pending?.then((browser) => browser.close().catch(() => undefined)).catch(() => undefined);
+    }, SHARED_WEB_TASK_BROWSER_IDLE_MS);
+
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
+    this.sharedBrowserIdleTimer = timer;
   }
 
   private getNumericRanking(
