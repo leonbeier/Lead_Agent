@@ -311,11 +311,6 @@ function buildCompanyKey(company: { domain?: string; name: string }): string {
   return normalizeDomain(company.domain) ?? company.name.trim().toLowerCase();
 }
 
-function toCompanyWebsite(domain?: string): string | undefined {
-  const normalized = normalizeDomain(domain);
-  return normalized ? `https://${normalized}` : undefined;
-}
-
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -493,6 +488,14 @@ export class LeadWorkerRunService {
     let searchCounter = 0;
     let completedExaWorkers = 0;
     let screeningFlushDue = false;
+    // Counts companies enqueued for AI classification but not yet finished processing (waiting +
+    // in-flight). It is incremented synchronously at every aiQueue.enqueue and decremented when the
+    // AI worker finishes an item. We cannot derive this from aiQueue.size + aiInFlight: when an AI
+    // worker is already idle-waiting, enqueue hands the item straight to that waiter (so it never
+    // counts in aiQueue.size) and aiInFlight is only bumped a microtask later, leaving a brief
+    // window where freshly enqueued seeds are invisible to neededCompanies() and the Exa worker
+    // would start an unnecessary search before the seeds are even classified.
+    let aiPendingCount = 0;
 
     const markQueueSizes = () => {
       metrics.queueSizes.aiWaiting = aiQueue.size;
@@ -522,7 +525,7 @@ export class LeadWorkerRunService {
     const countAssignedQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed && state.pipelineAssigned && state.hubspotStatus !== "done").length;
     const countDownstreamInFlight = () =>
       metrics.queueSizes.outreachInFlight + metrics.queueSizes.contactInFlight + metrics.queueSizes.hubspotInFlight + outreachQueue.size + contactQueue.size + hubspotQueue.size;
-    const countAiPending = () => metrics.queueSizes.aiInFlight + aiQueue.size;
+    const countAiPending = () => aiPendingCount;
     const neededCompanies = () => Math.max(0, targetLeadCount - metrics.hubspotWritten - countHeldQualifiedStates() - countAiPending());
     const hasReachedTarget = () => metrics.hubspotWritten >= targetLeadCount;
     const shouldStopNewPipelineWork = () => stopping || hasReachedTarget();
@@ -574,6 +577,7 @@ export class LeadWorkerRunService {
       }
 
       for (const company of uniqueRawCompanies.slice(0, SEARCH_BATCH_SIZE + SEARCH_RESULT_HEADROOM)) {
+        aiPendingCount += 1;
         aiQueue.enqueue({ company, searchId });
       }
 
@@ -1060,6 +1064,7 @@ export class LeadWorkerRunService {
           log(`KI-Worker Fehler fuer ${item.company.name}: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
           metrics.queueSizes.aiInFlight = Math.max(0, metrics.queueSizes.aiInFlight - 1);
+          aiPendingCount = Math.max(0, aiPendingCount - 1);
           emitProgress();
         }
       }
@@ -1346,39 +1351,42 @@ export class LeadWorkerRunService {
         }).slice(0, targetLeadCount);
 
     for (const record of seedRecords) {
-      const website = toCompanyWebsite(record.domain);
       const sourceFilter = record.sourceFilter ?? `cached-live-category:${record.category}`;
-      const company = website
-        ? this.debugConsoleService.createManualCompanyForWebsite(website, filters[0])
-        : {
-            name: record.companyName,
-            domain: record.domain,
-            shortDescription: record.shortDescription ?? "", 
-            sourceFilter
-          };
-      const categorized: PreCategorizedCompany = {
-        ...company,
-        // Re-apply the country that was determined when this company was last screened. Without it
-        // the rebuilt seed has no country and isCompanyInScope falls back to the neutral
-        // filter-location path, which would re-admit a company that was screened out for being
-        // outside the target region. Persisting + restoring the country keeps the locality
-        // constraint intact across runs. We deliberately do NOT fall back to company.country here:
-        // createManualCompanyForWebsite defaults country to the market (e.g. "Germany"), and trusting
-        // that market default is exactly what wrote out-of-region seeds (Mapvision .fi, Chromos .ch,
-        // Innerspec US, ...) into HubSpot as "Germany". When no evidence-based country was persisted,
-        // leave it empty so the fail-closed locality gate verifies it from the website before any write.
+      // Route every seed through the SAME website -> Azure AI classification path as fresh Exa
+      // results (the aiQueue). That single AI check determines BOTH the category AND the
+      // headquarters country from the company's own website, then applies the identical accept gate
+      // (target category + isCompanyInScope + region-trust). This is the efficient, consistent
+      // design: locality is decided where the category is decided, so an out-of-region or
+      // region-unverifiable seed is dropped BEFORE it consumes outreach + contact discovery instead
+      // of travelling the whole pipeline only to be skipped at the pre-write gate. It also
+      // re-validates the cached category from the live website (AGENTS.md: do not trust cached
+      // categorizations when a domain is available) and backfills the resolved country into the
+      // screening record so the cache self-heals across runs.
+      //
+      // We deliberately do NOT seed a market-default country here: createManualCompanyForWebsite /
+      // buildManualCompany default country to filters[0].locations[0] (e.g. "Germany"), and trusting
+      // that default is exactly what wrote out-of-region seeds (Mapvision .fi, Chromos .ch,
+      // Innerspec US, ...) into HubSpot as "Germany". Pass the persisted evidence-based country when
+      // one exists, otherwise leave it empty so the classifier/identity resolver determines the real
+      // country from the website.
+      const company: CompanySample = {
+        name: record.companyName,
+        domain: record.domain,
         country: record.country?.trim() || undefined,
-        category: record.category ?? filters[0].targetCategories?.[0] ?? targetCategories[0],
-        relevanceScore: record.relevanceScore ?? 0.75,
-        rationale: record.rationale ?? "Bereits im Live-Screening als passend klassifiziert."
+        shortDescription: record.shortDescription ?? "",
+        sourceFilter
       };
-      if (!(await isCompanyInScope(categorized, filters[0]))) {
-        log(`Seed ausserhalb Markt verworfen: ${categorized.name}`);
+      const key = buildCompanyKey(company);
+      if (seenCompanyKeys.has(key)) {
         continue;
       }
-      const key = buildCompanyKey(categorized);
       seenCompanyKeys.add(key);
-      queueQualifiedCompany(categorized, "seed");
+      const normalizedDomain = normalizeDomain(company.domain);
+      if (normalizedDomain) {
+        currentRunExcludedDomains.add(normalizedDomain);
+      }
+      aiPendingCount += 1;
+      aiQueue.enqueue({ company });
     }
 
     const exaWorkers = Array.from({ length: exaConcurrency }, () => (async () => {

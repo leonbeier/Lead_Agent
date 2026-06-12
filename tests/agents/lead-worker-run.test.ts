@@ -81,11 +81,17 @@ test("worker run consumes matching live screening seeds before starting Exa", as
       }
     } as any,
     debugConsoleService: {
-      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
-        name: "Seed Vision",
-        domain: website,
-        shortDescription: "Seed company",
-        sourceFilter: filter.name
+      // Seeds flow through the SAME website -> AI classification path as fresh Exa results. The
+      // classifier determines the category AND the headquarters country from the live website in a
+      // single check (here: an in-region German integrator), then the accept gate decides scope.
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit",
+          country: "Germany"
+        }
       }),
       buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
       discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
@@ -161,11 +167,17 @@ test("worker run does not re-admit a screening seed whose persisted country is o
       writeLatestLeadRun: async () => undefined
     } as any,
     debugConsoleService: {
-      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
-        name: "Innerspec Technologies",
-        domain: website,
-        shortDescription: "Seed company",
-        sourceFilter: filter.name
+      // The seed runs through the AI classifier, which confirms the US headquarters from the
+      // website. The accept gate then rejects it on locality before any outreach/contact/sync work,
+      // instead of letting it travel the whole pipeline only to be skipped at the pre-write gate.
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string; country?: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit",
+          country: "United States"
+        }
       }),
       buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
       discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
@@ -242,14 +254,17 @@ test("worker run does not fabricate a market-default country for a seed with no 
       writeLatestLeadRun: async () => undefined
     } as any,
     debugConsoleService: {
-      // Mirror production buildManualCompany, which defaults the country to the first filter
-      // location (e.g. "Germany"). The seed reuse path must NOT trust this fabricated country.
-      createManualCompanyForWebsite: (website: string, filter: OrganizationFilter) => ({
-        name: "Mapvision",
-        domain: website,
-        shortDescription: "Seed company",
-        sourceFilter: filter.name,
-        country: filter.locations[0]
+      // The classifier finds no reliable country evidence on the website and returns an empty
+      // country (no market-default fabrication). With no resolveCompanyAddress on the HubSpot mock
+      // the deep resolver also yields nothing, so the company reaches the scope check with an empty
+      // country and a neutral .com domain and is rejected before any sync.
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
       }),
       buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
       discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
@@ -325,11 +340,14 @@ test("worker run keeps live screening seeds when HubSpot sync does not succeed",
       writeLatestLeadRun: async () => undefined
     } as any,
     debugConsoleService: {
-      createManualCompanyForWebsite: (website: string, filter: ApolloOrganizationFilter) => ({
-        name: "Seed Vision",
-        domain: website,
-        shortDescription: "Seed company",
-        sourceFilter: filter.name
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit",
+          country: "Germany"
+        }
       }),
       buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
       discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
@@ -369,7 +387,10 @@ test("worker run keeps live screening seeds when HubSpot sync does not succeed",
   });
 
   assert.equal(result.hubspotSync.companySyncedCount, 0);
-  assert.equal(screeningWrites.length, 0);
+  // The seed was classified (upserted into screening) but the failed HubSpot write must NOT remove
+  // it, so it stays in the screening database and can be retried on a later run.
+  assert.ok(screeningWrites.length > 0);
+  assert.ok(screeningWrites.at(-1)?.records.some((record) => record.companyName === "Seed Vision"));
 });
 
 test("worker run skips live screening seeds when reuseQualifiedCompanyCache is false", async () => {
@@ -1959,6 +1980,15 @@ test("worker run still syncs companies to HubSpot when contact discovery fails",
         shortDescription: "Timeout company",
         sourceFilter: filter.name
       }),
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit",
+          country: "Germany"
+        }
+      }),
       buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
       discoverContactsForExecution: async () => {
         throw new Error("Contact worker timed out after 150000ms");
@@ -2133,6 +2163,15 @@ test("worker run passes selected contacts to HubSpot sync under the normalized c
         domain: website,
         shortDescription: "GeoTT company",
         sourceFilter: filter.name
+      }),
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit",
+          country: "Germany"
+        }
       }),
       buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
       discoverContactsForExecution: async () => ({
