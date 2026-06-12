@@ -8,6 +8,7 @@ import { DebugConsoleService } from "./debug/test-console-service";
 import { defaultFilters } from "./filters";
 import { LeadPipelineAgent } from "./agents/lead-pipeline";
 import { LeadWorkerRunService } from "./agents/lead-worker-run";
+import { FoundryAgentsClient } from "./clients/foundry-agents";
 import { CATEGORY_EXECUTION_CONTEXT } from "./prompting/one-ware-playbook";
 import { resolveSearchStrategyPresetContext } from "./search-presets";
 import { LeadRunProgress } from "./types";
@@ -1074,6 +1075,102 @@ app.post("/api/control/run-status/stop", (_request, response) => {
     accepted: true,
     runStatus: leadRunStatus
   });
+});
+
+const CONTACT_PROBE_DEFAULT_COMPANIES: Array<{ name: string; domain: string; country?: string }> = [
+  { name: "Kitov.ai", domain: "kitov.ai", country: "Israel" },
+  { name: "Sensoptic", domain: "sensoptic.ch", country: "Switzerland" },
+  { name: "Alicona", domain: "alicona.com", country: "Austria" },
+  { name: "Müetec", domain: "muetec.com", country: "Germany" },
+  { name: "IMTTS", domain: "imtts.pl", country: "Poland" },
+  { name: "Ankrit", domain: "ankrit.de", country: "Germany" }
+];
+
+const contactProbeSchema = z.object({
+  companies: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        domain: z.string().min(1),
+        country: z.string().optional()
+      })
+    )
+    .optional(),
+  includeFoundryProbe: z.boolean().optional(),
+  contactTimeoutMs: z.number().int().positive().max(290_000).optional()
+});
+
+// Deployed contact-discovery simulation: runs the REAL public contact discovery path (browser crawl
+// + Azure extraction + Foundry bing_grounding LinkedIn discovery) against a fixed set of company
+// websites in the live Railway environment and reports exactly what was found. Surfaces whether the
+// Foundry LinkedIn path actually works in production (DefaultAzureCredential auth) instead of
+// silently returning zero contacts.
+app.post("/api/control/contact-probe", async (request, response, next) => {
+  try {
+    const parsed = contactProbeSchema.parse(request.body ?? {});
+    const companies = parsed.companies ?? CONTACT_PROBE_DEFAULT_COMPANIES;
+    const contactTimeoutMs = parsed.contactTimeoutMs ?? 240_000;
+
+    let foundryProbe: { ok: boolean; error?: string; queries?: string[] } | undefined;
+    if (parsed.includeFoundryProbe !== false) {
+      foundryProbe = await new FoundryAgentsClient().probeConnectivity();
+    }
+
+    const results: Array<Record<string, unknown>> = [];
+    for (const company of companies) {
+      const startedAt = Date.now();
+      try {
+        const { selectedContacts } = await debugConsoleService.discoverContactsForExecution(
+          {
+            name: company.name,
+            domain: company.domain,
+            country: company.country,
+            shortDescription: "",
+            sourceFilter: "contact-probe",
+            category: "integrator_vision_industrial_ai",
+            relevanceScore: 8,
+            rationale: "contact-probe"
+          },
+          { selectedContactsTimeoutMs: contactTimeoutMs }
+        );
+        const contacts = (selectedContacts ?? []).map((contact) => ({
+          firstName: contact.firstName ?? null,
+          lastName: contact.lastName ?? null,
+          email: contact.email ?? null,
+          jobTitle: contact.jobTitle ?? null,
+          linkedinUrl: contact.linkedinUrl ?? null,
+          label: contact.label ?? null,
+          sourceUrl: contact.sourceUrl ?? null
+        }));
+        const personalLinkedIn = contacts.filter((c) => typeof c.linkedinUrl === "string" && /\/in\//i.test(c.linkedinUrl)).length;
+        results.push({
+          company: company.name,
+          domain: company.domain,
+          elapsedMs: Date.now() - startedAt,
+          contactCount: contacts.length,
+          personalLinkedInCount: personalLinkedIn,
+          contacts
+        });
+      } catch (error) {
+        results.push({
+          company: company.name,
+          domain: company.domain,
+          elapsedMs: Date.now() - startedAt,
+          error: error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+        });
+      }
+    }
+
+    response.json({
+      foundryProbe,
+      totalCompanies: results.length,
+      companiesWithContacts: results.filter((r) => typeof r.contactCount === "number" && (r.contactCount as number) > 0).length,
+      companiesWithPersonalLinkedIn: results.filter((r) => typeof r.personalLinkedInCount === "number" && (r.personalLinkedInCount as number) > 0).length,
+      results
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post("/api/control/learning/feedback", async (request, response, next) => {

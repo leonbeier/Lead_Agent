@@ -44,6 +44,32 @@ export class FoundryAgentsClient {
 
   private readonly agentCache = new Map<AgentKind, Promise<CachedAgentReference>>();
 
+  // Diagnostic: exercise the full Foundry auth + agent + responses path and surface the raw error
+  // instead of silently returning []. Used by the contact-discovery probe endpoint to prove whether
+  // Foundry (DefaultAzureCredential) actually authenticates in the deployed environment.
+  async probeConnectivity(): Promise<{ ok: boolean; error?: string; queries?: string[] }> {
+    if (!readiness.foundryConfigured) {
+      return { ok: false, error: "foundryConfigured=false (FOUNDRY_PROJECT_ENDPOINT not set)" };
+    }
+
+    try {
+      const content = await this.runAgent(
+        "contact_queries",
+        [
+          "Company: Foundry Connectivity Probe",
+          "Website: example.com",
+          "Country: Germany",
+          "Target roles: CEO.",
+          "Return strict JSON: {\"queries\":[\"site:linkedin.com/in example\"]}"
+        ].join("\n\n")
+      );
+      const parsed = JSON.parse(content) as { queries?: string[] };
+      return { ok: true, queries: (parsed.queries ?? []).slice(0, 3) };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) };
+    }
+  }
+
   async generateSuggestedFilters(
     market: string | undefined,
     customGoal: string | undefined,
