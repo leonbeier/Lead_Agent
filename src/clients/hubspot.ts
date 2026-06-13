@@ -4145,7 +4145,8 @@ export class HubSpotClient {
   }
 
   private async doFetchHtml(url: string): Promise<string | null> {
-    const primary = await this.attemptFetchHtml(url);
+    const diagnostics: { tlsHandshakeError?: boolean } = {};
+    const primary = await this.attemptFetchHtml(url, diagnostics);
     if (primary) {
       return primary;
     }
@@ -4156,7 +4157,13 @@ export class HubSpotClient {
     // the homepage unreadable, so the legal entity name (e.g. "isbo-tec Entwicklung technischer
     // Systeme GmbH") could never be extracted and the company fell back to the bare domain label.
     // As a last resort for read-only public website crawling, retry the same page over http://.
-    if (/^https:\/\//i.test(url)) {
+    //
+    // Gate this on an actual TLS handshake rejection. Each company probes up to ~15 follow-up URLs
+    // and many of them legitimately 404 or time out; retrying every one of those over http:// just
+    // doubles the (already slow: 20s fetch + 12s browser) cost with no chance of success and, over
+    // only two browser lanes, saturates the whole run. Only the genuine cipher-mismatch case can
+    // succeed over http://, so restrict the retry to it.
+    if (diagnostics.tlsHandshakeError && /^https:\/\//i.test(url)) {
       const httpUrl = url.replace(/^https:/i, "http:");
       const fallback = await this.attemptFetchHtml(httpUrl);
       if (fallback) {
@@ -4167,7 +4174,36 @@ export class HubSpotClient {
     return null;
   }
 
-  private async attemptFetchHtml(url: string): Promise<string | null> {
+  // Detect an obsolete/incompatible TLS handshake rejection (vs. a 404, DNS failure or timeout) by
+  // unwrapping the error chain (Node's fetch wraps the real reason in `.cause`) and matching known
+  // OpenSSL/Chromium handshake signatures. Used to decide whether an http:// fallback is worthwhile.
+  private static readonly TLS_HANDSHAKE_ERROR_PATTERN =
+    /ERR_SSL|ERR_CERT|SSL routines|sslv3|tlsv1|wrong version number|unsupported protocol|cipher|handshake|EPROTO|decryption failed|bad record mac/i;
+
+  private isTlsHandshakeError(error: unknown): boolean {
+    const messages: string[] = [];
+    let current: unknown = error;
+    for (let depth = 0; depth < 5 && current; depth += 1) {
+      if (current instanceof Error) {
+        messages.push(current.message);
+        const code = (current as NodeJS.ErrnoException).code;
+        if (code) {
+          messages.push(code);
+        }
+        current = (current as { cause?: unknown }).cause;
+      } else {
+        messages.push(String(current));
+        break;
+      }
+    }
+
+    return HubSpotClient.TLS_HANDSHAKE_ERROR_PATTERN.test(messages.join(" "));
+  }
+
+  private async attemptFetchHtml(
+    url: string,
+    diagnostics?: { tlsHandshakeError?: boolean }
+  ): Promise<string | null> {
     try {
       const response = await fetch(url, {
         headers: {
@@ -4190,11 +4226,14 @@ export class HubSpotClient {
         status: response.status,
         responseLength: html.trim().length
       });
-    } catch {
+    } catch (error) {
+      if (diagnostics && this.isTlsHandshakeError(error)) {
+        diagnostics.tlsHandshakeError = true;
+      }
       // Fall through to browser fetch below.
     }
 
-    return this.fetchHtmlWithBrowser(url);
+    return this.fetchHtmlWithBrowser(url, diagnostics);
   }
 
   private shouldRetryHtmlFetchInBrowser(status: number, html: string): boolean {
@@ -4242,7 +4281,10 @@ export class HubSpotClient {
     return false;
   }
 
-  private async fetchHtmlWithBrowser(url: string): Promise<string | null> {
+  private async fetchHtmlWithBrowser(
+    url: string,
+    diagnostics?: { tlsHandshakeError?: boolean }
+  ): Promise<string | null> {
     try {
       return await this.scheduleBrowserTask(async () => {
         const browser = await this.getSharedWebTaskBrowser();
@@ -4268,6 +4310,9 @@ export class HubSpotClient {
         }
       });
     } catch (error) {
+      if (diagnostics && this.isTlsHandshakeError(error)) {
+        diagnostics.tlsHandshakeError = true;
+      }
       console.warn("HubSpotClient.fetchHtmlWithBrowser failed", {
         url,
         error: error instanceof Error ? error.message : String(error)

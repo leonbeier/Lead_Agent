@@ -835,6 +835,27 @@ test("descriptive company labels still produce domain-token aliases for LinkedIn
   assert.ok(aliases.includes("Geott"));
 });
 
+test("TLS handshake detection gates the http:// fallback to real cipher rejections only", () => {
+  const client = new HubSpotClient();
+  const isTls = (error: unknown) => client["isTlsHandshakeError"](error);
+
+  // Real handshake rejections (the only case where retrying over http:// can succeed).
+  const cipherError = new TypeError("fetch failed");
+  (cipherError as { cause?: unknown }).cause = Object.assign(new Error("write EPROTO ... ssl3_read_bytes"), {
+    code: "EPROTO"
+  });
+  assert.equal(isTls(cipherError), true);
+  assert.equal(isTls(new Error("ERR_SSL_VERSION_OR_CIPHER_MISMATCH")), true);
+  assert.equal(isTls(new Error("ERR_CERT_AUTHORITY_INVALID")), true);
+
+  // Ordinary failures (404/DNS/timeout) must NOT trigger the http:// retry, otherwise every dead
+  // follow-up URL would double the fetch cost and saturate the run over the two browser lanes.
+  assert.equal(isTls(new Error("HTTP 404 Not Found")), false);
+  assert.equal(isTls(Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), { code: "ENOTFOUND" })), false);
+  assert.equal(isTls(Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" })), false);
+  assert.equal(isTls(Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" })), false);
+});
+
 test("company alias extraction ignores contact CTA phrases from page text", () => {
   const client = new HubSpotClient();
   const aliases = client["extractCompanySearchAliases"](
