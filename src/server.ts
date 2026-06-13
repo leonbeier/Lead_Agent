@@ -1097,9 +1097,9 @@ const contactProbeSchema = z.object({
     )
     .optional(),
   includeFoundryProbe: z.boolean().optional(),
+  includeNameResolution: z.boolean().optional(),
   contactTimeoutMs: z.number().int().positive().max(290_000).optional()
 });
-
 // Deployed contact-discovery simulation: runs the REAL public contact discovery path (browser crawl
 // + Azure extraction + Foundry bing_grounding LinkedIn discovery) against a fixed set of company
 // websites in the live Railway environment and reports exactly what was found. Surfaces whether the
@@ -1143,9 +1143,27 @@ app.post("/api/control/contact-probe", async (request, response, next) => {
           sourceUrl: contact.sourceUrl ?? null
         }));
         const personalLinkedIn = contacts.filter((c) => typeof c.linkedinUrl === "string" && /\/in\//i.test(c.linkedinUrl)).length;
+        let resolvedName: string | undefined;
+        let resolvedCountry: string | undefined;
+        if (parsed.includeNameResolution) {
+          const identity = await debugConsoleService.resolveCompanyIdentityForProbe({
+            name: company.name,
+            domain: company.domain,
+            country: company.country,
+            shortDescription: "",
+            sourceFilter: "contact-probe",
+            category: "integrator_vision_industrial_ai",
+            relevanceScore: 8,
+            rationale: "contact-probe"
+          }).catch(() => ({ resolvedName: undefined, resolvedCountry: undefined }));
+          resolvedName = identity.resolvedName;
+          resolvedCountry = identity.resolvedCountry;
+        }
         results.push({
           company: company.name,
           domain: company.domain,
+          resolvedName: resolvedName ?? null,
+          resolvedCountry: resolvedCountry ?? null,
           elapsedMs: Date.now() - startedAt,
           contactCount: contacts.length,
           personalLinkedInCount: personalLinkedIn,

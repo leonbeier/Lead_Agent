@@ -225,6 +225,16 @@ export class DebugConsoleService {
     return { selectedContacts };
   }
 
+  async resolveCompanyIdentityForProbe(
+    company: PreCategorizedCompany
+  ): Promise<{ resolvedName?: string; resolvedCountry?: string }> {
+    const resolved = await this.hubspotClient.resolveCompanyAddress(company).catch(() => null);
+    return {
+      resolvedName: resolved?.companyName?.trim() || undefined,
+      resolvedCountry: resolved?.country?.trim() || undefined
+    };
+  }
+
   async run(request: DebugConsoleRunRequest): Promise<DebugConsoleRunResult> {
     const filters = await this.resolveSearchFilters(request);
     const filter = filters[0] ?? buildDebugSearchFilter(request.targetCategory, request.region);
