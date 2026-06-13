@@ -1578,3 +1578,82 @@ test("enrichSelectedContactsWithLinkedIn does not re-search a contact that alrea
   assert.equal(searchCalls, 0);
   assert.equal(enriched[0]?.linkedinUrl, "https://www.linkedin.com/in/martin-minsel");
 });
+
+test("extractLegalEntityNameFromLine rejects German/French disclaimer prose that ends in a lowercase word colliding with a Nordic legal form (ab/as/se)", () => {
+  const client = new HubSpotClient();
+
+  // Real imprint disclaimer sentences observed in live runs (Solabcon, Esoes, Cira Vision). The
+  // lowercase German word "ab" (=from) must NOT be treated as the Swedish legal form "AB", so the
+  // whole sentence must NOT be extracted as a company name.
+  assert.equal(
+    client["extractLegalEntityNameFromLine"](
+      "Schadensersatzansprüche bleiben hiervon unberührt. Eine diesbezügliche Haftung ist jedoch erst ab"
+    ),
+    null
+  );
+  assert.equal(
+    client["extractLegalEntityNameFromLine"](
+      "Der Preis hängt vom Umfang und der Komplexität des Projekts ab"
+    ),
+    null
+  );
+  assert.equal(
+    client["extractLegalEntityNameFromLine"]("Nous proposons les solutions les plus ab"),
+    null
+  );
+});
+
+test("extractLegalEntityNameFromLine still captures real legal entity names, including lowercase particles and brands", () => {
+  const client = new HubSpotClient();
+
+  // Page-title form with an "Impressum der" prefix collapses to the bare legal entity.
+  assert.equal(client["extractLegalEntityNameFromLine"]("Impressum der Solabcon GmbH"), "Solabcon GmbH");
+  assert.equal(client["extractLegalEntityNameFromLine"]("Solabcon GmbH"), "Solabcon GmbH");
+  assert.equal(
+    client["extractLegalEntityNameFromLine"]("ESOES GmbH & Co. KG"),
+    "ESOES GmbH & Co. KG"
+  );
+  // Lowercase German particles ("für", "und") inside a real name must be preserved.
+  assert.equal(
+    client["extractLegalEntityNameFromLine"]("Gesellschaft für moderne Fertigung und Technik mbH"),
+    "Gesellschaft für moderne Fertigung und Technik mbH"
+  );
+  // Lowercase brand name with a canonical-case legal form is a valid entity.
+  assert.equal(client["extractLegalEntityNameFromLine"]("adidas AG"), "adidas AG");
+});
+
+test("extractCompanyAddress resolves the real GmbH from an impressum even when a disclaimer sentence ending in 'ab' is present", async () => {
+  const client = new HubSpotClient();
+  client["getOfficialWebsiteCompanyProfile"] = async () => null;
+  client["collectCandidatePages"] = async () => ([
+    {
+      url: "https://solabcon.de/impressum",
+      html: `
+        <html>
+          <body>
+            <h1>Impressum der Solabcon GmbH</h1>
+            <p>Solabcon GmbH</p>
+            <p>
+              Die gesetzlichen Schadensersatzansprüche bleiben hiervon unberührt. Eine
+              diesbezügliche Haftung ist jedoch erst ab dem Zeitpunkt der Kenntnis einer
+              konkreten Rechtsverletzung möglich.
+            </p>
+          </body>
+        </html>
+      `
+    }
+  ]);
+  client["apolloClient"] = {
+    getOrganizationAddress: async () => null
+  };
+  client["extractCompanyAddressWithWebSearch"] = async () => null;
+
+  const extracted = await client["extractCompanyAddress"]({
+    name: "Solabcon",
+    domain: "https://solabcon.de",
+    country: "Germany"
+  });
+
+  // The disclaimer prose ("… erst ab") must not win over the real legal entity.
+  assert.equal(extracted?.companyName, "Solabcon GmbH");
+});

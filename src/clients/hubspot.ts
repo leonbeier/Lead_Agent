@@ -205,6 +205,12 @@ const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
 const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
 const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 12000;
+// Case-SENSITIVE legal-form check used to validate a captured legal entity candidate. The capture
+// regex runs case-insensitively (to tolerate lowercase particle words inside real names), which
+// also lets lowercase German prose words satisfy the Nordic forms (e.g. "ab"→"AB", "as"→"AS").
+// Legal-form suffixes are written in their canonical case in imprints, so a genuine candidate must
+// contain at least one canonical-case form — this rejects disclaimer-sentence false-positives.
+const LEGAL_FORM_CANONICAL_CASE_PATTERN = /\b(?:gGmbH|GmbH|mbH|UG|AG|SE|e\.\s*K\.?|e\.\s*Kfm\.?|KGaA|KG|OHG|GbR|Ltd\.?|LLC|Inc\.?|AS|ASA|A\/S|AB|OY|OYJ)\b/;
 // Amount of real visible page text handed to the AI website profiler so it can read the legal
 // company entity, postal address, and contact block itself (agent-first, no role-keyword pre-filter).
 const WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT = 4000;
@@ -1787,6 +1793,38 @@ export class HubSpotClient {
       console.log(`[discoverWebSearchContacts] ${company.name}: foundry contacts WITHOUT LinkedIn: ${foundryContacts.map(c => `${c.firstName||''} ${c.lastName||''} label=${c.label} li=${c.linkedinUrl||'none'}`).join('; ')}`);
     }
 
+    // Foundry is the primary discovery agent, but on hosts without a usable Azure AD credential its
+    // call returns nothing — which silently discarded all the Bing people-search hits collected
+    // above and produced zero LinkedIn contacts. When Foundry yields nothing, fall back to the
+    // Azure OpenAI evidence extractor (API-key auth, host-independent) so the SAME already-collected
+    // search hits are still turned into named people / LinkedIn profiles. No extra web searches.
+    if (foundryContacts.length === 0) {
+      const azureFallbackContacts = await this.withTimeout(
+        this.azureOpenAIClient.extractPublicContactsFromEvidence(foundryCompany, {
+          websitePages: (this.buildWebsitePageDebugEntries(company, pages) ?? []).map((page) => ({
+            url: page.url,
+            evidenceSnippet: page.evidenceSnippet,
+            emails: page.emails,
+            phones: page.phones,
+            linkedInProfileUrl: page.linkedInProfileUrl
+          })),
+          hitGroups: queries.map((query, index) => ({
+            query,
+            hits: (hitGroups[index] ?? []).map((hit) => ({ url: hit.url, title: hit.title, snippet: hit.snippet }))
+          }))
+        }, false),
+        25_000,
+        [] as PublicContactCandidate[]
+      );
+      console.log(`[discoverWebSearchContacts] ${company.name}: azure fallback returned ${azureFallbackContacts.length} contacts, ${azureFallbackContacts.filter((c) => c.linkedinUrl && /\/in\//i.test(c.linkedinUrl)).length} with /in/ LinkedIn`);
+      return azureFallbackContacts.map((contact) => ({
+        ...contact,
+        jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
+        linkedinUrl: this.normalizeLinkedInUrl(contact.linkedinUrl),
+        sourceUrl: contact.sourceUrl || contact.linkedinUrl || company.domain || company.name
+      }));
+    }
+
     return foundryContacts.map((contact) => ({
       ...contact,
       jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
@@ -1958,17 +1996,29 @@ export class HubSpotClient {
 
     const cleanedLine = normalizedLine
       .replace(/^(impressum|firma|company|legal name|diensteanbieter|anbieter|betreiber(?:in)?|inhaber(?:in)?)\s*[:\-]\s*/i, "")
+      // Strip a leading "Impressum der/des/von/für " prefix that has no colon separator so the
+      // page-title form "Impressum der Solabcon GmbH" collapses to the bare legal entity name.
+      .replace(/^impressum\s+(?:der|des|von|für|fuer)\s+/i, "")
       .replace(/^(?:©|\(c\))?\s*(?:19|20)\d{2}(?:\s*[-\/]\s*(?:19|20)\d{2})?\s+/i, "")
       .trim();
-    const match = cleanedLine.match(/\b([A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?(?:\s+[A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?){0,6}\s+(?:GmbH\s*&\s*Co\.\s*KG|GmbH\s*&\s*Co\.\s*KGaA|GmbH|UG\s*\(haftungsbeschr(?:a|ä)nkt\)|UG|AG|SE|e\.\s*K\.?|e\.\s*Kfm\.?|KG|OHG|GbR|Ltd\.?|LLC|Inc\.?|AS|ASA|A\/S|AB|OY|OYJ))\b/i);
+    const match = cleanedLine.match(/\b([A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?(?:\s+[A-ZÄÖÜ0-9][A-Za-zÄÖÜäöüß0-9&.,'’\-\/()]+?){0,6}\s+(?:GmbH\s*&\s*Co\.\s*KG|GmbH\s*&\s*Co\.\s*KGaA|GmbH|gGmbH|mbH|UG\s*\(haftungsbeschr(?:a|ä)nkt\)|UG|AG|SE|e\.\s*K\.?|e\.\s*Kfm\.?|KG|OHG|GbR|Ltd\.?|LLC|Inc\.?|AS|ASA|A\/S|AB|OY|OYJ))\b/i);
     if (!match?.[1]) {
       return null;
     }
 
-    return match[1]
+    const candidate = match[1]
       .replace(/\s*&\s*/g, " & ")
       .replace(/\s+/g, " ")
       .trim();
+    // Reject case-insensitive false-positives: the /i match above also lets lowercase German prose
+    // words satisfy the Nordic legal forms (e.g. "ab"/"as"/"se"), turning a disclaimer sentence
+    // ("vom Umfang … erst ab") into a fake "AB" company. Legal-form suffixes are written in their
+    // canonical case in imprints, so require a canonical-case legal form to actually be present.
+    if (!LEGAL_FORM_CANONICAL_CASE_PATTERN.test(candidate)) {
+      return null;
+    }
+
+    return candidate;
   }
 
   private buildCompanyIdentityTokens(company: Pick<PreCategorizedCompany, "name" | "domain">): string[] {
