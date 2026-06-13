@@ -162,3 +162,44 @@ test("extractPublicContactsFromEvidence dedup keeps two distinct people and dist
 
   assert.equal(deduped.length, 4);
 });
+
+test("reconcileLinkedInUrl promotes a personal /in/ sourceUrl into an empty linkedinUrl", () => {
+  const client = new AzureOpenAIClient() as unknown as {
+    reconcileLinkedInUrl: (contact: PublicContactCandidate) => PublicContactCandidate;
+  };
+
+  // The model emitted a linkedin_profile contact with the /in/ URL only in sourceUrl.
+  const repaired = client.reconcileLinkedInUrl({
+    firstName: "Adam",
+    lastName: "Tabor",
+    jobTitle: "CEO",
+    sourceUrl: "https://www.linkedin.com/in/adam-tabor",
+    label: "linkedin_profile"
+  });
+
+  assert.equal(repaired.linkedinUrl, "https://www.linkedin.com/in/adam-tabor");
+});
+
+test("reconcileLinkedInUrl does not overwrite an existing linkedinUrl and ignores non-/in/ sources", () => {
+  const client = new AzureOpenAIClient() as unknown as {
+    reconcileLinkedInUrl: (contact: PublicContactCandidate) => PublicContactCandidate;
+  };
+
+  // Existing linkedinUrl must be preserved untouched.
+  const keepsExisting = client.reconcileLinkedInUrl({
+    firstName: "Yaniv",
+    lastName: "Ben-Yosef",
+    linkedinUrl: "https://www.linkedin.com/in/yaniv",
+    sourceUrl: "https://www.linkedin.com/in/other",
+    label: "linkedin_profile"
+  });
+  assert.equal(keepsExisting.linkedinUrl, "https://www.linkedin.com/in/yaniv");
+
+  // A company page or non-personal source must NOT be promoted into linkedinUrl.
+  const noPromotion = client.reconcileLinkedInUrl({
+    firstName: "Info",
+    sourceUrl: "https://www.linkedin.com/company/kitov",
+    label: "web_search_contact"
+  });
+  assert.equal(noPromotion.linkedinUrl, undefined);
+});
