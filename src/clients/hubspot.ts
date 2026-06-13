@@ -4145,6 +4145,29 @@ export class HubSpotClient {
   }
 
   private async doFetchHtml(url: string): Promise<string | null> {
+    const primary = await this.attemptFetchHtml(url);
+    if (primary) {
+      return primary;
+    }
+
+    // Some legacy company sites (typical for older industrial firms) serve a fully working site
+    // over http:// but present an obsolete/incompatible TLS cipher on https:// that both Node's
+    // fetch and Chromium reject at the handshake (ERR_SSL_VERSION_OR_CIPHER_MISMATCH). That left
+    // the homepage unreadable, so the legal entity name (e.g. "isbo-tec Entwicklung technischer
+    // Systeme GmbH") could never be extracted and the company fell back to the bare domain label.
+    // As a last resort for read-only public website crawling, retry the same page over http://.
+    if (/^https:\/\//i.test(url)) {
+      const httpUrl = url.replace(/^https:/i, "http:");
+      const fallback = await this.attemptFetchHtml(httpUrl);
+      if (fallback) {
+        return fallback;
+      }
+    }
+
+    return null;
+  }
+
+  private async attemptFetchHtml(url: string): Promise<string | null> {
     try {
       const response = await fetch(url, {
         headers: {
