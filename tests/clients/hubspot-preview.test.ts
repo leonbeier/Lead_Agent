@@ -856,6 +856,29 @@ test("TLS handshake detection gates the http:// fallback to real cipher rejectio
   assert.equal(isTls(Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" })), false);
 });
 
+test("role-adjacent snippet extraction stays linear on long punctuation-sparse pages", () => {
+  const client = new HubSpotClient();
+  const extract = (text: string) => client["extractRoleAdjacentSnippets"](text) as string[];
+
+  // A pathological page: a very long run of non-sentence-punctuation characters that previously
+  // forced the `[^.!?]{0,120}(?:role)[^.!?]{0,120}` matchAll to backtrack at every start position,
+  // pinning the event loop for minutes. It must now complete near-instantly. The role keyword sits
+  // near the front so it is within the bounded scan window.
+  const filler = "geschaeftsfuehrung kontakt team ".repeat(4000); // ~128k chars, no .!?
+  const pathological = `Managing Director Jane Doe leads us. ${filler}`;
+  const start = Date.now();
+  const snippets = extract(pathological);
+  const elapsedMs = Date.now() - start;
+  assert.ok(elapsedMs < 1000, `role-adjacent scan took ${elapsedMs}ms (expected < 1000ms)`);
+  assert.ok(snippets.length >= 1);
+  assert.ok(snippets.some((snippet) => /Managing Director/i.test(snippet)));
+
+  // Normal page: still returns readable role context windows.
+  const normal = "We are a robotics firm. Our Geschäftsführer Max Mustermann leads the team. Contact us today.";
+  const normalSnippets = extract(normal);
+  assert.ok(normalSnippets.some((snippet) => /Gesch\u00e4ftsf\u00fchrer Max Mustermann/.test(snippet)));
+});
+
 test("company alias extraction ignores contact CTA phrases from page text", () => {
   const client = new HubSpotClient();
   const aliases = client["extractCompanySearchAliases"](

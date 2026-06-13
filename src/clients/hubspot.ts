@@ -214,6 +214,10 @@ const LEGAL_FORM_CANONICAL_CASE_PATTERN = /\b(?:gGmbH|GmbH|mbH|UG|AG|SE|e\.\s*K\
 // Amount of real visible page text handed to the AI website profiler so it can read the legal
 // company entity, postal address, and contact block itself (agent-first, no role-keyword pre-filter).
 const WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT = 4000;
+// Upper bound for the role-keyword context scan. The agent only ever receives 6 short snippets, so
+// scanning beyond the first window of page text yields no extra signal but would let a huge page
+// monopolise the event loop.
+const ROLE_ADJACENT_SCAN_CHAR_LIMIT = 20000;
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -2350,13 +2354,7 @@ export class HubSpotClient {
     const footerEvidence = footerText && !visibleText.includes(footerText.slice(0, 60))
       ? footerText
       : "";
-    const roleAdjacentText = Array.from(
-      new Set(
-        [...plainText.matchAll(new RegExp(`[^.!?]{0,120}(?:${PUBLIC_CONTACT_ROLE_PATTERNS.join("|")})[^.!?]{0,120}`, "gi"))]
-          .map((match) => match[0].trim())
-          .filter(Boolean)
-      )
-    ).slice(0, 6);
+    const roleAdjacentText = this.extractRoleAdjacentSnippets(plainText);
     const linkedInUrls = Array.from(new Set((html.match(/https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/[^"]+/gi) ?? []).slice(0, 4)));
     const emails = Array.from(new Set([
       ...this.extractVisibleEmailsForAi(html),
@@ -2371,6 +2369,42 @@ export class HubSpotClient {
       linkedInUrls.length > 0 ? `LinkedIn URLs: ${linkedInUrls.join(" | ")}` : undefined,
       emails.length > 0 ? `Emails: ${emails.join(" | ")}` : undefined
     ].filter(Boolean).join("\n");
+  }
+
+  // Extracts up to 6 short text windows around role keywords (Geschäftsführer, Engineer, ...) so the
+  // agent sees who fills which role. Uses a single linear pass with a non-backtracking role regex and
+  // plain string slicing for the surrounding context. The previous implementation scanned the full
+  // (uncapped) page text with `[^.!?]{0,120}(?:role)[^.!?]{0,120}` whose leading variable-length span
+  // backtracked against the 26-way alternation at every start position (~n*120*26 ops). On long,
+  // punctuation-sparse pages crawled across many follow-up URLs and companies, that synchronously
+  // pinned the Node event loop for minutes, freezing every HTTP endpoint (incl. the stop handler).
+  private extractRoleAdjacentSnippets(plainText: string): string[] {
+    const snippets = new Set<string>();
+    // Bound the scan so a pathologically large page can never dominate the event loop.
+    const text = plainText.length > ROLE_ADJACENT_SCAN_CHAR_LIMIT
+      ? plainText.slice(0, ROLE_ADJACENT_SCAN_CHAR_LIMIT)
+      : plainText;
+    const regex = new RegExp(PUBLIC_CONTACT_ROLE_REGEX.source, "gi");
+    let match: RegExpExecArray | null;
+    while (snippets.size < 6 && (match = regex.exec(text)) !== null) {
+      const windowStart = Math.max(0, match.index - 120);
+      const windowEnd = Math.min(text.length, match.index + match[0].length + 120);
+      const before = text.slice(windowStart, match.index);
+      const after = text.slice(match.index, windowEnd);
+      // Trim each side at the nearest sentence boundary so snippets stay readable.
+      const lastPunct = Math.max(before.lastIndexOf("."), before.lastIndexOf("!"), before.lastIndexOf("?"));
+      const trimmedBefore = lastPunct >= 0 ? before.slice(lastPunct + 1) : before;
+      const firstPunct = after.slice(1).search(/[.!?]/);
+      const trimmedAfter = firstPunct >= 0 ? after.slice(0, firstPunct + 1) : after;
+      const snippet = `${trimmedBefore}${trimmedAfter}`.replace(/\s+/g, " ").trim();
+      if (snippet) {
+        snippets.add(snippet);
+      }
+      if (regex.lastIndex === match.index) {
+        regex.lastIndex += 1;
+      }
+    }
+    return [...snippets].slice(0, 6);
   }
 
   // Extracts the page footer text (registered company name, copyright line, legal entity) so the
