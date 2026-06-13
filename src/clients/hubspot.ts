@@ -36,6 +36,26 @@ const ANTI_BOT_PHRASES = [
 ];
 
 /**
+ * True when `value` is a machine-generated hexadecimal / UUID slug rather than a real brand name.
+ * Every whitespace/hyphen/underscore token is pure hexadecimal AND the value carries at least one
+ * digit — e.g. "489f595f 6891 49a9 b5fc 6a83ba5b0317" (a Wix asset-id subdomain turned into a
+ * "name"). Real names always contain a non-hex token (S, t, k, o, ...) or have no digits.
+ */
+export function looksLikeHexOrUuidSlug(value: string | undefined): boolean {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return false;
+  }
+  const tokens = trimmed.split(/[\s\-_]+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return false;
+  }
+  const allHex = tokens.every((token) => /^[0-9a-f]+$/i.test(token));
+  const hasDigit = /[0-9]/.test(trimmed);
+  return allHex && hasDigit;
+}
+
+/**
  * True when `value` is usable as a HubSpot company name. Rejects empty values, generic UI labels,
  * bare legal-form fragments, prose/sentence fragments (e.g. Impressum paragraphs), overly long or
  * many-word strings, and anti-bot block-page text. Applied at every boundary that adopts a name
@@ -53,6 +73,11 @@ export function isPlausibleCompanyName(value: string | undefined): boolean {
   }
   const compact = trimmed.replace(/[^a-z0-9]+/gi, "");
   if (compact.length < 3) {
+    return false;
+  }
+  // Machine-generated hex / UUID slugs (e.g. asset-id subdomains turned into a name) are never a
+  // real company. Reject them before length/word checks so they cannot leak into HubSpot.
+  if (looksLikeHexOrUuidSlug(trimmed)) {
     return false;
   }
   if (trimmed.length > 80) {
@@ -1195,11 +1220,15 @@ export class HubSpotClient {
     const canonicalCompanyName = (isPlausibleCompanyName(rawExtractedName) ? rawExtractedName : undefined)
       || (isPlausibleCompanyName(company.name) ? company.name : undefined);
     // Final safety net: never write a blank company name to HubSpot. Derive a readable
-    // name from the domain's first label when no usable name is available.
-    const fallbackFromDomain = this.normalizeDomain(company.domain)?.split(".")[0]
-      ?.split(/[-_]+/).filter(Boolean)
-      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-      .join(" ");
+    // name from the domain's first label when no usable name is available — but never adopt a
+    // machine slug (asset/UUID host label such as <uuid>.filesusr.com) as the name.
+    const domainFirstLabel = this.normalizeDomain(company.domain)?.split(".")[0];
+    const fallbackFromDomain = looksLikeHexOrUuidSlug(domainFirstLabel)
+      ? undefined
+      : domainFirstLabel
+        ?.split(/[-_]+/).filter(Boolean)
+        .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join(" ");
     const resolvedCompanyName = canonicalCompanyName?.trim()
       || fallbackFromDomain
       || company.name;

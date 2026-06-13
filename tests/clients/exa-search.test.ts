@@ -96,6 +96,11 @@ test("normalizeUrl drops infrastructure/CDN hosts so they never become companies
   assert.equal(normalize("https://files.cloudfront.net/asset.png"), undefined);
   assert.equal(normalize("https://www.scribd.com/document/123/whitepaper"), undefined);
 
+  // A Wix asset/file CDN (filesusr.com) hosts uploads on UUID subdomains. It must never become a
+  // company named after the UUID slug (e.g. 489f595f-6891-49a9-b5fc-6a83ba5b0317.filesusr.com).
+  assert.equal(normalize("https://489f595f-6891-49a9-b5fc-6a83ba5b0317.filesusr.com/ugd/file.pdf"), undefined);
+  assert.equal(normalize("https://static.usrfiles.com/asset.png"), undefined);
+
   // Real company websites must still pass through unchanged.
   assert.equal(normalize("https://www.intravis.com/en/products"), "https://www.intravis.com");
   assert.equal(normalize("https://evotegra.de/about"), "https://evotegra.de");

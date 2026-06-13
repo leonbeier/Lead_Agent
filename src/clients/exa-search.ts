@@ -127,7 +127,12 @@ const NON_COMPANY_HOST_SUFFIXES = [
   "scribd.com",
   "slideshare.net",
   "issuu.com",
-  "yumpu.com"
+  "yumpu.com",
+  // Website-builder asset / media CDNs (Wix). These host uploaded files on UUID subdomains
+  // (e.g. 489f595f-6891-...-...filesusr.com) and are never a company's own identity domain.
+  // Accepting one makes deriveCompanyName turn the UUID slug into a bogus "company name".
+  "filesusr.com",
+  "usrfiles.com"
 ];
 const COMPANY_NAME_STOP_WORDS = new Set(["ai", "the", "and", "for", "with", "vision", "industrial", "automation", "machine", "marking", "robotics", "solutions", "systems", "services"]);
 export class ExaSearchClient {

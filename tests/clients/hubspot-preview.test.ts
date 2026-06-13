@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { HubSpotClient } from "../../src/clients/hubspot";
+import { HubSpotClient, isPlausibleCompanyName, looksLikeHexOrUuidSlug } from "../../src/clients/hubspot";
 import { PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../../src/types";
 
 function buildSampleCompany(): PreCategorizedCompany {
@@ -264,6 +264,40 @@ test("previewHubSpotSync falls back to the domain-derived name when the source n
 
   // "De" is a bare language/country fragment captured from a subdomain, not a company name.
   assert.equal(preview.companyProperties.name, "Writepcb");
+});
+
+test("looksLikeHexOrUuidSlug flags machine slugs but keeps real brand names", () => {
+  // Wix asset-id subdomain turned into a "name" — the exact junk record we must reject.
+  assert.equal(looksLikeHexOrUuidSlug("489f595f 6891 49a9 b5fc 6a83ba5b0317"), true);
+  assert.equal(looksLikeHexOrUuidSlug("489f595f-6891-49a9-b5fc-6a83ba5b0317"), true);
+  assert.equal(looksLikeHexOrUuidSlug("deadbeef1234"), true);
+
+  // Real names contain a non-hex token or no digits and must stay usable.
+  assert.equal(looksLikeHexOrUuidSlug("Sample Automation GmbH"), false);
+  assert.equal(looksLikeHexOrUuidSlug("3D Systems"), false);
+  assert.equal(looksLikeHexOrUuidSlug("C3 AI"), false);
+  assert.equal(looksLikeHexOrUuidSlug("Facade"), false);
+  assert.equal(looksLikeHexOrUuidSlug(undefined), false);
+});
+
+test("isPlausibleCompanyName rejects hex/UUID slugs", () => {
+  assert.equal(isPlausibleCompanyName("489f595f 6891 49a9 b5fc 6a83ba5b0317"), false);
+  assert.equal(isPlausibleCompanyName("Sample Automation GmbH"), true);
+});
+
+test("previewHubSpotSync never adopts a UUID host slug as the company name", async () => {
+  const client = new HubSpotClient();
+  client["extractCompanyAddress"] = async () => null;
+
+  const preview = await client.previewHubSpotSync({
+    ...buildSampleCompany(),
+    name: "Mail",
+    domain: "https://489f595f-6891-49a9-b5fc-6a83ba5b0317.filesusr.com"
+  }, buildSampleBrief(), [], { includeAddressLookup: true });
+
+  // The UUID domain label (a Wix asset id) must never be turned into a "company name" via the
+  // domain-derived fallback.
+  assert.equal(looksLikeHexOrUuidSlug(preview.companyProperties.name), false);
 });
 
 test("previewHubSpotSync falls back to the domain-derived name when extraction returns anti-bot block text", async () => {

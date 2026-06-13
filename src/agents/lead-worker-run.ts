@@ -1,6 +1,6 @@
 import { ControlPlaneStore } from "../control-plane.js";
 import { DebugConsoleService } from "../debug/test-console-service.js";
-import { HubSpotClient, isPlausibleCompanyName } from "../clients/hubspot.js";
+import { HubSpotClient, isPlausibleCompanyName, looksLikeHexOrUuidSlug } from "../clients/hubspot.js";
 import { LeadPipelineAgent, EUROPEAN_TLDS } from "./lead-pipeline.js";
 import { env } from "../config.js";
 import type {
@@ -1258,6 +1258,29 @@ export class LeadWorkerRunService {
           metrics.hubspotSkippedOutOfScope += 1;
           const skipReason = inScope ? "Region nicht verifiziert" : "ausserhalb Zielregion";
           log(`HubSpot uebersprungen (${skipReason}): ${state.company.name} (${state.company.country ?? "unbekannt"})`);
+          screeningQueue.enqueue({ type: "upsert", record: buildScreeningRecord(state.company) });
+          maybePromoteStandby();
+          emitProgress();
+          continue;
+        }
+
+        // Fail CLOSED on the company NAME. When neither the sourcing name nor the domain's first
+        // label yields a usable brand name, the HubSpot writer would fall back to the domain label
+        // and create a junk record. For asset/UUID hosts (e.g. <uuid>.filesusr.com) that label is
+        // a machine slug like "489f595f 6891 49a9 b5fc 6a83ba5b0317". Skip + screen such companies
+        // instead of writing a numeric "company name".
+        const domainFirstLabel = (state.company.domain ?? "")
+          .replace(/^https?:\/\//i, "")
+          .replace(/^www\./i, "")
+          .split(/[./]/)[0] ?? "";
+        const hasUsableCompanyName = isPlausibleCompanyName(state.company.name)
+          || (Boolean(domainFirstLabel) && !looksLikeHexOrUuidSlug(domainFirstLabel));
+        if (!hasUsableCompanyName) {
+          state.hubspotStatus = "skipped";
+          state.removed = true;
+          state.pipelineAssigned = false;
+          metrics.hubspotSkippedOutOfScope += 1;
+          log(`HubSpot uebersprungen (kein brauchbarer Firmenname): ${state.company.name} | ${state.company.domain ?? "ohne Domain"}`);
           screeningQueue.enqueue({ type: "upsert", record: buildScreeningRecord(state.company) });
           maybePromoteStandby();
           emitProgress();
