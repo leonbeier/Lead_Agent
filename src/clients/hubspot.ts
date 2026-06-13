@@ -3117,10 +3117,13 @@ export class HubSpotClient {
     const trustedOfficialWebsiteCompanyName = officialWebsiteProfile && this.isTrustedOfficialWebsiteProfile(officialWebsiteProfile, company)
       ? officialWebsiteProfile.companyName
       : undefined;
+    // When the AI website name is the bare brand but the impressum carries the registered legal
+    // form for the same entity, adopt the impressum legal name (authoritative legal identity).
+    const preferredTrustedName = this.preferLegalEntityNameWithForm(trustedOfficialWebsiteCompanyName, legalEntityName);
 
     if (webSearchAddress || officialWebsiteProfile?.address || officialWebsiteProfile?.city || officialWebsiteProfile?.zip) {
       return {
-        companyName: trustedOfficialWebsiteCompanyName ?? legalEntityName ?? webSearchAddress?.companyName,
+        companyName: preferredTrustedName ?? legalEntityName ?? webSearchAddress?.companyName,
         address: officialWebsiteProfile?.address ?? webSearchAddress?.address,
         city: officialWebsiteProfile?.city ?? webSearchAddress?.city,
         zip: officialWebsiteProfile?.zip ?? webSearchAddress?.zip,
@@ -3133,7 +3136,7 @@ export class HubSpotClient {
       const extractedAddress = this.extractPostalAddress(page.html, company.country);
       if (extractedAddress && this.isPlausibleCompanyAddress(extractedAddress)) {
         return {
-          companyName: trustedOfficialWebsiteCompanyName ?? legalEntityName ?? extractedAddress.companyName,
+          companyName: preferredTrustedName ?? legalEntityName ?? extractedAddress.companyName,
           address: extractedAddress.address ?? officialWebsiteProfile?.address,
           city: extractedAddress.city ?? officialWebsiteProfile?.city,
           zip: extractedAddress.zip ?? officialWebsiteProfile?.zip,
@@ -3146,7 +3149,7 @@ export class HubSpotClient {
     const apolloAddress = await this.apolloClient.getOrganizationAddress(company);
     if (apolloAddress) {
       return {
-        companyName: trustedOfficialWebsiteCompanyName ?? legalEntityName,
+        companyName: preferredTrustedName ?? legalEntityName,
         address: officialWebsiteProfile?.address ?? apolloAddress.address,
         city: officialWebsiteProfile?.city ?? apolloAddress.city,
         zip: officialWebsiteProfile?.zip ?? apolloAddress.zip,
@@ -3155,9 +3158,9 @@ export class HubSpotClient {
       };
     }
 
-    return trustedOfficialWebsiteCompanyName || legalEntityName || officialWebsiteProfile?.address || officialWebsiteProfile?.city || officialWebsiteProfile?.zip
+    return preferredTrustedName || legalEntityName || officialWebsiteProfile?.address || officialWebsiteProfile?.city || officialWebsiteProfile?.zip
       ? {
-          companyName: trustedOfficialWebsiteCompanyName ?? legalEntityName,
+          companyName: preferredTrustedName ?? legalEntityName,
           address: officialWebsiteProfile?.address,
           city: officialWebsiteProfile?.city,
           zip: officialWebsiteProfile?.zip,
@@ -3376,6 +3379,35 @@ export class HubSpotClient {
     // long block of captured prose. Anything within a sane length that the profiler labelled as
     // the exact operating entity is trusted as-is.
     return companyName.length <= 80;
+  }
+
+  /**
+   * Prefer the impressum/legal-page entity name over the trusted AI website name when they refer
+   * to the SAME entity but the impressum form additionally carries the registered legal form
+   * (e.g. AI returns the brand "Solabcon" while the impressum says "Solabcon GmbH"). For German
+   * companies the impressum is the authoritative legal identity, so the legal-form-bearing variant
+   * is adopted. When the two names diverge on the actual entity (different root), the trusted AI
+   * name is kept unchanged — this is a name-completion preference, not a name override.
+   */
+  private preferLegalEntityNameWithForm(
+    trustedName: string | undefined,
+    legalEntityName: string | undefined
+  ): string | undefined {
+    if (!trustedName) {
+      return legalEntityName;
+    }
+    if (!legalEntityName || legalEntityName === trustedName || !isPlausibleCompanyName(legalEntityName)) {
+      return trustedName;
+    }
+    const toCore = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const trustedCore = toCore(trustedName);
+    const legalCore = toCore(legalEntityName);
+    const trustedHasForm = LEGAL_FORM_CANONICAL_CASE_PATTERN.test(trustedName);
+    const legalHasForm = LEGAL_FORM_CANONICAL_CASE_PATTERN.test(legalEntityName);
+    if (!trustedHasForm && legalHasForm && trustedCore.length >= 3 && legalCore.startsWith(trustedCore)) {
+      return legalEntityName;
+    }
+    return trustedName;
   }
 
   private isPlausibleCompanyAddress(address: ExtractedCompanyAddress): boolean {

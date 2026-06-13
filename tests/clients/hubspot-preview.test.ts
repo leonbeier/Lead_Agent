@@ -1657,3 +1657,80 @@ test("extractCompanyAddress resolves the real GmbH from an impressum even when a
   // The disclaimer prose ("… erst ab") must not win over the real legal entity.
   assert.equal(extracted?.companyName, "Solabcon GmbH");
 });
+
+test("extractCompanyAddress prefers the impressum legal entity (with legal form) over the bare AI brand name for the same company", async () => {
+  const client = new HubSpotClient();
+  // Reproduces the live Solabcon defect: the Azure website profiler returns the bare brand
+  // "Solabcon" (trusted exact_operating_entity), but the impressum carries the registered legal
+  // form "Solabcon GmbH". The authoritative legal name with the legal form must be adopted.
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "Solabcon",
+    entityScope: "exact_operating_entity",
+    searchAliases: [],
+    address: "Musterstrasse 1",
+    city: "Bruchsal",
+    zip: "76646",
+    state: undefined,
+    country: "Germany",
+    emails: ["info@solabcon.de"],
+    phones: [],
+    linkedInUrls: [],
+    sourceUrls: ["https://solabcon.de"]
+  });
+  client["collectCandidatePages"] = async () => ([
+    {
+      url: "https://solabcon.de/impressum",
+      html: "<html><body><h1>Impressum der Solabcon GmbH</h1><p>Solabcon GmbH</p></body></html>"
+    }
+  ]);
+  client["apolloClient"] = {
+    getOrganizationAddress: async () => null
+  };
+  client["extractCompanyAddressWithWebSearch"] = async () => null;
+
+  const extracted = await client["extractCompanyAddress"]({
+    name: "Solabcon",
+    domain: "https://solabcon.de",
+    country: "Germany"
+  });
+
+  assert.equal(extracted?.companyName, "Solabcon GmbH");
+});
+
+test("extractCompanyAddress keeps the trusted AI name when the impressum legal entity is a different company", async () => {
+  const client = new HubSpotClient();
+  // Guard: the legal-form preference must NOT override the trusted AI name when the impressum
+  // entity is a different root (e.g. a landlord / unrelated GmbH on a shared legal page).
+  client["getOfficialWebsiteCompanyProfile"] = async () => ({
+    companyName: "Acme Vision",
+    entityScope: "exact_operating_entity",
+    searchAliases: [],
+    address: "Musterstrasse 1",
+    city: "Berlin",
+    zip: "10115",
+    state: undefined,
+    country: "Germany",
+    emails: ["info@acme-vision.de"],
+    phones: [],
+    linkedInUrls: [],
+    sourceUrls: ["https://acme-vision.de"]
+  });
+  client["collectCandidatePages"] = async () => ([
+    {
+      url: "https://acme-vision.de/impressum",
+      html: "<html><body><h1>Impressum</h1><p>Hausverwaltung Schmidt GmbH</p></body></html>"
+    }
+  ]);
+  client["apolloClient"] = {
+    getOrganizationAddress: async () => null
+  };
+  client["extractCompanyAddressWithWebSearch"] = async () => null;
+
+  const extracted = await client["extractCompanyAddress"]({
+    name: "Acme Vision",
+    domain: "https://acme-vision.de",
+    country: "Germany"
+  });
+
+  assert.equal(extracted?.companyName, "Acme Vision");
+});
