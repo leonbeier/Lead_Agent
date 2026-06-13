@@ -879,6 +879,41 @@ test("role-adjacent snippet extraction stays linear on long punctuation-sparse p
   assert.ok(normalSnippets.some((snippet) => /Gesch\u00e4ftsf\u00fchrer Max Mustermann/.test(snippet)));
 });
 
+test("boundHtmlForProcessing caps oversized pages while keeping head and footer evidence", () => {
+  const client = new HubSpotClient();
+  const bound = (html: string) => client["boundHtmlForProcessing"](html) as string;
+
+  // A small page passes through unchanged.
+  const small = "<html><body><main>Impressum: Beispiel Technik GmbH</main><footer>© 2026 Beispiel Technik GmbH</footer></body></html>";
+  assert.equal(bound(small), small);
+
+  // A multi-megabyte page (e.g. minified site with huge inline CSS/JS) is capped to a bounded
+  // working set so every downstream synchronous full-HTML pass stays O(cap). The head (main
+  // content / impressum) and the tail (footer / © legal-entity line) must both survive so the
+  // agent never loses the legal entity. This is the core "page always reachable under load" guard:
+  // an unbounded page previously let a single synchronous map over crawled pages pin the event loop.
+  const headMarker = "<main>Impressum: Beispiel Technik GmbH, Musterstraße 1, 12345 Musterstadt</main>";
+  const footerMarker = "<footer>© 2026 Beispiel Technik GmbH</footer>";
+  const filler = "<div class=\"x-very-long-class-name-without-keyword-aaaaaaaaaaaaaaaaaaaa\"><span>n</span></div>".repeat(40000);
+  const huge = `<html><body>${headMarker}${filler}${footerMarker}</body></html>`;
+  assert.ok(huge.length > 2_000_000, "fixture should be multi-MB");
+
+  const start = Date.now();
+  const bounded = bound(huge);
+  const elapsedMs = Date.now() - start;
+  assert.ok(elapsedMs < 500, `bounding took ${elapsedMs}ms (expected < 500ms)`);
+  assert.ok(bounded.length < 260_000, `bounded length ${bounded.length} should be well under the raw size`);
+  assert.ok(bounded.includes("Impressum: Beispiel Technik GmbH"), "head/impressum evidence must survive");
+  assert.ok(bounded.includes(footerMarker), "footer / legal-entity line must survive");
+
+  // Building the evidence snippet on the bounded page must stay fast regardless of raw page size.
+  const snippetStart = Date.now();
+  const snippet = client["buildWebsiteEvidenceSnippet"]("https://example.com/impressum", bounded) as string;
+  const snippetMs = Date.now() - snippetStart;
+  assert.ok(snippetMs < 1000, `snippet build took ${snippetMs}ms (expected < 1000ms)`);
+  assert.ok(snippet.includes("Beispiel Technik GmbH"), "snippet must still expose the legal entity");
+});
+
 test("company alias extraction ignores contact CTA phrases from page text", () => {
   const client = new HubSpotClient();
   const aliases = client["extractCompanySearchAliases"](

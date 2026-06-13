@@ -218,6 +218,17 @@ const WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT = 4000;
 // scanning beyond the first window of page text yields no extra signal but would let a huge page
 // monopolise the event loop.
 const ROLE_ADJACENT_SCAN_CHAR_LIMIT = 20000;
+// Every crawled page runs through many synchronous full-HTML passes (stripHtml, decodeHtmlEntities,
+// footer/email/LinkedIn matches, postal-address and legal-entity extraction), and those passes are
+// applied to all collected pages inside synchronous `.map()` loops. On large/minified pages each
+// pass is O(page size), so a multi-MB page (or several of them per company) pins the single Node
+// event loop for tens of seconds — freezing every HTTP endpoint (incl. /health and the stop
+// handler). We therefore bound the HTML once at the fetch boundary so every downstream consumer
+// sees a capped working set. The bound keeps the document HEAD (where the main content, impressum
+// body and address typically live) plus the document TAIL (where the footer / © legal-entity line
+// sits), so neither the visible-text window nor the footer/legal evidence is lost.
+const HTML_PROCESSING_HEAD_LIMIT = 200_000;
+const HTML_PROCESSING_TAIL_LIMIT = 40_000;
 const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "CEO",
   "Chief Executive Officer",
@@ -4178,11 +4189,26 @@ export class HubSpotClient {
     return task;
   }
 
+  // Bounds a fetched HTML document to a capped working set so every downstream synchronous full-HTML
+  // pass (snippet building, address/legal-entity extraction, contact discovery) stays O(cap) instead
+  // of O(real page size). Keeps the document head (main content, impressum body, address) and the
+  // document tail (footer / © legal-entity line) so no evidence the agent relies on is truncated.
+  // Pages within the limit are returned unchanged.
+  private boundHtmlForProcessing(html: string): string {
+    const limit = HTML_PROCESSING_HEAD_LIMIT + HTML_PROCESSING_TAIL_LIMIT;
+    if (html.length <= limit) {
+      return html;
+    }
+    const head = html.slice(0, HTML_PROCESSING_HEAD_LIMIT);
+    const tail = html.slice(html.length - HTML_PROCESSING_TAIL_LIMIT);
+    return `${head}\n<!-- [lead-agent] html truncated for processing -->\n${tail}`;
+  }
+
   private async doFetchHtml(url: string): Promise<string | null> {
     const diagnostics: { tlsHandshakeError?: boolean } = {};
     const primary = await this.attemptFetchHtml(url, diagnostics);
     if (primary) {
-      return primary;
+      return this.boundHtmlForProcessing(primary);
     }
 
     // Some legacy company sites (typical for older industrial firms) serve a fully working site
@@ -4201,7 +4227,7 @@ export class HubSpotClient {
       const httpUrl = url.replace(/^https:/i, "http:");
       const fallback = await this.attemptFetchHtml(httpUrl);
       if (fallback) {
-        return fallback;
+        return this.boundHtmlForProcessing(fallback);
       }
     }
 
