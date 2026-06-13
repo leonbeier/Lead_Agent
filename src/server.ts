@@ -43,6 +43,31 @@ const leadWorkerRunService = new LeadWorkerRunService();
 const controlPlaneStore = new ControlPlaneStore();
 const debugConsoleService = new DebugConsoleService();
 let activeLeadRunAbortController: AbortController | undefined;
+
+// Deterministic deployed test bench: runs the REAL identity-resolution + public-contact-discovery
+// pipeline against a FIXED set of company websites, sequentially (no live-run browser contention),
+// and records exactly what was found per company (resolved legal name, contacts, personal LinkedIn).
+// This is the regression harness for the "wrong company name / missing contacts / missing LinkedIn"
+// bugs: the same sites are fed in every run so a fix can be proven before any live lead run.
+type TestBenchCompanyInput = { name: string; domain: string; country?: string };
+type TestBenchCompanyResult = Record<string, unknown>;
+type TestBenchState = {
+  running: boolean;
+  startedAt?: string;
+  finishedAt?: string;
+  totalCompanies: number;
+  completedCompanies: number;
+  currentCompany?: string;
+  results: TestBenchCompanyResult[];
+  lastError?: string;
+};
+const testBenchState: TestBenchState = {
+  running: false,
+  totalCompanies: 0,
+  completedCompanies: 0,
+  results: []
+};
+
 const hubSpotConsolePath = path.join(process.cwd(), "public", "hubspot-ui", "index.html");
 const publicRoutes = new Set(["/health", "/oauth-callback"]);
 
@@ -1208,6 +1233,150 @@ app.post("/api/control/contact-probe", async (request, response, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+// Fixed regression set: the companies that recently produced wrong names / zero contacts / missing
+// LinkedIn in live runs (so we always re-test the exact failure cases), plus a couple of known-good
+// references. Override via the `companies` field in the start request.
+const TEST_BENCH_DEFAULT_COMPANIES: TestBenchCompanyInput[] = [
+  { name: "Solabcon", domain: "solabcon.de", country: "Germany" },
+  { name: "Esoes", domain: "esoes.de", country: "Germany" },
+  { name: "Invigon", domain: "invigon.com", country: "Germany" },
+  { name: "Cira Vision", domain: "cira-vision.com", country: "Germany" },
+  { name: "Müetec", domain: "muetec.com", country: "Germany" },
+  { name: "Ankrit", domain: "ankrit.de", country: "Germany" }
+];
+
+async function runTestBenchCompany(
+  company: TestBenchCompanyInput,
+  contactTimeoutMs: number
+): Promise<TestBenchCompanyResult> {
+  const startedAt = Date.now();
+  const preCategorized = {
+    name: company.name,
+    domain: company.domain,
+    country: company.country,
+    shortDescription: "",
+    sourceFilter: "test-bench",
+    category: "integrator_vision_industrial_ai" as const,
+    relevanceScore: 8,
+    rationale: "test-bench"
+  };
+  try {
+    const [{ selectedContacts }, identity] = await Promise.all([
+      debugConsoleService.discoverContactsForExecution(preCategorized, {
+        selectedContactsTimeoutMs: contactTimeoutMs
+      }),
+      debugConsoleService.resolveCompanyIdentityForProbe(preCategorized).catch(() => ({
+        resolvedName: undefined,
+        resolvedCountry: undefined,
+        aiProfileName: undefined,
+        aiEntityScope: undefined,
+        aiProfileTrusted: undefined,
+        legalEntityCandidates: undefined
+      }))
+    ]);
+    const contacts = (selectedContacts ?? []).map((contact) => ({
+      firstName: contact.firstName ?? null,
+      lastName: contact.lastName ?? null,
+      email: contact.email ?? null,
+      jobTitle: contact.jobTitle ?? null,
+      linkedinUrl: contact.linkedinUrl ?? null,
+      label: contact.label ?? null,
+      sourceUrl: contact.sourceUrl ?? null
+    }));
+    const personalLinkedInCount = contacts.filter(
+      (c) => typeof c.linkedinUrl === "string" && /\/in\//i.test(c.linkedinUrl)
+    ).length;
+    return {
+      company: company.name,
+      domain: company.domain,
+      resolvedName: identity.resolvedName ?? null,
+      resolvedCountry: identity.resolvedCountry ?? null,
+      aiProfileName: identity.aiProfileName ?? null,
+      aiEntityScope: identity.aiEntityScope ?? null,
+      aiProfileTrusted: identity.aiProfileTrusted ?? null,
+      legalEntityCandidates: identity.legalEntityCandidates ?? null,
+      elapsedMs: Date.now() - startedAt,
+      contactCount: contacts.length,
+      personalLinkedInCount,
+      contacts
+    };
+  } catch (error) {
+    return {
+      company: company.name,
+      domain: company.domain,
+      elapsedMs: Date.now() - startedAt,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    };
+  }
+}
+
+const testBenchStartSchema = z.object({
+  companies: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        domain: z.string().min(1),
+        country: z.string().optional()
+      })
+    )
+    .optional(),
+  contactTimeoutMs: z.number().int().positive().max(290_000).optional()
+});
+
+app.post("/api/control/test-bench/start", (request, response, next) => {
+  try {
+    if (testBenchState.running) {
+      response.status(409).json({ accepted: false, error: "Test bench is already running.", state: testBenchState });
+      return;
+    }
+
+    const parsed = testBenchStartSchema.parse(request.body ?? {});
+    const companies = parsed.companies ?? TEST_BENCH_DEFAULT_COMPANIES;
+    const contactTimeoutMs = parsed.contactTimeoutMs ?? 240_000;
+
+    testBenchState.running = true;
+    testBenchState.startedAt = new Date().toISOString();
+    testBenchState.finishedAt = undefined;
+    testBenchState.totalCompanies = companies.length;
+    testBenchState.completedCompanies = 0;
+    testBenchState.currentCompany = undefined;
+    testBenchState.results = [];
+    testBenchState.lastError = undefined;
+
+    // Fire-and-forget background run. The browser is globally serialized inside the discovery client,
+    // so iterate companies sequentially to mirror a clean, contention-free environment.
+    void (async () => {
+      try {
+        for (const company of companies) {
+          testBenchState.currentCompany = company.name;
+          const result = await runTestBenchCompany(company, contactTimeoutMs);
+          testBenchState.results.push(result);
+          testBenchState.completedCompanies += 1;
+        }
+      } catch (error) {
+        testBenchState.lastError = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      } finally {
+        testBenchState.running = false;
+        testBenchState.currentCompany = undefined;
+        testBenchState.finishedAt = new Date().toISOString();
+      }
+    })();
+
+    response.status(202).json({ accepted: true, totalCompanies: companies.length, state: testBenchState });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/control/test-bench/status", (_request, response) => {
+  const results = testBenchState.results;
+  response.json({
+    ...testBenchState,
+    companiesWithContacts: results.filter((r) => typeof r.contactCount === "number" && (r.contactCount as number) > 0).length,
+    companiesWithPersonalLinkedIn: results.filter((r) => typeof r.personalLinkedInCount === "number" && (r.personalLinkedInCount as number) > 0).length
+  });
 });
 
 app.post("/api/control/learning/feedback", async (request, response, next) => {
