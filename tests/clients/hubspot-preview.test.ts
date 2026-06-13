@@ -1501,3 +1501,80 @@ test("contact page extraction includes ansprechpartner-style menu links", () => 
   assert.ok(links.includes("https://leitek.de/leitek-profil/ansprechpartner/"));
   assert.ok(links.includes("https://leitek.de/kontakt/"));
 });
+
+test("enrichSelectedContactsWithLinkedIn fills a missing personal LinkedIn URL for a named contact via web search", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  // Stub the (free Bing/DDG) search path so the test is deterministic and offline.
+  client["searchBingResults"] = async (query: string) => {
+    if (/adam tabor/i.test(query)) {
+      return [{ url: "https://www.linkedin.com/in/adam-tabor", title: "Adam Tabor", snippet: "CEO", query }];
+    }
+    return [];
+  };
+
+  const contacts: PublicContactCandidate[] = [
+    {
+      firstName: "Adam",
+      lastName: "Tabor",
+      jobTitle: "CEO",
+      sourceUrl: "https://sample-automation.de",
+      label: "website_named_contact"
+    }
+  ];
+
+  const enriched = await client["enrichSelectedContactsWithLinkedIn"](company, contacts);
+
+  assert.equal(enriched.length, 1);
+  assert.equal(enriched[0]?.linkedinUrl, "https://www.linkedin.com/in/adam-tabor");
+});
+
+test("enrichSelectedContactsWithLinkedIn leaves contacts unchanged when no LinkedIn profile is found", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  client["searchBingResults"] = async () => [];
+
+  const contacts: PublicContactCandidate[] = [
+    {
+      firstName: "Yaniv",
+      lastName: "Ben-Yosef",
+      jobTitle: "VP",
+      sourceUrl: "https://sample-automation.de",
+      label: "website_named_contact"
+    }
+  ];
+
+  const enriched = await client["enrichSelectedContactsWithLinkedIn"](company, contacts);
+
+  assert.equal(enriched.length, 1);
+  assert.equal(enriched[0]?.linkedinUrl, undefined);
+});
+
+test("enrichSelectedContactsWithLinkedIn does not re-search a contact that already has a personal LinkedIn URL", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  let searchCalls = 0;
+  client["searchBingResults"] = async () => {
+    searchCalls += 1;
+    return [];
+  };
+
+  const contacts: PublicContactCandidate[] = [
+    {
+      firstName: "Martin",
+      lastName: "Minsel",
+      jobTitle: "Managing Director",
+      linkedinUrl: "https://www.linkedin.com/in/martin-minsel",
+      sourceUrl: "https://www.linkedin.com/in/martin-minsel",
+      label: "linkedin_profile"
+    }
+  ];
+
+  const enriched = await client["enrichSelectedContactsWithLinkedIn"](company, contacts);
+
+  assert.equal(searchCalls, 0);
+  assert.equal(enriched[0]?.linkedinUrl, "https://www.linkedin.com/in/martin-minsel");
+});

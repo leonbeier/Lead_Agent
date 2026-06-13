@@ -197,6 +197,8 @@ const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
 const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 120_000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
+const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TIMEOUT_MS = 25_000;
+const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TOTAL_TIMEOUT_MS = 45_000;
 const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 60_000;
 const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
@@ -469,7 +471,10 @@ export class HubSpotClient {
 
     // Guarantee the reachable website mailbox/phone is never lost when the richer LinkedIn/named
     // discovery times out or returns empty: fall back to the deterministic website contact.
-    return selectedContacts.length > 0 ? selectedContacts : contactDiscoveryFallback;
+    const finalContacts = selectedContacts.length > 0 ? selectedContacts : contactDiscoveryFallback;
+    // Fill in missing personal LinkedIn /in/ URLs for named contacts via a targeted web search.
+    // Strictly time-bounded (see enrichSelectedContactsWithLinkedIn) so it never reduces throughput.
+    return this.enrichSelectedContactsWithLinkedIn(company, finalContacts);
   }
 
   async previewHubSpotSync(
@@ -2409,7 +2414,8 @@ export class HubSpotClient {
 
   private async enrichContactWithLinkedInUrl(
     company: Pick<PreCategorizedCompany, "name" | "domain">,
-    contact: PublicContactCandidate
+    contact: PublicContactCandidate,
+    maxQueries = 3
   ): Promise<PublicContactCandidate> {
     if (contact.linkedinUrl && this.isPersonalLinkedInUrl(contact.linkedinUrl)) {
       return {
@@ -2428,6 +2434,7 @@ export class HubSpotClient {
     const simplifiedCompanyToken = companyToken?.split(/[-_]/).filter(Boolean)[0];
     const simplifiedCompanyName = company.name.replace(/\b(ai|gmbh|ug|ag|ltd|llc|inc)\b/gi, "").replace(/\s+/g, " ").trim();
 
+    // Most-specific queries first so the search budget is spent on the highest-precision lookups.
     const queries = [
       `site:linkedin.com/in "${fullName}" "${company.name}"`,
       simplifiedCompanyName && simplifiedCompanyName !== company.name ? `site:linkedin.com/in "${fullName}" "${simplifiedCompanyName}"` : undefined,
@@ -2440,7 +2447,9 @@ export class HubSpotClient {
       companyToken ? `${fullName} linkedin ${companyToken}` : undefined,
       simplifiedCompanyToken && simplifiedCompanyToken !== companyToken ? `${fullName} linkedin ${simplifiedCompanyToken}` : undefined,
       `site:linkedin.com/in "${fullName}" linkedin`
-    ].filter((query): query is string => Boolean(query));
+    ]
+      .filter((query): query is string => Boolean(query))
+      .slice(0, Math.max(1, maxQueries));
 
     for (const query of queries) {
       const hits = await this.searchBingResults(query, 3);
@@ -2455,6 +2464,63 @@ export class HubSpotClient {
     }
 
     return contact;
+  }
+
+  /**
+   * Fill in personal LinkedIn /in/ URLs for the final selected contacts that have a real name but
+   * no LinkedIn profile yet. Many companies surface their team's names on the website (or via Bing)
+   * without the /in/ URL in the same evidence block, so the AI extraction returns a named contact
+   * with an empty linkedinUrl. A targeted "site:linkedin.com/in \"Full Name\" \"Company\"" web
+   * search (the same free Bing/DDG path used elsewhere — no Foundry/auth dependency) then resolves
+   * the person's actual profile. This is the chokepoint that turns named-but-no-LinkedIn contacts
+   * into reachable LinkedIn contacts. Strictly time-bounded so it can never reduce throughput: it
+   * enriches at most the top 2 such contacts, each with a hard per-contact timeout, and the whole
+   * phase falls back to the un-enriched contacts if the overall budget is exceeded.
+   */
+  private async enrichSelectedContactsWithLinkedIn(
+    company: Pick<PreCategorizedCompany, "name" | "domain">,
+    contacts: PublicContactCandidate[]
+  ): Promise<PublicContactCandidate[]> {
+    const enrichableIndexes = contacts
+      .map((contact, index) => ({ contact, index }))
+      .filter(({ contact }) =>
+        Boolean(contact.firstName || contact.lastName) && !this.isPersonalLinkedInUrl(contact.linkedinUrl)
+      )
+      .sort((left, right) => this.getPublicContactScore(right.contact) - this.getPublicContactScore(left.contact))
+      .slice(0, 2)
+      .map(({ index }) => index);
+
+    if (enrichableIndexes.length === 0) {
+      return contacts;
+    }
+
+    const enrichOne = async (index: number): Promise<{ index: number; contact: PublicContactCandidate }> => ({
+      index,
+      contact: await this.withTimeout(
+        this.enrichContactWithLinkedInUrl(company, contacts[index]),
+        PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TIMEOUT_MS,
+        contacts[index]
+      )
+    });
+
+    const enrichedEntries = await this.withTimeout(
+      this.mapWithConcurrency(
+        enrichableIndexes.map((index) => () => enrichOne(index)),
+        2
+      ),
+      PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TOTAL_TIMEOUT_MS,
+      [] as Array<{ index: number; contact: PublicContactCandidate }>
+    );
+
+    if (enrichedEntries.length === 0) {
+      return contacts;
+    }
+
+    const result = [...contacts];
+    for (const { index, contact } of enrichedEntries) {
+      result[index] = contact;
+    }
+    return result;
   }
 
   private getPublicContactScore(contact: PublicContactCandidate): number {
