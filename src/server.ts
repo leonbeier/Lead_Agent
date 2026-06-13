@@ -1145,6 +1145,10 @@ app.post("/api/control/contact-probe", async (request, response, next) => {
         const personalLinkedIn = contacts.filter((c) => typeof c.linkedinUrl === "string" && /\/in\//i.test(c.linkedinUrl)).length;
         let resolvedName: string | undefined;
         let resolvedCountry: string | undefined;
+        let aiProfileName: string | undefined;
+        let aiEntityScope: string | undefined;
+        let aiProfileTrusted: boolean | undefined;
+        let legalEntityCandidates: string[] | undefined;
         if (parsed.includeNameResolution) {
           const identity = await debugConsoleService.resolveCompanyIdentityForProbe({
             name: company.name,
@@ -1155,15 +1159,30 @@ app.post("/api/control/contact-probe", async (request, response, next) => {
             category: "integrator_vision_industrial_ai",
             relevanceScore: 8,
             rationale: "contact-probe"
-          }).catch(() => ({ resolvedName: undefined, resolvedCountry: undefined }));
+          }).catch(() => ({
+            resolvedName: undefined,
+            resolvedCountry: undefined,
+            aiProfileName: undefined,
+            aiEntityScope: undefined,
+            aiProfileTrusted: undefined,
+            legalEntityCandidates: undefined
+          }));
           resolvedName = identity.resolvedName;
           resolvedCountry = identity.resolvedCountry;
+          aiProfileName = identity.aiProfileName;
+          aiEntityScope = identity.aiEntityScope;
+          aiProfileTrusted = identity.aiProfileTrusted;
+          legalEntityCandidates = identity.legalEntityCandidates;
         }
         results.push({
           company: company.name,
           domain: company.domain,
           resolvedName: resolvedName ?? null,
           resolvedCountry: resolvedCountry ?? null,
+          aiProfileName: aiProfileName ?? null,
+          aiEntityScope: aiEntityScope ?? null,
+          aiProfileTrusted: aiProfileTrusted ?? null,
+          legalEntityCandidates: legalEntityCandidates ?? null,
           elapsedMs: Date.now() - startedAt,
           contactCount: contacts.length,
           personalLinkedInCount: personalLinkedIn,

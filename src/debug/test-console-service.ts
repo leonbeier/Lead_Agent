@@ -227,11 +227,25 @@ export class DebugConsoleService {
 
   async resolveCompanyIdentityForProbe(
     company: PreCategorizedCompany
-  ): Promise<{ resolvedName?: string; resolvedCountry?: string }> {
-    const resolved = await this.hubspotClient.resolveCompanyAddress(company).catch(() => null);
+  ): Promise<{
+    resolvedName?: string;
+    resolvedCountry?: string;
+    aiProfileName?: string;
+    aiEntityScope?: string;
+    aiProfileTrusted?: boolean;
+    legalEntityCandidates?: string[];
+  }> {
+    const [resolved, identity] = await Promise.all([
+      this.hubspotClient.resolveCompanyAddress(company).catch(() => null),
+      this.hubspotClient.debugResolveCompanyIdentity(company).catch(() => null)
+    ]);
     return {
       resolvedName: resolved?.companyName?.trim() || undefined,
-      resolvedCountry: resolved?.country?.trim() || undefined
+      resolvedCountry: resolved?.country?.trim() || undefined,
+      aiProfileName: identity?.officialWebsiteProfile?.companyName?.trim() || undefined,
+      aiEntityScope: identity?.officialWebsiteProfile?.entityScope || undefined,
+      aiProfileTrusted: identity?.isTrustedOfficialWebsiteProfile,
+      legalEntityCandidates: identity?.legalEntityCandidates?.slice(0, 5)
     };
   }
 
