@@ -3377,8 +3377,11 @@ export class HubSpotClient {
 
     // System-boundary garbage bound only: a real company name is never an empty string or a
     // long block of captured prose. Anything within a sane length that the profiler labelled as
-    // the exact operating entity is trusted as-is.
-    return companyName.length <= 80;
+    // the exact operating entity is trusted as-is. The bound is generous enough for legitimate
+    // long German legal names (e.g. "ESOES – Gesellschaft für EDV Beratung, Software-Entwicklung
+    // und Support mbH & Co. KG", 84 chars); the entityScope check above — not the length — is the
+    // primary prose guard, and full marketing sentences still exceed this bound.
+    return companyName.length <= 90;
   }
 
   /**
