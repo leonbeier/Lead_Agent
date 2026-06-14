@@ -201,6 +201,14 @@ const SEARCH_BATCH_SIZE = 20;
 const SEARCH_RESULT_HEADROOM = 4;
 const SEARCH_IDLE_MS = 250;
 const SCREENING_FLUSH_DEBOUNCE_MS = 500;
+// Hard cap on the post-loop shutdown drain. Every lead is written to HubSpot inline while the run
+// is active, so the final drain only flushes the internal screening/search-history caches and joins
+// already-idle worker promises. A single hung cleanup worker (e.g. a screening-DB flush that never
+// resolves) was observed freezing the run in stage=stopping for 16 minutes. Bounding the drain
+// guarantees the run always reaches a terminal state; anything still pending after this is internal
+// bookkeeping that is safe to abandon.
+const SHUTDOWN_DRAIN_DEADLINE_MS = 120_000;
+const SHUTDOWN_HEARTBEAT_MS = 1_000;
 const DEBUG_MESSAGE_LIMIT = 60;
 const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 510_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
@@ -1817,36 +1825,78 @@ export class LeadWorkerRunService {
         await delay(SEARCH_IDLE_MS);
       }
 
-      await Promise.all(exaWorkers);
-      outreachQueue.close();
-      contactQueue.close();
-      await Promise.all(aiWorkers);
-      await Promise.all(outreachWorkers);
-      await Promise.all(contactWorkers);
-      hubspotQueue.close();
-      await Promise.all(hubspotWorkers);
+      // Bounded shutdown drain. All leads are already written to HubSpot inline; the steps below
+      // only join already-idle worker promises and flush the internal screening/search-history
+      // caches. A single hung cleanup worker previously froze the run in stage=stopping for 16 min
+      // (updatedAt stopped advancing because nothing in this block calls emitProgress). Run the
+      // drain against a hard deadline with a heartbeat so the run always reaches a terminal state
+      // and the UI keeps updating; anything still pending after the deadline is internal bookkeeping
+      // that is safe to abandon.
+      const drainAll = (async () => {
+        await Promise.all(exaWorkers);
+        outreachQueue.close();
+        contactQueue.close();
+        await Promise.all(aiWorkers);
+        await Promise.all(outreachWorkers);
+        await Promise.all(contactWorkers);
+        hubspotQueue.close();
+        await Promise.all(hubspotWorkers);
 
-      const remainingQualifiedStates = Array.from(qualifiedStates.values())
-        .filter((state) => !state.removed && state.hubspotStatus !== "done");
+        const remainingQualifiedStates = Array.from(qualifiedStates.values())
+          .filter((state) => !state.removed && state.hubspotStatus !== "done");
 
-      for (const state of remainingQualifiedStates) {
-        screeningQueue.enqueue({
-          type: "upsert",
-          record: buildScreeningRecord(state.company)
-        });
+        for (const state of remainingQualifiedStates) {
+          screeningQueue.enqueue({
+            type: "upsert",
+            record: buildScreeningRecord(state.company)
+          });
+        }
+
+        historyQueue.enqueue({ type: "flush" });
+        await delay(SCREENING_FLUSH_DEBOUNCE_MS);
+        screeningQueue.close();
+        historyQueue.close();
+        await Promise.all([screeningWorkerPromise, historyWorkerPromise]);
+      })();
+
+      const shutdownHeartbeat = setInterval(() => emitProgress(), SHUTDOWN_HEARTBEAT_MS);
+      let drainDeadlineHandle: ReturnType<typeof setTimeout> | undefined;
+      const drainDeadline = new Promise<void>((resolve) => {
+        drainDeadlineHandle = setTimeout(() => {
+          logError(`Shutdown-Drain hat ${SHUTDOWN_DRAIN_DEADLINE_MS}ms ueberschritten - Lauf wird beendet. Alle Leads sind bereits in HubSpot geschrieben; ein haengender Cleanup-Worker (Screening-/History-Flush) wird abgebrochen.`);
+          resolve();
+        }, SHUTDOWN_DRAIN_DEADLINE_MS);
+      });
+      try {
+        await Promise.race([drainAll, drainDeadline]);
+      } finally {
+        clearInterval(shutdownHeartbeat);
+        if (drainDeadlineHandle) {
+          clearTimeout(drainDeadlineHandle);
+        }
       }
-
-      historyQueue.enqueue({ type: "flush" });
-      await delay(SCREENING_FLUSH_DEBOUNCE_MS);
-      screeningQueue.close();
-      historyQueue.close();
-      await Promise.all([screeningWorkerPromise, historyWorkerPromise]);
     } finally {
       options.signal?.removeEventListener("abort", abortHandler);
     }
 
     if (screeningFlushDue) {
-      await this.controlPlaneStore.writeCompanyScreeningDatabase(screeningState);
+      let flushTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const flushTimeout = new Promise<void>((resolve) => {
+        flushTimeoutHandle = setTimeout(() => {
+          logError(`Abschliessender Screening-Flush hat ${SHUTDOWN_DRAIN_DEADLINE_MS}ms ueberschritten - wird uebersprungen.`);
+          resolve();
+        }, SHUTDOWN_DRAIN_DEADLINE_MS);
+      });
+      try {
+        await Promise.race([
+          this.controlPlaneStore.writeCompanyScreeningDatabase(screeningState),
+          flushTimeout
+        ]);
+      } finally {
+        if (flushTimeoutHandle) {
+          clearTimeout(flushTimeoutHandle);
+        }
+      }
     }
 
     const searchHistory = Array.from(searchAggregates.values())
