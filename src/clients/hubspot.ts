@@ -225,6 +225,13 @@ const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TIMEOUT_MS = 25_000;
 const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TOTAL_TIMEOUT_MS = 45_000;
 const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 60_000;
+// A company that HAS a domain but yields zero crawlable pages is almost always a transient crawl
+// failure (blocked/timed-out/overloaded origin), not a genuinely page-less site. Retry the page
+// collection a bounded number of times before accepting an empty page set, so a single load-induced
+// crawl failure is not silently swallowed into zero contacts and a HubSpot company without any
+// reachable contact.
+const EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS = 3;
+const EXECUTION_CONTACT_PAGE_COLLECTION_RETRY_DELAY_MS = 1_500;
 const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
@@ -485,11 +492,25 @@ export class HubSpotClient {
       return this.discoverWebSearchContacts(company, []);
     }
 
-    const pages = await this.withTimeout(
-      this.collectCandidatePages(this.normalizeCompanyUrl(company.domain)).catch(() => [] as Array<{ url: string; html: string }>),
-      EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
-      [] as Array<{ url: string; html: string }>
-    );
+    // Collect the company's own pages with a bounded retry. A domain that returns zero pages is
+    // almost always a transient crawl failure, not a page-less site, so retrying recovers the
+    // contacts that would otherwise be lost. collectCandidatePages swallows its own errors into an
+    // empty array, so an empty result is the failure signal we retry on.
+    let pages: Array<{ url: string; html: string }> = [];
+    for (let attempt = 1; attempt <= EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS; attempt += 1) {
+      pages = await this.withTimeout(
+        this.collectCandidatePages(this.normalizeCompanyUrl(company.domain)).catch(() => [] as Array<{ url: string; html: string }>),
+        EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS,
+        [] as Array<{ url: string; html: string }>
+      );
+      if (pages.length > 0) {
+        break;
+      }
+      if (attempt < EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS) {
+        console.error(`[discoverPublicContactsForExecution] zero pages crawled for ${company.name} (${company.domain}) on attempt ${attempt}/${EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS} - retrying`);
+        await this.delay(EXECUTION_CONTACT_PAGE_COLLECTION_RETRY_DELAY_MS);
+      }
+    }
     const websiteContacts = await this.withTimeout(
       this.extractWebsiteContactsFromPages(company, pages, undefined, { includeOfficialWebsiteSearch: false }).catch(() => [] as PublicContactCandidate[]),
       EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS,
@@ -4656,6 +4677,13 @@ export class HubSpotClient {
     contact: PublicContactCandidate,
     brief: ResearchBrief
   ): string | undefined {
+    // Prefer the individual, website-grounded per-person message (data/outreach-context.md). The
+    // agent already addresses the person by name and uses no placeholders, so it is used verbatim.
+    const personalized = contact.personalizedOutreach?.message?.trim();
+    if (personalized) {
+      return this.buildOutreachNoteBody("Email Outreach", personalized);
+    }
+
     if (!brief.emailBody) {
       return undefined;
     }
@@ -4671,12 +4699,18 @@ export class HubSpotClient {
     contact: PublicContactCandidate,
     brief: ResearchBrief
   ): string | undefined {
-    if (!brief.linkedInMessage) {
+    // Prefer the individual, website-grounded per-person message (data/outreach-context.md), which
+    // is written in the ONE WARE LinkedIn outreach style. The connection request is derived from it.
+    const personalized = contact.personalizedOutreach?.message?.trim();
+    const personalizedMessage = personalized
+      ? personalized
+      : (brief.linkedInMessage ? this.personalizeOutreachMessage(brief.linkedInMessage, contact, brief.outreachLanguage) : undefined);
+
+    if (!personalizedMessage) {
       return undefined;
     }
 
-    const personalizedMessage = this.personalizeOutreachMessage(brief.linkedInMessage, contact, brief.outreachLanguage);
-    const personalizedConnectionRequest = brief.linkedInConnectionRequest
+    const personalizedConnectionRequest = !personalized && brief.linkedInConnectionRequest
       ? this.personalizeOutreachMessage(brief.linkedInConnectionRequest, contact, brief.outreachLanguage)
       : undefined;
     const connectionRequest = this.buildLinkedInConnectionRequest(personalizedConnectionRequest ?? personalizedMessage);

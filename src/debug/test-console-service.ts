@@ -6,7 +6,7 @@ import { ExaSearchClient, resolveExaSearchMode } from "../clients/exa-search";
 import { HubSpotClient } from "../clients/hubspot";
 import { WebSearchAgent } from "../clients/web-search-agent";
 import { ControlPlaneStore } from "../control-plane";
-import { OrganizationFilter, CompanySample, ExaQueryHistoryInsight, ExaSearchModeSetting, LeadCategory, LiveExaExcludedDomainDetail, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
+import { OrganizationFilter, CompanySample, ExaQueryHistoryInsight, ExaSearchModeSetting, LeadCategory, LiveExaExcludedDomainDetail, PersonalizedContactOutreach, PreCategorizedCompany, ResearchBrief, SelectableLeadCategory } from "../types";
 import { buildDebugSearchFilter, DebugConsoleSearchMode, normalizeManualWebsites } from "./test-console";
 
 export type DebugConsoleStage = "company_search" | "ai_prefilter" | "outreach_prep" | "contact_discovery";
@@ -223,6 +223,43 @@ export class DebugConsoleService {
   ): Promise<{ selectedContacts: Awaited<ReturnType<HubSpotClient["discoverPublicContactsForExecution"]>> }> {
     const selectedContacts = await this.hubspotClient.discoverPublicContactsForExecution(company, options);
     return { selectedContacts };
+  }
+
+  /**
+   * Generate an individual outreach message for ONE specific contact, grounded in the company's
+   * website evidence (taken from the already-built research brief) and the ONE WARE outreach agent
+   * prompt (data/outreach-context.md). Called once per contact so every person gets a personalized
+   * message. The company-level research brief is kept for rankings/business potential/company
+   * fields; this only produces the per-person message.
+   */
+  async generatePersonalizedOutreachForExecution(
+    company: PreCategorizedCompany,
+    brief: ResearchBrief | undefined,
+    contact: { firstName?: string; lastName?: string; jobTitle?: string; linkedinUrl?: string }
+  ): Promise<PersonalizedContactOutreach> {
+    const websiteEvidence = brief
+      ? [
+          brief.overview ? `Overview: ${brief.overview}` : undefined,
+          brief.targetIndustry ? `Target industry: ${brief.targetIndustry}` : undefined,
+          brief.productsOffered ? `Products/solutions: ${brief.productsOffered}` : undefined,
+          brief.qualifyingSignals?.length ? `Signals: ${brief.qualifyingSignals.join("; ")}` : undefined,
+          brief.qualificationSummary ? `Why relevant: ${brief.qualificationSummary}` : undefined
+        ]
+          .filter((line): line is string => Boolean(line))
+          .join("\n")
+      : "";
+
+    return this.azureOpenAIClient.generatePersonalizedContactOutreach({
+      company: {
+        name: company.name,
+        website: brief?.website ?? company.domain,
+        country: company.country,
+        category: company.category
+      },
+      websiteEvidence,
+      outreachLanguage: brief?.outreachLanguage ?? "en",
+      contact
+    });
   }
 
   async resolveCompanyIdentityForProbe(

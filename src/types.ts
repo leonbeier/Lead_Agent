@@ -139,6 +139,23 @@ export interface PublicContactCandidate {
   linkedinConnectionCount?: number;
   sourceQuery?: string;
   sourceSnippet?: string;
+  personalizedOutreach?: PersonalizedContactOutreach;
+}
+
+/**
+ * Per-person outreach produced by the ONE WARE LinkedIn outreach agent (data/outreach-context.md).
+ * Every contact gets its own individual message; the structured fields mirror the context.md
+ * "Output Format" section so the reasoning behind each message stays inspectable.
+ */
+export interface PersonalizedContactOutreach {
+  message: string;
+  language: OutreachLanguage;
+  researchFinding?: string;
+  underlyingLimitation?: string;
+  selectedStory?: string;
+  customerValue?: string;
+  whyMatchWorks?: string;
+  confidence?: "high" | "medium" | "low";
 }
 
 export interface ApolloContactCandidate {

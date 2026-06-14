@@ -119,6 +119,35 @@ test("previewHubSpotSync never writes a company LinkedIn URL to a contact, even 
   assert.equal(preview.contacts[1]?.properties.hs_linkedin_url, undefined);
 });
 
+test("previewHubSpotSync prefers the per-person personalized outreach message in the contact note", async () => {
+  const client = new HubSpotClient();
+  const contacts: PublicContactCandidate[] = [
+    {
+      email: "martin@sample-automation.de",
+      firstName: "Martin",
+      lastName: "Minsel",
+      jobTitle: "Managing Director",
+      linkedinUrl: "https://www.linkedin.com/in/martin-minsel/",
+      sourceUrl: "https://www.linkedin.com/in/martin-minsel/",
+      label: "linkedin_profile",
+      personalizedOutreach: {
+        message: "Hallo Martin, ich habe gesehen dass ihr PLC-integrierte Vision-Systeme baut. Das hat mich an einen Kunden erinnert, bei dem ein Modell genau auf die Anwendung angepasst wurde.",
+        language: "de",
+        confidence: "high"
+      }
+    }
+  ];
+
+  const preview = await client.previewHubSpotSync(buildSampleCompany(), buildSampleBrief(), contacts, { includeAddressLookup: false });
+  const note = preview.contacts[0]?.outreachNote ?? "";
+
+  // The individual per-person message must be used in the contact note.
+  assert.match(note, /Hallo Martin, ich habe gesehen dass ihr PLC-integrierte Vision-Systeme baut/);
+  // The generic brief LinkedIn/email body must NOT be used when a personalized message is present.
+  assert.doesNotMatch(note, /wir helfen Integratoren, Vision-AI schneller produktiv/);
+  assert.doesNotMatch(note, /produktionsreifen Vision-AI-Deployments/);
+});
+
 test("previewHubSpotSync keeps generic mailbox contacts when a phone number is present", async () => {
   const client = new HubSpotClient();
   const contacts: PublicContactCandidate[] = [

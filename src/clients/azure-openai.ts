@@ -7,6 +7,8 @@ import {
   LeadCategory,
   LeadLearningData,
   normalizeOutreachLanguage,
+  OutreachLanguage,
+  PersonalizedContactOutreach,
   PreCategorizedCompany,
   PrequalificationConfig,
   PublicContactCandidate,
@@ -25,6 +27,8 @@ import {
 } from "../prompting/one-ware-playbook";
 import { FoundryAgentsClient } from "./foundry-agents";
 import { WebSearchAgent } from "./web-search-agent";
+import { readFileSync } from "fs";
+import path from "path";
 
 interface ChatMessage {
   role: "system" | "user";
@@ -118,6 +122,26 @@ const azureChatRateLimiter = new AzureChatRateLimiter(8);
 const EXA_QUERY_PLANNER_TIMEOUT_MS = 45000;
 const CLASSIFIER_DEPLOYMENT = env.AZURE_OPENAI_CLASSIFIER_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT;
 const COMPANY_CLASSIFIER_INPUT_LIMIT = 700;
+
+// Personalized per-person outreach uses the low-cost GPT-5.4 mini classifier deployment by default
+// (repo rule: prefer the low-cost mini deployment for AI evaluation), with an explicit override.
+const OUTREACH_DEPLOYMENT =
+  env.AZURE_OPENAI_OUTREACH_DEPLOYMENT ?? CLASSIFIER_DEPLOYMENT;
+
+// The ONE WARE LinkedIn outreach agent prompt lives in data/outreach-context.md (copied verbatim
+// from the Outreach_Agent repo). The Dockerfile ships the data/ folder, so it is readable at
+// runtime under process.cwd(). Loaded once and cached; a load failure is surfaced to the caller so
+// the worker can fall back to the company-level brief instead of writing an empty outreach.
+const OUTREACH_CONTEXT_PATH = path.join(process.cwd(), "data", "outreach-context.md");
+let cachedOutreachContext: string | undefined;
+function loadOutreachContext(): string {
+  if (cachedOutreachContext !== undefined) {
+    return cachedOutreachContext;
+  }
+  cachedOutreachContext = readFileSync(OUTREACH_CONTEXT_PATH, "utf8");
+  return cachedOutreachContext;
+}
+
 const WEBSITE_CLASSIFIER_INPUT_LIMIT = 2200;
 const QUICK_QUALIFICATION_CONTEXT = [
   "# Identity\nYou classify company fit for ONE WARE from company descriptions and crawled website text.",
@@ -128,6 +152,7 @@ const QUICK_QUALIFICATION_CONTEXT = [
   "# Tie-Break Rules\nIf the main fit is embedding ONE WARE into the company's own shipped software product, diagnostic plugin, or hardware product, choose machine_builder_ai_enablement.\nIf customers can build, configure, distribute, train, or run their own apps, models, workflows, plugins, modules, or extensions on the company's platform, choose software_platform_embedding.\nIf the site describes packaging an app once, deploying it across customer sites, managing app lifecycles, monetizing digital services, controlled updates, turnkey appliances, dashboard builders, or modular extensibility, that is usually software_platform_embedding, not an external integrator.\nIf the vendor provides the productized integration stack so customers do not have to build the integration stack themselves, that is evidence for software_platform_embedding, not service delivery.\nMentions of PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration use cases do not make a vendor an integrator when those capabilities are delivered through the vendor's own runtime, app, or platform product.\nIf the company sells a closed niche municipal or route-planning platform for one operational workflow, choose other unless there is a clear open build-on-top surface.\nIf the company is a captive internal IT unit building MES, EDI, BI, process, or enterprise software for a larger industrial group, prefer integrator_general_ai over industrial_end_customer_scaled.\nIf evidence mixes catalog hardware with explicit custom system integration or engineering delivery, prefer machine_builder_ai_enablement, integrator_relevant_focus, or other over irrelevant.\nIf evidence is mixed, weak, or only capability-oriented without explicit fit-path proof, choose other rather than any integrator category.",
   "# Examples\nExample A: a certified radiology or medical-imaging plugin integrated into PACS or viewer systems is machine_builder_ai_enablement when it is a shipped product, not an open platform.\nExample B: an industrial software vendor that packages digital services as apps, deploys them to many customer sites through a runtime or appliance, and manages billing or update lifecycles is software_platform_embedding, not integrator_general_ai.\nExample C: a municipal waste, winter-service, street-cleaning, telematics, or route-planning cloud product with onboarding or rollout help still stays other unless customers clearly build their own apps, models, or extensions on top.\nExample D: a broad engineering generalist with MBSE, requirements engineering, hardware/software development, or system engineering pages but no explicit AI, automation, MES/SCADA, inspection, or embeddable platform/product surface should stay other.",
   "# Non-Targets\nReject media, publishing, editorial, event, investor, finance, recruiting, academic, association, and reseller profiles unless the evidence clearly shows a different real business model.",
+  "# Page Type Gate (decide first)\nBefore choosing any business category, decide whether the crawled evidence even describes ONE single operating company. If it does not, the category is irrelevant. Classify as irrelevant when the evidence describes:\n- a company directory, business listing, company register, member list, supplier index, regional or industry overview page, or aggregator that lists MANY different companies (for example a 'companies in Bavaria/Bayern' overview, a chamber-of-commerce listing, a startup map, or a portal that profiles multiple firms);\n- a news, press, magazine, blog portal, article, or editorial page whose purpose is publishing articles rather than selling the site owner's own product or service;\n- a file-sharing, file-hosting, cloud-storage, document-hosting, download, or asset/CDN page (for example a generic file or PDF host, an upload/share service, or a page served only to deliver static assets) that is not the company's own product/marketing site.\nThese page types are not a qualifiable company and must be irrelevant even if individual company names, AI, or industrial keywords appear on the page. Only classify into a business category when the evidence clearly belongs to one identifiable operating company's own site.",
   "# Output\nReturn compact JSON only with category, relevanceScore 0-100, rationale. Keep rationale to one short sentence with at most 18 words."
 ].join("\n\n");
 const MAX_FILTER_STRATEGY_HISTORY = 8;
@@ -467,6 +492,98 @@ export class AzureOpenAIClient {
         ]))
       );
     }
+  }
+
+  /**
+   * Generate an individual, website-grounded outreach message for ONE specific contact, using the
+   * verbatim ONE WARE LinkedIn outreach agent prompt (data/outreach-context.md) as the system
+   * contract. Every contact gets its own call so the message is personalized per person. The model
+   * receives the company's crawled website evidence plus the person's role/name, and returns a
+   * structured JSON object mirroring the context.md "Output Format" section. Agent-first: the prompt
+   * and schema are the contract; we do not post-process or rewrite the model's message.
+   */
+  async generatePersonalizedContactOutreach(input: {
+    company: { name: string; website?: string; country?: string; category?: string };
+    websiteEvidence: string;
+    outreachLanguage: OutreachLanguage;
+    contact: {
+      firstName?: string;
+      lastName?: string;
+      jobTitle?: string;
+      linkedinUrl?: string;
+    };
+  }): Promise<PersonalizedContactOutreach> {
+    const context = loadOutreachContext();
+    const personName = [input.contact.firstName, input.contact.lastName].filter(Boolean).join(" ").trim();
+    const languageInstruction = input.outreachLanguage === "de"
+      ? "Write the final outreach message in natural German."
+      : "Write the final outreach message in natural English.";
+
+    const systemPrompt = [
+      context,
+      "",
+      "---",
+      "",
+      "# Runtime Output Contract (this overrides the prose 'Output Format' section above)",
+      "Return ONLY a single JSON object, no markdown fences, with exactly these keys:",
+      "{",
+      '  "researchFinding": string,        // one sentence',
+      '  "underlyingLimitation": string,   // one sentence: a real technical constraint, not an industry',
+      '  "selectedStory": string,          // the ONE WARE demo/benchmark you matched',
+      '  "customerValue": string,          // one sentence: the concrete benefit for THIS person',
+      '  "whyMatchWorks": string,          // 2-3 sentences',
+      '  "message": string,                // the final outreach message, 70-120 words, no em/en dashes',
+      '  "language": "de" | "en",',
+      '  "confidence": "high" | "medium" | "low"',
+      "}",
+      languageInstruction,
+      "The message must be individual for THIS person and address them by their first name when it is known.",
+      "Only use the company's own website evidence below for the prospect anchor; do not invent products, customers, case studies, or numbers that are not in the context or that evidence.",
+      "Never use the characters '\u2014' or '\u2013' anywhere in the message."
+    ].join("\n");
+
+    const userContent = [
+      `Prospect company: ${input.company.name}`,
+      input.company.website ? `Company website: ${input.company.website}` : undefined,
+      input.company.country ? `Country: ${input.company.country}` : undefined,
+      input.company.category ? `Category: ${input.company.category}` : undefined,
+      "",
+      "Website evidence (crawled from the company's own site - use this to pick the concrete anchor and limitation):",
+      input.websiteEvidence || "(no website evidence available - keep the anchor honest and general, and lower confidence)",
+      "",
+      "Person to write to:",
+      personName ? `Name: ${personName}` : "Name: unknown (write a natural opener without a first name)",
+      input.contact.jobTitle ? `Role: ${input.contact.jobTitle}` : undefined,
+      input.contact.linkedinUrl ? `LinkedIn: ${input.contact.linkedinUrl}` : undefined
+    ].filter((line): line is string => line !== undefined).join("\n");
+
+    const content = await this.runChat(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent }
+      ],
+      { maxTokens: 900, deployment: OUTREACH_DEPLOYMENT }
+    );
+
+    const parsed = this.parseJsonObject<Partial<PersonalizedContactOutreach> & { language?: string }>(content);
+    if (!parsed.message || !parsed.message.trim()) {
+      throw new Error("Personalized outreach agent returned an empty message.");
+    }
+
+    const confidence = parsed.confidence === "high" || parsed.confidence === "medium" || parsed.confidence === "low"
+      ? parsed.confidence
+      : undefined;
+
+    return {
+      message: parsed.message.trim(),
+      language: normalizeOutreachLanguage(parsed.language, input.outreachLanguage),
+      researchFinding: parsed.researchFinding,
+      underlyingLimitation: parsed.underlyingLimitation,
+      selectedStory: parsed.selectedStory,
+      customerValue: parsed.customerValue,
+      whyMatchWorks: parsed.whyMatchWorks,
+      confidence
+    };
   }
 
   private compactClassificationInput(text: string, maxLength: number): string {
@@ -4292,6 +4409,7 @@ export class AzureOpenAIClient {
   ): ChatMessage[] {
     const compactWebsiteContext = [
       "# Website Task\nClassify the company only from its own crawled website pages.",
+      "# Website Page Type Gate\nFirst confirm the crawled pages are the self-owned site of ONE single operating company. If instead they are a company directory/business-listing/register/regional-or-industry overview page that lists many firms, a news/press/magazine/blog-portal/editorial page, or a file-sharing/file-hosting/cloud-storage/download/asset-CDN page, classify the company as irrelevant regardless of any company, AI, or industrial keywords on the page. A page that profiles or lists multiple companies, publishes articles, or only hosts files is never a qualifiable company.",
       "# Website Decision Rules\nIf the website mainly sells external customer project delivery, choose an integrator category. If it mainly sells its own shipped software product or diagnostic plugin, choose machine_builder_ai_enablement. If it mainly sells a platform or runtime where customers deploy apps, modules, agents, or workflows, choose software_platform_embedding.",
       "# Website Specific Reminders\nA certified PACS/viewer-integrated medical plugin is machine_builder_ai_enablement. A runtime, turnkey appliance, or app-lifecycle platform for OEM digital services is software_platform_embedding even if PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration is mentioned. If the product lets customers launch industrial apps without building the integration stack themselves, prefer software_platform_embedding. A closed municipal or route-planning platform stays other unless customers clearly build on top of it. Broad engineering or MBSE-style capability pages without explicit AI, automation, MES/SCADA, inspection, or embeddable product/platform proof should stay other. Research institutes, Fraunhofer-style institutes, universities, labs, clusters, and publicly funded competence centers are not integrators or customer delivery partners unless the website clearly sells commercial external implementation services as the main business model.",
       "# Country Rule\nAlso determine the company's headquarters country from the website's own evidence only: a registered office or postal address, an 'impressum'/'legal notice', a 'headquartered in' statement, or an international phone dialing code (e.g. +49 Germany, +43 Austria, +41 Switzerland, +31 Netherlands, +1 United States, +972 Israel, +86 China). Return the English country name. Do NOT infer the country from the domain TLD, the website language, or any supplied hint. If the website shows no reliable country evidence, return an empty string for country. A US/non-European company must be reported with its real country even when the page is in German or English.",

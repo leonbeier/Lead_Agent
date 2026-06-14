@@ -35,6 +35,7 @@ const envSchema = z.object({
   AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
   AZURE_OPENAI_DEPLOYMENT: z.string().default("gpt-5.4-mini"),
   AZURE_OPENAI_CLASSIFIER_DEPLOYMENT: z.string().optional(),
+  AZURE_OPENAI_OUTREACH_DEPLOYMENT: z.string().optional(),
   AZURE_AI_CLASSIFICATION_CONCURRENCY: z.coerce.number().int().positive().default(10),
   CONTACT_DISCOVERY_CONCURRENCY: z.coerce.number().int().positive().default(8),
   HUBSPOT_SYNC_CONCURRENCY: z.coerce.number().int().positive().default(6),

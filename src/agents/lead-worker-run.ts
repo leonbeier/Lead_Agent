@@ -231,6 +231,10 @@ const MAX_CONTACT_CONCURRENCY = 4;
 const CONTACT_DISCOVERY_MAX_ATTEMPTS = 3;
 const CONTACT_DISCOVERY_RETRY_DELAY_MS = 1_500;
 
+// Per-contact personalized outreach generation budget. Each contact gets its own message; a single
+// slow generation must never block the HubSpot write, so it falls back to the company-level brief.
+const PERSONALIZED_OUTREACH_PER_CONTACT_TIMEOUT_MS = 45_000;
+
 function getExaDiscoveryTimeoutMs(queryCount: number): number {
   return Math.max(
     DEFAULT_EXA_DISCOVERY_TIMEOUT_MS,
@@ -529,7 +533,10 @@ export class LeadWorkerRunService {
     const neededCompanies = () => Math.max(0, targetLeadCount - metrics.hubspotWritten - countHeldQualifiedStates() - countAiPending());
     const hasReachedTarget = () => metrics.hubspotWritten >= targetLeadCount;
     const shouldStopNewPipelineWork = () => stopping || hasReachedTarget();
-    const shouldDrainAcceptedCompaniesAfterSearchStop = () => stopReason === "exa_search_unavailable" || stopReason === "exa_credits_exhausted";
+    const shouldDrainAcceptedCompaniesAfterSearchStop = () =>
+      stopReason === "exa_search_unavailable"
+      || stopReason === "exa_credits_exhausted"
+      || stopReason === "runtime_limit_reached";
     const temporarilyUnavailableFilters = new Set<string>();
     let hadTemporaryExaFailure = false;
 
@@ -1292,6 +1299,42 @@ export class LeadWorkerRunService {
         log(`HubSpot startet: ${state.company.name} | ${summarizeContactChannels(state.contacts)}`);
         emitProgress();
         try {
+          // Generate an INDIVIDUAL outreach message per contact from the company's website evidence,
+          // using the ONE WARE outreach agent prompt (data/outreach-context.md). The company-level
+          // research brief is kept for rankings/business potential/company fields; this only writes
+          // a per-person message that the HubSpot note builder prefers. A per-contact generation
+          // failure or timeout never blocks the write: that contact simply falls back to the brief.
+          if (Array.isArray(state.contacts) && state.contacts.length > 0) {
+            await Promise.all(
+              state.contacts.map(async (contact) => {
+                try {
+                  const personalizedOutreach = await Promise.race([
+                    this.debugConsoleService.generatePersonalizedOutreachForExecution(
+                      state.company,
+                      state.researchBrief,
+                      {
+                        firstName: contact.firstName,
+                        lastName: contact.lastName,
+                        jobTitle: contact.jobTitle,
+                        linkedinUrl: contact.linkedinUrl
+                      }
+                    ),
+                    new Promise<null>((resolve) =>
+                      setTimeout(() => resolve(null), PERSONALIZED_OUTREACH_PER_CONTACT_TIMEOUT_MS)
+                    )
+                  ]);
+                  if (personalizedOutreach) {
+                    contact.personalizedOutreach = personalizedOutreach;
+                  }
+                } catch (outreachError) {
+                  log(`Personalisierter Outreach fehlgeschlagen (faellt auf Brief zurueck) fuer ${state.company.name}/${[contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.label}: ${outreachError instanceof Error ? outreachError.message : String(outreachError)}`);
+                }
+              })
+            );
+            const personalizedCount = state.contacts.filter((contact) => contact.personalizedOutreach).length;
+            log(`Personalisierter Outreach erstellt: ${state.company.name} (${personalizedCount}/${state.contacts.length})`);
+          }
+
           const companySyncKey = new URL(state.company.domain?.startsWith("http") ? state.company.domain : `https://${state.company.domain ?? state.company.name}`).hostname.replace(/^www\./i, "").toLowerCase();
           let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
           const timeoutPromise = new Promise<never>((_, reject) => {
@@ -1742,7 +1785,7 @@ export class LeadWorkerRunService {
           timedOut = true;
           stopping = true;
           stopReason = "runtime_limit_reached";
-          log("Zeitlimit erreicht. Lauf schliesst nur noch bereits freigegebene Firmen sauber ab.");
+          log("Zeitlimit erreicht. Exa startet keine neuen Suchen mehr. Alle bereits gefundenen Firmen werden noch analysiert, mit Kontakten/Outreach angereichert und in HubSpot geschrieben, bevor der Lauf stoppt.");
           stopAiQueue();
         }
 
@@ -1751,6 +1794,15 @@ export class LeadWorkerRunService {
           stopping = true;
           stopAiQueue();
         }
+
+        // While finishing, keep draining the standby list into the active pipeline. After a runtime
+        // timeout the AI workers still classify the companies Exa already returned; those qualified
+        // companies land on standby and must be promoted here so every already-found company is
+        // analyzed, enriched with contacts/outreach and written to HubSpot before the run ends.
+        // maybePromoteStandby itself respects the target cap, so this never overshoots the target.
+        // Any standby left after this call is intentionally non-promotable (target already reached),
+        // so the break below must NOT wait on standbyQualifiedStates being empty or it would hang.
+        maybePromoteStandby();
 
         if (stopping && countAiPending() === 0 && countDownstreamInFlight() === 0) {
           break;
