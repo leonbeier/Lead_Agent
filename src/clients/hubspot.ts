@@ -392,6 +392,7 @@ export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
   private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();
   private readonly officialWebsiteProfileCache = new Map<string, Promise<OfficialWebsiteCompanyProfile | null>>();
+  private readonly resolvedCompanyAddressCache = new Map<string, Promise<ExtractedCompanyAddress | null>>();
   private readonly candidatePagesCache = new Map<string, Promise<Array<{ url: string; html: string }>>>();
   private readonly fetchHtmlCache = new Map<string, Promise<string | null>>();
   private readonly apolloClient = new ApolloClient();
@@ -3199,6 +3200,43 @@ export class HubSpotClient {
   }
 
   private async extractCompanyAddress(company: PreCategorizedCompany): Promise<ExtractedCompanyAddress | null> {
+    // Share ONE in-flight extraction per company across the two callers in the live worker run:
+    // the identity-resolution gate (resolveCompanyAddress) and the HubSpot write (upsertCompany).
+    // The full website-profile extraction (impressum/contact follow-up crawl + several Azure calls)
+    // is correct but can take longer than the 90 s race each caller wraps it in under live
+    // concurrency / Azure rate-limiting. Without sharing, BOTH races time out and the record is
+    // written with the brand name and an empty address even though the extraction would have
+    // succeeded. Caching the promise lets the identity gate kick the computation off; it then keeps
+    // resolving in the background while contact discovery and per-contact outreach run, so the later
+    // upsertCompany call reads the completed, authoritative result (legal entity + postal address)
+    // instead of starting a fresh race that times out again. Keyed by the stable domain so the
+    // identity gate's company.name mutation cannot split the two lookups.
+    const companyKey = this.getCompanyKey(company);
+    const existing = this.resolvedCompanyAddressCache.get(companyKey);
+    if (existing) {
+      return existing;
+    }
+
+    const task = this.computeCompanyAddress(company);
+    this.resolvedCompanyAddressCache.set(companyKey, task);
+    // Never cache a null result from a transient (load-induced) failure, otherwise the company is
+    // permanently left without a legal name/address for the rest of the run. A non-null result is
+    // the authoritative identity and is reused by both callers.
+    void task
+      .then((result) => {
+        if (!result && this.resolvedCompanyAddressCache.get(companyKey) === task) {
+          this.resolvedCompanyAddressCache.delete(companyKey);
+        }
+      })
+      .catch(() => {
+        if (this.resolvedCompanyAddressCache.get(companyKey) === task) {
+          this.resolvedCompanyAddressCache.delete(companyKey);
+        }
+      });
+    return task;
+  }
+
+  private async computeCompanyAddress(company: PreCategorizedCompany): Promise<ExtractedCompanyAddress | null> {
     if (!company.domain) {
       return this.extractCompanyAddressWithWebSearch(company);
     }
