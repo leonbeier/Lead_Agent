@@ -719,6 +719,9 @@ app.get("/health", (_request, response) => {
   response.json({
     status: "ok",
     service: "lead-agent",
+    // Railway injects the deployed commit SHA at runtime. Exposing it here lets a deploy be
+    // verified (does the live commit match the just-pushed commit?) before triggering a live run.
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA ?? null,
     timestamp: new Date().toISOString()
   });
 });
