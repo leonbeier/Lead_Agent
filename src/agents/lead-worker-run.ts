@@ -247,6 +247,21 @@ const MAX_CONTACT_CONCURRENCY = 4;
 const CONTACT_DISCOVERY_MAX_ATTEMPTS = 3;
 const CONTACT_DISCOVERY_RETRY_DELAY_MS = 1_500;
 
+// Raised when contact discovery exceeds its full per-company budget (contactTaskTimeoutMs). A
+// timeout is fundamentally different from a transient crawl failure: the crawl already consumed its
+// entire time window without finishing, so re-running it just hands the same slow/hung origin
+// another full window. Because the shared Chromium browser is globally serialized, every wasted
+// window blocks all other companies, which is the documented cause of the run exhausting its
+// maxRuntimeMs and writing late companies to HubSpot without outreach/LinkedIn. We therefore mark
+// budget timeouts with this sentinel and do NOT retry them - retries stay reserved for genuine
+// transient failures (thrown network errors) that have a real chance of succeeding on a re-run.
+class ContactWorkerTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ContactWorkerTimeoutError";
+  }
+}
+
 // Per-contact personalized outreach generation budget. Each contact gets its own message; a single
 // slow generation must never block the HubSpot write, so it falls back to the company-level brief.
 const PERSONALIZED_OUTREACH_PER_CONTACT_TIMEOUT_MS = 45_000;
@@ -1178,7 +1193,7 @@ export class LeadWorkerRunService {
             let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
             const timeoutPromise = new Promise<never>((_, reject) => {
               timeoutHandle = setTimeout(() => {
-                reject(new Error(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`));
+                reject(new ContactWorkerTimeoutError(`Contact worker timed out after ${this.contactTaskTimeoutMs}ms`));
               }, this.contactTaskTimeoutMs);
             });
 
@@ -1193,6 +1208,12 @@ export class LeadWorkerRunService {
               break;
             } catch (attemptError) {
               lastError = attemptError;
+              // A budget timeout already used its full window, so retrying it only re-blocks the
+              // serialized browser for every other company; accept it immediately and let HubSpot
+              // run without contacts. Only genuine transient failures are worth another attempt.
+              if (attemptError instanceof ContactWorkerTimeoutError) {
+                break;
+              }
               if (attempt < CONTACT_DISCOVERY_MAX_ATTEMPTS) {
                 log(`Kontaktsuche fehlgeschlagen fuer ${state.company.name} (Versuch ${attempt}/${CONTACT_DISCOVERY_MAX_ATTEMPTS}) - erneuter Versuch: ${attemptError instanceof Error ? attemptError.message : String(attemptError)}`);
                 await delay(CONTACT_DISCOVERY_RETRY_DELAY_MS);
