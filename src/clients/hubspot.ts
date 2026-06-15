@@ -2955,6 +2955,11 @@ export class HubSpotClient {
       .replace(/<script[\s\S]*?<\/script>/gi, " ")
       .replace(/<style[\s\S]*?<\/style>/gi, " ")
       .replace(/<br\s*\/?>/gi, "\n")
+      // Inline-level tags can sit *inside* a single word — e.g. a styled logo rendered as
+      // "Fenn<span class='red-letters'>ai</span>o" — so stripping them with a space would split
+      // the brand into "Fenn ai o". Remove inline formatting tags with NO separator; block-level
+      // tags below still collapse to a space so genuine word boundaries are preserved.
+      .replace(/<\/?(?:span|a|b|i|em|strong|u|s|sup|sub|mark|small|font|abbr|q|cite|code|time|label|wbr|bdi|bdo|ins|del)(?:\s[^>]*)?>/gi, "")
       .replace(/<[^>]+>/g, " ");
   }
 
