@@ -4225,6 +4225,16 @@ export class LeadPipelineAgent {
       return false;
     }
 
+    // A malformed / truncated planner response (the Azure model hit its token cap mid-array, so the
+    // JSON cannot be parsed) must not abort the whole Exa worker. Treat it like the other transient
+    // planner failures and fall back to the deterministic default queries instead of crashing.
+    if (error instanceof SyntaxError
+      || /returned invalid JSON/i.test(error.message)
+      || /in JSON at position/i.test(error.message)
+      || /Unexpected (?:token|end|non-whitespace)/i.test(error.message)) {
+      return true;
+    }
+
     return /Exa query planner timed out/i.test(error.message)
       || /Exa query planner diversity rewrite timed out/i.test(error.message)
       || /temporarily unavailable/i.test(error.message)
