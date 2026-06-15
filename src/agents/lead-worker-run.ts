@@ -218,6 +218,13 @@ const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
 const IDENTITY_RESOLUTION_TIMEOUT_MS = 90_000;
 const DEFAULT_EXA_DISCOVERY_TIMEOUT_MS = Math.max(180_000, env.EXA_REQUEST_TIMEOUT_MS);
 const MIN_EXA_BATCH_REQUESTS = 2;
+// Bounds the research-brief build in the outreach worker. buildResearchBriefForExecution runs a
+// website crawl plus an Azure reasoning call; without a hard cap a single hung crawl/Azure request
+// keeps outreachInFlight pinned above zero forever, so countDownstreamInFlight() never reaches 0 and
+// the main loop can never break - the run then stays in stage=stopping indefinitely. The contact
+// and HubSpot workers already race their long calls against a timeout; the outreach worker must do
+// the same so every downstream task is guaranteed to settle and the run always terminates.
+const RESEARCH_BRIEF_TASK_TIMEOUT_MS = 300_000;
 
 // Hard safe ceilings for per-stage parallelism. The lead-agent runs on a single small container;
 // unbounded request-supplied concurrency (settings have historically stored 200) saturates the
@@ -1100,7 +1107,22 @@ export class LeadWorkerRunService {
         state.outreachStatus = "running";
         emitProgress();
         try {
-          state.researchBrief = await this.debugConsoleService.buildResearchBriefForExecution(state.company);
+          let researchBriefTimeout: ReturnType<typeof setTimeout> | undefined;
+          const researchBriefTimeoutPromise = new Promise<never>((_, reject) => {
+            researchBriefTimeout = setTimeout(() => {
+              reject(new Error(`Outreach worker timed out after ${RESEARCH_BRIEF_TASK_TIMEOUT_MS}ms`));
+            }, RESEARCH_BRIEF_TASK_TIMEOUT_MS);
+          });
+          try {
+            state.researchBrief = await Promise.race([
+              this.debugConsoleService.buildResearchBriefForExecution(state.company),
+              researchBriefTimeoutPromise
+            ]);
+          } finally {
+            if (researchBriefTimeout) {
+              clearTimeout(researchBriefTimeout);
+            }
+          }
           state.outreachStatus = "done";
           metrics.outreachCompleted += 1;
           log(`Outreach fertig: ${state.company.name}`);
