@@ -153,18 +153,19 @@ export class AsyncQueue<T> {
   private readonly waiters: Array<(item: T | undefined) => void> = [];
   private closed = false;
 
-  enqueue(item: T): void {
+  enqueue(item: T): boolean {
     if (this.closed) {
-      return;
+      return false;
     }
 
     const waiter = this.waiters.shift();
     if (waiter) {
       waiter(item);
-      return;
+      return true;
     }
 
     this.items.push(item);
+    return true;
   }
 
   async dequeue(): Promise<T | undefined> {
@@ -599,8 +600,14 @@ export class LeadWorkerRunService {
       }
 
       for (const company of uniqueRawCompanies.slice(0, SEARCH_BATCH_SIZE + SEARCH_RESULT_HEADROOM)) {
-        aiPendingCount += 1;
-        aiQueue.enqueue({ company, searchId });
+        // Only count a pending AI task when the item is actually accepted by the queue. enqueue is a
+        // no-op once the queue is closed (stopAiQueue ran after a timeout/target/exa-stop); counting
+        // it anyway would leak aiPendingCount permanently because no AI worker ever dequeues it, so
+        // countAiPending() would stay > 0 forever and the main loop could never break (stage=stopping
+        // would hang indefinitely). An Exa batch that returns right after the stop hits exactly this.
+        if (aiQueue.enqueue({ company, searchId })) {
+          aiPendingCount += 1;
+        }
       }
 
       return uniqueRawCompanies;
@@ -1481,8 +1488,11 @@ export class LeadWorkerRunService {
       if (normalizedDomain) {
         currentRunExcludedDomains.add(normalizedDomain);
       }
-      aiPendingCount += 1;
-      aiQueue.enqueue({ company });
+      // See ingestRawCompanies: only count the pending AI task when enqueue actually accepts it, so a
+      // closed queue (post-stop) never leaks aiPendingCount and strands the run in stage=stopping.
+      if (aiQueue.enqueue({ company })) {
+        aiPendingCount += 1;
+      }
     }
 
     const exaWorkers = Array.from({ length: exaConcurrency }, () => (async () => {
