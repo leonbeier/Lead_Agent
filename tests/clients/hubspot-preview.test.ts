@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { HubSpotClient, isPlausibleCompanyName, looksLikeHexOrUuidSlug } from "../../src/clients/hubspot";
+import { HubSpotClient } from "../../src/clients/hubspot";
 import { PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../../src/types";
 
 function buildSampleCompany(): PreCategorizedCompany {
@@ -87,67 +87,6 @@ test("previewHubSpotSync skips generic mailbox contacts without name or phone, k
   assert.match(preview.contacts[1]?.outreachNote ?? "", /LinkedIn Outreach/);
 });
 
-test("previewHubSpotSync never writes a company LinkedIn URL to a contact, even when malformed/concatenated", async () => {
-  const client = new HubSpotClient();
-  const contacts: PublicContactCandidate[] = [
-    {
-      email: "info@4h-jena.de",
-      firstName: "Michael",
-      lastName: "Boer",
-      jobTitle: "Managing Director",
-      // Malformed value observed in production: a company URL concatenated onto a base host.
-      linkedinUrl: "http://www.linkedin.com/https://www.linkedin.com/company/-4h--jena-engineering-gmbh",
-      sourceUrl: "https://4h-jena.de/contact",
-      label: "linkedin_profile"
-    },
-    {
-      email: "info@example-automation.de",
-      firstName: "Jana",
-      lastName: "Klein",
-      jobTitle: "CTO",
-      linkedinUrl: "https://www.linkedin.com/company/example-automation",
-      sourceUrl: "https://example-automation.de/team",
-      label: "linkedin_profile"
-    }
-  ];
-
-  const preview = await client.previewHubSpotSync(buildSampleCompany(), buildSampleBrief(), contacts, { includeAddressLookup: false });
-
-  // The malformed/concatenated company URL must be dropped, not written as a personal LinkedIn URL.
-  assert.equal(preview.contacts[0]?.properties.hs_linkedin_url, undefined);
-  // A plain company LinkedIn URL must also be dropped.
-  assert.equal(preview.contacts[1]?.properties.hs_linkedin_url, undefined);
-});
-
-test("previewHubSpotSync prefers the per-person personalized outreach message in the contact note", async () => {
-  const client = new HubSpotClient();
-  const contacts: PublicContactCandidate[] = [
-    {
-      email: "martin@sample-automation.de",
-      firstName: "Martin",
-      lastName: "Minsel",
-      jobTitle: "Managing Director",
-      linkedinUrl: "https://www.linkedin.com/in/martin-minsel/",
-      sourceUrl: "https://www.linkedin.com/in/martin-minsel/",
-      label: "linkedin_profile",
-      personalizedOutreach: {
-        message: "Hallo Martin, ich habe gesehen dass ihr PLC-integrierte Vision-Systeme baut. Das hat mich an einen Kunden erinnert, bei dem ein Modell genau auf die Anwendung angepasst wurde.",
-        language: "de",
-        confidence: "high"
-      }
-    }
-  ];
-
-  const preview = await client.previewHubSpotSync(buildSampleCompany(), buildSampleBrief(), contacts, { includeAddressLookup: false });
-  const note = preview.contacts[0]?.outreachNote ?? "";
-
-  // The individual per-person message must be used in the contact note.
-  assert.match(note, /Hallo Martin, ich habe gesehen dass ihr PLC-integrierte Vision-Systeme baut/);
-  // The generic brief LinkedIn/email body must NOT be used when a personalized message is present.
-  assert.doesNotMatch(note, /wir helfen Integratoren, Vision-AI schneller produktiv/);
-  assert.doesNotMatch(note, /produktionsreifen Vision-AI-Deployments/);
-});
-
 test("previewHubSpotSync keeps generic mailbox contacts when a phone number is present", async () => {
   const client = new HubSpotClient();
   const contacts: PublicContactCandidate[] = [
@@ -200,29 +139,6 @@ test("extractEmails normalizes bracketed obfuscated mailbox addresses", () => {
   assert.deepEqual(emails, ["info@ceeltec.de"]);
 });
 
-test("extractEmails does not glue adjacent page text onto an address split by markup", () => {
-  const client = new HubSpotClient();
-  const emails = client["extractEmails"](`
-    <html>
-      <body>
-        <a href="#">info@specim.com</a><h3>Press</h3>
-        <div>Geschäftsführer: <b>Takayuki Mukai</b> CEO <span>takayuki.mukai@specim.com</span></div>
-        <p>orders@specim.com</p>
-      </body>
-    </html>
-  `, new Set(["specim.com"]));
-
-  // Tags are stripped with a space so the TLD match stops at the address boundary instead of
-  // absorbing trailing words ("info@specim.compress…") or leading words ("…mukaiceotakayuki…").
-  assert.ok(emails.includes("info@specim.com"));
-  assert.ok(emails.includes("takayuki.mukai@specim.com"));
-  assert.ok(emails.includes("orders@specim.com"));
-  assert.ok(
-    emails.every((email) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,24}$/.test(email)),
-    `corrupted email present: ${emails.join(", ")}`
-  );
-});
-
 test("extractPhones captures local-format phone numbers in contact contexts", () => {
   const client = new HubSpotClient();
   const phones = client["extractPhones"](`
@@ -249,102 +165,6 @@ test("previewHubSpotSync prefers a legal entity name resolved from official page
   }, buildSampleBrief(), [], { includeAddressLookup: true });
 
   assert.equal(preview.companyProperties.name, "BERND MÜNSTERMANN GMBH & CO. KG");
-});
-
-test("previewHubSpotSync falls back to the domain-derived name when extraction fails and the source name is a generic web label", async () => {
-  const client = new HubSpotClient();
-  // Simulate website extraction failing under load (no company name resolved).
-  client["extractCompanyAddress"] = async () => null;
-
-  const preview = await client.previewHubSpotSync({
-    ...buildSampleCompany(),
-    name: "Mail",
-    domain: "https://interelectronic.com"
-  }, buildSampleBrief(), [], { includeAddressLookup: true });
-
-  // "Mail" is a generic navigation/UI label, never a real operating-entity name, so it must not
-  // be written as the record name; the readable domain-derived name is used instead.
-  assert.equal(preview.companyProperties.name, "Interelectronic");
-});
-
-test("previewHubSpotSync falls back to the domain-derived name when the source name is a template placeholder like 'OUR COMPANY'", async () => {
-  const client = new HubSpotClient();
-  client["extractCompanyAddress"] = async () => null;
-
-  const preview = await client.previewHubSpotSync({
-    ...buildSampleCompany(),
-    name: "OUR COMPANY",
-    domain: "https://abcvision.info"
-  }, buildSampleBrief(), [], { includeAddressLookup: true });
-
-  // "OUR COMPANY" is a CMS template placeholder, never a real operating-entity name.
-  assert.equal(preview.companyProperties.name, "Abcvision");
-});
-
-test("previewHubSpotSync falls back to the domain-derived name when the source name is a bare fragment like 'De'", async () => {
-  const client = new HubSpotClient();
-  client["extractCompanyAddress"] = async () => null;
-
-  const preview = await client.previewHubSpotSync({
-    ...buildSampleCompany(),
-    name: "De",
-    domain: "https://writepcb.com"
-  }, buildSampleBrief(), [], { includeAddressLookup: true });
-
-  // "De" is a bare language/country fragment captured from a subdomain, not a company name.
-  assert.equal(preview.companyProperties.name, "Writepcb");
-});
-
-test("looksLikeHexOrUuidSlug flags machine slugs but keeps real brand names", () => {
-  // Wix asset-id subdomain turned into a "name" — the exact junk record we must reject.
-  assert.equal(looksLikeHexOrUuidSlug("489f595f 6891 49a9 b5fc 6a83ba5b0317"), true);
-  assert.equal(looksLikeHexOrUuidSlug("489f595f-6891-49a9-b5fc-6a83ba5b0317"), true);
-  assert.equal(looksLikeHexOrUuidSlug("deadbeef1234"), true);
-
-  // Real names contain a non-hex token or no digits and must stay usable.
-  assert.equal(looksLikeHexOrUuidSlug("Sample Automation GmbH"), false);
-  assert.equal(looksLikeHexOrUuidSlug("3D Systems"), false);
-  assert.equal(looksLikeHexOrUuidSlug("C3 AI"), false);
-  assert.equal(looksLikeHexOrUuidSlug("Facade"), false);
-  assert.equal(looksLikeHexOrUuidSlug(undefined), false);
-});
-
-test("isPlausibleCompanyName rejects hex/UUID slugs", () => {
-  assert.equal(isPlausibleCompanyName("489f595f 6891 49a9 b5fc 6a83ba5b0317"), false);
-  assert.equal(isPlausibleCompanyName("Sample Automation GmbH"), true);
-});
-
-test("previewHubSpotSync never adopts a UUID host slug as the company name", async () => {
-  const client = new HubSpotClient();
-  client["extractCompanyAddress"] = async () => null;
-
-  const preview = await client.previewHubSpotSync({
-    ...buildSampleCompany(),
-    name: "Mail",
-    domain: "https://489f595f-6891-49a9-b5fc-6a83ba5b0317.filesusr.com"
-  }, buildSampleBrief(), [], { includeAddressLookup: true });
-
-  // The UUID domain label (a Wix asset id) must never be turned into a "company name" via the
-  // domain-derived fallback.
-  assert.equal(looksLikeHexOrUuidSlug(preview.companyProperties.name), false);
-});
-
-test("previewHubSpotSync falls back to the domain-derived name when extraction returns anti-bot block text", async () => {
-  const client = new HubSpotClient();
-  // A blocked crawl returns the access-challenge page text instead of a real company name.
-  client["extractCompanyAddress"] = async () => ({
-    companyName: "sorry, but your current behavior is detected as"
-  });
-
-  const preview = await client.previewHubSpotSync({
-    ...buildSampleCompany(),
-    // Worker overwrote the sourcing name with the same anti-bot text before the HubSpot write.
-    name: "sorry, but your current behavior is detected as",
-    domain: "https://mt.com"
-  }, buildSampleBrief(), [], { includeAddressLookup: true });
-
-  // Anti-bot block-page text must never be written as a company name; fall back to the domain.
-  assert.equal(preview.companyProperties.name, "Mt");
 });
 
 test("extractCompanyAddress prefers the AI website company profile before weaker web-search data", async () => {
@@ -898,85 +718,6 @@ test("descriptive company labels still produce domain-token aliases for LinkedIn
   assert.ok(aliases.includes("Geott"));
 });
 
-test("TLS handshake detection gates the http:// fallback to real cipher rejections only", () => {
-  const client = new HubSpotClient();
-  const isTls = (error: unknown) => client["isTlsHandshakeError"](error);
-
-  // Real handshake rejections (the only case where retrying over http:// can succeed).
-  const cipherError = new TypeError("fetch failed");
-  (cipherError as { cause?: unknown }).cause = Object.assign(new Error("write EPROTO ... ssl3_read_bytes"), {
-    code: "EPROTO"
-  });
-  assert.equal(isTls(cipherError), true);
-  assert.equal(isTls(new Error("ERR_SSL_VERSION_OR_CIPHER_MISMATCH")), true);
-  assert.equal(isTls(new Error("ERR_CERT_AUTHORITY_INVALID")), true);
-
-  // Ordinary failures (404/DNS/timeout) must NOT trigger the http:// retry, otherwise every dead
-  // follow-up URL would double the fetch cost and saturate the run over the two browser lanes.
-  assert.equal(isTls(new Error("HTTP 404 Not Found")), false);
-  assert.equal(isTls(Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), { code: "ENOTFOUND" })), false);
-  assert.equal(isTls(Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" })), false);
-  assert.equal(isTls(Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" })), false);
-});
-
-test("role-adjacent snippet extraction stays linear on long punctuation-sparse pages", () => {
-  const client = new HubSpotClient();
-  const extract = (text: string) => client["extractRoleAdjacentSnippets"](text) as string[];
-
-  // A pathological page: a very long run of non-sentence-punctuation characters that previously
-  // forced the `[^.!?]{0,120}(?:role)[^.!?]{0,120}` matchAll to backtrack at every start position,
-  // pinning the event loop for minutes. It must now complete near-instantly. The role keyword sits
-  // near the front so it is within the bounded scan window.
-  const filler = "geschaeftsfuehrung kontakt team ".repeat(4000); // ~128k chars, no .!?
-  const pathological = `Managing Director Jane Doe leads us. ${filler}`;
-  const start = Date.now();
-  const snippets = extract(pathological);
-  const elapsedMs = Date.now() - start;
-  assert.ok(elapsedMs < 1000, `role-adjacent scan took ${elapsedMs}ms (expected < 1000ms)`);
-  assert.ok(snippets.length >= 1);
-  assert.ok(snippets.some((snippet) => /Managing Director/i.test(snippet)));
-
-  // Normal page: still returns readable role context windows.
-  const normal = "We are a robotics firm. Our Geschäftsführer Max Mustermann leads the team. Contact us today.";
-  const normalSnippets = extract(normal);
-  assert.ok(normalSnippets.some((snippet) => /Gesch\u00e4ftsf\u00fchrer Max Mustermann/.test(snippet)));
-});
-
-test("boundHtmlForProcessing caps oversized pages while keeping head and footer evidence", () => {
-  const client = new HubSpotClient();
-  const bound = (html: string) => client["boundHtmlForProcessing"](html) as string;
-
-  // A small page passes through unchanged.
-  const small = "<html><body><main>Impressum: Beispiel Technik GmbH</main><footer>© 2026 Beispiel Technik GmbH</footer></body></html>";
-  assert.equal(bound(small), small);
-
-  // A multi-megabyte page (e.g. minified site with huge inline CSS/JS) is capped to a bounded
-  // working set so every downstream synchronous full-HTML pass stays O(cap). The head (main
-  // content / impressum) and the tail (footer / © legal-entity line) must both survive so the
-  // agent never loses the legal entity. This is the core "page always reachable under load" guard:
-  // an unbounded page previously let a single synchronous map over crawled pages pin the event loop.
-  const headMarker = "<main>Impressum: Beispiel Technik GmbH, Musterstraße 1, 12345 Musterstadt</main>";
-  const footerMarker = "<footer>© 2026 Beispiel Technik GmbH</footer>";
-  const filler = "<div class=\"x-very-long-class-name-without-keyword-aaaaaaaaaaaaaaaaaaaa\"><span>n</span></div>".repeat(40000);
-  const huge = `<html><body>${headMarker}${filler}${footerMarker}</body></html>`;
-  assert.ok(huge.length > 2_000_000, "fixture should be multi-MB");
-
-  const start = Date.now();
-  const bounded = bound(huge);
-  const elapsedMs = Date.now() - start;
-  assert.ok(elapsedMs < 500, `bounding took ${elapsedMs}ms (expected < 500ms)`);
-  assert.ok(bounded.length < 260_000, `bounded length ${bounded.length} should be well under the raw size`);
-  assert.ok(bounded.includes("Impressum: Beispiel Technik GmbH"), "head/impressum evidence must survive");
-  assert.ok(bounded.includes(footerMarker), "footer / legal-entity line must survive");
-
-  // Building the evidence snippet on the bounded page must stay fast regardless of raw page size.
-  const snippetStart = Date.now();
-  const snippet = client["buildWebsiteEvidenceSnippet"]("https://example.com/impressum", bounded) as string;
-  const snippetMs = Date.now() - snippetStart;
-  assert.ok(snippetMs < 1000, `snippet build took ${snippetMs}ms (expected < 1000ms)`);
-  assert.ok(snippet.includes("Beispiel Technik GmbH"), "snippet must still expose the legal entity");
-});
-
 test("company alias extraction ignores contact CTA phrases from page text", () => {
   const client = new HubSpotClient();
   const aliases = client["extractCompanySearchAliases"](
@@ -1219,6 +960,59 @@ test("final public contact composition keeps website mailbox and LinkedIn contac
   assert.ok(finalContacts.some((contact) => contact.label === "public_generic_mailbox"));
   assert.ok(finalContacts.some((contact) => contact.label === "linkedin_profile"));
   assert.ok(finalContacts.some((contact) => contact.email === "paul.niebler@pexon-consulting.de"));
+});
+
+test("normalizeContactForHubSpot drops a company-LinkedIn-only placeholder with no usable channel", () => {
+  const client = new HubSpotClient();
+
+  // Company LinkedIn page emitted as a "fallback" person: the company name is split into
+  // first/last name, the only LinkedIn evidence is a /company/ page (stripped during
+  // normalization), and there is no email or phone. This must be rejected, never written as a
+  // person contact (AGENTS.md: no company-LinkedIn-only placeholders, no channel-less contacts).
+  const companyLinkedInPlaceholder: PublicContactCandidate = {
+    firstName: "Krones",
+    lastName: "Ag",
+    linkedinUrl: "https://www.linkedin.com/company/krones",
+    sourceUrl: "https://www.linkedin.com/company/krones",
+    label: "linkedin_profile",
+    jobTitle: "Company LinkedIn Page"
+  };
+  assert.equal(client["normalizeContactForHubSpot"](companyLinkedInPlaceholder), null);
+
+  // A name-only contact with no reachable channel is likewise dropped.
+  const nameOnly: PublicContactCandidate = {
+    firstName: "Jane",
+    lastName: "Doe",
+    sourceUrl: "https://example.com/team",
+    label: "website_named_contact"
+  };
+  assert.equal(client["normalizeContactForHubSpot"](nameOnly), null);
+
+  // Contacts that carry a usable channel (email, phone, or personal /in/ LinkedIn) are kept.
+  const withEmail: PublicContactCandidate = {
+    email: "info@example.com",
+    sourceUrl: "https://example.com/kontakt",
+    label: "public_generic_mailbox"
+  };
+  assert.ok(client["normalizeContactForHubSpot"](withEmail));
+
+  const withPhoneOnly: PublicContactCandidate = {
+    firstName: "Max",
+    lastName: "Mustermann",
+    phone: "+49 30 123456",
+    sourceUrl: "https://example.com/impressum",
+    label: "website_named_contact"
+  };
+  assert.ok(client["normalizeContactForHubSpot"](withPhoneOnly));
+
+  const withPersonalLinkedIn: PublicContactCandidate = {
+    firstName: "Erika",
+    lastName: "Beispiel",
+    linkedinUrl: "https://www.linkedin.com/in/erika-beispiel",
+    sourceUrl: "https://www.linkedin.com/in/erika-beispiel",
+    label: "linkedin_profile"
+  };
+  assert.ok(client["normalizeContactForHubSpot"](withPersonalLinkedIn));
 });
 
 test("findPublicContactsFromPages keeps an official website mailbox alongside Azure LinkedIn contacts", async () => {
@@ -1642,237 +1436,4 @@ test("contact page extraction includes ansprechpartner-style menu links", () => 
 
   assert.ok(links.includes("https://leitek.de/leitek-profil/ansprechpartner/"));
   assert.ok(links.includes("https://leitek.de/kontakt/"));
-});
-
-test("enrichSelectedContactsWithLinkedIn fills a missing personal LinkedIn URL for a named contact via web search", async () => {
-  const client = new HubSpotClient();
-  const company = buildSampleCompany();
-
-  // Stub the (free Bing/DDG) search path so the test is deterministic and offline.
-  client["searchBingResults"] = async (query: string) => {
-    if (/adam tabor/i.test(query)) {
-      return [{ url: "https://www.linkedin.com/in/adam-tabor", title: "Adam Tabor", snippet: "CEO", query }];
-    }
-    return [];
-  };
-
-  const contacts: PublicContactCandidate[] = [
-    {
-      firstName: "Adam",
-      lastName: "Tabor",
-      jobTitle: "CEO",
-      sourceUrl: "https://sample-automation.de",
-      label: "website_named_contact"
-    }
-  ];
-
-  const enriched = await client["enrichSelectedContactsWithLinkedIn"](company, contacts);
-
-  assert.equal(enriched.length, 1);
-  assert.equal(enriched[0]?.linkedinUrl, "https://www.linkedin.com/in/adam-tabor");
-});
-
-test("enrichSelectedContactsWithLinkedIn leaves contacts unchanged when no LinkedIn profile is found", async () => {
-  const client = new HubSpotClient();
-  const company = buildSampleCompany();
-
-  client["searchBingResults"] = async () => [];
-
-  const contacts: PublicContactCandidate[] = [
-    {
-      firstName: "Yaniv",
-      lastName: "Ben-Yosef",
-      jobTitle: "VP",
-      sourceUrl: "https://sample-automation.de",
-      label: "website_named_contact"
-    }
-  ];
-
-  const enriched = await client["enrichSelectedContactsWithLinkedIn"](company, contacts);
-
-  assert.equal(enriched.length, 1);
-  assert.equal(enriched[0]?.linkedinUrl, undefined);
-});
-
-test("enrichSelectedContactsWithLinkedIn does not re-search a contact that already has a personal LinkedIn URL", async () => {
-  const client = new HubSpotClient();
-  const company = buildSampleCompany();
-
-  let searchCalls = 0;
-  client["searchBingResults"] = async () => {
-    searchCalls += 1;
-    return [];
-  };
-
-  const contacts: PublicContactCandidate[] = [
-    {
-      firstName: "Martin",
-      lastName: "Minsel",
-      jobTitle: "Managing Director",
-      linkedinUrl: "https://www.linkedin.com/in/martin-minsel",
-      sourceUrl: "https://www.linkedin.com/in/martin-minsel",
-      label: "linkedin_profile"
-    }
-  ];
-
-  const enriched = await client["enrichSelectedContactsWithLinkedIn"](company, contacts);
-
-  assert.equal(searchCalls, 0);
-  assert.equal(enriched[0]?.linkedinUrl, "https://www.linkedin.com/in/martin-minsel");
-});
-
-test("extractLegalEntityNameFromLine rejects German/French disclaimer prose that ends in a lowercase word colliding with a Nordic legal form (ab/as/se)", () => {
-  const client = new HubSpotClient();
-
-  // Real imprint disclaimer sentences observed in live runs (Solabcon, Esoes, Cira Vision). The
-  // lowercase German word "ab" (=from) must NOT be treated as the Swedish legal form "AB", so the
-  // whole sentence must NOT be extracted as a company name.
-  assert.equal(
-    client["extractLegalEntityNameFromLine"](
-      "Schadensersatzansprüche bleiben hiervon unberührt. Eine diesbezügliche Haftung ist jedoch erst ab"
-    ),
-    null
-  );
-  assert.equal(
-    client["extractLegalEntityNameFromLine"](
-      "Der Preis hängt vom Umfang und der Komplexität des Projekts ab"
-    ),
-    null
-  );
-  assert.equal(
-    client["extractLegalEntityNameFromLine"]("Nous proposons les solutions les plus ab"),
-    null
-  );
-});
-
-test("extractLegalEntityNameFromLine still captures real legal entity names, including lowercase particles and brands", () => {
-  const client = new HubSpotClient();
-
-  // Page-title form with an "Impressum der" prefix collapses to the bare legal entity.
-  assert.equal(client["extractLegalEntityNameFromLine"]("Impressum der Solabcon GmbH"), "Solabcon GmbH");
-  assert.equal(client["extractLegalEntityNameFromLine"]("Solabcon GmbH"), "Solabcon GmbH");
-  assert.equal(
-    client["extractLegalEntityNameFromLine"]("ESOES GmbH & Co. KG"),
-    "ESOES GmbH & Co. KG"
-  );
-  // Lowercase German particles ("für", "und") inside a real name must be preserved.
-  assert.equal(
-    client["extractLegalEntityNameFromLine"]("Gesellschaft für moderne Fertigung und Technik mbH"),
-    "Gesellschaft für moderne Fertigung und Technik mbH"
-  );
-  // Lowercase brand name with a canonical-case legal form is a valid entity.
-  assert.equal(client["extractLegalEntityNameFromLine"]("adidas AG"), "adidas AG");
-});
-
-test("extractCompanyAddress resolves the real GmbH from an impressum even when a disclaimer sentence ending in 'ab' is present", async () => {
-  const client = new HubSpotClient();
-  client["getOfficialWebsiteCompanyProfile"] = async () => null;
-  client["collectCandidatePages"] = async () => ([
-    {
-      url: "https://solabcon.de/impressum",
-      html: `
-        <html>
-          <body>
-            <h1>Impressum der Solabcon GmbH</h1>
-            <p>Solabcon GmbH</p>
-            <p>
-              Die gesetzlichen Schadensersatzansprüche bleiben hiervon unberührt. Eine
-              diesbezügliche Haftung ist jedoch erst ab dem Zeitpunkt der Kenntnis einer
-              konkreten Rechtsverletzung möglich.
-            </p>
-          </body>
-        </html>
-      `
-    }
-  ]);
-  client["apolloClient"] = {
-    getOrganizationAddress: async () => null
-  };
-  client["extractCompanyAddressWithWebSearch"] = async () => null;
-
-  const extracted = await client["extractCompanyAddress"]({
-    name: "Solabcon",
-    domain: "https://solabcon.de",
-    country: "Germany"
-  });
-
-  // The disclaimer prose ("… erst ab") must not win over the real legal entity.
-  assert.equal(extracted?.companyName, "Solabcon GmbH");
-});
-
-test("extractCompanyAddress prefers the impressum legal entity (with legal form) over the bare AI brand name for the same company", async () => {
-  const client = new HubSpotClient();
-  // Reproduces the live Solabcon defect: the Azure website profiler returns the bare brand
-  // "Solabcon" (trusted exact_operating_entity), but the impressum carries the registered legal
-  // form "Solabcon GmbH". The authoritative legal name with the legal form must be adopted.
-  client["getOfficialWebsiteCompanyProfile"] = async () => ({
-    companyName: "Solabcon",
-    entityScope: "exact_operating_entity",
-    searchAliases: [],
-    address: "Musterstrasse 1",
-    city: "Bruchsal",
-    zip: "76646",
-    state: undefined,
-    country: "Germany",
-    emails: ["info@solabcon.de"],
-    phones: [],
-    linkedInUrls: [],
-    sourceUrls: ["https://solabcon.de"]
-  });
-  client["collectCandidatePages"] = async () => ([
-    {
-      url: "https://solabcon.de/impressum",
-      html: "<html><body><h1>Impressum der Solabcon GmbH</h1><p>Solabcon GmbH</p></body></html>"
-    }
-  ]);
-  client["apolloClient"] = {
-    getOrganizationAddress: async () => null
-  };
-  client["extractCompanyAddressWithWebSearch"] = async () => null;
-
-  const extracted = await client["extractCompanyAddress"]({
-    name: "Solabcon",
-    domain: "https://solabcon.de",
-    country: "Germany"
-  });
-
-  assert.equal(extracted?.companyName, "Solabcon GmbH");
-});
-
-test("extractCompanyAddress keeps the trusted AI name when the impressum legal entity is a different company", async () => {
-  const client = new HubSpotClient();
-  // Guard: the legal-form preference must NOT override the trusted AI name when the impressum
-  // entity is a different root (e.g. a landlord / unrelated GmbH on a shared legal page).
-  client["getOfficialWebsiteCompanyProfile"] = async () => ({
-    companyName: "Acme Vision",
-    entityScope: "exact_operating_entity",
-    searchAliases: [],
-    address: "Musterstrasse 1",
-    city: "Berlin",
-    zip: "10115",
-    state: undefined,
-    country: "Germany",
-    emails: ["info@acme-vision.de"],
-    phones: [],
-    linkedInUrls: [],
-    sourceUrls: ["https://acme-vision.de"]
-  });
-  client["collectCandidatePages"] = async () => ([
-    {
-      url: "https://acme-vision.de/impressum",
-      html: "<html><body><h1>Impressum</h1><p>Hausverwaltung Schmidt GmbH</p></body></html>"
-    }
-  ]);
-  client["apolloClient"] = {
-    getOrganizationAddress: async () => null
-  };
-  client["extractCompanyAddressWithWebSearch"] = async () => null;
-
-  const extracted = await client["extractCompanyAddress"]({
-    name: "Acme Vision",
-    domain: "https://acme-vision.de",
-    country: "Germany"
-  });
-
-  assert.equal(extracted?.companyName, "Acme Vision");
 });

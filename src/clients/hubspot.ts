@@ -923,8 +923,16 @@ export class HubSpotClient {
     const linkedinUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
     const firstName = this.normalizeNamePart(contact.firstName);
     const lastName = this.normalizeNamePart(contact.lastName);
-    const hasReachableIdentity = Boolean(email || linkedinUrl || firstName || lastName);
-    if (!hasReachableIdentity) {
+    const phone = contact.phone?.trim() || undefined;
+    // A contact is only worth syncing when it carries at least one usable outreach channel:
+    // a real email, a phone number, or a personal LinkedIn /in/ profile. linkedinUrl is already
+    // normalized to personal profiles only (company LinkedIn pages are stripped to undefined
+    // above), so a name-only contact whose sole "channel" was a company LinkedIn page has no
+    // reachable channel and must be dropped instead of being written as a person. This enforces
+    // the AGENTS.md hard rule: no company-LinkedIn-only placeholders treated as people and no
+    // contacts without a usable channel after normalization.
+    const hasUsableChannel = Boolean(email || phone || linkedinUrl);
+    if (!hasUsableChannel) {
       return null;
     }
 
