@@ -330,7 +330,22 @@ export class ExaSearchClient {
       }
 
       if (response.ok) {
-        return JSON.parse(await this.readResponseTextWithTimeout(response)) as ExaSearchResponse;
+        const responseText = await this.readResponseTextWithTimeout(response);
+        try {
+          return JSON.parse(responseText) as ExaSearchResponse;
+        } catch (parseError) {
+          // Under higher request concurrency Exa occasionally returns a 200 with a truncated /
+          // malformed JSON body. Parsing it throws a SyntaxError that previously aborted the whole
+          // Exa worker. Treat a malformed success body like a transient failure and retry the
+          // request instead of losing every result from this batch.
+          if (attempt === EXA_MAX_RETRIES) {
+            const message = parseError instanceof Error ? parseError.message : String(parseError);
+            throw new Error(`Exa search returned an unparseable response body: ${message}`);
+          }
+
+          await this.sleep(EXA_RETRY_BACKOFF_BASE_MS * attempt * 2);
+          continue;
+        }
       }
 
       const errorText = await this.readResponseTextWithTimeout(response);
