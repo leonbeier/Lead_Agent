@@ -490,7 +490,9 @@ export class FoundryAgentsClient {
   }
 
   private async createAgent(kind: AgentKind): Promise<CachedAgentReference> {
-    const agentName = `lead-agent-${kind}`;
+    // Azure agent names must be alphanumeric with hyphens only (no underscores) and <=63 chars.
+    // Agent kinds like "contact_queries" contain underscores, so normalize them to hyphens.
+    const agentName = `lead-agent-${kind.replace(/_/g, "-")}`;
     const definition = await this.buildAgentDefinition(kind);
     const agent = await this.project.agents.createVersion(agentName, definition as any);
 
