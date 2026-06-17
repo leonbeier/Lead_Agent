@@ -13,6 +13,22 @@ import {
 
 type AgentKind = "filters" | "qualification" | "research" | "contacts" | "contact_queries";
 
+/**
+ * Some Foundry model deployments (e.g. gpt-4o) wrap strict-JSON responses in a markdown code
+ * fence (```json ... ```), which breaks JSON.parse. Strip a leading/trailing fence so the JSON
+ * body parses regardless of the underlying model's formatting.
+ */
+function stripJsonCodeFence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("```")) {
+    return trimmed;
+  }
+  return trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+}
+
 interface CachedAgentReference {
   name: string;
   version: string;
@@ -413,7 +429,7 @@ export class FoundryAgentsClient {
     );
 
     return {
-      text: response.output_text ?? "",
+      text: stripJsonCodeFence(response.output_text ?? ""),
       citations
     };
   }
