@@ -29,6 +29,77 @@ function stripJsonCodeFence(text: string): string {
     .trim();
 }
 
+/**
+ * Scan `text` for the first balanced JSON object or array and return that substring. Respects
+ * string literals and escape sequences so braces inside quoted strings never end the scan early.
+ * Returns null when no balanced JSON value is present.
+ */
+function extractFirstBalancedJson(text: string): string | null {
+  const objIndex = text.indexOf("{");
+  const arrIndex = text.indexOf("[");
+  const startIndex = objIndex === -1
+    ? arrIndex
+    : arrIndex === -1
+      ? objIndex
+      : Math.min(objIndex, arrIndex);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const openChar = text[startIndex];
+  const closeChar = openChar === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = startIndex; i < text.length; i += 1) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      if (inString) {
+        escaped = true;
+      }
+      continue;
+    }
+    if (ch === "\"") {
+      inString = !inString;
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (ch === openChar) {
+      depth += 1;
+    } else if (ch === closeChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(startIndex, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Normalize a Foundry agent text response into a parseable JSON string. Beyond stripping a markdown
+ * code fence, the grounded gpt-4o deployments intermittently prepend prose to the strict JSON the
+ * agent was instructed to return (observed live: "From the information...", "Here are results...",
+ * "Here's a contact list:" before the actual `{...}`), which made JSON.parse throw and silently
+ * dropped every discovered contact. When the fenced/trimmed text is not already a bare JSON token,
+ * extract the first balanced JSON object/array embedded in the prose so the payload still parses.
+ */
+export function extractJsonPayload(text: string): string {
+  const withoutFence = stripJsonCodeFence(text).trim();
+  if (withoutFence.startsWith("{") || withoutFence.startsWith("[")) {
+    return withoutFence;
+  }
+  return extractFirstBalancedJson(withoutFence) ?? withoutFence;
+}
+
 interface CachedAgentReference {
   name: string;
   version: string;
@@ -429,7 +500,7 @@ export class FoundryAgentsClient {
     );
 
     return {
-      text: stripJsonCodeFence(response.output_text ?? ""),
+      text: extractJsonPayload(response.output_text ?? ""),
       citations
     };
   }
@@ -546,7 +617,7 @@ export class FoundryAgentsClient {
         return {
           kind: "prompt",
           model: env.FOUNDRY_MODEL_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT,
-          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Discovery Agent. You MUST use the web-search tool when the supplied evidence does not already contain enough named people. Start with the exact search pattern site:linkedin.com/in plus the company name or alias, then try manager-title variants, then developer-title variants if fewer than 4 relevant people are found. Find real people for outreach at the supplied company. Prioritize managers and decision-makers first: CEO, CTO, COO, founder, managing director, head of engineering, head of operations, technology manager, operations manager, partner manager, innovation manager. If fewer than 4 evidence-backed manager-type people exist, fill the remaining slots with developers or engineering contacts such as software engineer, developer, pipeline engineer, technical director, or similar technical implementation roles. Exclude unclear people unless title evidence is missing across the candidate set; in that case prefer the people with the strongest LinkedIn connection-count evidence. Search in this order: official company website first, then exact LinkedIn profile searches, then broader web search evidence for named people and LinkedIn profile URLs. A LinkedIn result is relevant when the company name appears in the result title or snippet. Use only evidence-backed people. Never invent names, job titles, email addresses, phone numbers, LinkedIn URLs, or connection counts. Always include linkedinUrl when a credible LinkedIn profile URL is available. Return strict JSON: {"contacts":[{"firstName":"...","lastName":"...","fullName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","sourceUrl":"...","label":"website_named_contact|linkedin_profile|web_search_contact"}]}. Keep up to 8 contacts, ranked best first.`,
+          instructions: `${ONE_WARE_PROMPT_CONTEXT}\n\nYou are the Public Contact Discovery Agent. You MUST use the web-search tool when the supplied evidence does not already contain enough named people. Start with the exact search pattern site:linkedin.com/in plus the company name or alias, then try manager-title variants, then developer-title variants if fewer than 4 relevant people are found. Find real people for outreach at the supplied company. Prioritize managers and decision-makers first: CEO, CTO, COO, founder, managing director, head of engineering, head of operations, technology manager, operations manager, partner manager, innovation manager. If fewer than 4 evidence-backed manager-type people exist, fill the remaining slots with developers or engineering contacts such as software engineer, developer, pipeline engineer, technical director, or similar technical implementation roles. Exclude unclear people unless title evidence is missing across the candidate set; in that case prefer the people with the strongest LinkedIn connection-count evidence. Search in this order: official company website first, then exact LinkedIn profile searches, then broader web search evidence for named people and LinkedIn profile URLs. A LinkedIn result is relevant when the company name appears in the result title or snippet. Use only evidence-backed people. Never invent names, job titles, email addresses, phone numbers, LinkedIn URLs, or connection counts. Always include linkedinUrl when a credible LinkedIn profile URL is available. Return strict JSON: {"contacts":[{"firstName":"...","lastName":"...","fullName":"...","jobTitle":"...","email":"...","phone":"...","linkedinUrl":"...","sourceUrl":"...","label":"website_named_contact|linkedin_profile|web_search_contact"}]}. Output ONLY the raw JSON object as the entire response. Do not add any prose, explanation, preamble, reasoning, or markdown code fences before or after the JSON. The first character of your response must be { and the last character must be }. Keep up to 8 contacts, ranked best first.`,
           tools
         };
       }
