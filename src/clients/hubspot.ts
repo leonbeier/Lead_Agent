@@ -220,7 +220,7 @@ const HUBSPOT_BROWSER_TASK_CONCURRENCY = Math.max(
 const HUBSPOT_REQUEST_TIMEOUT_MS = 30000;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
-const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 120_000;
+const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 180_000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TIMEOUT_MS = 25_000;
 const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TOTAL_TIMEOUT_MS = 45_000;
@@ -1815,15 +1815,21 @@ export class HubSpotClient {
       knownContactEvidence ? `Known website contacts:\n${knownContactEvidence}` : undefined,
       companyAliases.length > 0 ? `Company aliases: ${companyAliases.join(" | ")}` : undefined
     ].filter(Boolean).join("\n\n");
-    // Query planning only — 60 s is ample.
+    // Query planning only — 20 s is ample (matches extractAzureMatchedContacts). The longer 60 s
+    // budget previously pushed planner+bing+foundry past the wrapping timeout, discarding the
+    // Foundry LinkedIn contacts before they could be returned.
     const suggestedQueries = await this.withTimeout(
       this.foundryAgentsClient.suggestPublicContactQueries(foundryCompany, queryPlanningEvidence, false),
-      60_000,
+      20_000,
       [] as string[]
     );
     const preferredQueries = this.buildPublicContactSearchQueries(company, companyAliases)
       .filter((query) => /site:linkedin\.com\/in/i.test(query));
-    const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 8);
+    // Cap at 4 external people-search queries (each is a ~30 s DuckDuckGo browser search). The
+    // Foundry discovery agent has its own bing_grounding tool and reliably finds /in/ profiles, so
+    // these external hits are supplementary evidence — keeping the count low ensures Foundry runs
+    // and returns within the wrapping timeout instead of being cut off mid-discovery.
+    const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 4);
     const hitGroups = await this.mapWithSearchInterval(
       queries.map((query) => async () => this.searchBingResults(query, 5)),
       PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
