@@ -224,13 +224,15 @@ const PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS = 180_000;
 const PUBLIC_CONTACT_ENRICHMENT_TIMEOUT_MS = 5000;
 const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TIMEOUT_MS = 25_000;
 const PUBLIC_CONTACT_LINKEDIN_ENRICHMENT_TOTAL_TIMEOUT_MS = 45_000;
-const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 60_000;
+const EXECUTION_CONTACT_PAGE_COLLECTION_TIMEOUT_MS = 45_000;
 // A company that HAS a domain but yields zero crawlable pages is almost always a transient crawl
 // failure (blocked/timed-out/overloaded origin), not a genuinely page-less site. Retry the page
 // collection a bounded number of times before accepting an empty page set, so a single load-induced
 // crawl failure is not silently swallowed into zero contacts and a HubSpot company without any
-// reachable contact.
-const EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS = 3;
+// reachable contact. Capped at 2 attempts: the Foundry discovery agent finds LinkedIn contacts
+// from the company name + domain alone (via bing_grounding), so a third 45 s retry only delays the
+// discovery budget and pushes slow companies past the contact-worker cap without adding contacts.
+const EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS = 2;
 const EXECUTION_CONTACT_PAGE_COLLECTION_RETRY_DELAY_MS = 1_500;
 const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;

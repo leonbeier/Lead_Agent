@@ -211,7 +211,13 @@ const SCREENING_FLUSH_DEBOUNCE_MS = 500;
 const SHUTDOWN_DRAIN_DEADLINE_MS = 120_000;
 const SHUTDOWN_HEARTBEAT_MS = 1_000;
 const DEBUG_MESSAGE_LIMIT = 60;
-const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 510_000;
+// Coherent end-to-end budget for discoverPublicContactsForExecution: page collection
+// (2 x 45 s = ~92 s) + website extraction (45 s) + findPublicContactsFromPages
+// (selectedContactsTimeoutMs 370 s) + LinkedIn enrichment (45 s) = ~552 s worst case. The cap must
+// exceed that sum so a discovery that DID find personal LinkedIn contacts is written to HubSpot
+// instead of being discarded as a timeout (the measured 2026-06-20 defect: Foundry returned 4/4
+// LinkedIn for HyPlus/CASE but the 510 s cap fired first -> companies written with 0 contacts).
+const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 600_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
 // Bounds the authoritative identity/locality resolution that runs right before a HubSpot write.
 // The underlying crawl is cached per domain (contact discovery already warmed it), so this is
