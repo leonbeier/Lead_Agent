@@ -3709,6 +3709,16 @@ export class LeadPipelineAgent {
       return this.isCompanyInScope(company, filter, market);
     }
 
+    // For an explicit single-country market (e.g. "Germany"/"DE") the deterministic check is a
+    // HARD, unambiguous constraint: country must equal that country. Do NOT delegate this to the
+    // fuzzy AI classifier — the model can over-generously admit neighbouring/European countries
+    // (Bulgaria, Spain, Switzerland, ...) as "in the Germany market", which is exactly the locality
+    // leak we keep seeing. The AI classifier is only needed for genuinely ambiguous multi-region
+    // markets ("DACH", "EU und USA", "Nordics", ...), which isGermanyFocusedMarket excludes.
+    if (isGermanyFocusedMarket(normalizedMarket)) {
+      return this.isCompanyInScope(company, filter, market);
+    }
+
     const cacheKey = `${normalizedMarket.toLowerCase()}::${normalizedCountry}`;
     const cached = this.regionScopeCache.get(cacheKey);
     if (cached !== undefined) {

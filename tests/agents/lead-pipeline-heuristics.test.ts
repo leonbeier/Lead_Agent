@@ -714,3 +714,57 @@ test("direct exa path falls back to baseline queries after planner timeouts", as
   assert.deepEqual(executedQueries, ["baseline query one", "baseline query two"]);
 });
 
+test("explicit Germany market never delegates locality to the fuzzy AI classifier", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  let classifierCalls = 0;
+  // Simulate the model being over-generous: it wrongly claims a Bulgarian company belongs to the
+  // Germany market. The deterministic single-country gate must override this and reject it.
+  agent.azureClient.classifyCountriesInTargetMarket = async (_market: string, countries: string[]) => {
+    classifierCalls += 1;
+    const verdicts: Record<string, boolean> = {};
+    for (const country of countries) {
+      verdicts[country.trim().toLowerCase()] = true;
+    }
+    return verdicts;
+  };
+
+  const filter = { locations: ["Germany"] } as any;
+
+  const bulgarian = await agent.isCompanyInExecutionScopeAsync(
+    { country: "Bulgaria", domain: "encorp.bg" },
+    filter,
+    "Germany"
+  );
+  const german = await agent.isCompanyInExecutionScopeAsync(
+    { country: "Germany", domain: "kunkel.de" },
+    filter,
+    "Germany"
+  );
+
+  assert.equal(bulgarian, false, "Bulgarian company must be rejected for an explicit Germany market");
+  assert.equal(german, true, "German company must be accepted for an explicit Germany market");
+  assert.equal(classifierCalls, 0, "the fuzzy AI classifier must not be consulted for an explicit single-country market");
+});
+
+test("ambiguous multi-region market still honours the AI classifier verdict", async () => {
+  const agent = new LeadPipelineAgent() as any;
+  agent.azureClient.classifyCountriesInTargetMarket = async (_market: string, countries: string[]) => {
+    const verdicts: Record<string, boolean> = {};
+    for (const country of countries) {
+      // DACH includes Switzerland; the AI is the source of truth for these fuzzy markets.
+      verdicts[country.trim().toLowerCase()] = country.trim().toLowerCase() === "switzerland";
+    }
+    return verdicts;
+  };
+
+  const filter = { locations: ["Germany", "Austria", "Switzerland"] } as any;
+
+  const swiss = await agent.isCompanyInExecutionScopeAsync(
+    { country: "Switzerland", domain: "sensoptic.ch" },
+    filter,
+    "DACH"
+  );
+
+  assert.equal(swiss, true, "Switzerland must be accepted for a DACH market via the AI classifier");
+});
+
