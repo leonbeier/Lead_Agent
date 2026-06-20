@@ -54,7 +54,12 @@ test("previewHubSpotSync builds company field previews from the same mapping as 
   assert.equal(preview.companyProperties.ai_cc_category, "integrator_relevant_focus");
   assert.equal(preview.companyProperties.ai_cc_email_subject, "Vision-AI fuer PLC/SCADA-Projekte");
   assert.equal(preview.companyProperties.domain, "sample-automation.de");
-  assert.match(preview.companyProperties.description, /Industrial automation/i);
+  // The company description must be AI-written (research brief), not a heuristic concatenation of
+  // the parsed website shortDescription. When a non-fallback brief has an overview, the description
+  // is the AI overview (+ qualification summary) verbatim.
+  assert.match(preview.companyProperties.description, /Overview/);
+  assert.match(preview.companyProperties.description, /Strong industrial delivery fit/);
+  assert.doesNotMatch(preview.companyProperties.description, /Industrial automation and PLC integration/i);
 });
 
 test("previewHubSpotSync skips generic mailbox contacts without name or phone, keeps named contacts", async () => {

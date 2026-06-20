@@ -706,7 +706,7 @@ export class HubSpotClient {
     let completedCompanies = 0;
     const companyResults = await this.mapWithConcurrency(
       companies.map((company) => async () => {
-        const brief = researchBriefs.find((item) => item.companyName === company.name);
+        const brief = this.findBriefForCompany(company, researchBriefs);
         const companyKey = this.getCompanyKey(company);
         let companySyncedCount = 0;
         let contactSyncedCount = 0;
@@ -1074,6 +1074,42 @@ export class HubSpotClient {
 
   private getCompanyKey(company: Pick<PreCategorizedCompany, "name" | "domain">): string {
     return this.normalizeDomain(company.domain) || company.name.trim().toLowerCase();
+  }
+
+  /**
+   * Resolve the per-company research brief robustly. The brief is produced earlier in the pipeline
+   * and tagged with the company name at that time; the HubSpot worker can later overwrite the
+   * company name with the canonical legal-entity name resolved from the website. A strict
+   * `brief.companyName === company.name` match then silently fails and the company is written
+   * WITHOUT its AI-written description and WITHOUT the per-contact outreach note. Match by name
+   * first, then by website domain, and finally — when there is exactly one company and one brief
+   * (the worker's 1:1 case) — pair them directly so a name divergence never drops the brief.
+   */
+  private findBriefForCompany(
+    company: PreCategorizedCompany,
+    researchBriefs: ResearchBrief[]
+  ): ResearchBrief | undefined {
+    const byName = researchBriefs.find((item) => item.companyName === company.name);
+    if (byName) {
+      return byName;
+    }
+
+    const companyDomain = this.normalizeDomain(company.domain);
+    if (companyDomain) {
+      const byDomain = researchBriefs.find((item) => {
+        const briefDomain = this.normalizeDomain(item.website);
+        return Boolean(briefDomain) && briefDomain === companyDomain;
+      });
+      if (byDomain) {
+        return byDomain;
+      }
+    }
+
+    if (researchBriefs.length === 1) {
+      return researchBriefs[0];
+    }
+
+    return undefined;
   }
 
   private async searchObject(
@@ -4697,10 +4733,22 @@ export class HubSpotClient {
   }
 
   private buildCompanyDescription(company: PreCategorizedCompany, brief: ResearchBrief | undefined): string {
+    // Agent-first: when the AI research brief produced a real (non-fallback) overview, the company
+    // description must be the AI-written text, not a heuristic concatenation of raw website
+    // fragments. company.shortDescription is parsed/snippet text (often meta tags or crawler
+    // boilerplate) and must NOT be mixed into a description that an AI summary already covers.
+    const aiOverview = brief?.isFallback ? undefined : this.toSingleLineText(brief?.overview);
+    const aiQualification = brief?.isFallback ? undefined : this.toSingleLineText(brief?.qualificationSummary);
+    if (aiOverview) {
+      const aiSections = Array.from(new Set([aiOverview, aiQualification].filter((value): value is string => Boolean(value))));
+      return aiSections.join(" ").slice(0, 1800);
+    }
+
+    // Fallback only when no AI overview is available (e.g. the research brief timed out and is a
+    // fallback). Use the best non-synthetic evidence we have rather than leaving the field empty.
     const hasSyntheticCrawlerSummary = /^open-crawler\s+(?:high-fit|review-fit)\s+score\s+\d+/i.test(company.shortDescription.trim());
     const sections = [
-      brief?.isFallback ? undefined : brief?.overview,
-      brief?.isFallback ? undefined : brief?.qualificationSummary,
+      aiQualification,
       hasSyntheticCrawlerSummary ? undefined : company.shortDescription,
       company.rationale
     ]

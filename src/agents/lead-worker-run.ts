@@ -1293,6 +1293,13 @@ export class LeadWorkerRunService {
           // meaningless label that then leaks into HubSpot and outreach.
           if (canonicalName && isPlausibleCompanyName(canonicalName)) {
             state.company.name = canonicalName;
+            // Keep the research brief's companyName aligned with the canonical company name. The
+            // HubSpot writer matches the per-company brief by `brief.companyName === company.name`;
+            // if the name diverges here the brief lookup silently returns undefined, which drops the
+            // AI-written description AND the per-contact outreach note. Re-sync so both are written.
+            if (state.researchBrief) {
+              state.researchBrief.companyName = canonicalName;
+            }
           }
           if (canonicalCountry) {
             state.company.country = canonicalCountry;
