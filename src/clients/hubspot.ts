@@ -1874,9 +1874,22 @@ export class HubSpotClient {
     // these external hits are supplementary evidence — keeping the count low ensures Foundry runs
     // and returns within the wrapping timeout instead of being cut off mid-discovery.
     const queries = Array.from(new Set([...preferredQueries, ...suggestedQueries])).slice(0, 4);
-    const hitGroups = await this.mapWithSearchInterval(
-      queries.map((query) => async () => this.searchBingResults(query, 5)),
-      PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
+    // Hard-cap the supplementary external people-search phase. Each searchBingResults runs on the
+    // globally serialized Chromium browser, so the "4 queries × ~30 s with concurrency" estimate is
+    // effectively sequential under contention and can exceed 120 s. That pushed planner + search +
+    // Foundry past the wrapping PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS (180 s), so the LinkedIn
+    // contacts Foundry found were silently discarded (the "foundry returned N with /in/" log fired
+    // after the wrapper already returned []). Bounding the search phase to 60 s guarantees Foundry
+    // (the primary path, with its own bing_grounding) always runs and returns within budget
+    // (20 s planning + ≤60 s search + 80 s Foundry = ≤160 s < 180 s). On timeout we proceed with
+    // whatever hits were already collected — Foundry searches independently regardless.
+    const hitGroups = await this.withTimeout(
+      this.mapWithSearchInterval(
+        queries.map((query) => async () => this.searchBingResults(query, 5)),
+        PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY
+      ),
+      60_000,
+      [] as WebSearchHit[][]
     );
     // Agent-first: pass all search hits directly to the AI agents. Do not filter hits with
     // isRelevantCompanyHit or extract names/titles via regex heuristics. The Foundry discovery
@@ -1899,8 +1912,9 @@ export class HubSpotClient {
       company.domain ? `Website: ${company.domain}` : undefined,
       company.country ? `Country: ${company.country}` : undefined
     ].filter(Boolean).join("\n");
-    // Foundry contact discovery — allow up to 80 s. The query-planner already ran above (20 s),
-    // so this is the main discovery budget. Total discoverWebSearchContacts ≤ 100 s.
+    // Foundry contact discovery — allow up to 80 s. The query-planner (20 s) and the bounded
+    // supplementary search phase (≤60 s) ran above, so this is the main discovery budget. Total
+    // discoverWebSearchContacts ≤ 160 s, safely under the wrapping PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS.
     const foundryContacts = await this.withTimeout(
       this.foundryAgentsClient.discoverPublicContacts(
         foundryCompany,
