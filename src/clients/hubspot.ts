@@ -238,7 +238,13 @@ const EXECUTION_CONTACT_WEBSITE_EXTRACTION_TIMEOUT_MS = 45_000;
 const CONTACT_SYNC_PER_COMPANY_CONCURRENCY = 2;
 const PUBLIC_CONTACT_SEARCH_QUERY_CONCURRENCY = 2;
 const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
-const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 12000;
+// 30s (not 12s): page.goto uses a WALL-CLOCK timer, so during a live run the saturated event loop
+// (parallel Exa/AI/outreach stages) can fire a short timer before a normal site even finishes
+// domcontentloaded. At higher target/concurrency this made EVERY browser crawl time out at 12000ms
+// → zero pages crawled → zero contacts synced. This mirrors the same fix already applied to the
+// plain fetch path (attemptFetchHtml raised 10s→20s for the identical reason); the browser renders
+// heavier pages so it gets even more headroom, matching DDG_BROWSER_SEARCH_TIMEOUT_MS.
+const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 30000;
 // Case-SENSITIVE legal-form check used to validate a captured legal entity candidate. The capture
 // regex runs case-insensitively (to tolerate lowercase particle words inside real names), which
 // also lets lowercase German prose words satisfy the Nordic forms (e.g. "ab"→"AB", "as"→"AS").
