@@ -203,3 +203,67 @@ test("reconcileLinkedInUrl does not overwrite an existing linkedinUrl and ignore
   });
   assert.equal(noPromotion.linkedinUrl, undefined);
 });
+
+test("normalizeAzureContactLabel downgrades a linkedin_profile label that lacks a personal /in/ URL", () => {
+  const client = new HubSpotClient() as unknown as {
+    normalizeAzureContactLabel: (contact: PublicContactCandidate) => string;
+  };
+
+  // Foundry tagged this contact linkedin_profile but supplied a company page that
+  // normalizeLinkedInUrl strips to undefined — the label must not survive, otherwise the
+  // channel-less contact would occupy a LinkedIn slot and be dropped at write time.
+  assert.equal(
+    client.normalizeAzureContactLabel({
+      firstName: "Jane",
+      lastName: "Doe",
+      email: "jane@acme.de",
+      linkedinUrl: undefined,
+      label: "linkedin_profile"
+    }),
+    "public_named_mailbox"
+  );
+
+  // A linkedin_profile label backed by a real /in/ URL is preserved.
+  assert.equal(
+    client.normalizeAzureContactLabel({
+      firstName: "Jane",
+      lastName: "Doe",
+      linkedinUrl: "https://www.linkedin.com/in/jane-doe",
+      label: "linkedin_profile"
+    }),
+    "linkedin_profile"
+  );
+
+  // Other explicit labels are trusted untouched.
+  assert.equal(
+    client.normalizeAzureContactLabel({
+      email: "info@acme.de",
+      label: "public_generic_mailbox"
+    }),
+    "public_generic_mailbox"
+  );
+});
+
+test("reconcilePersonalLinkedInUrl promotes a /in/ sourceUrl and ignores company pages", () => {
+  const client = new HubSpotClient() as unknown as {
+    reconcilePersonalLinkedInUrl: (linkedinUrl: string | undefined, sourceUrl: string | undefined) => string | undefined;
+  };
+
+  // Empty linkedinUrl but a personal /in/ profile in sourceUrl -> promoted.
+  assert.equal(
+    client.reconcilePersonalLinkedInUrl(undefined, "https://www.linkedin.com/in/adam-tabor"),
+    "https://www.linkedin.com/in/adam-tabor"
+  );
+
+  // A valid existing linkedinUrl wins over sourceUrl.
+  assert.equal(
+    client.reconcilePersonalLinkedInUrl("https://www.linkedin.com/in/yaniv", "https://www.linkedin.com/in/other"),
+    "https://www.linkedin.com/in/yaniv"
+  );
+
+  // A company page in sourceUrl must NOT be promoted.
+  assert.equal(
+    client.reconcilePersonalLinkedInUrl(undefined, "https://www.linkedin.com/company/kitov"),
+    undefined
+  );
+});

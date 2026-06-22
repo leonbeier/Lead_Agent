@@ -1405,7 +1405,7 @@ export class HubSpotClient {
         PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
         [] as PublicContactCandidate[]
       ))
-        .filter((contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl))
+        .filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl))
         .slice(0, Math.max(0, 4 - reachableWebsiteFallbackContacts.length));
 
       return this.mergeDiscoveredContacts(linkedInFallbackContacts, reachableWebsiteFallbackContacts).slice(0, 4);
@@ -1436,7 +1436,7 @@ export class HubSpotClient {
       // supplement with LinkedIn people via the Foundry bing_grounding agent so named employees
       // (e.g. Norbert Kalkert GF for tesium.com) are added on top of /kontakt/ page contacts.
       const hasLinkedInProfile = normalizedAzureContacts.some(
-        (contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl)
+        (contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl)
       );
       const spotsLeft = 4 - Math.min(normalizedAzureContacts.length, 4);
       if (!hasLinkedInProfile && spotsLeft > 0) {
@@ -1445,7 +1445,7 @@ export class HubSpotClient {
           PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
           [] as PublicContactCandidate[]
         ))
-          .filter((contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl))
+          .filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl))
           .slice(0, spotsLeft);
         if (linkedInPeople.length > 0) {
           return this.composeFinalPublicContacts(
@@ -1477,7 +1477,7 @@ export class HubSpotClient {
       [] as PublicContactCandidate[]
     );
     const linkedInFallbackContacts = webSearchContacts
-      .filter((contact) => contact.label === "linkedin_profile" || this.isPersonalLinkedInUrl(contact.linkedinUrl))
+      .filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl))
       .slice(0, Math.max(0, spotsLeft));
 
     return this.mergeDiscoveredContacts(
@@ -1790,8 +1790,18 @@ export class HubSpotClient {
   }
 
   private normalizeAzureContactLabel(contact: PublicContactCandidate): string {
-    if (typeof contact.label === "string" && contact.label.trim().length > 0) {
-      return contact.label.trim();
+    const explicitLabel = typeof contact.label === "string" ? contact.label.trim() : "";
+    // A "linkedin_profile" label is only meaningful when a personal /in/ URL actually survived
+    // normalizeLinkedInUrl. Foundry/Azure sometimes tag a contact as linkedin_profile while
+    // supplying a company page or malformed URL that normalization strips to undefined — keeping
+    // the label would let a channel-less contact occupy a LinkedIn slot and then be dropped at
+    // write time (no usable channel), leaving the company with zero LinkedIn contacts. Trust every
+    // other explicit label as-is, but downgrade an unbacked linkedin_profile label below.
+    if (explicitLabel.length > 0 && explicitLabel !== "linkedin_profile") {
+      return explicitLabel;
+    }
+    if (explicitLabel === "linkedin_profile" && this.isPersonalLinkedInUrl(contact.linkedinUrl)) {
+      return "linkedin_profile";
     }
 
     if (contact.email) {
@@ -1966,9 +1976,23 @@ export class HubSpotClient {
     return foundryContacts.map((contact) => ({
       ...contact,
       jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
-      linkedinUrl: this.normalizeLinkedInUrl(contact.linkedinUrl),
+      // Foundry sometimes returns the personal /in/ profile only in sourceUrl (or with a slightly
+      // malformed linkedinUrl). Reconcile it the same way the Azure evidence extractor does so a
+      // real LinkedIn person is not lost: prefer a valid linkedinUrl, otherwise promote a personal
+      // /in/ sourceUrl. Without this the contact reaches the final set with no linkedinUrl and is
+      // dropped at write time (no usable channel), suppressing the company's LinkedIn quota.
+      linkedinUrl: this.reconcilePersonalLinkedInUrl(contact.linkedinUrl, contact.sourceUrl),
       sourceUrl: contact.sourceUrl || contact.linkedinUrl || company.domain || company.name
     }));
+  }
+
+  private reconcilePersonalLinkedInUrl(linkedinUrl: string | undefined, sourceUrl: string | undefined): string | undefined {
+    const normalizedLinkedIn = this.normalizeLinkedInUrl(linkedinUrl);
+    if (normalizedLinkedIn) {
+      return normalizedLinkedIn;
+    }
+    const normalizedSource = this.normalizeLinkedInUrl(sourceUrl);
+    return this.isPersonalLinkedInUrl(normalizedSource) ? normalizedSource : undefined;
   }
 
   private buildPublicContactSearchQueries(company: Pick<PreCategorizedCompany, "name" | "domain">, aliases: string[] = []): string[] {
