@@ -1082,6 +1082,57 @@ test("browser fallback is not triggered for plain 404 pages", async () => {
   }
 });
 
+test("plain-only fetch does not retry a hard-blocked guessed path in the serialized browser", async () => {
+  const client = new HubSpotClient();
+  const originalFetch = globalThis.fetch;
+  let browserFallbackCalls = 0;
+
+  // A guessed contact path that hard-blocks plain fetch (403). With allowBrowserRetry=false the
+  // expensive serialized-browser retry must be skipped so a blocked site cannot saturate the
+  // single Chromium lane for the whole run.
+  globalThis.fetch = async () => new Response("403 - Forbidden", {
+    status: 403,
+    headers: {
+      "content-type": "text/html"
+    }
+  }) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
+  client["fetchHtmlWithBrowser"] = async () => {
+    browserFallbackCalls += 1;
+    return "<html><body>unexpected browser fallback</body></html>";
+  };
+
+  try {
+    const html = await client["fetchHtml"]("https://pexon-consulting.de/impressum/", false);
+    assert.equal(html, null);
+    assert.equal(browserFallbackCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("plain-only fetch still returns a usable page when the guessed path is not blocked", async () => {
+  const client = new HubSpotClient();
+  const originalFetch = globalThis.fetch;
+  let browserFallbackCalls = 0;
+
+  globalThis.fetch = async () => new Response(
+    "<html><body><a href=\"mailto:info@pexon-consulting.de\">info@pexon-consulting.de</a></body></html>",
+    { status: 200, headers: { "content-type": "text/html" } }
+  ) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
+  client["fetchHtmlWithBrowser"] = async () => {
+    browserFallbackCalls += 1;
+    return "<html><body>unexpected browser fallback</body></html>";
+  };
+
+  try {
+    const html = await client["fetchHtml"]("https://pexon-consulting.de/impressum/", false);
+    assert.match(html ?? "", /info@pexon-consulting\.de/i);
+    assert.equal(browserFallbackCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("browser fallback is not triggered by benign captcha labels in otherwise usable HTML", () => {
   const client = new HubSpotClient();
 

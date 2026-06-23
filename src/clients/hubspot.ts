@@ -3534,6 +3534,8 @@ export class HubSpotClient {
     // Always probe impressum/contact pages proactively so the legal entity name is reliably
     // sourced from the impressum even when the AI homepage analysis does not suggest them.
     const proactiveUrls = this.buildLikelyContactPageUrls(rootUrl);
+    const proactiveUrlSet = new Set(proactiveUrls);
+    const aiFollowUpUrlSet = new Set(homepageAnalysis?.followUpUrls ?? []);
     const followUpUrls = Array.from(new Set([
       ...proactiveUrls,
       ...(homepageAnalysis?.followUpUrls ?? [])
@@ -3543,7 +3545,11 @@ export class HubSpotClient {
     const followUpPages = await Promise.all(
       followUpUrls.map(async (url) => {
         // Use fetchHtml (with Playwright fallback) so JS-rendered pages (e.g. impressum) are retrieved.
-        const html = await this.fetchHtml(url);
+        // A purely guessed contact path (in the proactive set but NOT chosen by the homepage AI as a
+        // real link) is fetched plain-only so hard-blocked sites do not saturate the serialized
+        // browser; AI-selected real links keep the Playwright fallback for JS-rendered pages.
+        const allowBrowserRetry = aiFollowUpUrlSet.has(url) || !proactiveUrlSet.has(url);
+        const html = await this.fetchHtml(url, allowBrowserRetry);
         return html ? { url, html } : null;
       })
     );
@@ -3730,10 +3736,16 @@ export class HubSpotClient {
 
   private async doCollectCandidatePages(rootUrl: string, dryRun = false): Promise<Array<{ url: string; html: string }>> {
     // Phase 1: Fetch seed pages in parallel (homepage + proactive contact/impressum URLs).
-    const seedUrls = Array.from(new Set([rootUrl, ...this.buildLikelyContactPageUrls(rootUrl)]));
+    const proactiveContactUrls = this.buildLikelyContactPageUrls(rootUrl);
+    const proactiveContactUrlSet = new Set(proactiveContactUrls);
+    const seedUrls = Array.from(new Set([rootUrl, ...proactiveContactUrls]));
     const seedResults = await Promise.all(
       seedUrls.map(async (url) => {
-        const html = await this.fetchHtml(url);
+        // The homepage keeps the full browser retry; the proactively-guessed contact paths are
+        // fetched plain-only so a hard-blocked site cannot flood the single serialized browser with
+        // ~30 dead guessed-path navigations (the real impressum/contact pages are still discovered
+        // via homepage link extraction in Phase 2 and browser-retried as AI-selected follow-ups).
+        const html = await this.fetchHtml(url, !proactiveContactUrlSet.has(url));
         return html ? { url, html } : null;
       })
     );
@@ -4353,12 +4365,12 @@ export class HubSpotClient {
     return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
   }
 
-  private async fetchHtml(url: string): Promise<string | null> {
+  private async fetchHtml(url: string, allowBrowserRetry = true): Promise<string | null> {
     const cached = this.fetchHtmlCache.get(url);
     if (cached) {
       return cached;
     }
-    const task = this.doFetchHtml(url);
+    const task = this.doFetchHtml(url, allowBrowserRetry);
     this.fetchHtmlCache.set(url, task);
     // Do not let a transient empty/failed fetch poison the entire run. When the event loop is
     // saturated during a live run the initial fetch can abort prematurely; caching that null
@@ -4393,9 +4405,9 @@ export class HubSpotClient {
     return `${head}\n<!-- [lead-agent] html truncated for processing -->\n${tail}`;
   }
 
-  private async doFetchHtml(url: string): Promise<string | null> {
+  private async doFetchHtml(url: string, allowBrowserRetry = true): Promise<string | null> {
     const diagnostics: { tlsHandshakeError?: boolean } = {};
-    const primary = await this.attemptFetchHtml(url, diagnostics);
+    const primary = await this.attemptFetchHtml(url, diagnostics, allowBrowserRetry);
     if (primary) {
       return this.boundHtmlForProcessing(primary);
     }
@@ -4414,7 +4426,7 @@ export class HubSpotClient {
     // succeed over http://, so restrict the retry to it.
     if (diagnostics.tlsHandshakeError && /^https:\/\//i.test(url)) {
       const httpUrl = url.replace(/^https:/i, "http:");
-      const fallback = await this.attemptFetchHtml(httpUrl);
+      const fallback = await this.attemptFetchHtml(httpUrl, undefined, allowBrowserRetry);
       if (fallback) {
         return this.boundHtmlForProcessing(fallback);
       }
@@ -4451,7 +4463,8 @@ export class HubSpotClient {
 
   private async attemptFetchHtml(
     url: string,
-    diagnostics?: { tlsHandshakeError?: boolean }
+    diagnostics?: { tlsHandshakeError?: boolean },
+    allowBrowserRetry = true
   ): Promise<string | null> {
     try {
       const response = await fetch(url, {
@@ -4470,6 +4483,16 @@ export class HubSpotClient {
         return response.ok ? html : null;
       }
 
+      // Proactively-guessed contact-page paths (impressum/, kontakt/, team/ …) are speculative and
+      // are fetched plain-only. When a site hard-blocks plain fetch (401/403/408/429/5xx or a
+      // challenge page), retrying every guessed path through the single serialized Chromium browser
+      // saturates the browser for the whole run and starves the high-value fetches (homepage +
+      // AI-selected real links), causing cascading page.goto timeouts. Skip the browser retry for
+      // these; the real impressum/contact pages are still recovered via homepage link extraction.
+      if (!allowBrowserRetry) {
+        return null;
+      }
+
       console.warn("HubSpotClient.fetchHtml retrying in browser", {
         url,
         status: response.status,
@@ -4478,6 +4501,9 @@ export class HubSpotClient {
     } catch (error) {
       if (diagnostics && this.isTlsHandshakeError(error)) {
         diagnostics.tlsHandshakeError = true;
+      }
+      if (!allowBrowserRetry) {
+        return null;
       }
       // Fall through to browser fetch below.
     }
