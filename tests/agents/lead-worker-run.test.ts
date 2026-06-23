@@ -1391,7 +1391,10 @@ test("worker run keeps streaming Exa raw companies into AI when the batch times 
   assert.deepEqual(syncedCompanies, ["Streamed Vision One", "Streamed Vision Two"]);
   assert.equal(result.hubspotSync.companySyncedCount, 2);
   assert.equal(result.shortlistedCompanies.length, 2);
-  assert.equal(result.completionReason, "exa_search_unavailable");
+  // The two companies streamed via onQueryProgress before the batch threw are enough to reach
+  // target=2, so the retry budget lets the run finish on target rather than collapsing to
+  // exa_search_unavailable on the first transient timeout.
+  assert.equal(result.completionReason, "target_reached");
 });
 
 test("worker run continues with other Exa filters after a temporary search timeout", async () => {
@@ -1475,6 +1478,88 @@ test("worker run continues with other Exa filters after a temporary search timeo
   assert.equal(result.hubspotSync.companySyncedCount, 1);
   assert.equal(result.shortlistedCompanies[0]?.name, "Backup Vision Integrator");
   assert.equal(result.completionReason, "target_reached");
+});
+
+test("worker run keeps a single filter in rotation after one transient Exa timeout", async () => {
+  const syncedCompanies: string[] = [];
+  let exaCalls = 0;
+
+  const service = new LeadWorkerRunService({
+    controlPlaneStore: {
+      getLearning: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      getCompanyScreeningDatabase: async () => ({ records: [] }),
+      getLiveExaCache: async () => ({ entries: [], discoveredDomains: [] }),
+      writeCompanyScreeningDatabase: async () => undefined,
+      recordSearchHistory: async () => ({ companyFeedback: [], filterPerformance: {}, searchHistory: [], searchHistoryByMode: {} }),
+      recordLiveExaRawResults: async () => ({ entries: [], discoveredDomains: [] }),
+      recordLiveExaQueryRuns: async () => ({ entries: [], discoveredDomains: [], queryRuns: [] }),
+      writeLatestLeadRun: async () => undefined
+    } as any,
+    debugConsoleService: {
+      classifyCompanyForExecution: async (company: { name: string; domain?: string; shortDescription: string; sourceFilter: string }) => ({
+        categorizedCompany: {
+          ...company,
+          category: "integrator_vision_industrial_ai",
+          relevanceScore: 0.9,
+          rationale: "fit"
+        }
+      }),
+      buildResearchBriefForExecution: async (company: { name: string }) => createResearchBrief(company.name),
+      discoverContactsForExecution: async (company: { name: string }) => ({ selectedContacts: createContacts(company.name) })
+    } as any,
+    hubSpotClient: {
+      syncQualifiedCompanies: async (companies: Array<{ name: string }>) => {
+        syncedCompanies.push(companies[0]?.name ?? "unknown");
+        return {
+          attempted: true,
+          mode: "live",
+          candidateCount: 1,
+          syncedCount: 1,
+          companySyncedCount: 1,
+          contactSyncedCount: 1
+        };
+      }
+    } as any,
+    leadPipelineAgent: {
+      buildDirectExaFiltersForExecution: () => [createFilter("integrator_vision_industrial_ai")],
+      discoverDirectExaCompaniesForExecution: async () => {
+        exaCalls += 1;
+        // First batch hits a transient timeout. Under the old single-failure retirement this ended
+        // the whole run with "exa_search_unavailable" and zero companies. The retry budget keeps the
+        // sole filter in rotation so the very next batch can still deliver a company.
+        if (exaCalls === 1) {
+          throw new Error("Exa discovery timed out after 180000ms");
+        }
+
+        return [{
+          name: "Recovered Vision Integrator",
+          domain: "recovered-vision-integrator.example.com",
+          shortDescription: "fit",
+          sourceFilter: "exa-filter",
+          discoveryQuery: "vision query"
+        }];
+      }
+    } as any
+  });
+
+  const result = await service.run({
+    targetLeadCount: 1,
+    targetCategories: ["integrator_vision_industrial_ai"],
+    companySearchMode: "exa_search",
+    syncToHubSpot: true,
+    dryRun: false,
+    exaQueryCount: 1,
+    maxRuntimeMs: 60_000,
+    aiPrefilterConcurrency: 1,
+    outreachPrepConcurrency: 1,
+    contactSearchConcurrency: 1
+  });
+
+  assert.ok(exaCalls >= 2);
+  assert.deepEqual(syncedCompanies, ["Recovered Vision Integrator"]);
+  assert.equal(result.hubspotSync.companySyncedCount, 1);
+  assert.equal(result.shortlistedCompanies[0]?.name, "Recovered Vision Integrator");
+  assert.notEqual(result.completionReason, "exa_search_unavailable");
 });
 
 test("worker run can search with two Exa producer workers in parallel when multiple filters exist", async () => {

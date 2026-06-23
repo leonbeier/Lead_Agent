@@ -247,6 +247,14 @@ const RESEARCH_BRIEF_TASK_TIMEOUT_MS = 300_000;
 const MAX_AI_CONCURRENCY = 12;
 const MAX_OUTREACH_CONCURRENCY = 10;
 const MAX_CONTACT_CONCURRENCY = 4;
+// A transient Exa failure (a 180s discovery timeout, an aborted request, or a 429/503) is NOT a
+// filter-quality problem - the filter is fine, the request just did not land. Retiring the filter
+// for the whole run on the very first transient failure means that with only the handful of seed
+// filters a run carries (often 3), three unlucky timeouts end the search prematurely with
+// "exa_search_unavailable" after only a few companies. We therefore tolerate a bounded number of
+// CONSECUTIVE transient failures per filter (reset on any success) before retiring it, so a slow
+// Exa window no longer collapses the whole run.
+const MAX_FILTER_CONSECUTIVE_EXA_FAILURES = 3;
 // When contact discovery returns zero contacts we re-attempt a bounded number of times before
 // accepting an empty result, so a single load-induced crawl failure does not strand a company
 // without any reachable contact.
@@ -575,6 +583,9 @@ export class LeadWorkerRunService {
       || stopReason === "exa_credits_exhausted"
       || stopReason === "runtime_limit_reached";
     const temporarilyUnavailableFilters = new Set<string>();
+    // Counts CONSECUTIVE transient Exa failures per filter so a single unlucky timeout does not
+    // retire a filter for the whole run. Reset to 0 on any successful batch for that filter.
+    const filterConsecutiveExaFailures = new Map<string, number>();
     let hadTemporaryExaFailure = false;
 
     const getNextSearchFilter = (): OrganizationFilter | undefined => {
@@ -1787,6 +1798,7 @@ export class LeadWorkerRunService {
             );
           }
           temporarilyUnavailableFilters.delete(filter.name);
+          filterConsecutiveExaFailures.delete(filter.name);
           emitProgress();
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1801,10 +1813,20 @@ export class LeadWorkerRunService {
               break;
             }
 
-            temporarilyUnavailableFilters.add(filter.name);
+            const consecutiveFailures = (filterConsecutiveExaFailures.get(filter.name) ?? 0) + 1;
+            filterConsecutiveExaFailures.set(filter.name, consecutiveFailures);
             hadTemporaryExaFailure = true;
-            log(`Exa-Batch fuer ${filter.name} fehlgeschlagen. Worker versucht mit den uebrigen Filtern weiterzumachen. (${errorMessage})`);
             await flushBufferedLiveRawCompanies();
+
+            // Only retire the filter once it has failed transiently several times in a row. A single
+            // timeout keeps the filter in rotation so a slow Exa window does not end the run early.
+            if (consecutiveFailures < MAX_FILTER_CONSECUTIVE_EXA_FAILURES) {
+              log(`Exa-Batch fuer ${filter.name} fehlgeschlagen (Versuch ${consecutiveFailures}/${MAX_FILTER_CONSECUTIVE_EXA_FAILURES}). Worker versucht denselben Filter erneut. (${errorMessage})`);
+              continue;
+            }
+
+            temporarilyUnavailableFilters.add(filter.name);
+            log(`Exa-Batch fuer ${filter.name} nach ${consecutiveFailures} Fehlversuchen ausgeschieden. Worker versucht mit den uebrigen Filtern weiterzumachen. (${errorMessage})`);
             if (temporarilyUnavailableFilters.size >= filters.length) {
               stopReason = stopReason || "exa_search_unavailable";
               stopping = true;
