@@ -1024,6 +1024,53 @@ test("discoverWebSearchContacts always calls foundry with all search evidence", 
   assert.ok(foundryEvidence.includes("Web search evidence"), "Evidence should contain search section");
 });
 
+test("discoverWebSearchContacts recovers a /in/ profile when foundry returns named contacts without LinkedIn", async () => {
+  const client = new HubSpotClient();
+  const company = buildSampleCompany();
+
+  client["foundryAgentsClient"]["suggestPublicContactQueries"] = async () => [];
+  // The supplementary people-search surfaced a real personal /in/ profile...
+  client["searchBingResults"] = async () => ([
+    {
+      query: `${company.name} site:linkedin.com/in`,
+      url: "https://www.linkedin.com/in/jane-doe-automation",
+      title: "Jane Doe - Head of Engineering at Sample Automation GmbH | LinkedIn",
+      snippet: "Sample Automation GmbH - Head of Engineering"
+    }
+  ]);
+  // ...but Foundry returned only a website-named person WITHOUT any /in/ LinkedIn URL (the exact
+  // live failure mode: "foundry returned N contacts, 0 with /in/ LinkedIn").
+  client["foundryAgentsClient"]["discoverPublicContacts"] = async () => ([
+    {
+      firstName: "Tom",
+      lastName: "Webmaster",
+      jobTitle: "Contact",
+      sourceUrl: "https://sample-automation.de/team",
+      label: "website_named_contact"
+    }
+  ]);
+  // The Azure evidence extractor, run on the SAME already-collected evidence, recovers the /in/ profile.
+  client["azureOpenAIClient"]["extractPublicContactsFromEvidence"] = async () => ([
+    {
+      firstName: "Jane",
+      lastName: "Doe",
+      jobTitle: "Head of Engineering",
+      linkedinUrl: "https://www.linkedin.com/in/jane-doe-automation",
+      sourceUrl: "https://www.linkedin.com/in/jane-doe-automation",
+      label: "linkedin_profile"
+    }
+  ]);
+
+  const contacts = await client["discoverWebSearchContacts"](company, [], []);
+
+  // The personal /in/ LinkedIn profile that existed in the search evidence must survive instead of
+  // being discarded just because Foundry returned a non-empty (but LinkedIn-less) contact list.
+  assert.ok(
+    contacts.some((contact) => /\/in\//i.test(contact.linkedinUrl ?? "")),
+    "A personal /in/ LinkedIn profile present in the evidence must be recovered"
+  );
+});
+
 test("LinkedIn search queries prioritize exact legal aliases before generic short names", () => {
   const client = new HubSpotClient();
   const queries = client["buildPublicContactSearchQueries"](
@@ -1328,6 +1375,59 @@ test("normalizeContactForHubSpot drops a company-LinkedIn-only placeholder with 
     label: "linkedin_profile"
   };
   assert.ok(client["normalizeContactForHubSpot"](withPersonalLinkedIn));
+});
+
+test("normalizeContactForHubSpot infers a missing person name from a structured personal email", () => {
+  const client = new HubSpotClient();
+
+  // Live failure mode (2026-06-23): the Foundry/Azure discovery agent returned a structured
+  // personal mailbox (first.last@company) but left firstName/lastName empty, so the contact was
+  // written to HubSpot with an empty name (gate badNames). When the email itself encodes a clear
+  // two-token person name, derive it at the write boundary instead of storing a nameless contact.
+  const namelessPersonalEmail: PublicContactCandidate = {
+    email: "gabor.ozsvath@elas.hu",
+    sourceUrl: "https://elas.hu/kontakt",
+    label: "public_named_mailbox"
+  };
+  const normalized = client["normalizeContactForHubSpot"](namelessPersonalEmail);
+  assert.ok(normalized);
+  assert.equal(normalized?.firstName, "Gabor");
+  assert.equal(normalized?.lastName, "Ozsvath");
+
+  // A generic role mailbox must NOT receive an inferred person name.
+  const genericMailbox: PublicContactCandidate = {
+    email: "info@elas.hu",
+    sourceUrl: "https://elas.hu/kontakt",
+    label: "public_generic_mailbox"
+  };
+  const normalizedGeneric = client["normalizeContactForHubSpot"](genericMailbox);
+  assert.ok(normalizedGeneric);
+  assert.equal(normalizedGeneric?.firstName, undefined);
+  assert.equal(normalizedGeneric?.lastName, undefined);
+
+  // A single-token mailbox (no reliable first/last split) stays nameless rather than guessing.
+  const singleTokenMailbox: PublicContactCandidate = {
+    email: "elas@elas.hu",
+    sourceUrl: "https://elas.hu/kontakt",
+    label: "public_named_mailbox"
+  };
+  const normalizedSingle = client["normalizeContactForHubSpot"](singleTokenMailbox);
+  assert.ok(normalizedSingle);
+  assert.equal(normalizedSingle?.firstName, undefined);
+  assert.equal(normalizedSingle?.lastName, undefined);
+
+  // An agent-supplied explicit name is never overwritten by email inference.
+  const explicitName: PublicContactCandidate = {
+    firstName: "Stephan",
+    lastName: "Eirich",
+    email: "gabor.ozsvath@elas.hu",
+    sourceUrl: "https://elas.hu/kontakt",
+    label: "public_named_mailbox"
+  };
+  const normalizedExplicit = client["normalizeContactForHubSpot"](explicitName);
+  assert.ok(normalizedExplicit);
+  assert.equal(normalizedExplicit?.firstName, "Stephan");
+  assert.equal(normalizedExplicit?.lastName, "Eirich");
 });
 
 test("findPublicContactsFromPages keeps an official website mailbox alongside Azure LinkedIn contacts", async () => {

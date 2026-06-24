@@ -929,9 +929,20 @@ export class HubSpotClient {
     const emailLocalPart = rawEmail?.split("@")[0] ?? "";
     const email = rawEmail && (/%[0-9a-f]{2}/i.test(emailLocalPart) || /[^\x20-\x7e]/.test(emailLocalPart)) ? undefined : rawEmail;
     const linkedinUrl = this.normalizeLinkedInUrl(contact.linkedinUrl);
-    const firstName = this.normalizeNamePart(contact.firstName);
-    const lastName = this.normalizeNamePart(contact.lastName);
+    let firstName = this.normalizeNamePart(contact.firstName);
+    let lastName = this.normalizeNamePart(contact.lastName);
     const phone = contact.phone?.trim() || undefined;
+    // The discovery agents (Foundry / Azure evidence extractor) sometimes return a structured
+    // personal mailbox (e.g. "gabor.ozsvath@company") but leave firstName/lastName empty, which
+    // previously wrote a nameless contact to HubSpot (gate badNames). When the email itself encodes
+    // a clear two-token person name and the agent supplied no name, derive it here at the write
+    // boundary. inferNameFromEmail is conservative: it only splits emails with two valid person-name
+    // tokens and skips generic mailboxes and single-token locals, so role mailboxes stay nameless.
+    if (!firstName && !lastName && email && !this.isGenericMailbox(email)) {
+      const inferred = this.inferNameFromEmail(email);
+      firstName = this.normalizeNamePart(inferred.firstName);
+      lastName = this.normalizeNamePart(inferred.lastName);
+    }
     // A contact is only worth syncing when it carries at least one usable outreach channel:
     // a real email, a phone number, or a personal LinkedIn /in/ profile. linkedinUrl is already
     // normalized to personal profiles only (company LinkedIn pages are stripped to undefined
@@ -1941,13 +1952,34 @@ export class HubSpotClient {
       console.log(`[discoverWebSearchContacts] ${company.name}: foundry contacts WITHOUT LinkedIn: ${foundryContacts.map(c => `${c.firstName||''} ${c.lastName||''} label=${c.label} li=${c.linkedinUrl||'none'}`).join('; ')}`);
     }
 
+    // Normalize Foundry contacts up front so LinkedIn coverage can be evaluated and the same
+    // records reused whether or not Azure recovery runs. Foundry sometimes returns the personal
+    // /in/ profile only in sourceUrl (or with a slightly malformed linkedinUrl); reconcile it the
+    // same way the Azure evidence extractor does so a real LinkedIn person is not lost. Without this
+    // the contact reaches the final set with no linkedinUrl and is dropped at write time (no usable
+    // channel), suppressing the company's LinkedIn quota.
+    const normalizedFoundryContacts = foundryContacts.map((contact) => ({
+      ...contact,
+      jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
+      linkedinUrl: this.reconcilePersonalLinkedInUrl(contact.linkedinUrl, contact.sourceUrl),
+      sourceUrl: contact.sourceUrl || contact.linkedinUrl || company.domain || company.name
+    }));
+    const foundryHasPersonalLinkedIn = normalizedFoundryContacts.some((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl));
+
     // Foundry is the primary discovery agent, but on hosts without a usable Azure AD credential its
     // call returns nothing — which silently discarded all the Bing people-search hits collected
-    // above and produced zero LinkedIn contacts. When Foundry yields nothing, fall back to the
-    // Azure OpenAI evidence extractor (API-key auth, host-independent) so the SAME already-collected
-    // search hits are still turned into named people / LinkedIn profiles. No extra web searches.
-    if (foundryContacts.length === 0) {
-      const azureFallbackContacts = await this.withTimeout(
+    // above and produced zero LinkedIn contacts. It also frequently returns website-named people
+    // with no /in/ LinkedIn at all (observed live: "foundry returned N contacts, 0 with /in/"),
+    // which discards a personal /in/ profile that was present in the search evidence. In both cases
+    // run the Azure OpenAI evidence extractor (API-key auth, host-independent) on the SAME
+    // already-collected evidence so those hits are still turned into named people / LinkedIn
+    // profiles. Agent-first: this reuses an existing agent on existing evidence to recover the
+    // LinkedIn person Foundry missed — no heuristic name/URL parsing and no extra web searches. The
+    // recovery budget is kept tight (18 s) so total discoverWebSearchContacts stays under the
+    // wrapping PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS even after a full Foundry call.
+    if (normalizedFoundryContacts.length === 0 || !foundryHasPersonalLinkedIn) {
+      const azureBudgetMs = normalizedFoundryContacts.length === 0 ? 25_000 : 18_000;
+      const azureContacts = await this.withTimeout(
         this.azureOpenAIClient.extractPublicContactsFromEvidence(foundryCompany, {
           websitePages: (this.buildWebsitePageDebugEntries(company, pages) ?? []).map((page) => ({
             url: page.url,
@@ -1961,29 +1993,30 @@ export class HubSpotClient {
             hits: (hitGroups[index] ?? []).map((hit) => ({ url: hit.url, title: hit.title, snippet: hit.snippet }))
           }))
         }, false),
-        25_000,
+        azureBudgetMs,
         [] as PublicContactCandidate[]
       );
-      console.log(`[discoverWebSearchContacts] ${company.name}: azure fallback returned ${azureFallbackContacts.length} contacts, ${azureFallbackContacts.filter((c) => c.linkedinUrl && /\/in\//i.test(c.linkedinUrl)).length} with /in/ LinkedIn`);
-      return azureFallbackContacts.map((contact) => ({
+      const normalizedAzureContacts = azureContacts.map((contact) => ({
         ...contact,
         jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
         linkedinUrl: this.normalizeLinkedInUrl(contact.linkedinUrl),
         sourceUrl: contact.sourceUrl || contact.linkedinUrl || company.domain || company.name
       }));
+      const azureLinkedInContacts = normalizedAzureContacts.filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl));
+      const mode = normalizedFoundryContacts.length === 0 ? "fallback" : "LinkedIn recovery";
+      console.log(`[discoverWebSearchContacts] ${company.name}: azure ${mode} returned ${normalizedAzureContacts.length} contacts, ${azureLinkedInContacts.length} with /in/ LinkedIn`);
+
+      if (normalizedFoundryContacts.length === 0) {
+        return normalizedAzureContacts;
+      }
+
+      // Foundry already produced named people; only fold in the Azure-recovered personal /in/
+      // profiles (the exact gap) and let mergeDiscoveredContacts dedupe by name/email/LinkedIn so a
+      // person Foundry already returned simply gains their LinkedIn URL instead of duplicating.
+      return this.mergeDiscoveredContacts(normalizedFoundryContacts, azureLinkedInContacts);
     }
 
-    return foundryContacts.map((contact) => ({
-      ...contact,
-      jobTitle: this.normalizeJobTitle(contact.jobTitle) ?? contact.jobTitle,
-      // Foundry sometimes returns the personal /in/ profile only in sourceUrl (or with a slightly
-      // malformed linkedinUrl). Reconcile it the same way the Azure evidence extractor does so a
-      // real LinkedIn person is not lost: prefer a valid linkedinUrl, otherwise promote a personal
-      // /in/ sourceUrl. Without this the contact reaches the final set with no linkedinUrl and is
-      // dropped at write time (no usable channel), suppressing the company's LinkedIn quota.
-      linkedinUrl: this.reconcilePersonalLinkedInUrl(contact.linkedinUrl, contact.sourceUrl),
-      sourceUrl: contact.sourceUrl || contact.linkedinUrl || company.domain || company.name
-    }));
+    return normalizedFoundryContacts;
   }
 
   private reconcilePersonalLinkedInUrl(linkedinUrl: string | undefined, sourceUrl: string | undefined): string | undefined {
