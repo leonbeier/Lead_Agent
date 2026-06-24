@@ -4268,7 +4268,7 @@ export class HubSpotClient {
   }
 
   private isLowValueMailbox(email: string): boolean {
-    return /^(privacy|datenschutz|compliance|legal|impressum|career|careers|jobs|bewerbung|hr|people|invoice|billing)@/i.test(email);
+    return /^(privacy|datenschutz|dsgvo|gdpr|rgpd|dpo|compliance|legal|impressum|career|careers|jobs|bewerbung|hr|people|invoice|billing)@/i.test(email);
   }
 
   private isLikelyPersonNameToken(value: string): boolean {

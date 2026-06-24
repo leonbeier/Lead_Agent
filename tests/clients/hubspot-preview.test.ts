@@ -1430,6 +1430,29 @@ test("normalizeContactForHubSpot infers a missing person name from a structured 
   assert.equal(normalizedExplicit?.lastName, "Eirich");
 });
 
+test("isLowValueMailbox filters privacy/data-protection role inboxes", () => {
+  const client = new HubSpotClient();
+
+  // Privacy/data-protection inboxes are role mailboxes, never an outreach person. "datenschutz"
+  // (German) and "privacy" were already filtered; the French/abbreviated equivalents leaked through
+  // and were written as nameless contacts (live 2026-06-24: rgpd@kestrel-vision.com).
+  for (const email of [
+    "rgpd@kestrel-vision.com",
+    "gdpr@example.com",
+    "dsgvo@example.de",
+    "dpo@example.com",
+    "privacy@example.com",
+    "datenschutz@example.de"
+  ]) {
+    assert.equal(client["isLowValueMailbox"](email), true, `${email} should be low-value`);
+  }
+
+  // Real outreach mailboxes must not be filtered as low-value.
+  for (const email of ["info@example.com", "max.mustermann@example.com", "sales@example.com"]) {
+    assert.equal(client["isLowValueMailbox"](email), false, `${email} should not be low-value`);
+  }
+});
+
 test("findPublicContactsFromPages keeps an official website mailbox alongside Azure LinkedIn contacts", async () => {
   const client = new HubSpotClient();
   const company = buildSampleCompany();
