@@ -16,7 +16,8 @@
     "smoke": "node scripts/smoke-start.mjs",
     "watch:lead-run": "tsx scripts/watch-lead-run.ts",
     "watch:lead-loop": "tsx scripts/run-lead-loop.ts",
-    "benchmark:lead": "tsx scripts/run-lead-benchmark.ts"
+    "benchmark:lead": "tsx scripts/run-lead-benchmark.ts",
+    "test:pipeline-repro": "node scripts/run-pipeline-repro.mjs"
   },
   "dependencies": {
     "@azure/ai-projects": "^2.0.0",
