@@ -56,10 +56,11 @@ export interface CompanyPipelineReproExpectations {
    */
   minCompaniesWithResolvedCity: number;
   /**
-   * Minimum number of companies for which ALL expected info is present (correct real-entity name,
-   * resolved city where a public city exists, a contact, and a personal /in/ LinkedIn where one is
-   * realistically discoverable). The target is the full 20; this floor locks in no-regression while
-   * the per-company `missingInfo` report shows the remaining gap toward 20/20.
+   * Number of companies for which ALL realistically achievable info must be present (correct
+   * real-entity name, resolved city where the company publishes one, a contact, and a personal /in/
+   * LinkedIn where one is realistically discoverable). This is the goal, not a floor: it equals the
+   * full set, so the opt-in live test stays RED until the pipeline reaches every company's
+   * research-backed maximum. The per-company `missingInfo` report lists each remaining gap.
    */
   minFullyComplete: number;
 }
@@ -82,7 +83,7 @@ export const companyPipelineReproCases: CompanyPipelineReproCase[] = [
   // the richest companies to enrich, so a contact and a personal /in/ are expected despite the dead
   // source subdomain — country-only address from this domain is defensible (no publicCity asserted).
   { name: "Dr. Schenk GmbH", domain: "https://cn.drschenk.eu", country: "Germany", expectedNameIncludes: ["schenk"], expectsPersonalLinkedIn: true },
-  { name: "More Control Ltd", domain: "https://www.2ww.more-control.com", country: "United Kingdom", publicCity: "Milton Keynes", expectedNameIncludes: ["more control"] },
+  { name: "More Control Ltd", domain: "https://www.2ww.more-control.com", country: "United Kingdom", publicCity: "Milton Keynes", expectedNameIncludes: ["more control"], expectsPersonalLinkedIn: true },
   { name: "Psycle", domain: "https://psycle.fr", country: "France", publicCity: "Lacroix-Saint-Ouen", expectedNameIncludes: ["psycle"], expectsPersonalLinkedIn: true },
   {
     name: "ConnectedThinks",
@@ -131,31 +132,33 @@ export const companyPipelineReproCases: CompanyPipelineReproCase[] = [
     // Contact page: 106 Diminiou Str., 38500 Dimini, Volos — Executive Director Sotirios Bekos.
     publicCity: "Volos",
     publicManager: "Sotirios Bekos",
-    expectedNameIncludes: ["qubber"]
+    expectedNameIncludes: ["qubber"],
+    expectsPersonalLinkedIn: true
   },
   { name: "Althera di Castelluccio Francesco", domain: "https://althera.it", country: "Italy", publicCity: "Lecco", expectedNameIncludes: ["althera"], expectsPersonalLinkedIn: true },
   // Aviso legal: VISIONA Control Industrial S.L., Calle A 63, Pol. Ind. Mutilva, 31192 Mutilva (Navarra).
   { name: "Visionasl", domain: "https://visionasl.com", country: "Spain", publicCity: "Mutilva", expectedNameIncludes: ["visiona"] },
-  { name: "Vici & C. S.p.A.", domain: "https://vici.it", country: "Italy", publicCity: "Santarcangelo di Romagna", expectedNameIncludes: ["vici"] },
+  { name: "Vici & C. S.p.A.", domain: "https://vici.it", country: "Italy", publicCity: "Santarcangelo di Romagna", expectedNameIncludes: ["vici"], expectsPersonalLinkedIn: true },
   { name: "CVL4", domain: "https://kestrel-vision.com", country: "France", publicCity: "Saint-Genis-Laval", expectedNameIncludes: ["cvl4", "kestrel"], expectsPersonalLinkedIn: true },
-  { name: "Engilico Engineering Solutions NV", domain: "https://www.engilico.com", country: "Belgium", publicCity: "Rotselaar", expectedNameIncludes: ["engilico"] },
+  { name: "Engilico Engineering Solutions NV", domain: "https://www.engilico.com", country: "Belgium", publicCity: "Rotselaar", expectedNameIncludes: ["engilico"], expectsPersonalLinkedIn: true },
   { name: "ANTICIPATE GmbH", domain: "https://anticipate.webflow.io", country: "Germany", publicCity: "Aachen", expectedNameIncludes: ["anticipate"], expectsPersonalLinkedIn: true }
 ];
 
 /**
- * Reproducible thresholds. Deliberately set below the observed 2026-06-24 run
- * (16/20 with contacts, 7/20 with personal /in/) to absorb transient crawl/anti-bot
- * variance while still failing loudly if contact discovery regresses meaningfully.
+ * Targets = the research-backed realistic maximum per dimension, not a regression floor.
+ * The opt-in live test is intentionally RED until the pipeline reaches every company's achievable
+ * ceiling; the per-company `missingInfo` report shows exactly what is still missing each run.
+ *  - contacts: all 20 (every company should surface at least a fallback mailbox).
+ *  - personal /in/ LinkedIn: 16 (companies with a named executive or multi-person staffing; the 4
+ *    micro firms ConnectedThinks, Smart Industrial, Ifsvision and Visionasl stay contact-only,
+ *    because there a generic mailbox is the honest ceiling — "don't chase what isn't there").
+ *  - resolved city: 17 (the companies that publish a street address on their crawlable domain;
+ *    Viscom/.cn, Dr. Schenk/cn-subdomain and the Inbolt Webflow stub are legitimately exempt).
+ *  - fully complete: all 20 reaching their own per-company achievable bar.
  */
 export const companyPipelineReproExpectations: CompanyPipelineReproExpectations = {
-  minCompaniesWithContacts: 12,
-  minCompaniesWithPersonalLinkedIn: 5,
-  // 17 companies have a research-verified public city on their own crawlable domain. The
-  // 2026-06-24 run resolved a city for only 10 of them and returned country-only for CASE,
-  // ConnectedThinks, Smartray, Qubbervision, Baumer, VisionX and Visionasl — a real address
-  // under-extraction. Target: at least 11 must resolve a city. Raise toward 17 as extraction improves.
-  minCompaniesWithResolvedCity: 11,
-  // Per-company completeness floor. The 2026-06-24 run had ~9/20 fully complete; this floor locks in
-  // no-regression while the target is 20/20. The per-company `missingInfo` report lists every gap.
-  minFullyComplete: 8
+  minCompaniesWithContacts: 20,
+  minCompaniesWithPersonalLinkedIn: 16,
+  minCompaniesWithResolvedCity: 17,
+  minFullyComplete: 20
 };

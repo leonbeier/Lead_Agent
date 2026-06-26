@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { readiness } from "../../src/config";
 import { HubSpotClient } from "../../src/clients/hubspot";
 import type { PreCategorizedCompany, PublicContactCandidate } from "../../src/types";
@@ -11,6 +13,41 @@ import {
 
 function isPersonalLinkedIn(url: string | undefined): boolean {
   return Boolean(url && url.includes("/in/"));
+}
+
+// Resume checkpoint for the fail-fast iteration loop: stores the domains already verified fully
+// complete so a re-run skips them (no wasted live re-crawl) and lands on the first remaining gap.
+const FAILFAST_CHECKPOINT_PATH = path.resolve(
+  process.cwd(),
+  "data/lead-run-discovery-checkpoints/pipeline-repro-complete.json"
+);
+
+function loadCompletedDomains(): Set<string> {
+  try {
+    const raw = fs.readFileSync(FAILFAST_CHECKPOINT_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return new Set(parsed.map((d) => String(d)));
+  } catch {
+    // No checkpoint yet — start fresh.
+  }
+  return new Set();
+}
+
+function saveCompletedDomains(domains: Set<string>): void {
+  try {
+    fs.mkdirSync(path.dirname(FAILFAST_CHECKPOINT_PATH), { recursive: true });
+    fs.writeFileSync(FAILFAST_CHECKPOINT_PATH, `${JSON.stringify([...domains], null, 2)}\n`);
+  } catch {
+    // Best-effort: a missing checkpoint just means the next run re-validates from the top.
+  }
+}
+
+function clearCompletedCheckpoint(): void {
+  try {
+    fs.rmSync(FAILFAST_CHECKPOINT_PATH, { force: true });
+  } catch {
+    // ignore
+  }
 }
 
 function buildCompany(fixture: CompanyPipelineReproCase): PreCategorizedCompany {
@@ -34,6 +71,13 @@ function buildCompany(fixture: CompanyPipelineReproCase): PreCategorizedCompany 
 //   $env:RUN_LIVE_PIPELINE_REPRO="1"; npx tsx --test tests/clients/company-pipeline-repro.test.ts
 // or, with Railway-injected credentials:
 //   railway run powershell -Command "$env:RUN_LIVE_PIPELINE_REPRO='1'; npx tsx --test tests/clients/company-pipeline-repro.test.ts"
+//
+// Fail-fast iteration loop (fix one bug at a time):
+//   $env:RUN_LIVE_PIPELINE_REPRO="1"; $env:PIPELINE_REPRO_FAILFAST="1"; npx tsx --test tests/clients/company-pipeline-repro.test.ts
+//   -> runs every company in order, STOPS at the first one missing any expected info, and writes a
+//      checkpoint of the ones already complete. Re-running after a fix skips the green companies and
+//      resumes at the first remaining gap. Delete data/lead-run-discovery-checkpoints/
+//      pipeline-repro-complete.json (or finish all 20) to force a fresh full validation.
 test(
   "full company pipeline still resolves names, addresses and contacts for the reference 20",
   {
@@ -45,6 +89,8 @@ test(
   },
   async () => {
     const client = new HubSpotClient();
+    const failFast = process.env.PIPELINE_REPRO_FAILFAST === "1";
+    const completedDomains = failFast ? loadCompletedDomains() : new Set<string>();
     const foundryTimeoutMs = process.env.PIPELINE_REPRO_FOUNDRY_TIMEOUT_MS
       ? Number(process.env.PIPELINE_REPRO_FOUNDRY_TIMEOUT_MS)
       : 90_000;
@@ -73,6 +119,12 @@ test(
     const incompleteCompanies: string[] = [];
 
     for (const fixture of companyPipelineReproCases) {
+      // Fail-fast resume: skip companies already verified complete in a previous run so iteration
+      // lands directly on the first remaining gap instead of re-crawling the green ones.
+      if (failFast && completedDomains.has(fixture.domain)) {
+        process.stdout.write(`SKIP (checkpoint complete): ${fixture.name}\n`);
+        continue;
+      }
       const company = buildCompany(fixture);
 
       const address = await client.resolveCompanyAddress(company).catch(() => null);
@@ -96,6 +148,7 @@ test(
       }
 
       // Name-quality guards (deterministic, must hold for every company that resolved a name).
+      const nameViolationsBefore = nameViolations.length;
       if (resolvedName) {
         const trimmed = resolvedName.trim();
         // No bare-domain / all-caps-domain name (e.g. "QUBBERVISION.COM").
@@ -147,7 +200,7 @@ test(
       if (fullyComplete) companiesFullyComplete += 1;
       else incompleteCompanies.push(`${fixture.name}: ${missingInfo.join("; ")}`);
 
-      report.push({
+      const entry = {
         name: fixture.name,
         domain: fixture.domain,
         resolvedName,
@@ -162,7 +215,24 @@ test(
         hasPersonalLinkedIn,
         fullyComplete,
         missingInfo
-      });
+      };
+      report.push(entry);
+
+      // Fail-fast: stop at the first company missing any expected info (or with a name-quality
+      // regression) so the bug can be fixed before burning time on the rest. Already-complete
+      // companies are checkpointed so the next run resumes here.
+      if (failFast) {
+        const companyNameViolated = nameViolations.length > nameViolationsBefore;
+        if (!fullyComplete || companyNameViolated) {
+          process.stdout.write(`STOP at ${fixture.name}:\n${JSON.stringify(entry, null, 2)}\n`);
+          assert.fail(
+            `PIPELINE_REPRO_FAILFAST stopped at "${fixture.name}": ${(missingInfo.length ? missingInfo : ["name-quality regression"]).join("; ")}`
+          );
+        }
+        completedDomains.add(fixture.domain);
+        saveCompletedDomains(completedDomains);
+        process.stdout.write(`OK (complete): ${fixture.name}\n`);
+      }
     }
 
     process.stdout.write(`${JSON.stringify({
@@ -177,6 +247,15 @@ test(
       nameViolations,
       report
     }, null, 2)}\n`);
+
+    // In fail-fast mode, reaching this point means every company is complete (or was checkpointed),
+    // so the per-company gate already passed. Clear the checkpoint so the next run re-validates the
+    // full set fresh, and skip the aggregate thresholds (they would undercount the skipped ones).
+    if (failFast) {
+      clearCompletedCheckpoint();
+      process.stdout.write("ALL COMPLETE — every reference company reached its realistic maximum.\n");
+      return;
+    }
 
     assert.equal(
       nameViolations.length,
