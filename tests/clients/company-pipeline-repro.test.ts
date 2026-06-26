@@ -54,12 +54,23 @@ test(
       domain: string;
       resolvedName: string | null;
       address: string | null;
+      expectedCity: string | null;
+      resolvedCity: string | null;
+      cityTargetMet: boolean | null;
+      publicManager: string | null;
       contactCount: number;
       hasPersonalLinkedIn: boolean;
+      fullyComplete: boolean;
+      missingInfo: string[];
     }> = [];
     const nameViolations: string[] = [];
     let companiesWithContacts = 0;
     let companiesWithPersonalLinkedIn = 0;
+    let companiesExpectedCity = 0;
+    let companiesWithResolvedCity = 0;
+    let companiesFullyComplete = 0;
+    const cityTargetMisses: string[] = [];
+    const incompleteCompanies: string[] = [];
 
     for (const fixture of companyPipelineReproCases) {
       const company = buildCompany(fixture);
@@ -73,6 +84,16 @@ test(
       const hasPersonalLinkedIn = contacts.some((c) => isPersonalLinkedIn(c.linkedinUrl));
       if (contacts.length > 0) companiesWithContacts += 1;
       if (hasPersonalLinkedIn) companiesWithPersonalLinkedIn += 1;
+
+      // Address-target tracking against the research-backed public city ground truth.
+      const resolvedCity = address?.city?.trim() || null;
+      let cityTargetMet: boolean | null = null;
+      if (fixture.publicCity) {
+        companiesExpectedCity += 1;
+        cityTargetMet = Boolean(resolvedCity);
+        if (cityTargetMet) companiesWithResolvedCity += 1;
+        else cityTargetMisses.push(`${fixture.name}: public city "${fixture.publicCity}" is on the crawlable site but pipeline returned country-only`);
+      }
 
       // Name-quality guards (deterministic, must hold for every company that resolved a name).
       if (resolvedName) {
@@ -94,6 +115,38 @@ test(
         }
       }
 
+      // Per-company completeness: collect every piece of expected info that is missing, so the
+      // report shows exactly what would be needed to reach 20/20. Expectations are evidence-based
+      // (see fixture comments): a correct real-entity name, a resolved city where the company
+      // publishes one, at least one contact (info@ fallback counts), and a personal /in/ LinkedIn
+      // where one is realistically discoverable via Google + LinkedIn people filter.
+      const expectsContact = fixture.expectsContact !== false;
+      const missingInfo: string[] = [];
+
+      const nameKeywords = fixture.expectedNameIncludes ?? [];
+      const normalizedName = (resolvedName ?? "").trim().toLowerCase();
+      if (!resolvedName) {
+        missingInfo.push("no resolved company name");
+      } else if (nameKeywords.length > 0 && !nameKeywords.some((kw) => normalizedName.includes(kw.toLowerCase()))) {
+        missingInfo.push(`resolved name "${resolvedName.trim()}" does not match the real entity (expected one of: ${nameKeywords.join(", ")})`);
+      }
+
+      if (fixture.publicCity && !resolvedCity) {
+        missingInfo.push(`city "${fixture.publicCity}" not resolved (country-only)`);
+      }
+
+      if (expectsContact && contacts.length === 0) {
+        missingInfo.push("no usable contact (not even a fallback mailbox)");
+      }
+
+      if (fixture.expectsPersonalLinkedIn && !hasPersonalLinkedIn) {
+        missingInfo.push("no personal /in/ LinkedIn contact (one is realistically discoverable)");
+      }
+
+      const fullyComplete = missingInfo.length === 0;
+      if (fullyComplete) companiesFullyComplete += 1;
+      else incompleteCompanies.push(`${fixture.name}: ${missingInfo.join("; ")}`);
+
       report.push({
         name: fixture.name,
         domain: fixture.domain,
@@ -101,8 +154,14 @@ test(
         address: address
           ? [address.address, address.zip, address.city, address.state, address.country].filter(Boolean).join(", ") || null
           : null,
+        expectedCity: fixture.publicCity ?? null,
+        resolvedCity,
+        cityTargetMet,
+        publicManager: fixture.publicManager ?? null,
         contactCount: contacts.length,
-        hasPersonalLinkedIn
+        hasPersonalLinkedIn,
+        fullyComplete,
+        missingInfo
       });
     }
 
@@ -110,6 +169,11 @@ test(
       total: companyPipelineReproCases.length,
       companiesWithContacts,
       companiesWithPersonalLinkedIn,
+      companiesExpectedCity,
+      companiesWithResolvedCity,
+      companiesFullyComplete,
+      cityTargetMisses,
+      incompleteCompanies,
       nameViolations,
       report
     }, null, 2)}\n`);
@@ -126,6 +190,14 @@ test(
     assert.ok(
       companiesWithPersonalLinkedIn >= companyPipelineReproExpectations.minCompaniesWithPersonalLinkedIn,
       `Expected >= ${companyPipelineReproExpectations.minCompaniesWithPersonalLinkedIn} companies with a personal /in/ LinkedIn contact, got ${companiesWithPersonalLinkedIn}/${companyPipelineReproCases.length}.`
+    );
+    assert.ok(
+      companiesWithResolvedCity >= companyPipelineReproExpectations.minCompaniesWithResolvedCity,
+      `Expected >= ${companyPipelineReproExpectations.minCompaniesWithResolvedCity} of the ${companiesExpectedCity} companies with a public city to resolve a city, got ${companiesWithResolvedCity}. Misses:\n${cityTargetMisses.join("\n")}`
+    );
+    assert.ok(
+      companiesFullyComplete >= companyPipelineReproExpectations.minFullyComplete,
+      `Expected >= ${companyPipelineReproExpectations.minFullyComplete} of ${companyPipelineReproCases.length} companies to have ALL expected info present, got ${companiesFullyComplete}. Target is ${companyPipelineReproCases.length}/${companyPipelineReproCases.length}. Remaining gaps:\n${incompleteCompanies.join("\n")}`
     );
   }
 );
