@@ -91,9 +91,14 @@ test(
     const client = new HubSpotClient();
     const failFast = process.env.PIPELINE_REPRO_FAILFAST === "1";
     const completedDomains = failFast ? loadCompletedDomains() : new Set<string>();
+    // Match the production contact-discovery budget (lead-worker-run.ts passes
+    // selectedContactsTimeoutMs: 370_000) so the test measures the real production capability.
+    // A shorter budget (the previous 90 s) artificially cut off Foundry mid-discovery and made
+    // large, well-staffed companies (e.g. Dr. Schenk) appear to have zero contacts even though
+    // their personal LinkedIn profiles are reliably found once the agent is allowed to finish.
     const foundryTimeoutMs = process.env.PIPELINE_REPRO_FOUNDRY_TIMEOUT_MS
       ? Number(process.env.PIPELINE_REPRO_FOUNDRY_TIMEOUT_MS)
-      : 90_000;
+      : 370_000;
 
     const report: Array<{
       name: string;

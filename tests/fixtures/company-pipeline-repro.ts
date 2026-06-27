@@ -83,7 +83,7 @@ export const companyPipelineReproCases: CompanyPipelineReproCase[] = [
   // the richest companies to enrich, so a contact and a personal /in/ are expected despite the dead
   // source subdomain — country-only address from this domain is defensible (no publicCity asserted).
   { name: "Dr. Schenk GmbH", domain: "https://cn.drschenk.eu", country: "Germany", expectedNameIncludes: ["schenk"], expectsPersonalLinkedIn: true },
-  { name: "More Control Ltd", domain: "https://www.2ww.more-control.com", country: "United Kingdom", publicCity: "Milton Keynes", expectedNameIncludes: ["more control"], expectsPersonalLinkedIn: true },
+  { name: "More Control Ltd", domain: "https://www.more-control.com", country: "United Kingdom", publicCity: "Milton Keynes", expectedNameIncludes: ["more control"], expectsPersonalLinkedIn: true },
   { name: "Psycle", domain: "https://psycle.fr", country: "France", publicCity: "Lacroix-Saint-Ouen", expectedNameIncludes: ["psycle"], expectsPersonalLinkedIn: true },
   {
     name: "ConnectedThinks",

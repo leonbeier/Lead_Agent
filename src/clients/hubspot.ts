@@ -245,6 +245,13 @@ const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
 // plain fetch path (attemptFetchHtml raised 10s→20s for the identical reason); the browser renders
 // heavier pages so it gets even more headroom, matching DDG_BROWSER_SEARCH_TIMEOUT_MS.
 const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 30000;
+// A client-rendered SPA's plain fetch returns HTTP 200 with a large inlined JS bundle but almost no
+// rendered text. These thresholds detect that contentless bundle (large HTML + very low visible-text
+// ratio) so it is re-fetched through the browser, where the real route content renders. Normal
+// content pages stay well above the ratio (5-8%) and most are far below the size floor, so this only
+// triggers for genuine unrendered SPA shells.
+const UNRENDERED_BUNDLE_MIN_HTML_LENGTH = 200_000;
+const UNRENDERED_BUNDLE_MAX_VISIBLE_TEXT_RATIO = 0.02;
 // Case-SENSITIVE legal-form check used to validate a captured legal entity candidate. The capture
 // regex runs case-insensitively (to tolerate lowercase particle words inside real names), which
 // also lets lowercase German prose words satisfy the Nordic forms (e.g. "ab"→"AB", "as"→"AS").
@@ -403,6 +410,20 @@ export class HubSpotClient {
   private readonly resolvedCompanyAddressCache = new Map<string, Promise<ExtractedCompanyAddress | null>>();
   private readonly candidatePagesCache = new Map<string, Promise<Array<{ url: string; html: string }>>>();
   private readonly fetchHtmlCache = new Map<string, Promise<string | null>>();
+  // Maps a requested URL to the final URL actually served after following HTTP/meta redirects.
+  // Many discovered company domains are redirecting hosts (apex -> subdomain, e.g.
+  // ing-possible.de -> vision.ing-possible.de, or http -> https, or www changes). The homepage
+  // fetch follows the redirect, but contact-page guessing and relative-link resolution are based on
+  // the original (redirecting) root, so guessed impressum/kontakt paths and relative links resolve
+  // against a host that 404s. Recording the resolved final URL lets the crawler re-base onto the
+  // real canonical origin so the right URL is analyzed instead of a domain with a redirect.
+  private readonly resolvedFinalUrls = new Map<string, string>();
+  // Hosts whose browser fetch already returned a hard anti-bot block (401/403/429/5xx). A blocked
+  // site returns the same block to the browser as to plain fetch, so retrying every follow-up page
+  // of that host through the single serialized Chromium browser is pure waste that saturates the
+  // browser and starves the high-value searches (address web search, LinkedIn enrichment). Once a
+  // host is known browser-blocked we skip its further browser retries for the rest of the process.
+  private readonly browserBlockedHosts = new Set<string>();
   private readonly apolloClient = new ApolloClient();
 
   private readonly azureOpenAIClient = new AzureOpenAIClient();
@@ -1451,16 +1472,35 @@ export class HubSpotClient {
       );
       const spotsLeft = 4 - Math.min(normalizedAzureContacts.length, 4);
       if (!hasLinkedInProfile && spotsLeft > 0) {
-        const linkedInPeople = (await this.withTimeout(
+        const webSearchPeople = await this.withTimeout(
           this.discoverWebSearchContacts(company, pages, normalizedAzureContacts, officialWebsiteProfile),
           PUBLIC_CONTACT_WEB_SEARCH_TIMEOUT_MS,
           [] as PublicContactCandidate[]
-        ))
+        );
+        const linkedInPeople = webSearchPeople
           .filter((contact) => this.isPersonalLinkedInUrl(contact.linkedinUrl))
           .slice(0, spotsLeft);
         if (linkedInPeople.length > 0) {
           return this.composeFinalPublicContacts(
             this.mergeDiscoveredContacts(linkedInPeople, normalizedAzureContacts).slice(0, 4),
+            this.mergeDiscoveredContacts(normalizedAzureContacts, websiteFallbackContacts)
+          ).slice(0, 4);
+        }
+        // No LinkedIn surfaced during this (non-deterministic) discovery pass, but the web search
+        // frequently returns named executives whose /in/ profile is only resolvable via the
+        // targeted per-contact enrichment search that runs AFTER selection. Without keeping them
+        // the final set collapses to the website contact — often a sales mailbox with no
+        // discoverable LinkedIn — and the company's reachable executive LinkedIn is lost. Fold the
+        // highest-value named priority-title web-search people in so enrichSelectedContactsWithLinkedIn
+        // can resolve their profile.
+        const namedWebSearchExecutives = this.dedupeNamedEmployeeContacts(webSearchPeople)
+          .filter((contact) => (contact.firstName || contact.lastName) && this.isPriorityContactTitle(contact.jobTitle))
+          .filter((contact) => !this.isExcludedContact(contact))
+          .sort((left, right) => this.getPublicContactScore(right) - this.getPublicContactScore(left))
+          .slice(0, spotsLeft);
+        if (namedWebSearchExecutives.length > 0) {
+          return this.composeFinalPublicContacts(
+            this.mergeDiscoveredContacts(namedWebSearchExecutives, normalizedAzureContacts).slice(0, 4),
             this.mergeDiscoveredContacts(normalizedAzureContacts, websiteFallbackContacts)
           ).slice(0, 4);
         }
@@ -2525,12 +2565,25 @@ export class HubSpotClient {
     const looksLikeLegalPage = /\/(impressum|imprint|kontakt|contact|legal|ansprechpartner|team)/i.test(url);
     let sourceHtml = html;
     if (looksLikeLegalPage) {
-      // Extract <main>, <article>, or the first large <section> to skip navigation
-      const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
-        ?? html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
-        ?? html.match(/<div[^>]+(?:class|id)=["'][^"']*(?:content|main|impressum|kontakt|page)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-      if (mainMatch?.[1] && mainMatch[1].length > 200) {
-        sourceHtml = mainMatch[1];
+      const fullPlainLength = this.decodeHtmlEntities(this.stripHtml(html)).replace(/\s+/g, " ").trim().length;
+      // Only narrow to the main content block when the full page text would actually overflow the
+      // visible window (long nav menus pushing the address out). When the whole page already fits,
+      // narrowing is pure risk: the content selectors can match a sub-block (e.g. a contact <form>
+      // container) whose stripped text omits the very postal address we need — exactly what happened
+      // on a WordPress contact page where "106 Diminiou Str. 38500 Dimini, Volos" lived outside the
+      // selected form block. Validate on the block's visible text length (not raw HTML length) so a
+      // markup-heavy, text-poor block never wins.
+      if (fullPlainLength > WEBSITE_EVIDENCE_VISIBLE_TEXT_LIMIT) {
+        // Extract <main>, <article>, or the first large <section> to skip navigation
+        const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
+          ?? html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
+          ?? html.match(/<div[^>]+(?:class|id)=["'][^"']*(?:content|main|impressum|kontakt|page)[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+        const mainText = mainMatch?.[1]
+          ? this.decodeHtmlEntities(this.stripHtml(mainMatch[1])).replace(/\s+/g, " ").trim()
+          : "";
+        if (mainMatch?.[1] && mainText.length > 200) {
+          sourceHtml = mainMatch[1];
+        }
       }
     }
     const plainText = this.decodeHtmlEntities(this.stripHtml(sourceHtml)).replace(/\s+/g, " ").trim();
@@ -2545,6 +2598,12 @@ export class HubSpotClient {
     const footerEvidence = footerText && !visibleText.includes(footerText.slice(0, 60))
       ? footerText
       : "";
+    const legalText = this.extractLegalEvidenceText(plainText);
+    const legalEvidence = legalText
+      && !visibleText.includes(legalText.slice(0, 60))
+      && !footerEvidence.includes(legalText.slice(0, 60))
+      ? legalText
+      : "";
     const roleAdjacentText = this.extractRoleAdjacentSnippets(plainText);
     const linkedInUrls = Array.from(new Set((html.match(/https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/[^"]+/gi) ?? []).slice(0, 4)));
     const emails = Array.from(new Set([
@@ -2556,6 +2615,7 @@ export class HubSpotClient {
       `Page: ${url}`,
       visibleText.length > 0 ? `Visible page text: ${visibleText}` : undefined,
       footerEvidence.length > 0 ? `Footer / legal block: ${footerEvidence}` : undefined,
+      legalEvidence.length > 0 ? `Registered address block: ${legalEvidence}` : undefined,
       roleAdjacentText.length > 0 ? `Role mentions: ${roleAdjacentText.join(" | ")}` : undefined,
       linkedInUrls.length > 0 ? `LinkedIn URLs: ${linkedInUrls.join(" | ")}` : undefined,
       emails.length > 0 ? `Emails: ${emails.join(" | ")}` : undefined
@@ -2612,6 +2672,24 @@ export class HubSpotClient {
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 1200);
+  }
+
+  // Surfaces the registered postal-address / legal-entity block wherever it renders, even when it
+  // sits below the visible-text window and outside any <footer> element. Long pages and SPA layouts
+  // frequently place the company-info block (street, postal code, city, plus registry identifiers
+  // such as NIP/REGON/USt-IdNr/HRB) partway down the body, so the visible-text slice truncates it
+  // and the <footer> extractor never sees it — silently losing the city/zip the address resolver
+  // needs. This anchors on the first postal-code/registry marker and hands the agent the surrounding
+  // window. Structural selection only; the agent still decides the company identity and address.
+  private extractLegalEvidenceText(plainText: string): string {
+    const markerRegex = /(?:\b\d{2}-\d{3}\b|\b\d{5}\b|\bNIP\b|\bREGON\b|USt-?IdNr|\bVAT\b|\bHRB\b|Handelsregister)/i;
+    const match = plainText.match(markerRegex);
+    if (!match || match.index === undefined) {
+      return "";
+    }
+    const start = Math.max(0, match.index - 240);
+    const end = Math.min(plainText.length, match.index + match[0].length + 160);
+    return plainText.slice(start, end).trim();
   }
 
   private mergeDiscoveredContacts(
@@ -2749,8 +2827,12 @@ export class HubSpotClient {
    * search (the same free Bing/DDG path used elsewhere — no Foundry/auth dependency) then resolves
    * the person's actual profile. This is the chokepoint that turns named-but-no-LinkedIn contacts
    * into reachable LinkedIn contacts. Strictly time-bounded so it can never reduce throughput: it
-   * enriches at most the top 2 such contacts, each with a hard per-contact timeout, and the whole
-   * phase falls back to the un-enriched contacts if the overall budget is exceeded.
+   * enriches at most the top 4 such contacts (by contact score), each with a hard per-contact
+   * timeout, all under one overall budget — when several named contacts share a high-priority title
+   * (e.g. a German firm where Geschäftsführung/Leiter/Area Manager all score equally), the two best
+   * by stable order are not always the two whose profile is actually findable, so a slightly wider
+   * candidate set lets the resolvable ones (positions 3-4) be reached without raising the budget.
+   * The whole phase falls back to the un-enriched contacts if the overall budget is exceeded.
    */
   private async enrichSelectedContactsWithLinkedIn(
     company: Pick<PreCategorizedCompany, "name" | "domain">,
@@ -2762,7 +2844,7 @@ export class HubSpotClient {
         Boolean(contact.firstName || contact.lastName) && !this.isPersonalLinkedInUrl(contact.linkedinUrl)
       )
       .sort((left, right) => this.getPublicContactScore(right.contact) - this.getPublicContactScore(left.contact))
-      .slice(0, 2)
+      .slice(0, 4)
       .map(({ index }) => index);
 
     if (enrichableIndexes.length === 0) {
@@ -3053,7 +3135,11 @@ export class HubSpotClient {
     try {
       const parsed = new URL(candidate);
       const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
-      if (hostname !== "linkedin.com" && hostname !== "de.linkedin.com" && hostname !== "www.linkedin.com") {
+      // Accept linkedin.com and any localized country subdomain (de., uk., fr., it., es., nl., pl.,
+      // …). Restricting the allowlist to de.linkedin.com silently dropped valid personal /in/
+      // profiles for every other country — e.g. a UK company's executives on uk.linkedin.com — so
+      // the contact lost its LinkedIn URL and the company appeared to have no personal LinkedIn.
+      if (hostname !== "linkedin.com" && !hostname.endsWith(".linkedin.com")) {
         return undefined;
       }
 
@@ -3564,24 +3650,40 @@ export class HubSpotClient {
       },
       false
     );
-    // Always probe impressum/contact pages proactively so the legal entity name is reliably
-    // sourced from the impressum even when the AI homepage analysis does not suggest them.
+    // Always probe impressum/contact pages proactively so the legal entity name and postal address
+    // are reliably sourced from the impressum even when the AI homepage analysis does not suggest them.
     const proactiveUrls = this.buildLikelyContactPageUrls(rootUrl);
-    const proactiveUrlSet = new Set(proactiveUrls);
-    const aiFollowUpUrlSet = new Set(homepageAnalysis?.followUpUrls ?? []);
-    const followUpUrls = Array.from(new Set([
-      ...proactiveUrls,
-      ...(homepageAnalysis?.followUpUrls ?? [])
-    ]))
+    const aiFollowUpUrls = homepageAnalysis?.followUpUrls ?? [];
+    // Match URLs regardless of a trailing-slash difference: the homepage AI may return ".../impressum"
+    // while the proactive guesser lists ".../impressum/". Without normalization the two are treated as
+    // distinct, the plain-only proactive variant wins the slice below, and a JS-rendered impressum is
+    // fetched as an empty shell — silently losing the postal address. Normalize for dedup and for the
+    // browser-retry check, and order AI-selected links first so they always survive the slice.
+    const normalizeFollowUpUrl = (url: string): string => url.trim().replace(/\/+$/, "").toLowerCase();
+    const proactiveNormalizedSet = new Set(proactiveUrls.map(normalizeFollowUpUrl));
+    const aiFollowUpNormalizedSet = new Set(aiFollowUpUrls.map(normalizeFollowUpUrl));
+    const seenFollowUpKeys = new Set<string>();
+    const followUpUrls = [...aiFollowUpUrls, ...proactiveUrls]
       .filter((url) => this.isSameCompanyWebsiteUrl(rootUrl, url) || this.isLegalOrContactPageUrl(url))
+      .filter((url) => {
+        const key = normalizeFollowUpUrl(url);
+        if (seenFollowUpKeys.has(key)) {
+          return false;
+        }
+        seenFollowUpKeys.add(key);
+        return true;
+      })
       .slice(0, 14);
     const followUpPages = await Promise.all(
       followUpUrls.map(async (url) => {
         // Use fetchHtml (with Playwright fallback) so JS-rendered pages (e.g. impressum) are retrieved.
         // A purely guessed contact path (in the proactive set but NOT chosen by the homepage AI as a
         // real link) is fetched plain-only so hard-blocked sites do not saturate the serialized
-        // browser; AI-selected real links keep the Playwright fallback for JS-rendered pages.
-        const allowBrowserRetry = aiFollowUpUrlSet.has(url) || !proactiveUrlSet.has(url);
+        // browser; AI-selected real links keep the Playwright fallback for JS-rendered pages. The
+        // trailing-slash-normalized check ensures an AI-selected impressum is recognised as such even
+        // when the proactive list holds its slash twin.
+        const normalized = normalizeFollowUpUrl(url);
+        const allowBrowserRetry = aiFollowUpNormalizedSet.has(normalized) || !proactiveNormalizedSet.has(normalized);
         const html = await this.fetchHtml(url, allowBrowserRetry);
         return html ? { url, html } : null;
       })
@@ -3768,12 +3870,23 @@ export class HubSpotClient {
   }
 
   private async doCollectCandidatePages(rootUrl: string, dryRun = false): Promise<Array<{ url: string; html: string }>> {
-    // Phase 1: Fetch seed pages in parallel (homepage + proactive contact/impressum URLs).
-    const proactiveContactUrls = this.buildLikelyContactPageUrls(rootUrl);
+    // Phase 0: Fetch the homepage first (with full browser retry) so we can resolve the canonical
+    // origin the site actually serves after following redirects. Many company domains redirect the
+    // apex to a subdomain (ing-possible.de -> vision.ing-possible.de), www, or http->https. The
+    // contact-page guesses and relative links must be based on that final origin, otherwise guessed
+    // impressum/kontakt paths and relative links resolve against a host that 404s.
+    const homepageHtml = await this.fetchHtml(rootUrl, true);
+    const canonicalRootUrl = this.resolveCanonicalRootUrl(rootUrl);
+
+    // Phase 1: Fetch the remaining seed pages in parallel (proactive contact/impressum URLs),
+    // basing the guessed paths on the canonical origin. The homepage is already fetched above.
+    const proactiveContactUrls = this.buildLikelyContactPageUrls(canonicalRootUrl);
     const proactiveContactUrlSet = new Set(proactiveContactUrls);
-    const seedUrls = Array.from(new Set([rootUrl, ...proactiveContactUrls]));
+    const remainingSeedUrls = Array.from(new Set(proactiveContactUrls)).filter(
+      (url) => url !== rootUrl && url !== canonicalRootUrl
+    );
     const seedResults = await Promise.all(
-      seedUrls.map(async (url) => {
+      remainingSeedUrls.map(async (url) => {
         // The homepage keeps the full browser retry; the proactively-guessed contact paths are
         // fetched plain-only so a hard-blocked site cannot flood the single serialized browser with
         // ~30 dead guessed-path navigations (the real impressum/contact pages are still discovered
@@ -3782,12 +3895,16 @@ export class HubSpotClient {
         return html ? { url, html } : null;
       })
     );
-    const seedPages = seedResults.filter((page): page is { url: string; html: string } => Boolean(page));
+    const seedPages = [
+      ...(homepageHtml ? [{ url: canonicalRootUrl, html: homepageHtml }] : []),
+      ...seedResults.filter((page): page is { url: string; html: string } => Boolean(page))
+    ];
 
-    // Collect all candidate links from seed pages (deduplicated by URL).
+    // Collect all candidate links from seed pages (deduplicated by URL), resolved against the
+    // canonical origin so relative links point at the host that actually serves the content.
     const linkMap = new Map<string, { url: string; anchorText: string }>();
     for (const page of seedPages) {
-      for (const link of this.extractAllCandidateLinks(rootUrl, page.html)) {
+      for (const link of this.extractAllCandidateLinks(canonicalRootUrl, page.html)) {
         if (!linkMap.has(link.url)) {
           linkMap.set(link.url, link);
         }
@@ -3803,11 +3920,11 @@ export class HubSpotClient {
         .map((page) => this.stripHtml(page.html).replace(/\s+/g, " ").slice(0, 300))
         .join("\n");
       const aiLinks = await this.azureOpenAIClient.selectLinksForCrawl(
-        rootUrl, combinedSnippet, allCandidateLinks, 10, dryRun
+        canonicalRootUrl, combinedSnippet, allCandidateLinks, 10, dryRun
       );
       followUpUrls = aiLinks.length > 0
         ? aiLinks.filter((url) => !visitedUrls.has(url))
-        : this.extractRelevantLinks(rootUrl, seedPages[0]?.html ?? "").filter((url) => !visitedUrls.has(url));
+        : this.extractRelevantLinks(canonicalRootUrl, seedPages[0]?.html ?? "").filter((url) => !visitedUrls.has(url));
     }
 
     // Phase 3: Fetch follow-up pages in parallel.
@@ -3821,6 +3938,34 @@ export class HubSpotClient {
 
     return [...seedPages, ...followUpPages].slice(0, 14);
   }
+
+  // Resolve the canonical origin a root URL serves after following redirects (recorded by
+  // fetchHtml/fetchHtmlWithBrowser). Re-basing is restricted to the SAME registrable domain
+  // (apex<->subdomain, www changes, http->https) so we never cross-rebase onto an unrelated host,
+  // which would break email allowlists and HubSpot domain dedup. Returns the original root URL when
+  // no redirect was recorded or when the redirect crossed registrable domains.
+  private resolveCanonicalRootUrl(rootUrl: string): string {
+    const finalUrl = this.resolvedFinalUrls.get(rootUrl);
+    if (!finalUrl) {
+      return rootUrl;
+    }
+    try {
+      const original = new URL(rootUrl);
+      const resolved = new URL(finalUrl);
+      if (original.origin === resolved.origin) {
+        return rootUrl;
+      }
+      const originalDomain = this.normalizeDomain(original.host);
+      const resolvedDomain = this.normalizeDomain(resolved.host);
+      if (!originalDomain || !resolvedDomain || originalDomain !== resolvedDomain) {
+        return rootUrl;
+      }
+      return new URL("/", resolved.origin).toString();
+    } catch {
+      return rootUrl;
+    }
+  }
+
 
   /** Extract all internal same-domain links (+ cross-domain legal/contact pages) without heuristic scoring. */
   private extractAllCandidateLinks(rootUrl: string, html: string): Array<{ url: string; anchorText: string }> {
@@ -4427,14 +4572,26 @@ export class HubSpotClient {
   // pass (snippet building, address/legal-entity extraction, contact discovery) stays O(cap) instead
   // of O(real page size). Keeps the document head (main content, impressum body, address) and the
   // document tail (footer / © legal-entity line) so no evidence the agent relies on is truncated.
-  // Pages within the limit are returned unchanged.
   private boundHtmlForProcessing(html: string): string {
     const limit = HTML_PROCESSING_HEAD_LIMIT + HTML_PROCESSING_TAIL_LIMIT;
-    if (html.length <= limit) {
-      return html;
+    // SPA/no-code frameworks (Wix, Webflow, React/Next/Vue builders) inline a megabyte-scale JS
+    // bundle and CSS ahead of (and around) the rendered DOM. That noise does two harmful things:
+    // it can push the real address/contact content past the raw-byte head/tail cutoff, AND — even
+    // when the page is under the byte limit — it dilutes the few hundred bytes of address text down
+    // to a ~2-3% visible-text ratio, so the extractor drowns in bundle markup and misses the
+    // postal address that is plainly present in the rendered text. Dropping the inlined asset
+    // blocks first spends the byte budget on actual DOM content and makes the address prominent.
+    // JSON-LD structured data is preserved because it frequently carries the company address, and
+    // <a href> links survive (they live in the DOM, not inside <script>), so link discovery and
+    // address extraction keep working.
+    const compacted = html
+      .replace(/<script(?![^>]*application\/ld\+json)[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ");
+    if (compacted.length <= limit) {
+      return compacted;
     }
-    const head = html.slice(0, HTML_PROCESSING_HEAD_LIMIT);
-    const tail = html.slice(html.length - HTML_PROCESSING_TAIL_LIMIT);
+    const head = compacted.slice(0, HTML_PROCESSING_HEAD_LIMIT);
+    const tail = compacted.slice(compacted.length - HTML_PROCESSING_TAIL_LIMIT);
     return `${head}\n<!-- [lead-agent] html truncated for processing -->\n${tail}`;
   }
 
@@ -4474,7 +4631,16 @@ export class HubSpotClient {
   private static readonly TLS_HANDSHAKE_ERROR_PATTERN =
     /ERR_SSL|ERR_CERT|SSL routines|sslv3|tlsv1|wrong version number|unsupported protocol|cipher|handshake|EPROTO|decryption failed|bad record mac/i;
 
-  private isTlsHandshakeError(error: unknown): boolean {
+  // A genuine protocol/cipher/record-layer mismatch (typical of an HTTP-only site that presents
+  // garbage on the https port, or an obsolete cipher) fails identically in Chromium — even with
+  // ignoreHTTPSErrors — so the browser retry is guaranteed to waste a full page.goto timeout. This
+  // is deliberately narrower than TLS_HANDSHAKE_ERROR_PATTERN: it excludes pure certificate-trust
+  // failures (ERR_CERT_*, self-signed, expired), which the browser CAN load via ignoreHTTPSErrors,
+  // so those still fall through to the browser instead of being skipped.
+  private static readonly TLS_PROTOCOL_MISMATCH_PATTERN =
+    /ERR_SSL_PROTOCOL_ERROR|ERR_SSL_VERSION_OR_CIPHER_MISMATCH|wrong version number|unsupported protocol|packet length too long|sslv3 alert|tlsv1 alert|no cipher|sslv2|EPROTO|decryption failed|bad record mac|tls_get_more_records|http request/i;
+
+  private collectErrorMessages(error: unknown): string {
     const messages: string[] = [];
     let current: unknown = error;
     for (let depth = 0; depth < 5 && current; depth += 1) {
@@ -4490,8 +4656,18 @@ export class HubSpotClient {
         break;
       }
     }
+    return messages.join(" ");
+  }
 
-    return HubSpotClient.TLS_HANDSHAKE_ERROR_PATTERN.test(messages.join(" "));
+  private isTlsHandshakeError(error: unknown): boolean {
+    return HubSpotClient.TLS_HANDSHAKE_ERROR_PATTERN.test(this.collectErrorMessages(error));
+  }
+
+  // True when the https failure is a protocol/cipher/record mismatch that Chromium would also
+  // reject (so skip the doomed browser attempt and go straight to the http:// fallback), as
+  // opposed to a certificate-trust error the browser can bypass.
+  private isUnrecoverableTlsProtocolError(error: unknown): boolean {
+    return HubSpotClient.TLS_PROTOCOL_MISMATCH_PATTERN.test(this.collectErrorMessages(error));
   }
 
   private async attemptFetchHtml(
@@ -4512,6 +4688,11 @@ export class HubSpotClient {
       });
 
       const html = await response.text();
+      // Record the post-redirect final URL so the crawler can re-base onto the real canonical
+      // origin (apex -> subdomain, http -> https, www changes) instead of a redirecting host.
+      if (response.url) {
+        this.resolvedFinalUrls.set(url, response.url);
+      }
       if (!this.shouldRetryHtmlFetchInBrowser(response.status, html)) {
         return response.ok ? html : null;
       }
@@ -4535,13 +4716,38 @@ export class HubSpotClient {
       if (diagnostics && this.isTlsHandshakeError(error)) {
         diagnostics.tlsHandshakeError = true;
       }
+      // A protocol/cipher/record-layer TLS mismatch (e.g. an HTTP-only site that presents garbage
+      // on the https port, or an obsolete cipher) fails identically in Chromium after a full
+      // page.goto timeout, even with ignoreHTTPSErrors. Skip that guaranteed-to-fail browser
+      // attempt so doFetchHtml retries over http:// immediately. Probing ~14 follow-up URLs × a
+      // 30s doomed browser load otherwise blows past the page-collection budget and yields zero
+      // pages for a site that is perfectly readable over http://. Certificate-trust errors are NOT
+      // matched here, so those still fall through to the browser (which bypasses them).
+      if (this.isUnrecoverableTlsProtocolError(error)) {
+        return null;
+      }
       if (!allowBrowserRetry) {
         return null;
       }
       // Fall through to browser fetch below.
     }
 
+    const blockedHost = this.getUrlHost(url);
+    if (blockedHost && this.browserBlockedHosts.has(blockedHost)) {
+      // A prior browser fetch for this host already hit a hard anti-bot block; another browser
+      // navigation would return the same block while occupying the serialized browser. Skip it.
+      return null;
+    }
+
     return this.fetchHtmlWithBrowser(url, diagnostics);
+  }
+
+  private getUrlHost(url: string): string | null {
+    try {
+      return new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+    } catch {
+      return null;
+    }
   }
 
   private shouldRetryHtmlFetchInBrowser(status: number, html: string): boolean {
@@ -4554,6 +4760,20 @@ export class HubSpotClient {
     }
 
     const normalizedHtml = html.trim();
+
+    // A client-rendered SPA returns a large inlined JS bundle whose visible text is almost empty
+    // until it hydrates. The plain fetch captures that contentless shell, so the route's real
+    // content (impressum address, team names) never reaches the pipeline. Detect the bundle by its
+    // large size plus very low visible-text ratio and re-fetch through the browser, where the
+    // content renders. This runs before the mailto/tel short-circuit because such bundles often
+    // inline a mailto link even though no real page text is present yet.
+    if (normalizedHtml.length > UNRENDERED_BUNDLE_MIN_HTML_LENGTH) {
+      const visibleTextLength = this.stripHtml(normalizedHtml).replace(/\s+/g, " ").trim().length;
+      if (visibleTextLength / normalizedHtml.length < UNRENDERED_BUNDLE_MAX_VISIBLE_TEXT_RATIO) {
+        return true;
+      }
+    }
+
     if (/(mailto:|tel:)/i.test(normalizedHtml)) {
       return false;
     }
@@ -4603,13 +4823,31 @@ export class HubSpotClient {
         });
 
         try {
-          await page.goto(url, {
+          const response = await page.goto(url, {
             waitUntil: "domcontentloaded",
             timeout: WEBSITE_BROWSER_FETCH_TIMEOUT_MS
           });
+          const status = response?.status() ?? 0;
+          if (status === 401 || status === 403 || status === 429 || status >= 500) {
+            // The browser hit the same hard anti-bot block as plain fetch. Remember the host so the
+            // remaining follow-up pages skip their (futile) browser retry, and return null rather
+            // than the challenge/error page so it never pollutes name/address/contact extraction.
+            const host = this.getUrlHost(url);
+            if (host) {
+              this.browserBlockedHosts.add(host);
+            }
+            return null;
+          }
           await page.waitForLoadState("networkidle", {
             timeout: 5000
           }).catch(() => undefined);
+
+          // Record the post-redirect final URL (JS/meta redirects included) so the crawler can
+          // re-base onto the real canonical origin instead of the redirecting host.
+          const finalUrl = page.url();
+          if (finalUrl) {
+            this.resolvedFinalUrls.set(url, finalUrl);
+          }
 
           const html = await page.content();
           return html.trim().length > 0 ? html : null;
