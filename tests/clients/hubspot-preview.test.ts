@@ -800,6 +800,71 @@ test("upsertContact creates new contacts with the intended primary company assoc
   }
 });
 
+test("upsertContact drops a generic-only mailbox by default but keeps it as sole-contact fallback", async () => {
+  const client = new HubSpotClient();
+  const originalFetch = globalThis.fetch;
+  client["findExistingContact"] = async () => null;
+
+  let posted = false;
+  globalThis.fetch = async () => {
+    posted = true;
+    return new Response(JSON.stringify({ id: "contact-generic", properties: {} }), {
+      status: 201,
+      headers: { "content-type": "application/json" }
+    }) as typeof fetch extends (...args: any[]) => infer T ? Awaited<T> : never;
+  };
+
+  try {
+    const generic = { email: "info@core-systems.cz", label: "public_generic_mailbox" };
+    const props = new Set(["email", "firstname", "lastname"]);
+
+    // Default: a nameless generic mailbox is dropped when richer contacts exist elsewhere.
+    const dropped = await client["upsertContact"](generic, props, "company-1");
+    assert.equal(dropped, null);
+    assert.equal(posted, false);
+
+    // Fallback: when it is the company's ONLY reachable contact it must still be written.
+    const kept = await client["upsertContact"](generic, props, "company-1", true);
+    assert.equal(kept?.id, "contact-generic");
+    assert.equal(posted, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("companyExistsInHubSpot matches a www-stored domain that bare-domain intake missed", async () => {
+  const client = new HubSpotClient();
+  const queried: Array<{ property: string; value: string }> = [];
+  // Simulate a HubSpot record stored as "www.satvision.es": only that exact variant matches.
+  client["searchObject"] = (async (_objectType: string, propertyName: string, value: string) => {
+    queried.push({ property: propertyName, value });
+    return propertyName === "domain" && value === "www.satvision.es"
+      ? ({ id: "company-existing", properties: {} } as any)
+      : null;
+  }) as any;
+
+  const exists = await client.companyExistsInHubSpot({ name: "Satvision", domain: "satvision.es" });
+  assert.equal(exists, true);
+  // It must have probed beyond the bare domain form (the gap that let duplicates through).
+  assert.ok(queried.some((q) => q.value === "www.satvision.es"));
+});
+
+test("companyExistsInHubSpot matches a subsidiary to its parent brand by name", async () => {
+  const client = new HubSpotClient();
+  const queried: string[] = [];
+  // No domain match (keyence.fr != keyence.com); only the brand-root name "KEYENCE" exists.
+  client["searchObject"] = (async (_objectType: string, propertyName: string, value: string) => {
+    queried.push(`${propertyName}:${value}`);
+    return propertyName === "name" && value === "KEYENCE"
+      ? ({ id: "company-keyence", properties: {} } as any)
+      : null;
+  }) as any;
+
+  const exists = await client.companyExistsInHubSpot({ name: "KEYENCE FRANCE SAS", domain: "keyence.fr" });
+  assert.equal(exists, true);
+  assert.ok(queried.includes("name:KEYENCE"), `expected brand-root name search, got ${queried.join(", ")}`);
+});
+
 test("previewHubSpotSync tolerates non-string research brief fields", async () => {
   const client = new HubSpotClient();
   const malformedBrief = {

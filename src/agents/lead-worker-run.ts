@@ -1,6 +1,7 @@
 import { ControlPlaneStore } from "../control-plane.js";
 import { DebugConsoleService } from "../debug/test-console-service.js";
-import { HubSpotClient, isPlausibleCompanyName, looksLikeHexOrUuidSlug } from "../clients/hubspot.js";
+import { HubSpotClient, isPlausibleCompanyName, looksLikeHexOrUuidSlug, HUBSPOT_BROWSER_TASK_CONCURRENCY } from "../clients/hubspot.js";
+import type { ExtractedCompanyAddress } from "../clients/hubspot.js";
 import { LeadPipelineAgent, EUROPEAN_TLDS } from "./lead-pipeline.js";
 import { env } from "../config.js";
 import type {
@@ -45,6 +46,7 @@ interface WorkerRunMetrics {
   contactFailed: number;
   hubspotWritten: number;
   hubspotSkippedOutOfScope: number;
+  hubspotSkippedAlreadyExists: number;
   queueSizes: {
     exaInFlight: number;
     aiWaiting: number;
@@ -217,7 +219,7 @@ const DEBUG_MESSAGE_LIMIT = 60;
 // exceed that sum so a discovery that DID find personal LinkedIn contacts is written to HubSpot
 // instead of being discarded as a timeout (the measured 2026-06-20 defect: Foundry returned 4/4
 // LinkedIn for HyPlus/CASE but the 510 s cap fired first -> companies written with 0 contacts).
-const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 600_000;
+export const DEFAULT_CONTACT_TASK_TIMEOUT_MS = 600_000;
 const DEFAULT_HUBSPOT_TASK_TIMEOUT_MS = env.WORKER_HUBSPOT_TASK_TIMEOUT_MS;
 // Bounds the authoritative identity/locality resolution that runs right before a HubSpot write.
 // The underlying crawl is cached per domain (contact discovery already warmed it), so this is
@@ -246,7 +248,28 @@ const RESEARCH_BRIEF_TASK_TIMEOUT_MS = 300_000;
 // stay low to avoid the documented /dev/shm OOM on Railway.
 const MAX_AI_CONCURRENCY = 12;
 const MAX_OUTREACH_CONCURRENCY = 10;
-const MAX_CONTACT_CONCURRENCY = 4;
+export const MAX_CONTACT_CONCURRENCY = 4;
+
+// Contact discovery is BROWSER-BOUND: every company's page collection runs through the shared
+// Chromium, which serves only HUBSPOT_BROWSER_TASK_CONCURRENCY (default 2) serial lanes. Scheduling
+// more concurrent contact discoveries than there are lanes does NOT add throughput — the excess just
+// waits in the lane queue, and that queue wait pushes the company's total past the 600s contact-task
+// cap, so it is written with ZERO contacts (the measured Railway defect: test-green companies such as
+// Baumer resolved their address but lost all contacts only under parallel load). Capping the
+// browser-bound fan-out to the lane count gives every in-flight discovery a dedicated lane so its
+// page collection starts immediately and finishes inside budget. The hard ceiling and the
+// request-supplied value still apply on top.
+export function resolveContactSearchConcurrency(
+  requested: number | undefined,
+  browserLanes: number = HUBSPOT_BROWSER_TASK_CONCURRENCY
+): number {
+  return Math.min(
+    MAX_CONTACT_CONCURRENCY,
+    Math.max(1, browserLanes),
+    Math.max(1, requested ?? 3)
+  );
+}
+
 // A transient Exa failure (a 180s discovery timeout, an aborted request, or a 429/503) is NOT a
 // filter-quality problem - the filter is fine, the request just did not land. Retiring the filter
 // for the whole run on the very first transient failure means that with only the handful of seed
@@ -458,7 +481,7 @@ export class LeadWorkerRunService {
     const deadlineMs = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? 10 * 60_000);
     const aiConcurrency = Math.min(MAX_AI_CONCURRENCY, Math.max(1, request.aiPrefilterConcurrency ?? 2));
     const outreachConcurrency = Math.min(MAX_OUTREACH_CONCURRENCY, Math.max(1, request.outreachPrepConcurrency ?? 6));
-    const contactConcurrency = Math.min(MAX_CONTACT_CONCURRENCY, Math.max(1, request.contactSearchConcurrency ?? 3));
+    const contactConcurrency = resolveContactSearchConcurrency(request.contactSearchConcurrency);
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 4);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const learning = typeof this.controlPlaneStore.getLearning === "function"
@@ -515,6 +538,7 @@ export class LeadWorkerRunService {
       contactFailed: 0,
       hubspotWritten: 0,
       hubspotSkippedOutOfScope: 0,
+      hubspotSkippedAlreadyExists: 0,
       queueSizes: {
         exaInFlight: 0,
         aiWaiting: 0,
@@ -984,6 +1008,36 @@ export class LeadWorkerRunService {
       return resolvedIdentity?.country?.trim() || undefined;
     };
 
+    // Live HubSpot-existence dedup at intake. Uses the SAME matching the pre-write writer uses
+    // (companyExistsInHubSpot -> findExistingCompany: every domain variant + full and brand-root
+    // name search), so any company the writer would later match-and-update is recognised as a
+    // duplicate BEFORE it is classified and consumes contact/outreach/write budget. Previously this
+    // searched only the single bare-domain form, so older records (stored www./https:// or matchable
+    // only by name) and brand subsidiaries (KEYENCE FRANCE SAS vs KEYENCE) slipped through intake and
+    // were re-discovered and re-upserted, inflating "written" with duplicates.
+    //
+    // It deliberately does NOT race a short wall-clock timeout. HubSpot search calls are globally
+    // serialized (scheduleSearchRequest) to respect rate limits, so under high AI concurrency a
+    // company can legitimately wait several seconds for its turn in the search queue. A short
+    // fail-open timeout interpreted that normal queue wait as "lookup failed" and let the duplicate
+    // through, which is exactly how duplicates kept reaching the write path. Each underlying request
+    // is already bounded by HUBSPOT_REQUEST_TIMEOUT_MS with retries, so we wait for an accurate
+    // answer and only fail open (proceed) on a genuine lookup error, so a real transient HubSpot
+    // hiccup can never drop a real new lead.
+    const companyAlreadyInHubSpot = async (company: { name: string; domain?: string }): Promise<boolean> => {
+      if (request.dryRun || request.syncToHubSpot === false) {
+        return false;
+      }
+      const normalized = normalizeDomain(company.domain);
+      const label = normalized ?? company.name;
+      try {
+        return await this.hubSpotClient.companyExistsInHubSpot(company);
+      } catch (error) {
+        log(`HubSpot-Dedup-Pruefung uebersprungen fuer ${label}: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    };
+
     const maybeQueueHubSpot = (state: QualifiedCompanyState) => {
       if (state.removed || state.hubspotStatus !== "pending") {
         return;
@@ -1012,6 +1066,24 @@ export class LeadWorkerRunService {
         metrics.queueSizes.aiInFlight += 1;
         emitProgress();
         try {
+          // HARD HubSpot-existence dedup BEFORE any classification. A company that already exists in
+          // HubSpot must never run through the rest of the pipeline (Azure AI classification, deeper
+          // identity resolution, contact discovery, outreach, write) only to be re-upserted as an
+          // update. Checked here at the very top of the AI worker - right after Exa discovery handed
+          // the raw company over and BEFORE its category (ai-accepted / other / ...) is ever
+          // determined - so a duplicate is dropped immediately instead of consuming the whole run
+          // budget and inflating "written" with updates of records we already have. It still fails
+          // open on lookup error/timeout so a transient HubSpot hiccup can never drop a real new lead.
+          if (await companyAlreadyInHubSpot({ name: item.company.name, domain: item.company.domain })) {
+            metrics.hubspotSkippedAlreadyExists += 1;
+            const existingDomain = normalizeDomain(item.company.domain);
+            if (existingDomain) {
+              currentRunExcludedDomains.add(existingDomain);
+            }
+            log(`Aussortiert (existiert bereits in HubSpot, vor KI-Klassifizierung): ${item.company.name} (${item.company.domain})`);
+            continue;
+          }
+
           const analysis = await this.debugConsoleService.classifyCompanyForExecution(item.company, {
             annotateDebugStage: false
           });
@@ -1418,6 +1490,47 @@ export class LeadWorkerRunService {
           }
 
           const companySyncKey = new URL(state.company.domain?.startsWith("http") ? state.company.domain : `https://${state.company.domain ?? state.company.name}`).hostname.replace(/^www\./i, "").toLowerCase();
+
+          // AIRTIGHT locality hard-constraint. The qualification gate above races identity
+          // resolution for IDENTITY_RESOLUTION_TIMEOUT_MS and, on timeout, approves the company on
+          // its in-scope SOURCING country. The shared per-domain resolution then keeps running and
+          // typically completes (with the company's TRUE country) during the contact-discovery and
+          // per-contact outreach stages above. The HubSpot writer reads that completed result, so a
+          // company whose verified country is out of region could be PERSISTED even though the gate
+          // approved the heuristic in-scope country. Re-read the now-authoritative identity here and
+          // (a) re-evaluate scope on it, skipping out-of-region companies, and (b) pass it verbatim
+          // to the writer so the country we VALIDATE is exactly the country we WRITE. The crawl is
+          // cached per domain (already warmed), so this does not trigger a second crawl.
+          let writeAddressOverride: ExtractedCompanyAddress | null | undefined;
+          if (typeof (this.hubSpotClient as { resolveCompanyAddress?: unknown }).resolveCompanyAddress === "function") {
+            let finalIdentityTimeout: ReturnType<typeof setTimeout> | undefined;
+            writeAddressOverride = await Promise.race([
+              this.hubSpotClient.resolveCompanyAddress(state.company),
+              new Promise<null>((resolve) => {
+                finalIdentityTimeout = setTimeout(() => resolve(null), IDENTITY_RESOLUTION_TIMEOUT_MS);
+              })
+            ]).catch(() => null);
+            if (finalIdentityTimeout) {
+              clearTimeout(finalIdentityTimeout);
+            }
+            const authoritativeCountry = writeAddressOverride?.country?.trim();
+            if (authoritativeCountry) {
+              state.company.country = authoritativeCountry;
+            }
+            const stillInScope = await isCompanyInScope({ country: state.company.country, domain: state.company.domain }, defaultScopeFilter);
+            if (!stillInScope) {
+              state.hubspotStatus = "skipped";
+              state.removed = true;
+              state.pipelineAssigned = false;
+              metrics.hubspotSkippedOutOfScope += 1;
+              log(`HubSpot uebersprungen (Region nach finaler Aufloesung ausserhalb Zielregion): ${state.company.name} (${state.company.country ?? "unbekannt"})`);
+              screeningQueue.enqueue({ type: "upsert", record: buildScreeningRecord(state.company) });
+              maybePromoteStandby();
+              emitProgress();
+              continue;
+            }
+          }
+
           let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
           const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
@@ -1432,7 +1545,13 @@ export class LeadWorkerRunService {
                 [state.company],
                 state.researchBrief ? [state.researchBrief] : [],
                 new Map<string, PublicContactCandidate[]>([[companySyncKey, state.contacts]]),
-                Boolean(request.dryRun || request.syncToHubSpot === false)
+                Boolean(request.dryRun || request.syncToHubSpot === false),
+                undefined,
+                // Pass the authoritative address the locality gate just validated so the writer
+                // persists the SAME country it was checked against (no independent re-resolve).
+                writeAddressOverride !== undefined
+                  ? new Map<string, ExtractedCompanyAddress | null>([[companySyncKey, writeAddressOverride]])
+                  : undefined
               ),
               timeoutPromise
             ]);

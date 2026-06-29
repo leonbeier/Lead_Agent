@@ -126,7 +126,7 @@ interface HubSpotSyncProgress {
   companyName: string;
 }
 
-interface ExtractedCompanyAddress {
+export interface ExtractedCompanyAddress {
   companyName?: string;
   address?: string;
   city?: string;
@@ -213,7 +213,11 @@ const SHARED_WEB_TASK_BROWSER_IDLE_MS = 5_000;
 // Each instance launches with --disable-dev-shm-usage so shared memory does not hit the 64MB
 // /dev/shm ceiling that caused earlier OOM/502s. Keep this small (1-2) to stay memory-safe on
 // Railway; override via WEBSITE_BROWSER_CONCURRENCY only after verifying no OOM under load.
-const HUBSPOT_BROWSER_TASK_CONCURRENCY = Math.max(
+// EXPORTED so the worker can cap its browser-bound contact-discovery fan-out to the number of
+// Chromium lanes: scheduling more concurrent crawls than lanes makes the excess wait in the lane
+// queue, and that queue wait pushes a company's total past the 600s contact-task cap -> the
+// company is written with ZERO contacts (the measured Railway defect).
+export const HUBSPOT_BROWSER_TASK_CONCURRENCY = Math.max(
   1,
   Math.min(3, Number.parseInt(process.env.WEBSITE_BROWSER_CONCURRENCY ?? "2", 10) || 2)
 );
@@ -712,7 +716,15 @@ export class HubSpotClient {
     researchBriefs: ResearchBrief[],
     contactsByCompany: Map<string, PublicContactCandidate[]>,
     dryRun: boolean,
-    onProgress?: (progress: HubSpotSyncProgress) => void
+    onProgress?: (progress: HubSpotSyncProgress) => void,
+    // Optional authoritative address override keyed by getCompanyKey(company) (the SAME key as
+    // contactsByCompany). When an entry exists, upsertCompany writes that exact address instead of
+    // independently re-resolving it. The live worker resolves the identity ONCE, validates locality
+    // on it, and passes it here so the country it VALIDATED is exactly the country that gets
+    // WRITTEN — closing the gate/writer divergence where a late-resolved out-of-scope country was
+    // persisted even though the gate approved the in-scope sourcing country. A null entry means
+    // "resolution attempted, no address" and forces the writer to fall back to company fields.
+    resolvedAddresses?: Map<string, ExtractedCompanyAddress | null>
   ): Promise<HubSpotSyncResult> {
     if (dryRun || !readiness.hubspotConfigured) {
       return {
@@ -741,15 +753,27 @@ export class HubSpotClient {
         let companyWriteSucceeded = false;
 
         try {
-          const { company: syncedCompany, wasCreated } = await this.upsertCompany(company, brief, companyProperties);
+          const preResolvedAddress = resolvedAddresses?.has(companyKey)
+            ? resolvedAddresses.get(companyKey) ?? null
+            : undefined;
+          const { company: syncedCompany, wasCreated } = await this.upsertCompany(company, brief, companyProperties, preResolvedAddress);
           companySyncedCount = wasCreated ? 1 : 0;
           companyWriteSucceeded = true;
 
           const selectedContacts = contactsByCompany.get(this.getCompanyKey(company)) ?? [];
+          // A company must never be written with zero contacts. Generic role mailboxes (info@, ...)
+          // are normally dropped, but when discovery found NO richer contact (named person, personal
+          // LinkedIn, or phone) the generic mailbox is the only reachable channel and must be kept as
+          // an explicit fallback so the record stays actionable (AGENTS.md: every company >=1 contact,
+          // info@ acceptable as fallback). The generic mailbox is still dropped whenever a richer
+          // contact exists.
+          const hasRicherContact = selectedContacts.some(
+            (contact) => Boolean(contact.firstName || contact.lastName || contact.linkedinUrl || contact.phone)
+          );
           const contactResults = await this.mapWithConcurrency(
             selectedContacts.map((publicContact) => async () => {
               try {
-                const syncedContact = await this.upsertContact(publicContact, contactProperties, syncedCompany.id);
+                const syncedContact = await this.upsertContact(publicContact, contactProperties, syncedCompany.id, !hasRicherContact);
                 if (!syncedContact) {
                   return 0;
                 }
@@ -839,16 +863,22 @@ export class HubSpotClient {
   private async upsertCompany(
     company: PreCategorizedCompany,
     brief: ResearchBrief | undefined,
-    availableProperties: Set<string>
+    availableProperties: Set<string>,
+    // When provided (including explicit null), the caller has already resolved the authoritative
+    // identity and validated locality against it; write it verbatim instead of resolving again so
+    // the country written matches the country the caller validated. `undefined` = resolve here.
+    preResolvedAddress?: ExtractedCompanyAddress | null
   ): Promise<{ company: HubSpotObjectResponse; wasCreated: boolean }> {
     // Cap address extraction so that slow Azure AI retries or hung browser fetches
     // do not consume the entire HubSpot worker budget (360 s).  Address data is
     // enrichment; missing it is acceptable — the company record must still be written.
-    const extractedAddress = await this.withTimeout(
-      this.extractCompanyAddress(company),
-      90_000,
-      null
-    );
+    const extractedAddress = preResolvedAddress !== undefined
+      ? preResolvedAddress
+      : await this.withTimeout(
+          this.extractCompanyAddress(company),
+          90_000,
+          null
+        );
 
     const properties = this.pickAvailableProperties(
       this.buildRawCompanyProperties(company, brief, extractedAddress),
@@ -881,7 +911,8 @@ export class HubSpotClient {
   private async upsertContact(
     contact: PublicContactCandidate,
     availableProperties: Set<string>,
-    companyId?: string
+    companyId?: string,
+    allowGenericFallback = false
   ): Promise<HubSpotObjectResponse | null> {
     const normalizedContact = this.normalizeContactForHubSpot(contact);
     if (!normalizedContact) {
@@ -889,7 +920,8 @@ export class HubSpotClient {
     }
 
     if (
-      this.shouldSkipHubSpotContact(normalizedContact)
+      !allowGenericFallback
+      && this.shouldSkipHubSpotContact(normalizedContact)
     ) {
       return null;
     }
@@ -1050,7 +1082,69 @@ export class HubSpotClient {
       }
     }
 
-    return this.searchObject("companies", "name", company.name);
+    for (const nameVariant of this.buildCompanyNameSearchVariants(company.name)) {
+      const byName = await this.searchObject("companies", "name", nameVariant);
+      if (byName) {
+        return byName;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Public existence guard used by the live intake dedup. It applies the EXACT same matching as the
+   * pre-write findExistingCompany (every domain variant + the full and brand-root name variants), so
+   * a company that the writer would later match-and-update is recognised as a duplicate BEFORE it
+   * consumes contact/outreach/write budget. Previously the intake guard searched only the single
+   * bare-domain form, so older records stored as www./https:// domains or matchable only by name
+   * slipped through intake and were re-discovered and re-upserted (counted as "written" though they
+   * already existed). Unifying the two checks closes that gap.
+   */
+  async companyExistsInHubSpot(company: { name: string; domain?: string }): Promise<boolean> {
+    const existing = await this.findExistingCompany({
+      name: company.name,
+      domain: company.domain
+    } as PreCategorizedCompany);
+    return Boolean(existing);
+  }
+
+  /**
+   * Brand-root name variants for duplicate detection. A subsidiary record such as
+   * "KEYENCE FRANCE SAS" or "Bosch Rexroth Italia S.r.l." is the same brand as its parent
+   * ("KEYENCE", "Bosch Rexroth") and must be treated as a duplicate. We strip trailing
+   * region/country tokens and legal-form suffixes to recover the brand root and search that too.
+   * The full name is always tried first, so this only ADDS matches and never loses an exact hit.
+   */
+  private buildCompanyNameSearchVariants(name: string): string[] {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const variants = [trimmed];
+    const legalAndRegionTokens = new Set<string>([
+      "gmbh", "ag", "kg", "ohg", "se", "ug", "mbh", "co", "inc", "llc", "ltd", "limited",
+      "sas", "sa", "sarl", "srl", "spa", "bv", "nv", "oy", "ab", "as", "aps", "plc", "pte",
+      "sl", "slu", "sro", "kft", "doo", "lda", "sp", "zoo",
+      "france", "deutschland", "germany", "italia", "italy", "espana", "spain", "schweiz",
+      "suisse", "switzerland", "austria", "oesterreich", "nederland", "belgium", "belgique",
+      "polska", "poland", "uk", "usa", "international", "europe", "group", "gruppe", "holding"
+    ]);
+    const words = trimmed.split(/\s+/);
+    let end = words.length;
+    while (end > 1) {
+      const token = words[end - 1].replace(/[.,&]/g, "").toLowerCase();
+      if (token && legalAndRegionTokens.has(token)) {
+        end -= 1;
+        continue;
+      }
+      break;
+    }
+    const brandRoot = words.slice(0, end).join(" ").trim();
+    if (brandRoot && brandRoot.toLowerCase() !== trimmed.toLowerCase()) {
+      variants.push(brandRoot);
+    }
+    return variants;
   }
 
   private async findExistingContact(

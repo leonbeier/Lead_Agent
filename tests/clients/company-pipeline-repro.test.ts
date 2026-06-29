@@ -5,6 +5,14 @@ import path from "node:path";
 import { readiness } from "../../src/config";
 import { HubSpotClient } from "../../src/clients/hubspot";
 import type { PreCategorizedCompany, PublicContactCandidate } from "../../src/types";
+// The exact production budgets the worker enforces around contact discovery. Importing them (rather
+// than hard-coding) keeps the live-repro test in lockstep with the real pipeline so the test can
+// never drift into testing a gentler regime than Railway actually runs.
+import {
+  MAX_CONTACT_CONCURRENCY,
+  DEFAULT_CONTACT_TASK_TIMEOUT_MS,
+  resolveContactSearchConcurrency
+} from "../../src/agents/lead-worker-run";
 import {
   companyPipelineReproCases,
   companyPipelineReproExpectations,
@@ -62,6 +70,54 @@ function buildCompany(fixture: CompanyPipelineReproCase): PreCategorizedCompany 
   } as unknown as PreCategorizedCompany;
 }
 
+type ResolvedAddress = Awaited<ReturnType<HubSpotClient["resolveCompanyAddress"]>>;
+type LiveResult = { address: ResolvedAddress | null; contacts: PublicContactCandidate[] };
+
+// Mirror the production outer task cap: the worker wraps contact discovery in
+// DEFAULT_CONTACT_TASK_TIMEOUT_MS and writes the company with ZERO contacts when it overruns. The
+// historical sequential test applied only the inner Foundry budget and no outer cap, so a discovery
+// that finishes late (e.g. starved on the shared browser under parallel load) still counted its
+// contacts here while the live worker had already discarded them.
+function raceWithTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, ms);
+    if (typeof timer.unref === "function") timer.unref();
+    const finish = (value: T) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      }
+    };
+    promise.then(finish, () => finish(fallback));
+  });
+}
+
+// Bounded worker pool that mirrors the production contact-discovery parallelism: at most `limit`
+// companies run their live crawl + Foundry + LinkedIn enrichment at once, contending on the SAME
+// shared Chromium just like the worker does.
+async function runWithConcurrency<T>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+}
+
 // Opt-in live regression: feeds the 20 companies of the 2026-06-24 run through the SAME logic
 // the worker uses (company name + address resolution and public contact discovery, including the
 // Foundry agent and LinkedIn enrichment). It is skipped in the normal deterministic suite and is
@@ -100,6 +156,53 @@ test(
       ? Number(process.env.PIPELINE_REPRO_FOUNDRY_TIMEOUT_MS)
       : 370_000;
 
+    // Reproduce the production contact-discovery LOAD, not just its logic. The worker runs
+    // resolveContactSearchConcurrency(...) companies in parallel against the shared Chromium (capped
+    // to the browser-lane count), each bounded by the DEFAULT_CONTACT_TASK_TIMEOUT_MS outer cap; a
+    // discovery that overruns the cap (e.g. because it was starved on the shared browser under
+    // parallel load) is written with ZERO contacts. The historical sequential-with-no-outer-cap loop
+    // hid exactly this failure: a company such as Baumer resolved its address but lost its contacts
+    // ONLY under concurrency, so it looked green here while failing live. The default mirrors the
+    // EFFECTIVE production concurrency; set PIPELINE_REPRO_CONCURRENCY (e.g. the old uncapped 4) to
+    // reproduce the pre-fix starvation. Fail-fast stays sequential so the iterate-one-bug-at-a-time
+    // loop is deterministic.
+    const liveConcurrency = failFast
+      ? 1
+      : Math.max(
+          1,
+          process.env.PIPELINE_REPRO_CONCURRENCY
+            ? Number(process.env.PIPELINE_REPRO_CONCURRENCY)
+            : resolveContactSearchConcurrency(undefined)
+        );
+
+    async function resolveLive(fixture: CompanyPipelineReproCase): Promise<LiveResult> {
+      const company = buildCompany(fixture);
+      const address = await client.resolveCompanyAddress(company).catch(() => null);
+      const contacts = await raceWithTimeout(
+        client
+          .discoverPublicContactsForExecution(company, { selectedContactsTimeoutMs: foundryTimeoutMs })
+          .catch(() => [] as PublicContactCandidate[]),
+        DEFAULT_CONTACT_TASK_TIMEOUT_MS,
+        [] as PublicContactCandidate[]
+      );
+      return { address, contacts };
+    }
+
+    // Aggregate mode: warm every company's live result concurrently at the production parallelism so
+    // the shared-browser contention is exercised, then run the deterministic evaluation below over
+    // the cached results. Fail-fast mode leaves this empty and resolves each company sequentially in
+    // the loop (concurrency 1) so it can stop at the first gap without crawling the rest.
+    const precomputedLive = new Map<string, LiveResult>();
+    if (!failFast) {
+      const pending = companyPipelineReproCases.filter((fixture) => !completedDomains.has(fixture.domain));
+      process.stdout.write(
+        `Resolving ${pending.length} companies live at concurrency ${liveConcurrency} (production cap ${MAX_CONTACT_CONCURRENCY}, outer task cap ${DEFAULT_CONTACT_TASK_TIMEOUT_MS}ms)...\n`
+      );
+      await runWithConcurrency(pending, liveConcurrency, async (fixture) => {
+        precomputedLive.set(fixture.domain, await resolveLive(fixture));
+      });
+    }
+
     const report: Array<{
       name: string;
       domain: string;
@@ -130,12 +233,12 @@ test(
         process.stdout.write(`SKIP (checkpoint complete): ${fixture.name}\n`);
         continue;
       }
-      const company = buildCompany(fixture);
 
-      const address = await client.resolveCompanyAddress(company).catch(() => null);
-      const contacts: PublicContactCandidate[] = await client
-        .discoverPublicContactsForExecution(company, { selectedContactsTimeoutMs: foundryTimeoutMs })
-        .catch(() => [] as PublicContactCandidate[]);
+      // Aggregate mode reads the concurrently-warmed result (real shared-browser contention);
+      // fail-fast mode resolves sequentially here so it can stop at the first gap.
+      const live = precomputedLive.get(fixture.domain) ?? (await resolveLive(fixture));
+      const address = live.address;
+      const contacts: PublicContactCandidate[] = live.contacts;
 
       const resolvedName = address?.companyName ?? null;
       const hasPersonalLinkedIn = contacts.some((c) => isPersonalLinkedIn(c.linkedinUrl));
