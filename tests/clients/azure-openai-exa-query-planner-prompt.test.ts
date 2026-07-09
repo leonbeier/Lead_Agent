@@ -216,6 +216,13 @@ test("Exa query planner prompt uses the new ONE WARE system and structured user 
     assert.match(userPrompt, /too many results come back as the same companies on alternate subpages or deep links/i);
     assert.match(userPrompt, /queries visibly more different, more niche, and more specific/i);
     assert.match(userPrompt, /Prefer fresh official root domains or homepages from new site families/i);
+    // Category-agnostic specialization + anti-duplication mandate: rotate sub-region / application / named technology anchors.
+    assert.match(userPrompt, /Specialization and anti-duplication mandate:/i);
+    assert.match(userPrompt, /Sub-region \/ industrial cluster: narrow to a specific city, metro area, named industrial cluster/i);
+    assert.match(userPrompt, /Application \/ use-case \/ end market: anchor on a concrete application/i);
+    assert.match(userPrompt, /Named technology anchor: anchor on a specific tool, product family, framework, camera or sensor brand, or standard that the target company itself uses, integrates/i);
+    assert.match(userPrompt, /it does NOT mean searching for the maker or vendor of that technology/i);
+    assert.match(userPrompt, /Every new query must move to a sub-region, application, or named technology anchor that does not already appear in the recent query history/i);
     assert.doesNotMatch(userPrompt, /senswork\.com/i);
     assert.doesNotMatch(userPrompt, /ait\.de/i);
     assert.doesNotMatch(userPrompt, /fraunhofer\.de/i);
@@ -501,7 +508,8 @@ test("Exa query planner prompt localizes geography examples and opening warnings
     const systemPrompt = capturedCalls[0]?.find((message) => message.role === "system")?.content ?? "";
     const rewritePrompt = capturedCalls[1]?.find((message) => message.role === "user")?.content ?? "";
 
-    assert.match(systemPrompt, /Geography angle:\n\* France nationwide/i);
+    assert.match(systemPrompt, /Geography angle:\nRotate the geography across the concrete required countries/i);
+    assert.match(systemPrompt, /optionally a specific French region or city/i);
     assert.match(systemPrompt, /Example of too-similar queries:\n\* France machine vision system integrators/i);
     assert.match(systemPrompt, /Do not begin every query with France official company websites of\./i);
     assert.match(rewritePrompt, /At least half of the queries must avoid opening with France official company websites of\./i);
@@ -509,4 +517,242 @@ test("Exa query planner prompt localizes geography examples and opening warnings
   } finally {
     readiness.azureConfigured = previousAzureConfigured;
   }
+});
+
+test("Exa query planner prompt uses end-customer archetype framing and drops forced delivery/QC wording", async () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
+    runChat: (messages: Array<{ role: string; content: string }>) => Promise<string>;
+  };
+  let capturedMessages: Array<{ role: string; content: string }> = [];
+  const previousAzureConfigured = readiness.azureConfigured;
+
+  readiness.azureConfigured = true;
+
+  try {
+    azureClient.runChat = async (messages) => {
+      capturedMessages = messages;
+      return JSON.stringify({
+        queries: ["Germany food producers that own and operate their own factories at industrial scale"],
+        constraintCheck: {
+          requiredLocalities: ["Germany"],
+          allQueriesPreserveLocality: true,
+          forbiddenBroadeningTermsPresent: false,
+          preservedLocalitiesByQuery: [
+            {
+              query: "Germany food producers that own and operate their own factories at industrial scale",
+              preservedLocalities: ["Germany"]
+            }
+          ]
+        }
+      });
+    };
+
+    await azureClient.planExaSearchQueries(
+      {
+        name: "Scaled Food Producers Germany",
+        persona: "Operations leaders at scaled food producers",
+        industries: ["Food Production"],
+        keywords: ["food manufacturing", "production lines"],
+        locations: ["Germany"],
+        employeeRanges: ["201-500"],
+        targetCategories: ["industrial_end_customer_scaled"],
+        notes: "Find scaled German food producers that operate their own factories."
+      },
+      ["Germany food producers that operate their own factories"],
+      undefined,
+      false,
+      "Main context",
+      "Search strategy context",
+      1
+    );
+
+    const systemPrompt = capturedMessages.find((message) => message.role === "system")?.content ?? "";
+
+    assert.match(systemPrompt, /Archetype-specific query framing:/i);
+    assert.match(systemPrompt, /owns and operates its own factories, production lines, or plants at industrial scale/i);
+    assert.match(systemPrompt, /do NOT force delivery, implementation, integration, or deployment ownership wording/i);
+    assert.match(systemPrompt, /Do not add an in-house quality-control, inspection, or Vision-AI application requirement into discovery queries for end-customer archetypes/i);
+  } finally {
+    readiness.azureConfigured = previousAzureConfigured;
+  }
+});
+
+test("Exa query planner prompt uses software-platform archetype framing for platform targets", async () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
+    runChat: (messages: Array<{ role: string; content: string }>) => Promise<string>;
+  };
+  let capturedMessages: Array<{ role: string; content: string }> = [];
+  const previousAzureConfigured = readiness.azureConfigured;
+
+  readiness.azureConfigured = true;
+
+  try {
+    azureClient.runChat = async (messages) => {
+      capturedMessages = messages;
+      return JSON.stringify({
+        queries: ["Germany software platform vendors that build their own extensible product"],
+        constraintCheck: {
+          requiredLocalities: ["Germany"],
+          allQueriesPreserveLocality: true,
+          forbiddenBroadeningTermsPresent: false,
+          preservedLocalitiesByQuery: [
+            {
+              query: "Germany software platform vendors that build their own extensible product",
+              preservedLocalities: ["Germany"]
+            }
+          ]
+        }
+      });
+    };
+
+    await azureClient.planExaSearchQueries(
+      {
+        name: "Software Platforms Germany",
+        persona: "Product leaders at software platform vendors",
+        industries: ["Software"],
+        keywords: ["software platform", "workflow suite"],
+        locations: ["Germany"],
+        employeeRanges: ["51-200"],
+        targetCategories: ["software_platform_embedding"],
+        notes: "Find German software platform vendors that build their own product."
+      },
+      ["Germany software platform vendors"],
+      undefined,
+      false,
+      "Main context",
+      "Search strategy context",
+      1
+    );
+
+    const systemPrompt = capturedMessages.find((message) => message.role === "system")?.content ?? "";
+
+    assert.match(systemPrompt, /Archetype-specific query framing:/i);
+    assert.match(systemPrompt, /builds and sells its own software platform, workflow suite, or tool environment/i);
+    assert.match(systemPrompt, /do NOT force delivery, implementation, integration, or deployment ownership wording/i);
+  } finally {
+    readiness.azureConfigured = previousAzureConfigured;
+  }
+});
+
+test("Exa query planner prompt frames integrator_relevant_focus with the generic service-delivery integrator archetype", async () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    planExaSearchQueries: typeof AzureOpenAIClient.prototype.planExaSearchQueries;
+    runChat: (messages: Array<{ role: string; content: string }>) => Promise<string>;
+  };
+  let capturedMessages: Array<{ role: string; content: string }> = [];
+  const previousAzureConfigured = readiness.azureConfigured;
+
+  readiness.azureConfigured = true;
+
+  try {
+    azureClient.runChat = async (messages) => {
+      capturedMessages = messages;
+      return JSON.stringify({
+        queries: ["Germany official company websites of solution providers delivering customer vision projects"],
+        constraintCheck: {
+          requiredLocalities: ["Germany"],
+          allQueriesPreserveLocality: true,
+          forbiddenBroadeningTermsPresent: false,
+          preservedLocalitiesByQuery: [
+            {
+              query: "Germany official company websites of solution providers delivering customer vision projects",
+              preservedLocalities: ["Germany"]
+            }
+          ]
+        }
+      });
+    };
+
+    await azureClient.planExaSearchQueries(
+      {
+        name: "Relevant-Vertical Integrators Germany",
+        persona: "Engineering leads at vertical-specialized delivery firms",
+        industries: ["Embedded Systems", "Defence", "Medtech"],
+        keywords: ["embedded vision", "FPGA image processing"],
+        locations: ["Germany"],
+        employeeRanges: ["11-50"],
+        targetCategories: ["integrator_relevant_focus"],
+        notes: "Find German vertical-specialist engineering firms with a real vision signal."
+      },
+      ["Germany embedded vision engineering firms"],
+      undefined,
+      false,
+      "Main context",
+      "Search strategy context",
+      1
+    );
+
+    const systemPrompt = capturedMessages.find((message) => message.role === "system")?.content ?? "";
+
+    assert.match(systemPrompt, /Archetype-specific query framing:/i);
+    // integrator_relevant_focus must reuse the generic service-delivery integrator archetype (V1 direction), not a vertical-noun archetype.
+    assert.match(systemPrompt, /delivers customer-specific AI or vision projects and owns the implementation, integration, and deployment work/i);
+    assert.match(systemPrompt, /Frame each query around the target's business model/i);
+    // The generic integrator archetype must explicitly steer away from pure hardware, camera, optics, or component product manufacturers.
+    assert.match(systemPrompt, /pure hardware, camera, optics, or component product manufacturers/i);
+    // The removed vertical-noun archetype framing must no longer appear.
+    assert.doesNotMatch(systemPrompt, /vertical-specialized engineering and solution firms in embedded\/FPGA\/ASIC/i);
+    // A single integrator-family run must not relax the delivery-ownership requirement.
+    assert.doesNotMatch(systemPrompt, /do NOT force delivery, implementation, integration, or deployment ownership wording/i);
+  } finally {
+    readiness.azureConfigured = previousAzureConfigured;
+  }
+});
+
+test("Exa saturation pivot block fires a category-agnostic route rotation for heavily-mined runs", () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    buildExaSaturationPivotBlock: (
+      recentQueryHistory: Array<Record<string, unknown>>
+    ) => string | undefined;
+  };
+
+  const minedHistory = [
+    {
+      query: "Germany automation integrators machine vision",
+      returnedResults: 40,
+      filteredByExcludedDomains: 33,
+      accepted: 1,
+      rejectedDifferentCategory: 5,
+      rejectedOther: 18,
+      rawFound: 7
+    }
+  ];
+
+  const block = azureClient.buildExaSaturationPivotBlock(minedHistory);
+  assert.ok(block, "expected a saturation pivot block for a heavily-mined run");
+  assert.match(block as string, /Search-surface exhaustion signal/i);
+  // The pivot must stay category-agnostic: rotate the discovery angle, keep archetype and locality.
+  assert.match(block as string, /Keep the same target archetype and the same required locality/i);
+  assert.match(block as string, /a different customer industry or end market, a different application or use case/i);
+  assert.match(block as string, /do not switch a service, integrator, consulting, or engineering run toward hardware, component, optics, or product manufacturers/i);
+  // Naming a technology the target uses is an allowed discovery anchor (does not change the archetype).
+  assert.match(block as string, /a specific technology, tool, product family, or standard that the target itself uses or integrates/i);
+  assert.match(block as string, /Naming a technology the target works with is a legitimate discovery anchor and does not change the archetype/i);
+  // It must NOT inject the old hardcoded vision-vertical technology list.
+  assert.doesNotMatch(block as string, /embedded \/ FPGA \/ ASIC image-processing engineering houses/i);
+});
+
+test("Exa saturation pivot block stays silent when the surface is still productive", () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    buildExaSaturationPivotBlock: (
+      recentQueryHistory: Array<Record<string, unknown>>
+    ) => string | undefined;
+  };
+
+  const healthyHistory = [
+    {
+      query: "Germany embedded vision engineering firms",
+      returnedResults: 40,
+      filteredByExcludedDomains: 8,
+      accepted: 12,
+      rejectedDifferentCategory: 3,
+      rejectedOther: 5,
+      rawFound: 32
+    }
+  ];
+
+  const block = azureClient.buildExaSaturationPivotBlock(healthyHistory);
+  assert.equal(block, undefined);
 });

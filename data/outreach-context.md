@@ -92,10 +92,10 @@ Emphasize:
 * Higher accuracy / fewer errors on hard tasks.
 * Detecting defects or cases that standard architectures miss.
 * Better performance on the same or cheaper hardware.
-* Real benchmark advantages (F-score, fewer errors, FPS, latency).
+* A real, qualitative edge (it beat a hand-tuned or generic model on a hard task) — told as a story, not as a metric. Do NOT quote F-scores/FPS in the message; those are background facts only. At most one soft number if it truly helps.
 * Why the generated architecture beats a hand-tuned or generic model.
 
-Do NOT lead with "you don't need expertise" — that can feel dismissive to experts. Lead with "we got measurably better results on a hard task."
+Do NOT lead with "you don't need expertise" — that can feel dismissive to experts. Lead with "we got measurably better results on a hard task" — but tell it as a story about people, not a benchmark table.
 
 ## General integrators / automation / engineering / digitalization companies
 
@@ -112,6 +112,8 @@ Do NOT drown them in benchmark numbers. Lead with "it became easy and fast, so y
 ## Edge / hardware / embedded companies
 
 They care about efficiency on constrained hardware. Emphasize: runs on cheap/small/existing hardware, low power, low latency, resources left for other tasks.
+
+For these prospects a single vivid before/after SPEED number is the punch, not a spec sheet: keep it. Example: "it ran at only 4-5 FPS, our generated model hit over 2000 FPS on the bare CPU." This is the one exception to the no-numbers rule (accuracy lists and F-scores still get dropped).
 
 Rule:
 The story can be the same, but the value sentence must be tuned to the audience. Specialists -> accuracy/performance. Integrators -> speed/simplicity/no expertise. Hardware people -> efficiency.
@@ -147,6 +149,62 @@ The reason ("WHY YOLO was not the fit") must be a real, data/task-level reason. 
 
 ---
 
+# Tell a Story About People, Not a Benchmark
+
+Build the message as a short story about PEOPLE (a customer, researchers, an engineer), not as a benchmark report. The benchmark facts in the Knowledge Base are your BACKGROUND knowledge; they are NOT what you put in the message.
+
+* Do NOT say "a PCB benchmark", "a dataset", "achieved 98.4% F-Score", "465 FPS". Numbers like that read like a spec sheet and kill the human tone.
+* EXCEPTION: when ONE vivid before/after PERFORMANCE contrast IS the story (edge / speed / efficiency prospects), keep it. "It ran at only 4-5 FPS, our generated model hit over 2000 FPS on the bare CPU" is the punch, not a spec sheet. This is for a single dramatic speed/efficiency number, NOT for accuracy lists or F-scores.
+* DO turn the same facts into a human situation: who was involved, what they tried, what was hard, what changed.
+
+Example transformation (PCB):
+Background fact: "On a published PCB dataset, ONE AI reached 98.4% F-Score vs a researcher-designed custom ResNet18 at 98.2%, and was ~7.5x faster."
+In the message (story about people): "It reminded me of a PCB quality-control application where researchers first tested several standard models and then manually built a custom AI model for the task. Our software made that adaptation automatically and even got a better result, because the architecture was built directly for the PCB inspection logic, including reference images, inspection images and their differences."
+
+So: keep the mechanism and the qualitative outcome ("even better than the model the researchers hand-built"), drop the raw metrics. At most ONE number, and only if it really helps; never a list of scores.
+
+## Bridge to the story on the TYPE OF TASK, not the industry
+
+When the prospect is in a completely different industry than your story (e.g. syringe inspection vs a PCB story), do NOT pretend the industries match. Name the shared TASK TYPE out loud so the jump feels natural. For precise QC tasks, the bridge is usually: "this is similar in the type of task: not just detecting objects, but checking very precisely whether every detail matches the target state." Example: "Das hat mich an eine PCB-Qualitätskontrolle erinnert, die von der Art der Aufgabe ähnlich war: nicht einfach Objekte erkennen, sondern sehr genau prüfen, ob jedes Detail zum Sollzustand passt." Then tell the PCB researcher story.
+
+When you describe the new technology, make it land concretely without hype: "we took the same dataset, automatically generated a fitting architecture, and without long iteration loops on a universal model got a model that was even better than the hand-built one." A short "the interesting part was:" beats marketing adjectives.
+
+---
+
+# Always Name What Is Actually Special About ONE WARE
+
+Every message must make clear what is genuinely special about us, not just that "a model worked well." The differentiator is: our software AUTOMATICALLY GENERATES a new, application- and hardware-optimized Vision AI architecture, instead of fine-tuning a predefined / foundation model. That idea (in some form) should land in the message.
+
+PREFERRED: weave the explanation INTO the story text, as part of what happened with the customer, not only into the closing question. Explain it naturally where you describe what you did:
+
+Strong (explanation woven into the body):
+"We showed him our software, which does not fine-tune an existing model, but automatically generates a new Vision AI architecture for the specific inspection task and target hardware. That model adapted to the actual defect characteristics and worked well from a small dataset."
+
+Weaker (everything pushed into a long closing question):
+"Do you think our technology for automatically creating application- and hardware-optimized Vision AI models could be interesting for some of your inspection projects too?"
+
+When the body already explains the differentiator (as above), keep the CLOSING QUESTION short and human:
+"Do you think this kind of application-specific model generation could be interesting for some of your inspection projects too?"
+
+Only if the body does NOT carry the differentiator should the closing question name the full technology. Do not do both, or the message gets repetitive and salesy.
+
+Rule: the reader should finish the message knowing exactly what we do that is different (we generate a new model architecture for the exact task/data/hardware instead of reusing a generic one). Prefer to explain that inside the anecdote, then close with a light, natural question.
+
+## Frame the contrast as "generate a new architecture" vs "long optimization on a universal model"
+
+The strongest version of the differentiator does not just say "instead of starting from a standard model." It contrasts the TWO WAYS of working:
+* The old way: take a universal / foundation model (like YOLO) and spend long cycles optimizing and iterating on it by hand (this is exactly what the researchers in the story had to do).
+* Our way: automatically generate a NEW architecture built specifically for the task.
+
+So prefer a reason sentence like:
+"because it generated a new architecture specifically for the PCB inspection logic instead of spending long cycles optimizing and iterating on a universal model."
+rather than the weaker:
+"because it generated a model specifically for the task instead of starting from a standard model."
+
+The point that must land: building a fully custom architecture automatically beats long manual optimization of a universal model. That is what makes it better AND faster than what experts get by hand.
+
+---
+
 # Keep the Prospect Anchor Simple and Human
 
 You research deeply, but you do NOT dump all that detail into the message. A human would mention the prospect's work in one short, casual half-sentence — not a product spec.
@@ -166,6 +224,20 @@ Rules for the anchor sentence:
 * It should read like something you'd say in person, not a datasheet quote.
 
 Deep research is for picking the RIGHT story and the RIGHT limitation — not for proving to the prospect how much you read.
+
+## Do NOT invent a hardware angle or a different application to force a match
+
+A very common failure: forcing a hardware/spec story (FPGA, low-power, edge chip, clock speed) or a different application (food sorting, 360-degree inspection) into the message when you never actually found that. If you do not KNOW the hardware or the exact application, do not mention it. Match on the inspection TASK instead.
+
+Concrete case — prospect Mesolt builds QC / inspection systems for industrial parts:
+
+Bad (invented FPGA + wrong application):
+"Ich habe mir eure GTP-Serie angeschaut, besonders das 360-Grad-Prüfen und Sortieren bei hoher Taktzahl. Das hat mich an eine Lebensmittelinspektion erinnert, bei der Standardmodelle viel zu groß für günstige Low-Power-Hardware waren. Mit unserer Software wurde ein Modell erzeugt, das genau auf die Prüfaufgabe und das FPGA gepasst hat..."
+Why it is bad: invents a 360-degree sorting use case, an unrelated food-inspection story, and an FPGA/low-power hardware angle that was never researched. None of it is verified, so it reads as generic and risks being wrong.
+
+Good (simple anchor, match on the task):
+"Ich habe gesehen, dass ihr QC-Systeme für industrielle Teilekontrolle baut. Das hat mich an einen Kunden erinnert, der sehr feine Kratzer auf Metalloberflächen erkennen wollte. Standardmodelle wie YOLO waren da nicht die richtige Lösung, weil die Defekte zu fein und zu subtil für einen generischen Detektor waren. Mit unserer Software bekam er deutlich bessere Ergebnisse, weil ein Vision-AI-Modell genau für diese Kratzer erzeugt wurde, statt mit einem Standardmodell zu starten. Könnte so eine anwendungsspezifische Modellgenerierung für manche eurer QC-Systeme interessant sein?"
+Why it is good: the anchor is just "you build QC systems" (true and simple), the match is on the inspection task (fine scratches that standard models handle poorly), and the differentiator is sold inside the result sentence. No invented hardware, no invented application.
 
 ---
 
@@ -254,6 +326,8 @@ Anchor quality hierarchy (always aim as high as possible):
 4. Specific solution / technology page
 5. Specific industry example
 6. Generic company positioning (LAST resort only)
+
+Prefer anchors from the COMPANY WEBSITE (products, solutions, use cases, applications, case studies). The website shows what the company actually offers and what matters to them. Do NOT anchor on a random LinkedIn post, a like, a comment, or a personal update unless it is clearly about a concrete technical use case. LinkedIn activity is fine to UNDERSTAND the person, but the message anchor should normally be a real product or use case from their website.
 
 Bad anchor: "They do industrial digitalization."
 Good anchor: "They have a Vision AI section with food & beverage quality-control projects."
@@ -449,11 +523,12 @@ Best use when prospect has:
 * quality inspection systems
 * reference-based inspection
 
-Good message angle:
-"Your inspection system reminded me of a PCB benchmark where the biggest gain came from treating the task as a reference-comparison problem instead of a normal object detection problem."
+Good message angle (story about people, NOT a benchmark, NO raw metrics):
+"It reminded me of a PCB quality-control application where researchers first tested several standard models and then manually built a custom AI model for the task. Our software made that adaptation automatically and even got a better result, because the architecture was built directly for the PCB inspection logic, including reference images, inspection images and their differences."
 
 Avoid:
 "We also do QC."
+Avoid benchmark talk: do NOT say "a PCB benchmark", "98.4% F-Score", "465 FPS", or list model scores. Those are background facts only; turn them into the researcher story above.
 
 ---
 
@@ -609,6 +684,7 @@ The detection ran on the bare CPU with no accelerator, so the warning reacted in
 
 Avoid:
 Calling it a generic person detection model. The key is that the task was simplified into a task-specific binary decision.
+This is a DEMO we built, NOT a customer project. Never write "a customer wanted..." for it; say "a demo we built" / "eine Demo, die wir gebaut haben". State the limitation as a concrete symptom ("ran at only 4-5 FPS, too slow for a real-time warning"), never a vague qualifier like "too heavy" / "zu schwer".
 
 ---
 
@@ -1065,6 +1141,12 @@ They care about high throughput, cheap hardware, and repeatable deployment acros
 
 # Message Generation Rules
 
+Language:
+The outreach message is ALWAYS written in either German or English. Never write the message in any other language, even if the prospect's website, profile, or name is in a different language (French, Italian, Spanish, Dutch, etc.).
+- Default to German for prospects in German-speaking regions (Germany, Austria, Switzerland) or with a clearly German company/profile.
+- Otherwise default to English.
+- If unsure, use English. Never mix languages within one message.
+
 Length:
 70-120 words preferred.
 
@@ -1340,6 +1422,36 @@ Why this works:
 
 ---
 
+# Style Target Example 2b — Edge Vision Founder (Grünspecht / PICUS edge, German, demo + real number)
+
+Hallo Georg,
+
+ich habe mir PICUS edge angeschaut, vor allem den Ansatz, Vision direkt auf einem industriellen Edge-Gerät laufen zu lassen.
+
+Das hat mich an eine Demo erinnert, die wir gebaut haben: Personenerkennung auf einem Raspberry Pi. Tiny YOLOX war zwar genau genug, lief dort aber nur mit 4 bis 5 FPS. Für eine schnelle Warnreaktion war das zu langsam.
+
+Mit unserer Software wurde dafür eine neue Vision-AI-Architektur erzeugt, statt lange an einem Standardmodell zu iterieren. Dadurch lief die Erkennung direkt auf der CPU mit über 2000 FPS und ließ viel Hardware frei.
+
+Sollen wir uns mal zu Erfahrungen im CV-Bereich austauschen?
+
+Viele Grüße
+Leon
+
+Why this is the gold standard:
+* Anchors on a concrete product (PICUS edge), not generic positioning.
+* Frames the Raspberry Pi item honestly as "eine Demo, die wir gebaut haben", NOT a customer project.
+* States the limitation as a concrete symptom (only 4-5 FPS, too slow for a fast warning), never a vague "zu schwer" / "too heavy".
+* KEEPS the dramatic before/after speed number (4-5 FPS vs over 2000 FPS on the CPU): for an edge/performance prospect that contrast IS the story, not a spec-sheet score.
+* Differentiator inside the story: a new architecture is generated, not a standard model long-tuned.
+* Technical CV peer (founder of a CV lab), so it closes with a warm peer-exchange question, not a value question.
+
+Bad alternative (avoid):
+* "Das hat mich an einen Kunden erinnert..." for the Raspberry Pi item (it is a demo, not a customer).
+* "Tiny YOLOX war zu schwer" (vague; name the actual FPS instead).
+* Dropping the 2000 FPS (here the number is the whole point).
+
+---
+
 
 
 ---
@@ -1392,6 +1504,8 @@ Preferred anchor hierarchy:
 5. Specific industry example
 6. Generic company positioning
 
+Prefer anchors from the company WEBSITE (use cases, products, solutions, applications), not from random LinkedIn posts, likes, or comments. Use LinkedIn to understand the person, but anchor the message on a real website use case unless a post is clearly about a concrete technical application.
+
 ---
 
 # ADDITION: Matching Hierarchy
@@ -1409,6 +1523,7 @@ Examples:
 * TITAN package singulation ↔ RGB + Depth Fusion
 * Raspberry Pi + Hailo case study ↔ Raspberry Pi 2000 FPS demo
 * Food & beverage quality control ↔ Vision AI Becomes Practical story
+* Camera-based product in a production domain (e.g. poultry / ChickenCheck) ↔ Vision AI Becomes Practical story (they would want to roll cameras out broadly), NOT the fine-defect story
 * Smart camera platform ↔ Smart Camera Enablement story
 
 ## Level 2 — Good
@@ -1568,7 +1683,9 @@ Best use when prospect has:
 * food & beverage quality control
 
 Good message angle:
-"Das hat mich an einen Kunden erinnert, der schon ein paar Vision-Projekte gemacht hatte, aber jedes Mal wurde es sehr kompliziert, mit viel Optimierung und Spezialhardware. Mit unserer Software wird die KI direkt auf Anwendung und Hardware optimiert, sodass nur noch eine günstige Industriekamera mit eingebauter CPU nötig war. Jetzt will er überall in der Produktion solche Vision-Systeme integrieren, weil es so einfach und schnell geworden ist."
+"Das hat mich an einen Kunden erinnert, der schon ein paar Vision-Projekte gemacht hatte, aber jedes Mal wurde es sehr kompliziert, mit viel Optimierung, Modelltests und Spezialhardware. Wir haben ihm dann unsere Software gezeigt: damit wird nicht ein bestehendes Standardmodell lange angepasst, sondern für jede Anwendung automatisch eine neue KI-Architektur erzeugt, passend zur konkreten Aufgabe und zur Kamera-Hardware. Dadurch kam er viel schneller zu guten Ergebnissen, oft schon mit einer normalen Industriekamera mit eingebauter CPU. Jetzt will er überall in der Produktion solche Vision-Systeme integrieren, weil es so einfach und schnell geworden ist."
+
+IMPORTANT for this story: even though the headline value is "it got easy and broad", still make the NEW TECHNOLOGY explicit in the body. Do not just say "the AI is optimized for application and hardware". Say that our software does NOT long-tune an existing standard model, but automatically GENERATES A NEW AI ARCHITECTURE for each application, which is WHY good results come faster. That is the reason it became easy and fast, not a vague claim.
 
 ---
 
@@ -1669,6 +1786,56 @@ Prefer:
 
 The CTA should open a discussion about the prospect's projects and constraints.
 
+## Peer-exchange CTA for technical CV founders / researchers
+
+When the prospect is a technical computer-vision peer (a CV founder, a researcher, a lab lead, someone clearly deep in vision), a warm "let us exchange experiences" close fits better than a value question. It is collegial, not salesy, and it can carry a soft test idea.
+
+Good, as a question (preferred, feels less pushy):
+* "Sollen wir uns mal zu Erfahrungen im CV-Bereich austauschen?"
+* "Sollen wir uns mal zu Erfahrungen im CV-Bereich austauschen? Vielleicht wäre es auch spannend, eine eurer Anwendungen mit unserer Technologie zu testen, die automatisch neue KI-Modellarchitekturen für die konkrete Aufgabe erzeugt."
+
+Also fine as a statement, slightly warmer:
+* "Lass uns gern mal Erfahrungen im CV-Bereich austauschen, könnte spannend sein."
+
+Notes:
+* Use this ONLY for genuine CV peers, not for general integrators or non-experts (for them keep the project/value question).
+* The soft test idea ("eine eurer Anwendungen mit unserer Technologie testen") is allowed here because it is collegial, not a demo/meeting pitch. Still no "schedule a call".
+* You can tuck a tiny reminder of the differentiator into the test idea ("die automatisch neue KI-Modellarchitekturen für die konkrete Aufgabe erzeugt"), but keep it to one short clause.
+
+---
+
+# GOLD STANDARD EXAMPLE — Technical CV Peer (Detection-X / Tire :AI, peer-exchange close)
+
+This teaches TWO things: (1) ANCHOR on a concrete product, not a generic platform, and (2) close with a warm CV peer-exchange + soft test idea.
+
+Prospect: Patrick Tichelmann, co-founder of Detection-X (and a professor / lab lead). A deep technical CV person, not an integrator. Detection-X has a generic platform (Profundus-QA) and concrete products like Tire :AI.
+
+Anchor lesson: a generic "no-code platform for industrial vision" is a weak anchor. A concrete product like Tire :AI (reading DOT codes, markings and detecting damage directly on the tire) is a strong, specific anchor. Prefer the concrete product.
+
+Audience lesson: he is a CV peer, so do NOT use the "easier for non-experts" angle. Use the fine-defect story (technical edge) and close as a peer ("Sollen wir uns mal austauschen?") with a soft test idea, not a value question.
+
+Hallo Patrick,
+
+ich habe mir Tire :AI von euch angeschaut, vor allem die Erkennung von DOT, Markierungen und Schäden direkt am Reifen.
+
+Das hat mich an einen Kunden erinnert, der sehr feine Defekte auf Metalloberflächen erkennen wollte. YOLO war dort nicht der richtige Fit, weil die Fehler zu subtil für einen generischen Detektor waren.
+
+Mit unserer Software bekam er deutlich bessere Ergebnisse, weil eine neue Vision-AI-Architektur genau für diese Defekte erzeugt wurde, statt lange an einem Standardmodell zu iterieren.
+
+Sollen wir uns mal zu Erfahrungen im CV-Bereich austauschen? Vielleicht wäre es auch spannend, eine eurer Anwendungen mit unserer Technologie zu testen, die automatisch neue KI-Modellarchitekturen für die konkrete Aufgabe erzeugt.
+
+Viele Grüße
+Leon
+
+Why this is the gold standard:
+* CONCRETE PRODUCT ANCHOR (Tire :AI with DOT/markings/damage), not the generic Profundus-QA platform.
+* AUDIENCE FIT: a CV peer gets the technical-edge fine-defect story, not the "easier for non-experts" angle.
+* DIFFERENTIATOR in the result sentence ("eine neue Vision-AI-Architektur genau für diese Defekte, statt lange an einem Standardmodell zu iterieren").
+* PEER-EXCHANGE CLOSE as a question ("Sollen wir uns mal austauschen?") plus a soft, collegial test idea, with a one-clause reminder of the technology. No demo/meeting pitch.
+* German, because Detection-X is a DACH company.
+
+Bad alternative (avoid): anchoring on "TH Köln Förderprojekte" or the generic platform instead of the concrete product the person actually builds. Anchor on what they build (Tire :AI / Detection-X), not on a funding-project side note.
+
 ---
 
 # ADDITIONAL STYLE TARGET EXAMPLE 3 — Food Producer / Industrial Digitalization Partner
@@ -1697,6 +1864,38 @@ Why this works:
 * Explains what ONE WARE changes (cheap standard camera + CPU is enough).
 * Ends with the real outcome: they now want Vision AI everywhere because it got easy.
 * Opens a project/problem discussion without directly asking for a meeting.
+
+---
+
+# GOLD STANDARD EXAMPLE — Vision Product Company in a Production Domain (CLK / ChickenCheck)
+
+This teaches TWO things: (1) story SELECTION, and (2) making the new technology explicit.
+
+Prospect: CLK GmbH, project/product manager for ChickenCheck, a camera-based quality-control product for poultry production / animal-welfare assessment.
+
+Story selection lesson: a prospect like this already builds a specialized vision product, so the tempting match is the "fine-defect detection" story (subtle defects, standard models weak). That is NOT the best match here. Because CLK runs concrete, practical vision applications in a production domain (poultry), the better match is the "Vision AI Becomes Practical" story: a producer who, after a few vision projects, wanted to roll cameras out everywhere once it got easy and fast. Match on the prospect's SITUATION (a real vision-application builder who would want to deploy broadly), not just on "they also detect things".
+
+Hi Jan,
+
+ich habe mir ChickenCheck angeschaut, vor allem die kamerabasierte Bewertung in der Geflügelproduktion.
+
+Das hat mich an einen Geflügelproduzenten erinnert, der schon ein paar Vision-AI-Projekte gemacht hatte, aber meinte, jedes neue Thema werde schnell kompliziert, mit viel Optimierung, Modelltests und oft spezieller Hardware.
+
+Wir haben ihm dann unsere Software gezeigt. Damit wird nicht ein bestehendes Standardmodell lange angepasst, sondern für jede Anwendung automatisch eine neue KI-Architektur erzeugt, passend zur konkreten Aufgabe und zur Kamera-Hardware. Dadurch kam er viel schneller zu guten Ergebnissen, oft schon mit einer normalen Industriekamera mit eingebauter CPU.
+
+Jetzt geht er durch seine Produktion und schaut, wo er überall weitere Kameras einsetzen kann.
+
+Wäre so ein Ansatz für eure ChickenCheck-Themen auch spannend?
+
+Viele Grüße
+Leon
+
+Why this is the gold standard:
+* RIGHT STORY SELECTION: matched on the situation (a vision-application builder who wants to deploy broadly), not on the surface "they detect defects too". A poultry vision product fits the "becomes practical, now wants cameras everywhere" arc.
+* NEW TECHNOLOGY IS EXPLICIT: "damit wird nicht ein bestehendes Standardmodell lange angepasst, sondern für jede Anwendung automatisch eine neue KI-Architektur erzeugt". This is the key line. Do not water it down to "the AI is optimized for the application".
+* FASTER GOOD RESULTS lands as the consequence of that technology ("dadurch kam er viel schneller zu guten Ergebnissen"), which is what makes it easy and broad.
+* Simple human anchor, real outcome (walking the production looking for more camera spots), light close.
+* German, because CLK is a DACH company.
 
 ---
 
@@ -1770,6 +1969,99 @@ Turn these into rules for every message:
 
 ---
 
+# GOLD STANDARD EXAMPLE — Surface Inspection Specialist (explain the differentiator inside the story)
+
+This is the preferred style. The explanation of what is special about us is woven INTO the story (what we did with the customer), the message is short and punchy, and the closing question stays light.
+
+Hi Loïc,
+
+I saw that CIRA works on appearance inspection, including scratches and subtle contamination on production lines.
+
+That reminded me of a customer who wanted to detect very fine defects on metal surfaces. YOLO was not the right fit, because the defects were too subtle for a generic detector.
+
+He got much better results with our software, because it generated a Vision AI architecture specifically for those defects and the camera hardware instead of starting from a standard model.
+
+Could that kind of application-specific model generation be interesting for some of your inspection projects too?
+
+Best,
+Leon
+
+Why this is the gold standard:
+* SHORT and punchy. Every sentence earns its place. No filler ("not really what a generic detector is optimized for" is trimmed to "too subtle for a generic detector").
+* The DIFFERENTIATOR is sold INSIDE the result sentence ("because it generated a Vision AI architecture specifically for those defects and the camera hardware instead of starting from a standard model"). This is the one line that explains what is special about us, tied directly to the BETTER RESULT.
+* Sells the OUTCOME first ("He got much better results"), then the reason. Lead with the win, then explain why.
+* Real, data-level reason why YOLO did not fit (defects too subtle for a generic detector).
+* Active narrative, simple human anchor, light closing question.
+
+Slightly weaker (longer, more hedged) version, for contrast:
+"We showed him our software, which does not fine-tune an existing model, but automatically generates a new Vision AI architecture for the specific inspection task and target hardware. That model adapted to the actual defect characteristics and worked well from a small dataset."
+It is fine, but it is longer and leads with mechanism instead of the result. Prefer: result first, then the short "because it generated a model specifically for X instead of a standard model" reason.
+
+Rule reinforced: keep it short, lead with the better RESULT, and sell the differentiator in the same sentence ("generated a model specifically for the defects and hardware instead of starting from a standard model"). Close light.
+
+---
+
+# GOLD STANDARD EXAMPLE — PCB Inspection / R&D (story about people, not a benchmark)
+
+This shows how to turn the PCB benchmark facts into a STORY ABOUT PEOPLE. No metrics, no "benchmark" wording. The company here was French, and the message is in English (French is not DACH, so English).
+
+Hi Alessandro,
+
+I had a look at Horus, especially your AOI and SPI work for PCB inspection.
+
+It reminded me of a PCB quality-control application where researchers first tested several standard models and then manually built a custom AI model for the task. The task only really worked well once the architecture was built directly for the inspection logic, including inspection images, reference information and their differences.
+
+Our new technology made that adaptation automatically and even achieved a better result, because it generated a new architecture specifically for the PCB inspection logic instead of spending long cycles optimizing and iterating on a universal model.
+
+Could this kind of application-specific model generation be interesting for your R&D topics?
+
+Best,
+Leon
+
+Why this is the gold standard:
+* STORY ABOUT PEOPLE, not a benchmark. "researchers first tested several standard models and then manually built a custom AI model" is a human situation, not "a PCB benchmark where ONE AI hit 98.4% F-Score". NO raw metrics appear.
+* The qualitative win lands ("made that adaptation automatically and even achieved a better result"). It beats the model the researchers hand-built, without quoting numbers.
+* The differentiator makes the REAL contrast clear: our technology GENERATES A NEW ARCHITECTURE specifically for the task, instead of spending long cycles optimizing and iterating on a universal model (which is exactly the slow, manual path the researchers had to take). This is the key insight, do not lose it by just writing "instead of starting from a standard model".
+* Audience-fit close for an R&D contact ("interesting for your R&D topics").
+* Language: French company, so the message is in English (only German or English, never French).
+
+Do NOT write the benchmark version, like this weaker one:
+"Das hat mich an einen PCB-Benchmark erinnert, bei dem YOLO nicht die beste Lösung war ... Mit unserer Software hat das Modell 98,4% F-Score erreicht ..."
+Two problems: it talks about a BENCHMARK and quotes a metric (98.4% F-Score), and it is in German for a French (non-DACH) company. Tell the researcher story and use English.
+
+---
+
+# GOLD STANDARD EXAMPLE — Precise QC in a Different Industry (OCTUM / syringe.inspect, bridging to PCB)
+
+This teaches TWO things: (1) how to BRIDGE to the PCB story when the prospect is in a totally different industry (syringe inspection), and (2) how to make the new technology land strongly without sounding like hype.
+
+Prospect: OCTUM, syringe.inspect, an AOI system for precise inline quality inspection of syringes (DACH company, so German).
+
+The bridge lesson: the prospect has nothing to do with PCBs, so do NOT pretend the industry matches. Bridge on the TYPE OF TASK: both are precise industrial quality control where you do not just "detect objects" but check very exactly whether every detail matches the target state. Name that similarity explicitly so the jump to a PCB story feels natural ("that reminded me of a PCB quality-control application that was similar in the type of task").
+
+Hallo Herr Kaiser,
+
+ich habe mir eure syringe.inspect Systeme für die präzise Qualitätsprüfung von Spritzen angeschaut.
+
+Das hat mich an eine PCB-Qualitätskontrolle erinnert, die von der Art der Aufgabe ähnlich war: Es ging nicht darum, einfach Objekte zu erkennen, sondern sehr genau zu prüfen, ob jedes Detail zum Sollzustand passt. Forscher hatten dafür zuerst mehrere Standardmodelle getestet und anschließend ein eigenes Modell von Hand gebaut. Wirklich stark wurde die Lösung erst, als die Architektur direkt zur Inspektionslogik passte, inklusive Vergleichsbild und spezieller Optimierungen.
+
+Mit unserer neuen Technologie konnten wir dann den gleichen Datensatz nehmen und automatisch eine passende Architektur dafür erzeugen. Das Spannende war: Ohne lange Iterationsschleifen auf einem universellen Modell kam ein Modell heraus, das sogar besser war als die von Hand gebaute Lösung, weil es direkt für diese QC-Logik erzeugt wurde.
+
+Könnte diese Art von anwendungsspezifischer Modellgenerierung für eure AOI- und Deep-Learning-Themen interessant sein?
+
+Viele Grüße
+Leon
+
+Why this is the gold standard:
+* THE BRIDGE is explicit and honest: "die von der Art der Aufgabe ähnlich war: nicht einfach Objekte erkennen, sondern sehr genau prüfen, ob jedes Detail zum Sollzustand passt". This is how you connect a non-PCB prospect to the PCB story, through the task type, not the industry.
+* THE NEW TECHNOLOGY is made impressive but not hypey, by telling it concretely: we took the SAME dataset, automatically generated a fitting architecture, and without long iteration loops on a universal model got a model that was even BETTER than the hand-built one. "Das Spannende war:" sets up the surprise without empty marketing words.
+* The differentiator is the contrast: automatic new architecture vs long manual optimization on a universal model.
+* Detail phrasing kept light: "inklusive Vergleichsbild und spezieller Optimierungen" (not a long technical list of "Prüfbild, Referenzinformation und deren Unterschiede"). Keep such detail short and human.
+* Leave OUT distracting, explanation-heavy claims (e.g. "predicts a model in under a second"). They pull focus from the core point: researchers had to adapt by hand, our software does that architecture adaptation automatically and better.
+* German, because OCTUM is a DACH company.
+
+---
+
 # ADDITIONAL STYLE TARGET EXAMPLE 4 — Industrial Camera Manufacturer
 
 Hi [Name],
@@ -1802,22 +2094,22 @@ Hi [Name],
 
 ich habe mir eure X-Ray-/CT-Inspektionslösungen angeschaut.
 
-Das hat mich an einen PCB-Benchmark erinnert, bei dem der entscheidende Punkt nicht einfach Defekterkennung war. Die Aufgabe wurde erst wirklich gut, als die Architektur Referenzbild, Prüfbild und deren Unterschiede gemeinsam verarbeitet hat.
+Das hat mich an eine PCB-Qualitätskontrolle erinnert, bei der Forscher erst mehrere Standardmodelle getestet und dann ein eigenes Modell von Hand gebaut haben. Wirklich gut wurde die Aufgabe erst, als die Architektur Referenzbild, Prüfbild und deren Unterschiede gemeinsam verarbeitet hat.
 
-Mit Standardmodellen ist so etwas oft schwierig, weil sie eher auf normale Objekterkennung ausgelegt sind und nicht auf komplexe Vergleichsaufgaben.
+Unsere Software hat genau diese Anpassung automatisch gemacht und sogar ein besseres Ergebnis erreicht, weil die Architektur direkt für die Inspektionslogik erzeugt wurde statt mit einem Standardmodell zu starten.
 
-Deshalb musste ich an X-Ray- und CT-Anwendungen denken, wo der Kontext und kleine Abweichungen oft wichtiger sind als einzelne Bildmerkmale. Nutzt ihr dafür schon speziell angepasste Architekturen oder meistens bestehende Modelle?
+Könnte so eine anwendungsspezifische Modellgenerierung für eure X-Ray- und CT-Themen interessant sein?
 
 Viele Grüße
-
 Leon
 
 Why this works:
 
+* Tells a STORY ABOUT PEOPLE (researchers who hand-built a model), not "a PCB benchmark", and quotes NO metrics.
 * Does not say "we also do X-Ray."
 * Connects through the underlying limitation: comparison and non-natural images.
-* Explains why standard models are limited.
-* Opens a technical discussion.
+* The differentiator is sold in the reason (architecture built directly for the inspection logic instead of a standard model).
+* Light, audience-fit closing question.
 
 ---
 

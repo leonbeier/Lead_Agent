@@ -269,6 +269,8 @@ export class LeadPipelineAgent {
 
   private companyScreeningDatabase: CompanyScreeningDatabase = { records: [] };
 
+  private activeTargetCategoryRefinement?: string;
+
   private discoveryCheckpointContext?: { runId: string; nextSequence: number };
 
   private aiPrefilterConcurrency = AZURE_WORKER_CONCURRENCY;
@@ -289,6 +291,7 @@ export class LeadPipelineAgent {
     const syncToHubSpot = request.syncToHubSpot ?? !dryRun;
     const disableHubSpotDeduplication = request.disableHubSpotDeduplication ?? false;
     const companySearchMode = request.companySearchMode ?? "internet_research";
+    this.activeTargetCategoryRefinement = request.targetCategoryRefinement?.trim() || undefined;
     this.companySearchClient.setExaApiKey(request.exaApiKey);
     this.companySearchClient.setDiffbotToken(request.diffbotToken);
     this.companySearchClient.setExaSearchPayloadOptions({
@@ -2148,7 +2151,8 @@ export class LeadPipelineAgent {
               dryRun,
               mainContext,
               prequalification,
-              learning
+              learning,
+              this.activeTargetCategoryRefinement
             )
           : await this.azureClient.categorizeCompany(
               company.name,
@@ -2157,7 +2161,8 @@ export class LeadPipelineAgent {
               mainContext,
               prequalification,
               targetCategories,
-              learning
+              learning,
+              this.activeTargetCategoryRefinement
             );
 
         const resolvedCategorization = {

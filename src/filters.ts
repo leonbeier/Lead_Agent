@@ -141,7 +141,14 @@ export const defaultFilters: OrganizationFilter[] = [
       "industrial digitalization",
       "customer-specific automation projects"
     ],
-    locations: ["Europe"],
+    // Concrete European country list (not the abstract "Europe" token). With ["Europe"] the Exa
+    // query planner received requestedLocalities=["Europe"], so every query had to contain "Europe"
+    // verbatim — producing generic, already-saturated queries and forbidding per-country
+    // diversification (a "Netherlands"/"Sweden" angle was rejected by the hard locality validator as
+    // missing the required locality). A concrete country list lets the planner rotate per-country
+    // queries that each satisfy the validator and surface NEW companies (empirically ~10-13 new
+    // per underexplored country: NL/DK/SE/ES/PT vs 2-3 for a generic "Europe" query).
+    locations: ["Germany", "France", "Italy", "Netherlands", "Belgium", "Switzerland", "Sweden", "Austria", "Spain", "Denmark", "Portugal", "Poland", "Czech Republic"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
     targetCategories: ["integrator_relevant_focus"],
     notes: "Europe-wide discovery for delivery-led industrial automation, OT, and production software implementation partners. Prefer project businesses with customer integration ownership over broad AI consultancies or product-only vendors."
@@ -355,24 +362,25 @@ export const defaultFilters: OrganizationFilter[] = [
   },
   {
     name: "Germany Automation Software Integrators",
-    persona: "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects with customer implementation ownership",
+    persona: "German automation software integrator delivering MES, SCADA, PLC, and industrial software projects with customer implementation ownership and a plausible path into camera-based inspection, quality control, or Vision AI automation",
     industries: ["Industrial Automation", "System Integration", "Industrial Software", "Machinery"],
     keywords: [
       "industrial automation integrator",
       "automatisierung software dienstleister",
-      "sondermaschinen software",
+      "machine vision integration",
+      "camera-based inspection",
+      "ai quality inspection",
       "mes system integrator",
       "scada system integrator",
       "plc software integration",
       "industrial software services",
-      "manufacturing software implementation",
       "ot integration",
       "softwareentwicklung industrie"
     ],
     locations: ["Germany"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
     targetCategories: ["integrator_general_ai"],
-    notes: "German industrial software and automation implementation partners with clear delivery ownership. Prefer project-led OT, PLC, SCADA, and MES services over generic SaaS or HR software vendors."
+    notes: "German industrial software and automation implementation partners with clear delivery ownership. Prefer integrators with a visible or plausible path into camera-based inspection, quality control, or Vision AI over generic SaaS or HR software vendors."
   },
   {
     name: "Germany Embedded Vision Engineering Firms",
@@ -417,45 +425,47 @@ export const defaultFilters: OrganizationFilter[] = [
   },
   {
     name: "Germany Smart Factory Software Engineering Partners",
-    persona: "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers",
+    persona: "German software engineering partner implementing smart factory, MES, production data, or industrial digitalization solutions for manufacturers, with a plausible path into camera-based inspection, quality control, or Vision AI",
     industries: ["Industrial Software", "Industrial Automation", "System Integration", "Machinery"],
     keywords: [
       "smart factory software",
       "smart factory dienstleister",
       "industrial software engineering",
-      "manufacturing software implementation",
+      "machine vision integration",
+      "camera-based inspection",
+      "ai quality inspection",
       "production data integration",
       "ot integration",
       "industrial digitalization",
       "smart systems engineering",
-      "co engineering automation",
       "produktionssoftware dienstleister"
     ],
     locations: ["Germany"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
     targetCategories: ["integrator_general_ai", "integrator_relevant_focus"],
-    notes: "Targets project-driven software delivery partners for production and smart factory environments, not generic SaaS vendors."
+    notes: "Targets project-driven software delivery partners for production and smart factory environments with a plausible path into camera-based inspection, quality control, or Vision AI, not generic SaaS vendors."
   },
   {
     name: "DACH Industrial Software Integration Partners",
-    persona: "DACH industrial software and automation integration partner delivering MES, SCADA, PLC, production data, and OT implementation projects for manufacturers",
+    persona: "DACH industrial software and automation integration partner delivering MES, SCADA, PLC, production data, and OT implementation projects for manufacturers, with a plausible path into camera-based inspection, quality control, or Vision AI",
     industries: ["Industrial Software", "Industrial Automation", "System Integration", "Machinery"],
     keywords: [
       "mes system integrator",
       "scada system integrator",
+      "machine vision integration",
+      "camera-based inspection",
+      "ai quality inspection",
       "produktionssoftware dienstleister",
-      "automatisierung software dienstleister",
       "ot integration",
       "plc software integration",
       "industrial digitalization",
       "softwareentwicklung industrie",
-      "systemintegration automation",
-      "prozessleittechnik integration"
+      "systemintegration automation"
     ],
     locations: ["Germany", "Austria", "Switzerland"],
     employeeRanges: ["11,50", "51,200", "201,500", "501,1000"],
     targetCategories: ["integrator_general_ai", "integrator_relevant_focus"],
-    notes: "Expands software-led discovery beyond Germany-only filters toward DACH implementation partners with explicit MES, SCADA, PLC, OT, and production software delivery ownership."
+    notes: "Expands software-led discovery beyond Germany-only filters toward DACH implementation partners with a plausible path into camera-based inspection, quality control, or Vision AI on top of explicit MES, SCADA, PLC, OT, and production software delivery ownership."
   },
   {
     name: "DACH Scaled Industrial End Customers",

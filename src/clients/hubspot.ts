@@ -4,6 +4,7 @@ import { ApolloClient } from "./apollo";
 import { AzureOpenAIClient } from "./azure-openai";
 import { FoundryAgentsClient } from "./foundry-agents";
 import { OpenAIWebSearchClient } from "./openai-web-search";
+import { resolveBrowserLaneCount, resolveResourceAwareConcurrency } from "../runtime-resources";
 import { PreCategorizedCompany, PublicContactCandidate, ResearchBrief } from "../types";
 
 // Bare legal-form or country fragments (e.g. "De", "AG", "GmbH") that the address extractor
@@ -202,6 +203,10 @@ interface BrowserSearchArticle {
 const HUBSPOT_MAX_RETRIES = 5;
 const HUBSPOT_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 12000];
 const HUBSPOT_SEARCH_MIN_INTERVAL_MS = 250;
+// HubSpot CRM search allows up to 5 OR'd filterGroups per request. Batching every domain (or name)
+// variant into ONE request instead of one request per variant is the key lever for cutting the
+// globally-serialized search backlog that was making writes time out.
+const HUBSPOT_SEARCH_MAX_FILTER_GROUPS = 5;
 const HUBSPOT_BROWSER_TASK_MIN_INTERVAL_MS = 250;
 // How long the shared web-task browser may sit idle (no running browser task) before it is closed.
 // During a company's page burst the browser is reused (the perf win); once the burst ends it shuts
@@ -217,10 +222,13 @@ const SHARED_WEB_TASK_BROWSER_IDLE_MS = 5_000;
 // Chromium lanes: scheduling more concurrent crawls than lanes makes the excess wait in the lane
 // queue, and that queue wait pushes a company's total past the 600s contact-task cap -> the
 // company is written with ZERO contacts (the measured Railway defect).
-export const HUBSPOT_BROWSER_TASK_CONCURRENCY = Math.max(
-  1,
-  Math.min(3, Number.parseInt(process.env.WEBSITE_BROWSER_CONCURRENCY ?? "2", 10) || 2)
-);
+//
+// The lane count is derived from the container's REAL CPU + memory allowance (resolveBrowserLaneCount):
+// too few lanes lets a company's ~11-fetch page burst queue past the 45s collection budget, so a
+// well-resourced container runs more lanes to drain the queue inside budget, while a constrained one
+// drops to a single lane so the browser never contends the only core (which fires page.goto's
+// wall-clock timeout). WEBSITE_BROWSER_CONCURRENCY still overrides, bounded by the memory-safe ceiling.
+export const HUBSPOT_BROWSER_TASK_CONCURRENCY = resolveBrowserLaneCount();
 const HUBSPOT_REQUEST_TIMEOUT_MS = 30000;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_PRIMARY_COMPANY = 1;
 const HUBSPOT_ASSOCIATION_CONTACT_TO_COMPANY = 279;
@@ -249,6 +257,14 @@ const DDG_BROWSER_SEARCH_TIMEOUT_MS = 30000;
 // plain fetch path (attemptFetchHtml raised 10s→20s for the identical reason); the browser renders
 // heavier pages so it gets even more headroom, matching DDG_BROWSER_SEARCH_TIMEOUT_MS.
 const WEBSITE_BROWSER_FETCH_TIMEOUT_MS = 30000;
+// Under a live run the Node event loop is saturated (dozens of concurrent AI classifications plus
+// synchronous parsing of multi-MB pages), so page.goto's WALL-CLOCK timer can fire even though
+// Chromium already finished rendering the DOM — the completion callback is merely starved, not the
+// browser. Rather than discarding a fully-loaded page (→ zero pages → empty address/contacts), the
+// browser fetch salvages page.content() after a goto timeout. A page is only accepted as salvaged
+// when its visible text clears this floor, so a genuinely blank/never-loaded page still falls
+// through to a real failure.
+const BROWSER_GOTO_TIMEOUT_MIN_SALVAGE_TEXT = 200;
 // A client-rendered SPA's plain fetch returns HTTP 200 with a large inlined JS bundle but almost no
 // rendered text. These thresholds detect that contentless bundle (large HTML + very low visible-text
 // ratio) so it is re-fetched through the browser, where the real route content renders. Normal
@@ -306,6 +322,18 @@ const PUBLIC_CONTACT_MANAGER_PATTERNS = [
   "Head of Operations",
   "Head of Product",
   "Head of Technology",
+  "Head of Production",
+  "Head of Manufacturing",
+  "Head of Quality",
+  "Head of Digitalization",
+  "Head of Digitalisation",
+  "Head of Automation",
+  "Head of Innovation",
+  "Plant Manager",
+  "Production Manager",
+  "Quality Manager",
+  "QA Manager",
+  "QC Manager",
   "Director",
   "VP",
   "Vice President"
@@ -407,10 +435,73 @@ const COMMON_COMPOUND_TLDS = new Set([
   "com.hk"
 ]);
 
+// Result of the deployed crawl benchmark: drives the SAME browser fetch path the live pipeline uses,
+// at a chosen fan-out, and reports how many page.goto navigations hit the wall-clock timeout (and how
+// many were salvaged) INSIDE the real container. Running this on Railway is the only way to observe
+// the CPU-starvation goto timeouts, which a 22-core dev box cannot reproduce.
+export interface CrawlBenchmarkResult {
+  concurrency: number;
+  domains: number;
+  wallMs: number;
+  perTaskMs: { p50: number; p95: number; max: number };
+  ok: number;
+  failed: number;
+  tasksOver30s: number;
+  tasksOver45s: number;
+  gotoTimeouts: number;
+  gotoTimeoutsSalvaged: number;
+  infrastructureFailures: number;
+}
+
+// A minimal counting semaphore. `permits` tracks the number of free slots; on release the permit is
+// handed directly to the next waiter (FIFO) instead of being incremented, which keeps the effective
+// concurrency at exactly `max` with no race window between wake-up and re-acquisition.
+class AsyncSemaphore {
+  private permits: number;
+  private readonly waiters: Array<() => void> = [];
+
+  constructor(max: number) {
+    this.permits = Math.max(1, Math.floor(max));
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+
+  private async acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits -= 1;
+      return;
+    }
+    await new Promise<void>((resolve) => this.waiters.push(resolve));
+  }
+
+  private release(): void {
+    const next = this.waiters.shift();
+    if (next) {
+      next();
+    } else {
+      this.permits += 1;
+    }
+  }
+}
+
 export class HubSpotClient {
   private readonly availableProperties = new Map<"companies" | "contacts", Promise<Set<string>>>();
-  private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();
-  private readonly officialWebsiteProfileCache = new Map<string, Promise<OfficialWebsiteCompanyProfile | null>>();
+  // In-run idempotency memo: once a company (by dedup key) or contact (by channel key) has been
+  // created or matched in HubSpot during this process, remember its object id. A HubSpot write retry
+  // (re-enqueued after a timeout) or a double-discovery of the same company then UPDATES that exact
+  // record instead of re-searching HubSpot — whose search index is eventually consistent and does
+  // NOT immediately return a just-created record, which was creating duplicate companies/contacts.
+  private readonly writtenCompanyIdByKey = new Map<string, string>();
+  private readonly writtenContactIdByKey = new Map<string, string>();
+  private readonly writtenNoteKeys = new Set<string>();
+  private readonly searchResultCache = new Map<string, Promise<WebSearchHit[]>>();  private readonly officialWebsiteProfileCache = new Map<string, Promise<OfficialWebsiteCompanyProfile | null>>();
   private readonly resolvedCompanyAddressCache = new Map<string, Promise<ExtractedCompanyAddress | null>>();
   private readonly candidatePagesCache = new Map<string, Promise<Array<{ url: string; html: string }>>>();
   private readonly fetchHtmlCache = new Map<string, Promise<string | null>>();
@@ -422,12 +513,38 @@ export class HubSpotClient {
   // against a host that 404s. Recording the resolved final URL lets the crawler re-base onto the
   // real canonical origin so the right URL is analyzed instead of a domain with a redirect.
   private readonly resolvedFinalUrls = new Map<string, string>();
-  // Hosts whose browser fetch already returned a hard anti-bot block (401/403/429/5xx). A blocked
-  // site returns the same block to the browser as to plain fetch, so retrying every follow-up page
-  // of that host through the single serialized Chromium browser is pure waste that saturates the
-  // browser and starves the high-value searches (address web search, LinkedIn enrichment). Once a
-  // host is known browser-blocked we skip its further browser retries for the rest of the process.
-  private readonly browserBlockedHosts = new Set<string>();
+  // Per-host count of browser fetches that returned an anti-bot / rate-limit block (401/403/408/
+  // 429/5xx). These responses are probabilistic under batch load: the SAME host frequently returns
+  // 200 on the next attempt. Treating the FIRST block as a permanent, host-wide verdict for the
+  // whole run collapsed the entire company (name + address + contacts all read the same crawl)
+  // whenever the dice came up blocked on the homepage. Counting instead of latching lets a single
+  // transient block be retried; only after repeated blocks do we stop the host's (futile) browser
+  // retries so it cannot saturate the single serialized Chromium and starve high-value searches.
+  private readonly browserHostBlockCounts = new Map<string, number>();
+  private static readonly BROWSER_HOST_BLOCK_THRESHOLD = 3;
+  // Outbound plain-HTTP fetch politeness. The crawl fans out ~14 proactive contact-page URLs per
+  // company in parallel and the worker runs many companies at once, so without pacing a single
+  // origin can receive dozens of near-simultaneous requests from one IP. That burst is what trips
+  // servers' anti-bot / rate limiters (401/403/408/429/503), and because company name + address +
+  // contacts all read the same crawl, one tripped host collapses the whole company. These
+  // semaphores cap concurrent plain fetches PER HOST (the direct rate-limit trigger) and globally
+  // (event-loop / bandwidth protection) so we stop self-inflicting the blocks. Browser fetches are
+  // already lane-limited separately by scheduleBrowserTask.
+  private readonly globalFetchSemaphore = new AsyncSemaphore(
+    resolveResourceAwareConcurrency(24, 3)
+  );
+  private readonly perHostFetchSemaphores = new Map<string, AsyncSemaphore>();
+  private static readonly MAX_PER_HOST_PLAIN_FETCH = 3;
+  // Count of genuine Chromium infrastructure failures (launch/crash/OOM/disconnect) surfaced during
+  // this process. Kept as a visible signal so a broken browser is loud instead of being swallowed
+  // into silent zero-page crawls.
+  private browserInfrastructureFailureCount = 0;
+  // Count of page.goto wall-clock timeouts (the event-loop-saturation symptom) and how many of them
+  // were recovered by salvaging the already-rendered DOM. Surfaced in the log so a saturated run is
+  // quantifiable instead of invisible: a high timeout count means concurrency is starving the
+  // browser callbacks, and the salvaged/unrecovered split shows how much crawl data was at risk.
+  private browserGotoTimeoutCount = 0;
+  private browserGotoTimeoutSalvagedCount = 0;
   private readonly apolloClient = new ApolloClient();
 
   private readonly azureOpenAIClient = new AzureOpenAIClient();
@@ -518,6 +635,64 @@ export class HubSpotClient {
     return this.findPublicContacts(company);
   }
 
+  // Reproduces the production browser-crawl load INSIDE the running container. Fans `concurrency`
+  // parallel browser fetches (round-robin over `domains`) through the SAME shared-Chromium path the
+  // live pipeline uses, then reports the goto-timeout / salvage / infrastructure counters plus
+  // per-task timing. The browser lane semaphore (HUBSPOT_BROWSER_TASK_CONCURRENCY) still applies, so
+  // this exercises the exact lane-queue + CPU contention a live worker sees on Railway — the only
+  // place the wall-clock goto timeouts actually fire.
+  async runCrawlBenchmark(domains: string[], concurrency: number): Promise<CrawlBenchmarkResult> {
+    const normalizedDomains = domains
+      .map((domain) => domain.trim())
+      .filter((domain) => domain.length > 0)
+      .map((domain) => (/^https?:\/\//i.test(domain) ? domain : `https://${domain}`));
+
+    if (normalizedDomains.length === 0) {
+      throw new Error("runCrawlBenchmark requires at least one domain");
+    }
+
+    const laneCount = Math.max(1, Math.floor(concurrency) || 1);
+    const startGoto = this.browserGotoTimeoutCount;
+    const startSalvaged = this.browserGotoTimeoutSalvagedCount;
+    const startInfra = this.browserInfrastructureFailureCount;
+    const started = Date.now();
+
+    const tasks: Array<() => Promise<{ ms: number; ok: boolean }>> = [];
+    for (let index = 0; index < laneCount; index += 1) {
+      const url = normalizedDomains[index % normalizedDomains.length]!;
+      tasks.push(async () => {
+        const taskStart = Date.now();
+        const html = await this.fetchHtmlWithBrowser(url).catch(() => null);
+        return { ms: Date.now() - taskStart, ok: Boolean(html && html.length > 500) };
+      });
+    }
+
+    const results = await this.mapWithConcurrency(tasks, laneCount);
+    const wallMs = Date.now() - started;
+
+    const durations = results.map((result) => result.ms).sort((left, right) => left - right);
+    const percentile = (fraction: number): number =>
+      durations.length === 0 ? 0 : durations[Math.min(durations.length - 1, Math.floor(durations.length * fraction))]!;
+
+    return {
+      concurrency: laneCount,
+      domains: normalizedDomains.length,
+      wallMs,
+      perTaskMs: {
+        p50: percentile(0.5),
+        p95: percentile(0.95),
+        max: durations.length === 0 ? 0 : durations[durations.length - 1]!
+      },
+      ok: results.filter((result) => result.ok).length,
+      failed: results.filter((result) => !result.ok).length,
+      tasksOver30s: durations.filter((ms) => ms > 30_000).length,
+      tasksOver45s: durations.filter((ms) => ms > 45_000).length,
+      gotoTimeouts: this.browserGotoTimeoutCount - startGoto,
+      gotoTimeoutsSalvaged: this.browserGotoTimeoutSalvagedCount - startSalvaged,
+      infrastructureFailures: this.browserInfrastructureFailureCount - startInfra
+    };
+  }
+
   async discoverPublicContactsForExecution(
     company: PreCategorizedCompany,
     options: { selectedContactsTimeoutMs?: number } = {}
@@ -544,6 +719,14 @@ export class HubSpotClient {
         console.error(`[discoverPublicContactsForExecution] zero pages crawled for ${company.name} (${company.domain}) on attempt ${attempt}/${EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS} - retrying`);
         await this.delay(EXECUTION_CONTACT_PAGE_COLLECTION_RETRY_DELAY_MS);
       }
+    }
+    if (pages.length === 0) {
+      // All crawl attempts returned zero pages. Surface this as a clear failure (not a silent
+      // zero-page → web-search-only fallback) so a broken crawl is visible: address and website
+      // contact extraction cannot run, and the company will rely solely on the web-search path.
+      console.error(
+        `[discoverPublicContactsForExecution] WEBSITE CRAWL FAILED for ${company.name} (${company.domain}): 0 pages after ${EXECUTION_CONTACT_PAGE_COLLECTION_MAX_ATTEMPTS} attempts - address/website-contact extraction skipped, falling back to web search only`
+      );
     }
     const websiteContacts = await this.withTimeout(
       this.extractWebsiteContactsFromPages(company, pages, undefined, { includeOfficialWebsiteSearch: false }).catch(() => [] as PublicContactCandidate[]),
@@ -889,6 +1072,31 @@ export class HubSpotClient {
       throw new Error("No writable company properties are available for the record.");
     }
 
+    // Idempotency: if this company was already created/matched in this process, UPDATE that exact
+    // record. This prevents a retry (or a second discovery of the same company) from creating a
+    // duplicate because HubSpot's search index has not yet indexed the just-created record.
+    const dedupKey = this.getCompanyKey(company);
+    const memoizedId = this.writtenCompanyIdByKey.get(dedupKey);
+    if (memoizedId) {
+      try {
+        const updated = await this.requestJson<HubSpotObjectResponse>(
+          `${env.HUBSPOT_BASE_URL}/crm/v3/objects/companies/${memoizedId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ properties })
+          }
+        );
+        return { company: updated, wasCreated: false };
+      } catch (error) {
+        // Stale id (record deleted between attempts): drop it and fall through to search/create.
+        if (this.isHubSpotNotFoundError(error)) {
+          this.writtenCompanyIdByKey.delete(dedupKey);
+        } else {
+          throw error;
+        }
+      }
+    }
+
     const existingCompany = await this.findExistingCompany(company);
     if (existingCompany) {
       const updated = await this.requestJson<HubSpotObjectResponse>(
@@ -898,6 +1106,7 @@ export class HubSpotClient {
           body: JSON.stringify({ properties })
         }
       );
+      this.writtenCompanyIdByKey.set(dedupKey, existingCompany.id);
       return { company: updated, wasCreated: false };
     }
 
@@ -905,6 +1114,7 @@ export class HubSpotClient {
       method: "POST",
       body: JSON.stringify({ properties })
     });
+    this.writtenCompanyIdByKey.set(dedupKey, created.id);
     return { company: created, wasCreated: true };
   }
 
@@ -935,18 +1145,45 @@ export class HubSpotClient {
       return null;
     }
 
+    // Idempotency: reuse the id of a contact already created/matched in this process so a retry (or
+    // the same person discovered for two companies) UPDATES that record instead of creating a
+    // duplicate via an eventually-consistent HubSpot search that misses the just-created contact.
+    const contactKey = this.getContactDedupKey(normalizedContact);
+    const memoizedContactId = contactKey ? this.writtenContactIdByKey.get(contactKey) : undefined;
+    if (memoizedContactId) {
+      try {
+        return await this.requestJson<HubSpotObjectResponse>(
+          `${env.HUBSPOT_BASE_URL}/crm/v3/objects/contacts/${memoizedContactId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ properties })
+          }
+        );
+      } catch (error) {
+        if (this.isHubSpotNotFoundError(error) && contactKey) {
+          this.writtenContactIdByKey.delete(contactKey);
+        } else {
+          throw error;
+        }
+      }
+    }
+
     const existingContact = await this.findExistingContact(normalizedContact, availableProperties);
     if (existingContact) {
-      return this.requestJson<HubSpotObjectResponse>(
+      const updatedContact = await this.requestJson<HubSpotObjectResponse>(
         `${env.HUBSPOT_BASE_URL}/crm/v3/objects/contacts/${existingContact.id}`,
         {
           method: "PATCH",
           body: JSON.stringify({ properties })
         }
       );
+      if (contactKey) {
+        this.writtenContactIdByKey.set(contactKey, existingContact.id);
+      }
+      return updatedContact;
     }
 
-    return this.requestJson<HubSpotObjectResponse>(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/contacts`, {
+    const createdContact = await this.requestJson<HubSpotObjectResponse>(`${env.HUBSPOT_BASE_URL}/crm/v3/objects/contacts`, {
       method: "POST",
       body: JSON.stringify({
         properties,
@@ -973,6 +1210,33 @@ export class HubSpotClient {
           : {})
       })
     });
+    if (contactKey) {
+      this.writtenContactIdByKey.set(contactKey, createdContact.id);
+    }
+    return createdContact;
+  }
+
+  // Stable per-contact identity for the in-run write memo: prefer the email, then a personal
+  // LinkedIn profile, then the full name. Mirrors findExistingContact's match order.
+  private getContactDedupKey(contact: PublicContactCandidate): string | undefined {
+    const email = contact.email?.trim().toLowerCase();
+    if (email) {
+      return `email:${email}`;
+    }
+    const linkedin = contact.linkedinUrl?.trim().toLowerCase();
+    if (linkedin) {
+      return `linkedin:${linkedin}`;
+    }
+    const firstName = contact.firstName?.trim().toLowerCase();
+    const lastName = contact.lastName?.trim().toLowerCase();
+    if (firstName && lastName) {
+      return `name:${firstName} ${lastName}`;
+    }
+    return undefined;
+  }
+
+  private isHubSpotNotFoundError(error: unknown): boolean {
+    return error instanceof Error && /HubSpot request failed:\s*404\b/.test(error.message);
   }
 
   private normalizeContactForHubSpot(contact: PublicContactCandidate): PublicContactCandidate | null {
@@ -1048,9 +1312,18 @@ export class HubSpotClient {
       return;
     }
 
+    // Idempotency: a note has no natural dedup key, so a write retry would POST a fresh duplicate
+    // note for a contact that was already noted in a previous attempt. Skip when we already created
+    // the outreach note for this company/contact pair in this process.
+    const noteKey = `${companyId}:${contactId}`;
+    if (this.writtenNoteKeys.has(noteKey)) {
+      return;
+    }
+
     const combinedNote = this.buildCombinedOutreachNote(company, contact, brief);
     if (combinedNote) {
       await this.createAssociatedNote(companyId, contactId, combinedNote);
+      this.writtenNoteKeys.add(noteKey);
     }
   }
 
@@ -1075,15 +1348,23 @@ export class HubSpotClient {
   }
 
   private async findExistingCompany(company: PreCategorizedCompany): Promise<HubSpotObjectResponse | null> {
-    for (const domainVariant of this.buildCompanyDomainSearchVariants(company.domain)) {
-      const byDomain = await this.searchObject("companies", "domain", domainVariant);
+    // Match by domain FIRST (highest-confidence identity), then by name. Within each property every
+    // variant is OR'd into a SINGLE search request (HubSpot filterGroups are OR'd), so the existence
+    // check costs at most 2 search calls instead of one per variant (~6). This is the same matching
+    // as before (identical variants) — it only collapses the requests — so dedup is not weakened, but
+    // the globally-serialized search queue no longer backs up to minutes on large runs (which was the
+    // root cause of the 360s HubSpot write timeouts that both lost and, via retry, duplicated leads).
+    const domainVariants = this.buildCompanyDomainSearchVariants(company.domain);
+    if (domainVariants.length > 0) {
+      const byDomain = await this.searchObjectAny("companies", "domain", domainVariants);
       if (byDomain) {
         return byDomain;
       }
     }
 
-    for (const nameVariant of this.buildCompanyNameSearchVariants(company.name)) {
-      const byName = await this.searchObject("companies", "name", nameVariant);
+    const nameVariants = this.buildCompanyNameSearchVariants(company.name);
+    if (nameVariants.length > 0) {
+      const byName = await this.searchObjectAny("companies", "name", nameVariants);
       if (byName) {
         return byName;
       }
@@ -1249,15 +1530,32 @@ export class HubSpotClient {
     propertyName: string,
     value: string
   ): Promise<HubSpotObjectResponse | null> {
-    const response = await this.scheduleSearchRequest(() =>
-      this.requestJson<{ results?: HubSpotObjectResponse[] }>(
-        `${env.HUBSPOT_BASE_URL}/crm/v3/objects/${objectType}/search`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            limit: 1,
-            filterGroups: [
-              {
+    return this.searchObjectAny(objectType, propertyName, [value]);
+  }
+
+  // Search for the first object whose `propertyName` EQUALS ANY of `values`, using OR'd filterGroups
+  // so every variant is checked in a SINGLE request (batched in chunks of HUBSPOT_SEARCH_MAX_FILTER_
+  // GROUPS). This replaces one serialized search per variant and is the main search-backlog fix.
+  private async searchObjectAny(
+    objectType: "companies" | "contacts",
+    propertyName: string,
+    values: string[]
+  ): Promise<HubSpotObjectResponse | null> {
+    const uniqueValues = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+    if (uniqueValues.length === 0) {
+      return null;
+    }
+
+    for (let index = 0; index < uniqueValues.length; index += HUBSPOT_SEARCH_MAX_FILTER_GROUPS) {
+      const chunk = uniqueValues.slice(index, index + HUBSPOT_SEARCH_MAX_FILTER_GROUPS);
+      const response = await this.scheduleSearchRequest(() =>
+        this.requestJson<{ results?: HubSpotObjectResponse[] }>(
+          `${env.HUBSPOT_BASE_URL}/crm/v3/objects/${objectType}/search`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              limit: 1,
+              filterGroups: chunk.map((value) => ({
                 filters: [
                   {
                     propertyName,
@@ -1265,14 +1563,19 @@ export class HubSpotClient {
                     value
                   }
                 ]
-              }
-            ]
-          })
-        }
-      )
-    );
+              }))
+            })
+          }
+        )
+      );
 
-    return response.results?.[0] ?? null;
+      const hit = response.results?.[0];
+      if (hit) {
+        return hit;
+      }
+    }
+
+    return null;
   }
 
   private async scheduleSearchRequest<T>(task: () => Promise<T>): Promise<T> {
@@ -4128,7 +4431,25 @@ export class HubSpotClient {
       // policy or terms pages, so probe those too to recover the real country for the locality gate.
       // Order universal + privacy/terms pages ahead of locale-specific slugs so both EU and US
       // companies are covered within the follow-up fetch budget.
+      // The address / legal entity lives on the identity pages (impressum, kontakt, contact, …).
+      // Serve them FIRST as no-trailing-slash variants: many SPAs / client-routed sites (measured
+      // live on mak-cet.de) return the real impressum content at "/impressum" but only an empty JS
+      // shell at "/impressum/" (or vice-versa). Trying only one slash variant loses the address on
+      // exactly those sites and forces the recovery onto the saturation-sensitive browser follow-up.
+      // These are plain-only fetches (no browser), so probing both variants of the highest-value
+      // identity pages is cheap and keeps the address recoverable even on a resource-starved worker.
+      const identityBothSlashVariants = [
+        "impressum",
+        "kontakt",
+        "contact",
+        "contact-us",
+        "about-us",
+        "about",
+        "datenschutz",
+        "ansprechpartner"
+      ];
       const candidates = [
+        ...identityBothSlashVariants,
         "impressum/",
         "kontakt/",
         "contact/",
@@ -4161,7 +4482,17 @@ export class HubSpotClient {
         "kontakt.php"
       ];
 
-      return candidates.map((path) => new URL(path, root).toString());
+      // Dedup while preserving order (identity no-slash variants stay first).
+      const seen = new Set<string>();
+      const urls: string[] = [];
+      for (const path of candidates) {
+        const url = new URL(path, root).toString();
+        if (!seen.has(url)) {
+          seen.add(url);
+          urls.push(url);
+        }
+      }
+      return urls;
     } catch {
       return [];
     }
@@ -4690,10 +5021,25 @@ export class HubSpotClient {
   }
 
   private async doFetchHtml(url: string, allowBrowserRetry = true): Promise<string | null> {
-    const diagnostics: { tlsHandshakeError?: boolean } = {};
+    const diagnostics: { tlsHandshakeError?: boolean; transientBlock?: boolean } = {};
     const primary = await this.attemptFetchHtml(url, diagnostics, allowBrowserRetry);
     if (primary) {
       return this.boundHtmlForProcessing(primary);
+    }
+
+    // A transient anti-bot / rate-limit block (403/408/429/503) is probabilistic under batch load:
+    // the same host commonly returns real content on a second attempt a moment later. Because every
+    // downstream field (legal name, postal address, contacts) reads this one crawl, a single such
+    // block otherwise collapses the whole company to empty/brand-only. Back off briefly and retry
+    // once so these recoverable blocks do not masquerade as "no data". The wait happens here,
+    // OUTSIDE the serialized browser task, so it never holds a browser lane.
+    if (diagnostics.transientBlock && allowBrowserRetry) {
+      await this.delay(2500 + Math.floor(Math.random() * 1500));
+      const retryDiagnostics: { tlsHandshakeError?: boolean; transientBlock?: boolean } = {};
+      const retried = await this.attemptFetchHtml(url, retryDiagnostics, allowBrowserRetry);
+      if (retried) {
+        return this.boundHtmlForProcessing(retried);
+      }
     }
 
     // Some legacy company sites (typical for older industrial firms) serve a fully working site
@@ -4766,22 +5112,24 @@ export class HubSpotClient {
 
   private async attemptFetchHtml(
     url: string,
-    diagnostics?: { tlsHandshakeError?: boolean },
+    diagnostics?: { tlsHandshakeError?: boolean; transientBlock?: boolean },
     allowBrowserRetry = true
   ): Promise<string | null> {
     try {
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; LeadAgent/1.0; +https://leadagent-production-4555.up.railway.app)"
-        },
-        redirect: "follow",
-        // 20s (not 10s) so an otherwise-fast website fetch is not aborted prematurely when the
-        // event loop is saturated during a live run. The timer is wall-clock, so a busy event
-        // loop can fire it before a quick network response is even processed.
-        signal: AbortSignal.timeout(20000)
+      const { response, html } = await this.runPacedPlainFetch(url, async () => {
+        const res = await fetch(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; LeadAgent/1.0; +https://leadagent-production-4555.up.railway.app)"
+          },
+          redirect: "follow",
+          // 20s (not 10s) so an otherwise-fast website fetch is not aborted prematurely when the
+          // event loop is saturated during a live run. The timer is wall-clock, so a busy event
+          // loop can fire it before a quick network response is even processed.
+          signal: AbortSignal.timeout(20000)
+        });
+        const body = await res.text();
+        return { response: res, html: body };
       });
-
-      const html = await response.text();
       // Record the post-redirect final URL so the crawler can re-base onto the real canonical
       // origin (apex -> subdomain, http -> https, www changes) instead of a redirecting host.
       if (response.url) {
@@ -4827,9 +5175,9 @@ export class HubSpotClient {
     }
 
     const blockedHost = this.getUrlHost(url);
-    if (blockedHost && this.browserBlockedHosts.has(blockedHost)) {
-      // A prior browser fetch for this host already hit a hard anti-bot block; another browser
-      // navigation would return the same block while occupying the serialized browser. Skip it.
+    if (blockedHost && (this.browserHostBlockCounts.get(blockedHost) ?? 0) >= HubSpotClient.BROWSER_HOST_BLOCK_THRESHOLD) {
+      // This host's browser fetch has repeatedly returned a hard anti-bot block; further browser
+      // navigations would return the same block while occupying the serialized browser. Skip it.
       return null;
     }
 
@@ -4842,6 +5190,28 @@ export class HubSpotClient {
     } catch {
       return null;
     }
+  }
+
+  // Run a plain-HTTP fetch under both the per-host and global concurrency caps so a single origin is
+  // never hit by a burst of near-simultaneous requests (the thing that trips anti-bot / rate
+  // limiters). The per-host slot is nested inside the global slot; the network round-trip AND the
+  // body read are held inside the slots so a slow response applies real backpressure instead of just
+  // gating request start.
+  private async runPacedPlainFetch<T>(url: string, fn: () => Promise<T>): Promise<T> {
+    const host = this.getUrlHost(url);
+    const guarded = host
+      ? () => this.getHostFetchSemaphore(host).run(fn)
+      : fn;
+    return this.globalFetchSemaphore.run(guarded);
+  }
+
+  private getHostFetchSemaphore(host: string): AsyncSemaphore {
+    let semaphore = this.perHostFetchSemaphores.get(host);
+    if (!semaphore) {
+      semaphore = new AsyncSemaphore(HubSpotClient.MAX_PER_HOST_PLAIN_FETCH);
+      this.perHostFetchSemaphores.set(host, semaphore);
+    }
+    return semaphore;
   }
 
   private shouldRetryHtmlFetchInBrowser(status: number, html: string): boolean {
@@ -4905,7 +5275,7 @@ export class HubSpotClient {
 
   private async fetchHtmlWithBrowser(
     url: string,
-    diagnostics?: { tlsHandshakeError?: boolean }
+    diagnostics?: { tlsHandshakeError?: boolean; transientBlock?: boolean }
   ): Promise<string | null> {
     try {
       return await this.scheduleBrowserTask(async () => {
@@ -4917,18 +5287,61 @@ export class HubSpotClient {
         });
 
         try {
-          const response = await page.goto(url, {
-            waitUntil: "domcontentloaded",
-            timeout: WEBSITE_BROWSER_FETCH_TIMEOUT_MS
-          });
+          let response: Awaited<ReturnType<typeof page.goto>> = null;
+          try {
+            response = await page.goto(url, {
+              waitUntil: "domcontentloaded",
+              timeout: WEBSITE_BROWSER_FETCH_TIMEOUT_MS
+            });
+          } catch (gotoError) {
+            // Under event-loop saturation during a live run, page.goto's wall-clock timer can fire
+            // even though Chromium already rendered the DOM (the late completion callback is
+            // starved, not the browser). Salvage the content Chromium already built instead of
+            // discarding the page and returning zero pages → empty address/contacts. This is not a
+            // heuristic text repair: it reads the browser's real rendered DOM. Only a genuinely
+            // blank/never-loaded page (salvaged text below the floor) falls through to a failure.
+            if (this.isNavigationTimeoutError(gotoError)) {
+              this.browserGotoTimeoutCount += 1;
+              const salvaged = await page.content().catch(() => "");
+              const salvagedTextLength = this.stripHtml(salvaged).replace(/\s+/g, " ").trim().length;
+              if (salvagedTextLength >= BROWSER_GOTO_TIMEOUT_MIN_SALVAGE_TEXT) {
+                this.browserGotoTimeoutSalvagedCount += 1;
+                const finalUrl = page.url();
+                if (finalUrl) {
+                  this.resolvedFinalUrls.set(url, finalUrl);
+                }
+                console.warn("HubSpotClient.fetchHtmlWithBrowser recovered content after goto timeout", {
+                  url,
+                  salvagedTextLength,
+                  gotoTimeouts: this.browserGotoTimeoutCount,
+                  salvaged: this.browserGotoTimeoutSalvagedCount
+                });
+                return salvaged;
+              }
+              // The wall-clock timer fired AND nothing usable rendered — this is a genuine crawl loss
+              // (zero pages → empty address/contacts), so make it loud instead of a silent null.
+              console.error("HubSpotClient.fetchHtmlWithBrowser goto timeout could NOT be recovered (page discarded, no content)", {
+                url,
+                salvagedTextLength,
+                gotoTimeouts: this.browserGotoTimeoutCount
+              });
+              return null;
+            }
+            throw gotoError;
+          }
           const status = response?.status() ?? 0;
-          if (status === 401 || status === 403 || status === 429 || status >= 500) {
-            // The browser hit the same hard anti-bot block as plain fetch. Remember the host so the
-            // remaining follow-up pages skip their (futile) browser retry, and return null rather
-            // than the challenge/error page so it never pollutes name/address/contact extraction.
+          if (status === 401 || status === 403 || status === 408 || status === 429 || status >= 500) {
+            // The browser hit an anti-bot / rate-limit block. Count it per host; after repeated
+            // blocks the remaining follow-up pages skip their (futile) browser retry. Return null
+            // rather than the challenge/error page so it never pollutes name/address/contact
+            // extraction. Flag transient overload statuses (403/408/429/503) so the caller can back
+            // off and retry once — these are probabilistic under batch load and usually clear.
             const host = this.getUrlHost(url);
             if (host) {
-              this.browserBlockedHosts.add(host);
+              this.browserHostBlockCounts.set(host, (this.browserHostBlockCounts.get(host) ?? 0) + 1);
+            }
+            if (diagnostics && (status === 403 || status === 408 || status === 429 || status === 503)) {
+              diagnostics.transientBlock = true;
             }
             return null;
           }
@@ -4953,12 +5366,53 @@ export class HubSpotClient {
       if (diagnostics && this.isTlsHandshakeError(error)) {
         diagnostics.tlsHandshakeError = true;
       }
-      console.warn("HubSpotClient.fetchHtmlWithBrowser failed", {
-        url,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      // Distinguish a genuine browser INFRASTRUCTURE failure (launch failed, browser crashed/OOM,
+      // "Target closed") from an ordinary per-page miss. Infrastructure failures mean crawling is
+      // broken for the whole run and must be loud (error, not warn) instead of being silently
+      // swallowed into a zero-page → zero-contact success.
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.isBrowserInfrastructureError(error)) {
+        this.browserInfrastructureFailureCount += 1;
+        console.error("HubSpotClient.fetchHtmlWithBrowser CHROMIUM INFRASTRUCTURE FAILURE", {
+          url,
+          error: message,
+          totalInfrastructureFailures: this.browserInfrastructureFailureCount
+        });
+      } else {
+        console.warn("HubSpotClient.fetchHtmlWithBrowser failed", {
+          url,
+          error: message
+        });
+      }
       return null;
     }
+  }
+
+  // A navigation timeout means Chromium was still working when the wall-clock budget expired — the
+  // page object is still usable, so the caller can salvage page.content(). Playwright reports this
+  // as a TimeoutError whose message begins with "page.goto: Timeout".
+  private isNavigationTimeoutError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /Timeout\s+\d+ms exceeded/i.test(message) || /page\.goto: Timeout/i.test(message);
+  }
+
+  // A browser INFRASTRUCTURE failure means the shared Chromium is unusable (launch failure, crash/
+  // OOM, disconnected pipe), as opposed to a single page that failed to load. These must surface as
+  // errors because they break crawling for every subsequent company in the run.
+  private isBrowserInfrastructureError(error: unknown): boolean {
+    const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+    return (
+      message.includes("target closed") ||
+      message.includes("target page, context or browser has been closed") ||
+      message.includes("browser has been closed") ||
+      message.includes("browser has disconnected") ||
+      message.includes("browsercontext.newpage") ||
+      message.includes("browser.newpage") ||
+      message.includes("executable doesn't exist") ||
+      message.includes("failed to launch") ||
+      message.includes("session closed") ||
+      message.includes("connection closed")
+    );
   }
 
   // Lazily launch one shared Chromium and reuse it for every browser-backed task. On disconnect
@@ -5252,9 +5706,17 @@ export class HubSpotClient {
       return undefined;
     }
 
-    const personalizedConnectionRequest = !personalized && brief.linkedInConnectionRequest
-      ? this.personalizeOutreachMessage(brief.linkedInConnectionRequest, contact, brief.outreachLanguage)
-      : undefined;
+    // Always prefer a purpose-built short LinkedIn connection request (a proper <=200 character
+    // teaser in the template style) as the connection request, personalized to the contact, EVEN
+    // when a longer per-person message exists. Mechanically truncating the long per-person message
+    // to 200 characters produced a cut-off "..." fragment, which is not a usable connection request.
+    // Priority: (1) the per-person agent's dedicated connectionRequest, (2) the brief's teaser,
+    // (3) only as a last resort, a truncation of the long message.
+    const personalizedContactConnectionRequest = contact.personalizedOutreach?.connectionRequest?.trim() || undefined;
+    const personalizedConnectionRequest = personalizedContactConnectionRequest
+      ?? (brief.linkedInConnectionRequest
+        ? this.personalizeOutreachMessage(brief.linkedInConnectionRequest, contact, brief.outreachLanguage)
+        : undefined);
     const connectionRequest = this.buildLinkedInConnectionRequest(personalizedConnectionRequest ?? personalizedMessage);
     const sections = [
       contact.linkedinUrl ? `LinkedIn URL: ${contact.linkedinUrl}` : undefined,

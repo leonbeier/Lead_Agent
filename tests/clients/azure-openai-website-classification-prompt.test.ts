@@ -62,3 +62,100 @@ test("website classification prompt rejects directory, news, and file-sharing pa
   assert.match(systemPrompt, /ONE single operating company/i);
   assert.match(systemPrompt, /irrelevant/i);
 });
+
+test("website classification prompt always enforces the base-website fit gate and end-customer scale band", () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    buildWebsiteClassificationMessages: (
+      name: string,
+      domain: string | undefined,
+      compactWebsiteSummary: string,
+      mainContext?: string,
+      prequalification?: unknown,
+      learning?: unknown,
+      compactMode?: boolean,
+      targetCategoryRefinement?: string
+    ) => Array<{ role: string; content: string }>;
+  };
+
+  const messages = azureClient.buildWebsiteClassificationMessages(
+    "Vw Mms",
+    "https://vw-mms.de/",
+    "Landing page about media asset management services.",
+    ""
+  );
+
+  const systemPrompt = messages.find((message) => message.role === "system")?.content ?? "";
+
+  // Base-website fit gate: a media/asset server or a query-matched subpage must not qualify.
+  assert.match(systemPrompt, /fit decision MUST come from the base website/i);
+  assert.match(systemPrompt, /media\/asset server|marketing microsite|deep subpage/i);
+  // Scale band: reject tiny artisanal producers and global mega-conglomerates.
+  assert.match(systemPrompt, /Industrial End-Customer Scale Band/i);
+  assert.match(systemPrompt, /artisanal or manufaktur-scale/i);
+  assert.match(systemPrompt, /globally diversified mega-conglomerate or holding group/i);
+});
+
+test("website classification prompt enforces the additional required focus as a HARD constraint when provided", () => {
+  const azureClient = new AzureOpenAIClient() as unknown as {
+    buildWebsiteClassificationMessages: (
+      name: string,
+      domain: string | undefined,
+      compactWebsiteSummary: string,
+      mainContext?: string,
+      prequalification?: unknown,
+      learning?: unknown,
+      compactMode?: boolean,
+      targetCategoryRefinement?: string
+    ) => Array<{ role: string; content: string }>;
+  };
+
+  const withRefinement = azureClient.buildWebsiteClassificationMessages(
+    "Some Producer",
+    "https://example.de/",
+    "Producer website.",
+    "",
+    undefined,
+    undefined,
+    false,
+    "im Food Produktionssektor"
+  );
+  const systemPromptWithRefinement = withRefinement.find((message) => message.role === "system")?.content ?? "";
+  assert.match(systemPromptWithRefinement, /Additional Required Focus \(HARD/i);
+  assert.match(systemPromptWithRefinement, /im Food Produktionssektor/);
+  assert.match(systemPromptWithRefinement, /OVERRIDES archetype fit/i);
+  assert.match(systemPromptWithRefinement, /strong archetype in the WRONG sector/i);
+
+  const withoutRefinement = azureClient.buildWebsiteClassificationMessages(
+    "Some Producer",
+    "https://example.de/",
+    "Producer website.",
+    ""
+  );
+  const systemPromptWithoutRefinement = withoutRefinement.find((message) => message.role === "system")?.content ?? "";
+  assert.doesNotMatch(systemPromptWithoutRefinement, /Additional Required Focus/i);
+});
+
+test("applyRequiredFocusGate forces irrelevant only on explicit focusMatch=false with a refinement set", () => {
+  const client = new AzureOpenAIClient();
+  const base = { category: "industrial_end_customer_scaled" as const, relevanceScore: 96, rationale: "Large automotive manufacturer; food not evidenced.", country: "Germany" };
+
+  // Explicit mismatch with a refinement -> forced irrelevant (the VW/Trimet leak).
+  const rejected = client.applyRequiredFocusGate(base, false, "im Food Produktionssektor");
+  assert.equal(rejected.category, "irrelevant");
+  assert.ok(rejected.relevanceScore <= 15);
+  assert.match(rejected.rationale, /required focus/i);
+
+  // Explicit match -> kept.
+  assert.equal(client.applyRequiredFocusGate(base, true, "im Food Produktionssektor").category, "industrial_end_customer_scaled");
+
+  // Missing focusMatch -> never over-reject a genuine match that omitted the field.
+  assert.equal(client.applyRequiredFocusGate(base, undefined, "im Food Produktionssektor").category, "industrial_end_customer_scaled");
+
+  // No refinement -> gate is inert.
+  assert.equal(client.applyRequiredFocusGate(base, false, undefined).category, "industrial_end_customer_scaled");
+  assert.equal(client.applyRequiredFocusGate(base, false, "   ").category, "industrial_end_customer_scaled");
+
+  // Already irrelevant -> untouched.
+  const alreadyIrrelevant = { category: "irrelevant" as const, relevanceScore: 0, rationale: "x" };
+  assert.equal(client.applyRequiredFocusGate(alreadyIrrelevant, false, "im Food Produktionssektor").category, "irrelevant");
+});

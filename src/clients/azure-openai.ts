@@ -147,7 +147,7 @@ const QUICK_QUALIFICATION_CONTEXT = [
   "# Identity\nYou classify company fit for ONE WARE from company descriptions and crawled website text.",
   "# Goal\nChoose exactly one category. Stay conservative and unbiased. Do not prefer integrators by default.",
   "# Evidence Handling\nUse business-model evidence from homepage, about, products, services, documentation, integrations, reference pages, applications, and use cases. Ignore cookie banners, legal text, newsletter prompts, careers pages, and navigation fragments. Do not infer fit from the company name, source filter, or vague branding alone. Words such as vision, AI, smart, digital, or automation in the company name do not count as proof.",
-  "# Category Map\nintegrator_vision_industrial_ai: explicit external delivery of machine vision, computer vision, industrial inspection AI, optical quality control, image-processing systems, or edge-vision deployment for customers. Choose this when the company clearly implements customer-specific vision or inspection solutions rather than only selling a product.\nintegrator_vision_ai_consulting: consulting-shaped firm or specialist boutique with explicit machine vision, industrial AI, AOI, embedded vision, or inspection implementation work for customers. Use when the business is clearly services-led and hands-on, but consulting-shaped rather than a broader integrator organization.\nintegrator_vision_ai_freelancer: solo specialist or freelancer with explicit machine vision, industrial AI, AOI, embedded vision, or inspection implementation work for customers. Use only when the profile is clearly person-led rather than a firm.\nintegrator_general_ai: explicit external delivery of AI, machine learning, data-science, predictive analytics, or broadly reusable AI software for customers. Plain automation, PLC, SCADA, MES, embedded, or industrial software delivery without explicit AI evidence should not be integrator_general_ai. Generic engineering, generic IT, or systems-engineering capability pages alone are not enough.\nintegrator_relevant_focus: explicit customer-specific implementation ownership in a relevant industrial or technical vertical such as industrial automation, embedded systems, MES, SCADA, PLC, semiconductors, instrumentation, regulated/medtech, defence, robotics, or measurement-heavy environments, even when explicit AI wording is absent. Pure MBSE, RBE, safety, or general development-process services alone are not enough.\nmachine_builder_ai_enablement: own shipped machine, OEM system, scanner, imaging product, hardware-centric inspection product, or single-purpose shipped software application where ONE WARE would improve the product itself. Use this when Vision AI is a potential future add-on or improvement, not yet the core purpose of the machine.\nmachine_builder_vision_ai: machines or systems where Vision AI, machine vision, optical inspection, LiDAR sensing, or computer vision is the PRIMARY purpose and core value proposition of the product. Examples: AOI machines, inline optical inspection systems, automated visual quality-control equipment, LiDAR sensor systems, 3D measurement machines, or machine-vision inspection stations sold as imaging/inspection products. Do NOT require the term Vision AI — a company selling AOI machines or optical inspection stations fits this category even with classical imaging language. Use machine_builder_vision_ai when optical inspection or machine vision sensing IS the product; use machine_builder_ai_enablement when Vision AI is only a potential future add-on to a machine whose current purpose is something else. When in doubt, prefer machine_builder_vision_ai if optical inspection or machine vision is the dominant product.\nsoftware_platform_embedding: own software platform or modular software product where customers use modules, drivers, plugins, APIs, workflow builders, runtimes, app stores, installable extensions, or vendor-managed app lifecycles. This also includes OEM digital-service platforms where customers package once and deploy across many sites or machines.\nindustrial_end_customer_scaled: company primarily operates factories, plants, or production and the fit is their own internal inspection or process-automation need.\ncamera_manufacturer_partner: own camera or imaging hardware manufacturer.\nother: real company but weak, ambiguous, closed-niche, or non-priority fit. Use this when evidence is mixed or the fit path is not explicit.\nirrelevant: clear non-target such as media, publisher, event, investor, bank, insurer, recruiter, university, association, or comparable profile.",
+  "# Category Map\nintegrator_vision_industrial_ai: explicit external delivery of machine vision, computer vision, industrial inspection AI, optical quality control, image-processing systems, or edge-vision deployment for customers. Choose this when the company clearly implements customer-specific vision or inspection solutions rather than only selling a product.\nintegrator_vision_ai_consulting: consulting-shaped firm or specialist boutique with explicit machine vision, industrial AI, AOI, embedded vision, or inspection implementation work for customers. Use when the business is clearly services-led and hands-on, but consulting-shaped rather than a broader integrator organization.\nintegrator_vision_ai_freelancer: solo specialist or freelancer with explicit machine vision, industrial AI, AOI, embedded vision, or inspection implementation work for customers. Use only when the profile is clearly person-led rather than a firm.\nintegrator_general_ai: explicit external delivery of AI, machine learning, data-science, predictive analytics, or broadly reusable AI software for customers. Plain automation, PLC, SCADA, MES, embedded, or industrial software delivery without explicit AI evidence should not be integrator_general_ai. Generic engineering, generic IT, or systems-engineering capability pages alone are not enough.\nintegrator_relevant_focus: explicit customer-specific implementation ownership in a relevant industrial or technical vertical such as industrial automation, embedded systems, MES, SCADA, PLC, semiconductors, instrumentation, regulated/medtech, defence, robotics, or measurement-heavy environments, even when explicit AI wording is absent. This category ADDITIONALLY REQUIRES at least one concrete website signal that a Vision-AI fit is plausible: machine vision, cameras or image processing, optical inspection or quality control, vision brands such as Cognex or Keyence, computer-vision use cases, OR customer-specific software development that is itself tied to machine vision, image processing, optical inspection, visual quality control, or camera/perception/measurement-image data (for example bespoke inspection, image-analysis, defect-detection, or vision-guided automation software). This vision signal is MANDATORY and overrides any softer operator add-on: generic industrial-automation software, custom control software, process visualization, Prozessvisualisierung, HMI or SCADA dashboards, MES, plant commissioning, robotics motion, or plain PLC/SPS engineering do NOT count as a vision signal on their own, because visualization of process data is not machine vision. A company that only does automation, generic software development, process visualization, commissioning, panel building, electrical installation, or catalog hardware resale, with no explicit machine-vision, camera, image-processing, optical-inspection, or visual-quality-control signal, must be classified as other instead. Pure MBSE, RBE, safety, or general development-process services alone are not enough.\nmachine_builder_ai_enablement: own shipped machine, OEM system, scanner, imaging product, hardware-centric inspection product, or single-purpose shipped software application where ONE WARE would improve the product itself. Use this when Vision AI is a potential future add-on or improvement, not yet the core purpose of the machine.\nmachine_builder_vision_ai: machines or systems where Vision AI, machine vision, optical inspection, LiDAR sensing, or computer vision is the PRIMARY purpose and core value proposition of the product. Examples: AOI machines, inline optical inspection systems, automated visual quality-control equipment, LiDAR sensor systems, 3D measurement machines, or machine-vision inspection stations sold as imaging/inspection products. Do NOT require the term Vision AI — a company selling AOI machines or optical inspection stations fits this category even with classical imaging language. Use machine_builder_vision_ai when optical inspection or machine vision sensing IS the product; use machine_builder_ai_enablement when Vision AI is only a potential future add-on to a machine whose current purpose is something else. When in doubt, prefer machine_builder_vision_ai if optical inspection or machine vision is the dominant product.\nsoftware_platform_embedding: own software platform or modular software product where customers use modules, drivers, plugins, APIs, workflow builders, runtimes, app stores, installable extensions, or vendor-managed app lifecycles. This also includes OEM digital-service platforms where customers package once and deploy across many sites or machines.\nindustrial_end_customer_scaled: company primarily operates factories, plants, or production and the fit is their own internal inspection or process-automation need.\ncamera_manufacturer_partner: own camera or imaging hardware manufacturer.\nother: real company but weak, ambiguous, closed-niche, or non-priority fit. Use this when evidence is mixed or the fit path is not explicit.\nirrelevant: clear non-target such as media, publisher, event, investor, bank, insurer, recruiter, university, association, or comparable profile.",
   "# Decision Process\n1. Identify the core business model: external delivery services, own shipped product, build-on-top platform, internal captive IT, industrial operator, camera/imaging manufacturer, or irrelevant.\n2. Identify the likely ONE WARE fit path: service delivery partner, embed into own product, embed into a customer-facing platform, internal industrial IT, end-customer need, or none.\n3. Map to the closest category from the full list.",
   "# Tie-Break Rules\nIf the main fit is embedding ONE WARE into the company's own shipped software product, diagnostic plugin, or hardware product, choose machine_builder_ai_enablement.\nIf customers can build, configure, distribute, train, or run their own apps, models, workflows, plugins, modules, or extensions on the company's platform, choose software_platform_embedding.\nIf the site describes packaging an app once, deploying it across customer sites, managing app lifecycles, monetizing digital services, controlled updates, turnkey appliances, dashboard builders, or modular extensibility, that is usually software_platform_embedding, not an external integrator.\nIf the vendor provides the productized integration stack so customers do not have to build the integration stack themselves, that is evidence for software_platform_embedding, not service delivery.\nMentions of PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration use cases do not make a vendor an integrator when those capabilities are delivered through the vendor's own runtime, app, or platform product.\nIf the company sells a closed niche municipal or route-planning platform for one operational workflow, choose other unless there is a clear open build-on-top surface.\nIf the company is a captive internal IT unit building MES, EDI, BI, process, or enterprise software for a larger industrial group, prefer integrator_general_ai over industrial_end_customer_scaled.\nIf evidence mixes catalog hardware with explicit custom system integration or engineering delivery, prefer machine_builder_ai_enablement, integrator_relevant_focus, or other over irrelevant.\nIf evidence is mixed, weak, or only capability-oriented without explicit fit-path proof, choose other rather than any integrator category.\nPerson-led precedence: when the evidence shows the business is operated by a single individual or sole proprietorship — a one-person profile, a solo consultant, an Einzelunternehmen, a sole trader named after one person (for example an Italian \"<brand> di <Given> <Surname>\", a German \"<Name> Einzelunternehmen\", or a site whose only operator is one named person), or a CV/portfolio-style site for one expert — choose integrator_vision_ai_freelancer over integrator_vision_ai_consulting or integrator_vision_industrial_ai, even when the work itself is integrator- or consulting-shaped. Reserve _consulting and _industrial_ai for an actual firm or team with more than one person.",
   "# Examples\nExample A: a certified radiology or medical-imaging plugin integrated into PACS or viewer systems is machine_builder_ai_enablement when it is a shipped product, not an open platform.\nExample B: an industrial software vendor that packages digital services as apps, deploys them to many customer sites through a runtime or appliance, and manages billing or update lifecycles is software_platform_embedding, not integrator_general_ai.\nExample C: a municipal waste, winter-service, street-cleaning, telematics, or route-planning cloud product with onboarding or rollout help still stays other unless customers clearly build their own apps, models, or extensions on top.\nExample D: a broad engineering generalist with MBSE, requirements engineering, hardware/software development, or system engineering pages but no explicit AI, automation, MES/SCADA, inspection, or embeddable platform/product surface should stay other.",
@@ -181,7 +181,8 @@ export class AzureOpenAIClient {
     mainContext?: string,
     prequalification?: PrequalificationConfig,
     targetCategories?: LeadCategory[],
-    learning?: LeadLearningData
+    learning?: LeadLearningData,
+    targetCategoryRefinement?: string
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">> {
     const deterministicCategory = this.categorizeDeterministic(name, description, learning);
 
@@ -209,9 +210,12 @@ export class AzureOpenAIClient {
           content: [
             QUICK_QUALIFICATION_CONTEXT,
             buildPrequalificationContextBlock(prequalification, undefined, mainContext),
+            targetCategoryRefinement?.trim()
+              ? `# Additional Required Focus (HARD — decisive gate)\nThe operator restricted this run to a required focus: "${targetCategoryRefinement.trim()}". This focus OVERRIDES archetype fit — apply it FIRST. A company qualifies for a target category ONLY when its evidence clearly places it INSIDE this focus. If the focus is not clearly evidenced, you MUST return "irrelevant" with a low relevanceScore, even when the company is an otherwise perfect archetype; a strong archetype in the WRONG sector is NOT a match. Never assign a target category while noting the focus is "not evidenced" or "not shown", and never infer the focus from the company name or search query alone.`
+              : undefined,
             "Do not prefer integrators over other categories. Pick the closest archetype from all available categories, including machine builders/OEMs, software platforms, end customers, camera vendors, irrelevant, and other.",
             "If the firm mainly sells its own AOI system, machine, hardware-assisted inspection product, or productized API offering, do not force it into an integrator category unless customer project-delivery ownership clearly dominates."
-          ].join("\n\n")
+          ].filter((block): block is string => Boolean(block)).join("\n\n")
         },
         {
           role: "user",
@@ -302,6 +306,32 @@ export class AzureOpenAIClient {
     }
   }
 
+  /**
+   * Deterministic enforcement of the operator's required focus (targetCategoryRefinement).
+   * The AI reports focusMatch=false when the base website does not clearly show the required sector.
+   * When a refinement is set and the model explicitly returns focusMatch=false, the company is forced
+   * to "irrelevant" regardless of the archetype category the model picked — this closes the leak where
+   * the model narrates "focus not evidenced" yet still assigns a target category. A missing focusMatch
+   * is treated as "no explicit mismatch" and left unchanged, so genuine matches that omit the field are
+   * never over-rejected. Companies already classified "irrelevant" are left unchanged.
+   */
+  applyRequiredFocusGate<T extends { category: LeadCategory; relevanceScore: number; rationale: string; country?: string }>(
+    result: T,
+    focusMatch: boolean | undefined,
+    targetCategoryRefinement: string | undefined
+  ): T {
+    const trimmed = targetCategoryRefinement?.trim();
+    if (!trimmed || result.category === "irrelevant" || focusMatch !== false) {
+      return result;
+    }
+    return {
+      ...result,
+      category: "irrelevant" as LeadCategory,
+      relevanceScore: Math.min(result.relevanceScore ?? 0, 15),
+      rationale: `Base website does not clearly match the required focus "${trimmed}", so the company is out of scope.`
+    };
+  }
+
   async categorizeWebsiteCrawl(
     name: string,
     domain: string | undefined,
@@ -309,7 +339,8 @@ export class AzureOpenAIClient {
     dryRun: boolean,
     mainContext?: string,
     prequalification?: PrequalificationConfig,
-    learning?: LeadLearningData
+    learning?: LeadLearningData,
+    targetCategoryRefinement?: string
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale" | "country">> {
     if (dryRun || !readiness.azureConfigured) {
       return this.categorizeDryRun(crawledWebsiteSummary);
@@ -338,7 +369,8 @@ export class AzureOpenAIClient {
           mainContext,
           prequalification,
           learning,
-          false
+          false,
+          targetCategoryRefinement
         ),
         { maxTokens: 160, deployment: CLASSIFIER_DEPLOYMENT }
       );
@@ -348,13 +380,14 @@ export class AzureOpenAIClient {
         relevanceScore: number;
         rationale: string;
         country?: string;
+        focusMatch?: boolean;
       }>(content);
 
-      return {
+      return this.applyRequiredFocusGate({
         ...parsed,
         category: this.normalizeCategory(parsed.category),
         country: parsed.country?.trim() || undefined
-      };
+      }, parsed.focusMatch, targetCategoryRefinement);
     } catch {
       try {
         const compactRetrySummary = this.compactClassificationInput(websiteEvidence, 1500);
@@ -366,7 +399,8 @@ export class AzureOpenAIClient {
             mainContext,
             prequalification,
             learning,
-            true
+            true,
+            targetCategoryRefinement
           ),
           { maxTokens: 160, deployment: CLASSIFIER_DEPLOYMENT }
         );
@@ -376,13 +410,14 @@ export class AzureOpenAIClient {
           relevanceScore: number;
           rationale: string;
           country?: string;
+          focusMatch?: boolean;
         }>(retryContent);
 
-        return {
+        return this.applyRequiredFocusGate({
           ...retryParsed,
           category: this.normalizeCategory(retryParsed.category),
           country: retryParsed.country?.trim() || undefined
-        };
+        }, retryParsed.focusMatch, targetCategoryRefinement);
       } catch {
         return {
           category: "other",
@@ -441,7 +476,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(mainContext)}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Estimate whether the decision-makers or likely target contacts are German-speaking. If yes, produce outreach in German; otherwise produce it in English. For LinkedIn, always produce two separate texts: linkedInConnectionRequest as a short connection request with a hard maximum of 200 characters, and linkedInMessage as the longer follow-up message after connecting. Treat linkedInConnectionRequest as a compact teaser, not a compressed full pitch. Good example style for German outreach: "Hi Marc, eure Physical-AI Loesungen bei Sereact finde ich sehr spannend. Wir haben einen neuen Ansatz, der passende Vision-AI-Architekturen automatisiert erzeugt. Wuerde mich ueber einen Austausch freuen". For German outreach, always start emailBody naturally with "Hallo [Name]," and never with "Hello". Keep German phrasing natural and direct, avoid long list-like opener sentences, avoid vague department enumerations that sound AI-written, and do not use dash punctuation such as "–" or "—" in outreach copy. Prefer commas or full sentences instead. Estimate all three commercial rankings on a 0-10 scale: customer, serviceProvider, partner. Estimate businessPotentialEUR as a realistic euro value, not a score. Use the following commercial framing: a single AI use case often starts around 7000 EUR, can be 20000 to 40000 EUR per AI for more complex or production-grade deployments, can multiply across many use cases, and OEM or camera-manufacturer partner rollouts can be much larger, including six- or seven-figure potential in recurring machine volumes. Also return targetIndustry and productsOffered. Use any supplied web evidence as your factual grounding. If no web evidence is supplied, reason only from the provided company facts and keep uncertainty explicit. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. The outreach must not open with generic flattery. If the evidence contains a concrete company hook such as 2D/3D machine vision, AOI, visual inspection, quality control, robot guidance, Sondermaschinenbau, MES, SCADA, factory software, or a named industrial use case, reference that hook in the first sentence of linkedInMessage and emailBody. Make the first sentence sound company-specific, not template-generic. Keep linkedInConnectionRequest shorter, simpler, and curiosity-driven than linkedInMessage. For service-provider or partner-leaning companies, keep phoneScript collaboration-first: first ask whether they already implement Vision AI or have relevant experience, then position ONE WARE as a software layer for faster production-ready models, and finally test whether a delivery partnership or joint customer work could make sense. Keep placeholders only for the contact name ([Name]) and sender name ([Ihr Name]), not for company-specific hooks. All other placeholders such as [Branche / Anwendung], [Branche], [Anwendungsfall], [für die visuelle Qualitätskontrolle], or any similar bracketed content MUST be replaced with concrete, company-specific language drawn from the crawled website evidence or company description. If you cannot find a specific hook, write a plausible and concrete industry or application based on what the company does — never leave a bracketed placeholder for anything other than [Name] and [Ihr Name]. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInConnectionRequest, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
+          content: `${buildMainContextBlock(mainContext)}\n\nTask: Build a concise sales research brief for ONE WARE. Use the segment template as the base and only personalize where a clear factual hook exists. Do not fully rewrite the outreach. Keep the core USP visible: less trial and error, faster path to production-ready models, more predictable timelines, local training, smaller hardware-efficient models, lower development effort. Apply the category execution context strictly. Estimate whether the decision-makers or likely target contacts are German-speaking. If yes, produce outreach in German; otherwise produce it in English. For LinkedIn, always produce two separate texts: linkedInConnectionRequest as a short connection request with a hard maximum of 200 characters, and linkedInMessage as the longer follow-up message after connecting. Follow the supplied template's tone, structure, and length closely and only personalize with a concrete factual hook taken from the company's own website; never invent facts, benchmarks, customer names, or metrics that are not in the evidence, and keep linkedInMessage close to the length and structure of the template LinkedIn message. Treat linkedInConnectionRequest as a compact teaser, not a compressed full pitch. Good example style for German outreach: "Hi Marc, eure Physical-AI Loesungen bei Sereact finde ich sehr spannend. Wir haben einen neuen Ansatz, der passende Vision-AI-Architekturen automatisiert erzeugt. Wuerde mich ueber einen Austausch freuen". For German outreach, always start emailBody naturally with "Hallo [Name]," and never with "Hello". Keep German phrasing natural and direct, avoid long list-like opener sentences, avoid vague department enumerations that sound AI-written, and do not use dash punctuation such as "–" or "—" in outreach copy. Prefer commas or full sentences instead. Estimate all three commercial rankings on a 0-10 scale: customer, serviceProvider, partner. Estimate businessPotentialEUR as a realistic euro value, not a score. Use the following commercial framing: a single AI use case often starts around 7000 EUR, can be 20000 to 40000 EUR per AI for more complex or production-grade deployments, can multiply across many use cases, and OEM or camera-manufacturer partner rollouts can be much larger, including six- or seven-figure potential in recurring machine volumes. Also return targetIndustry and productsOffered. Use any supplied web evidence as your factual grounding. If no web evidence is supplied, reason only from the provided company facts and keep uncertainty explicit. If the evidence is weak or conflicting, say so in riskFlags instead of inventing certainty. The outreach must not open with generic flattery. If the evidence contains a concrete company hook such as 2D/3D machine vision, AOI, visual inspection, quality control, robot guidance, Sondermaschinenbau, MES, SCADA, factory software, or a named industrial use case, reference that hook in the first sentence of linkedInMessage and emailBody. Make the first sentence sound company-specific, not template-generic. Keep linkedInConnectionRequest shorter, simpler, and curiosity-driven than linkedInMessage. For service-provider or partner-leaning companies, keep phoneScript collaboration-first: first ask whether they already implement Vision AI or have relevant experience, then position ONE WARE as a software layer for faster production-ready models, and finally test whether a delivery partnership or joint customer work could make sense. Keep placeholders only for the contact name ([Name]) and sender name ([Ihr Name]), not for company-specific hooks. All other placeholders such as [Branche / Anwendung], [Branche], [Anwendungsfall], [für die visuelle Qualitätskontrolle], or any similar bracketed content MUST be replaced with concrete, company-specific language drawn from the crawled website evidence or company description. If you cannot find a specific hook, write a plausible and concrete industry or application based on what the company does — never leave a bracketed placeholder for anything other than [Name] and [Ihr Name]. Return strict JSON with: overview, qualificationSummary, qualifyingSignals (array of strings), riskFlags (array of strings), likelyGermanSpeaking, outreachLanguage, rankings { customer, serviceProvider, partner }, businessPotentialEUR, businessPotentialReasoning, targetIndustry, productsOffered, recommendedTemplateKey, personalizationRule, linkedInAngle, emailAngle, phoneAngle, linkedInConnectionRequest, linkedInMessage, emailSubject, emailBody, phoneScript, eventIdea.`
         },
         {
           role: "user",
@@ -532,14 +567,23 @@ export class AzureOpenAIClient {
       '  "selectedStory": string,          // the ONE WARE demo/benchmark you matched',
       '  "customerValue": string,          // one sentence: the concrete benefit for THIS person',
       '  "whyMatchWorks": string,          // 2-3 sentences',
-      '  "message": string,                // the final outreach message, 70-120 words, no em/en dashes',
+      '  "message": string,                // the full LinkedIn follow-up message, 70-120 words, no em/en dashes',
+      '  "connectionRequest": string,      // the SHORT LinkedIn connection request, hard max 200 characters',
       '  "language": "de" | "en",',
       '  "confidence": "high" | "medium" | "low"',
       "}",
       languageInstruction,
       "The message must be individual for THIS person and address them by their first name when it is known.",
+      "",
+      "# LinkedIn connection request rules (the 'connectionRequest' field)",
+      "The connectionRequest is the FIRST-TOUCH LinkedIn connect note sent BEFORE connecting, so it must be short, low-friction, and human. It is NOT a shortened copy of the long message and must never be a truncated fragment ending in '...'. Keep it to at most 200 characters. Do not personalize it with a specific product or case; keep it a light, generic teaser in the founder's voice. Greeting rules: when the prospect's first name is known, start with 'Hi ' + the first name + ',' (for example 'Hi Daniel,'); when no first name is known, start with just 'Hi,'. Never output the literal placeholder text '[Name]' or any bracketed token. Pick the variant by prospect focus: if the prospect clearly works on machine vision, cameras, image processing, or optical inspection, use the Vision-AI variant; otherwise use the general-automation variant. Follow these approved templates closely in tone and length (the leading 'Hi ...,' shown here is only an example of the greeting, substitute the real first name or just 'Hi,'):",
+      "- German Vision-AI: \"Hi Daniel, ich habe gesehen, dass Ihr euch mit Vision-AI beschäftigt. Wir entwickeln eine neue Technologie für anspruchsvolle Vision-AI Anwendungen. Freue mich auf den Austausch.\"",
+      "- English Vision-AI: \"Hi Daniel, I saw that you work on Vision AI projects. We're developing a new technology for building Vision AI models for demanding applications. Happy to connect.\"",
+      "- German general automation: \"Hi Daniel, ich habe gesehen, dass Ihr euch mit intelligenter Automation beschäftigt. Wir entwickeln eine neue Technologie für anspruchsvolle Vision-AI Anwendungen. Ein Austausch wäre spannend.\"",
+      "- English general automation: \"Hi Daniel, I saw that you work on intelligent automation applications. We're developing a new technology for building Vision AI models for demanding applications. It would be great to exchange ideas.\"",
+      "",
       "Only use the company's own website evidence below for the prospect anchor; do not invent products, customers, case studies, or numbers that are not in the context or that evidence.",
-      "Never use the characters '\u2014' or '\u2013' anywhere in the message."
+      "Never use the characters '\u2014' or '\u2013' anywhere in the message or the connectionRequest."
     ].join("\n");
 
     const userContent = [
@@ -574,8 +618,11 @@ export class AzureOpenAIClient {
       ? parsed.confidence
       : undefined;
 
+    const connectionRequest = parsed.connectionRequest?.trim();
+
     return {
       message: parsed.message.trim(),
+      connectionRequest: connectionRequest || undefined,
       language: normalizeOutreachLanguage(parsed.language, input.outreachLanguage),
       researchFinding: parsed.researchFinding,
       underlyingLimitation: parsed.underlyingLimitation,
@@ -637,6 +684,9 @@ export class AzureOpenAIClient {
     }
 
     try {
+      const endCustomerContactGuidance = company.category === "industrial_end_customer_scaled"
+        ? " For this industrial end-customer producer, the most valuable decision-makers are operational and production leaders: Head of Production, Head of Operations, Head or Manager of Quality (QC/QA), Plant Manager, Head of Manufacturing, Head of Digitalization, Innovation Manager, or Head of Engineering. A company-wide CEO or Geschäftsführer of a large producer group is usually NOT the right contact for a focused machine-vision or inspection project, so when both are available prefer such operational, quality, or innovation leaders in the first slot over a group-level CEO/Geschäftsführer."
+        : "";
       const contactPayload = rankedCandidates.map((candidate, index) => ({
         contactId: `contact_${index + 1}`,
         firstName: candidate.firstName,
@@ -655,7 +705,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Rank and select up to 4 public web-search contacts for outbound outreach. Use this step mainly to prioritize, not to aggressively discard. Managers and decision-makers first; if fewer than 4 relevant manager-type people are evidence-backed, fill remaining slots with developers or engineering contacts. Reject only candidates that are clearly invalid, for example one-word names, CTA text, navigation fragments, generic phrases such as represented by, our customers, about us, team, contact, company, business, or similar non-person labels. Reject candidates whose evidence points to a different company, parent brand, partner brand, directory, or unrelated domain unless the evidence explicitly says they work for the supplied company. A candidate whose only reachable channel is an email on a different company's corporate domain than the supplied company (for example a distributor, reseller, marketplace, integrator partner, or component-supplier employee surfaced through the supplied company's pages) must be rejected unless the evidence explicitly states that person works for the supplied company; never keep such a foreign-domain email contact, because it would attach outreach to the wrong company. Do not treat LinkedIn company pages or generic company mailboxes as people, but you may keep one such company-level fallback contact when it is the only evidence-backed public outreach channel for the supplied company. Treat founder or company-founding evidence in snippets, for example wording like "we founded <company>", as a strong executive-leadership signal even if no explicit CEO title is present. Prefer one executive sponsor plus one technical or operational owner when possible. Prefer contacts that combine multiple reachable data points such as personal LinkedIn URL, named company email, and phone. Avoid HR, recruiting, finance, legal, support, generic sales, marketing, students, advisors, and unrelated contacts when stronger company-matching contacts exist. When evidence-backed personal LinkedIn profiles or named employee contacts exist for the supplied company, keep them rather than returning an empty result. Use only the provided evidence. Return strict JSON with {"selectedContactIds":["..."],"reason":"..."}.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Rank and select up to 4 public web-search contacts for outbound outreach.${endCustomerContactGuidance} Use this step mainly to prioritize, not to aggressively discard. Managers and decision-makers first: whenever the candidate list contains any evidence-backed decision-maker (owner, founder, Geschäftsführer, Inhaber, CEO, CTO, COO, Managing Director, or comparable leadership title), you MUST select at least one such decision-maker and place them in the first slot; never return a selection made up only of developers or engineers when a decision-maker candidate is available. If fewer than 4 relevant manager-type people are evidence-backed, fill remaining slots with developers or engineering contacts. Reject only candidates that are clearly invalid, for example one-word names, CTA text, navigation fragments, generic phrases such as represented by, our customers, about us, team, contact, company, business, or similar non-person labels. Reject candidates whose evidence points to a different company, parent brand, partner brand, directory, or unrelated domain unless the evidence explicitly says they work for the supplied company. This also applies to LinkedIn-only candidates: reject a person whose LinkedIn profile or stated employer names a DIFFERENT company — including a company with a similar-sounding or near-duplicate name at a different domain (for example a same-looking brand token that actually belongs to another firm) — unless the evidence explicitly ties that person to the supplied company's own website or domain. A candidate whose only reachable channel is an email on a different company's corporate domain than the supplied company (for example a distributor, reseller, marketplace, integrator partner, or component-supplier employee surfaced through the supplied company's pages) must be rejected unless the evidence explicitly states that person works for the supplied company; never keep such a foreign-domain email contact, because it would attach outreach to the wrong company. Do not treat LinkedIn company pages or generic company mailboxes as people, but you may keep one such company-level fallback contact when it is the only evidence-backed public outreach channel for the supplied company. Treat founder or company-founding evidence in snippets, for example wording like "we founded <company>", as a strong executive-leadership signal even if no explicit CEO title is present. Prefer one executive sponsor plus one technical or operational owner when possible. Prefer contacts that combine multiple reachable data points such as personal LinkedIn URL, named company email, and phone. Avoid HR, recruiting, finance, legal, support, generic sales, marketing, students, advisors, and unrelated contacts when stronger company-matching contacts exist. When evidence-backed personal LinkedIn profiles or named employee contacts exist for the supplied company, keep them rather than returning an empty result. Use only the provided evidence. Return strict JSON with {"selectedContactIds":["..."],"reason":"..."}.`
         },
         {
           role: "user",
@@ -901,7 +951,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Read official company homepage evidence and extract organization-level company information only. Extract the exact legal operating entity for the supplied domain, postal address, shared company inboxes, and main switchboard phone numbers when they are explicitly visible. The legal entity named in this website's own impressum, legal notice, or contact/footer block is the operating entity for this website: return it as companyName with entityScope "exact_operating_entity" even when its registered name differs from the public brand, the person operating the site, or the domain label. Only withhold the name (leaving companyName empty with the matching entityScope) when the evidence shows it belongs to a separate parent group, holding company, umbrella brand, or an unrelated third-party brand rather than the operator of this site. A company name shown with a legal form in this website's own footer, copyright line, header, logo block, or impressum — for example "© 2026 Example Co.,Ltd.", "Example GmbH", "Example Inc.", "Example S.A.", "Example Ltd." — is this site's exact operating entity: return it as companyName with entityScope "exact_operating_entity" unless the evidence clearly shows it is a separate parent group or unrelated brand. Exception: a footer credit, copyright line, or "created/realised/designed/developed by", "réalisé par", "site by", "webdesign by", "powered by" attribution that names the web design or web development AGENCY that built the site — recognisable because it usually links to a DIFFERENT external domain than this site and/or sits next to such wording — is NOT the operating entity; ignore that agency name and instead use the entity named as the owner/operator in the impressum or legal notice ("Propriétaire", "Inhaber", "Betreiber", "Herausgeber", "Owner", e.g. a "SAS"/"SARL"/"GmbH" company) as the exact operating entity. The supplied Country is an unverified hint that may be wrong; determine the country from this website's own evidence (registered office, "headquartered in" statements, impressum or postal address, or the international phone dialing code such as +49 Germany, +972 Israel, +82 South Korea, +86 China) and return that country, only falling back to the hint when the website gives no country evidence. A natural person's name listed as the site operator's representative, owner, proprietor, or managing director — for example the name following "Vertreten durch", "Vertretungsberechtigt", "Inhaber", "Inhaberin", "Geschäftsführer", "Geschäftsführerin", "Owner", "Proprietor", "Represented by", "Managing Director", "CEO", or "Founder" in an impressum or legal notice — is the human REPRESENTATIVE of the business, NOT the company name: never return a bare personal name (a given name plus surname with no legal form and no brand word, e.g. "Anton Lytvynenko") as companyName. When the operator is a sole proprietorship / Einzelunternehmen whose only named entity is a person, set companyName to the business's trading or brand name instead — the name under which it actually operates, taken from the logo, header, site title, or domain label (e.g. "ki-aktiv") — with entityScope "exact_operating_entity"; if no trading or brand name is evident anywhere in the evidence, leave companyName empty and set entityScope "uncertain" rather than returning the person's name. When the homepage evidence is genuinely ambiguous, leave companyName empty and set entityScope accordingly. Also produce searchAliases: 1 to 4 short, search-friendly names for the exact operating entity that a recruiter could type to find this company's employees on LinkedIn. Include only the legal entity name, its brand or short form, and the domain token. searchAliases must never contain call-to-action, marketing, slogan, navigation, menu, button, or heading phrases (for example "Nehmen Sie Kontakt", "Learn More", "Mehr erfahren", "Contact us"), and never a parent group or unrelated brand. If you are unsure, return only the domain token. Then choose the best 1 to 5 follow-up links that are most likely to contain missing official company information, legal identity, address details, or company-level contact details. Prefer kontakt, contact, impressum, imprint, legal, about, company, team, and footer-linked pages when relevant. If this site's own impressum, legal notice, or contact page is hosted on a different domain (common for sole proprietors, freelancers, and agencies that link their impressum/contact to a separate operating-company domain), include that exact impressum/legal/contact URL as a follow-up link so the legal entity, address, and contacts can be read. Do not include personal data. Do not invent information. Email addresses on public websites are frequently obfuscated to defeat scrapers (for example info@remove-this.example.com, kontakt@nospam.example.de, name (at) example [dot] de): reconstruct the real address by removing anti-harvest tokens such as remove-this., removethis., remove., nospam., no-spam., kein-spam., delete-this., antispam. from the domain and local part and by decoding textual separators ( (at)/[at]/ AT to @ and (dot)/[dot]/ DOT to .). The emitted domain must be a real registrable domain — never keep a fabricated label like remove-this. or nospam. as part of it; only emit an email you can confidently reconstruct into a valid address, otherwise omit it. A partner, client, customer, supplier, reseller, distributor, or any third party merely mentioned or credited on the page (for example after "in partnership with", "operated in partnership with", "powered by", "a partner of", "client:", "reseller of", "distributor for") is NOT the operating entity of this site and must never be returned as companyName; the operating entity is the one that owns this domain and is named as owner/operator in its own impressum/legal notice/footer, so when the only legal-form name on the page belongs to such a third party whose brand does not match this domain, leave companyName empty with entityScope "uncertain". companyName must be a human-readable brand or legal entity name, never the bare domain string: never return the domain with its TLD or in all caps (for example never "QUBBERVISION.COM", "EXAMPLE.COM", or "example.com") as companyName. When the only available name is the domain, use its clean brand form without the TLD and in normal capitalisation (for example "Qubber", not "QUBBERVISION.COM"), and always prefer any real brand or legal entity evident elsewhere on the page (logo, header, site title, impressum, or footer) over the domain token. Always extract the operating entity's full postal address exactly as written in the impressum, legal notice, contact, or footer evidence: the street name and number, the postal/ZIP code, the city or town, and the state or region when shown. Whenever a street line or a postal code appears anywhere in the evidence, you MUST populate address, city, and zip from it — never leave city or zip empty and return only the country when the evidence contains them. Never infer, guess, or invent an address, city, or postal code that is not present in the evidence. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","searchAliases":["..."],"address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"followUpUrls":["https://..."]}. Use empty strings or empty arrays when unknown.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Read official company homepage evidence and extract organization-level company information only. Extract the exact legal operating entity for the supplied domain, postal address, shared company inboxes, and main switchboard phone numbers when they are explicitly visible. Return the COMPLETE registered legal name exactly as written in the impressum, legal notice, or footer, including every word and the legal form suffix (for example GmbH, GmbH & Co. KG, AG, UG, SLU, SARL, S.r.l., BV, Ltd., Inc.); never shorten a multi-word legal name down to the short public brand, so if the impressum shows "Autech Tesla Automation GmbH" return "Autech Tesla Automation GmbH" and not "Autech Tesla". The legal entity named in this website's own impressum, legal notice, or contact/footer block is the operating entity for this website: return it as companyName with entityScope "exact_operating_entity" even when its registered name differs from the public brand, the person operating the site, or the domain label. Only withhold the name (leaving companyName empty with the matching entityScope) when the evidence shows it belongs to a separate parent group, holding company, umbrella brand, or an unrelated third-party brand rather than the operator of this site. A company name shown with a legal form in this website's own footer, copyright line, header, logo block, or impressum — for example "© 2026 Example Co.,Ltd.", "Example GmbH", "Example Inc.", "Example S.A.", "Example Ltd." — is this site's exact operating entity: return it as companyName with entityScope "exact_operating_entity" unless the evidence clearly shows it is a separate parent group or unrelated brand. Exception: a footer credit, copyright line, or "created/realised/designed/developed by", "réalisé par", "site by", "webdesign by", "powered by" attribution that names the web design or web development AGENCY that built the site — recognisable because it usually links to a DIFFERENT external domain than this site and/or sits next to such wording — is NOT the operating entity; ignore that agency name and instead use the entity named as the owner/operator in the impressum or legal notice ("Propriétaire", "Inhaber", "Betreiber", "Herausgeber", "Owner", e.g. a "SAS"/"SARL"/"GmbH" company) as the exact operating entity. The supplied Country is an unverified hint that may be wrong; determine the country from this website's own evidence (registered office, "headquartered in" statements, impressum or postal address, or the international phone dialing code such as +49 Germany, +972 Israel, +82 South Korea, +86 China) and return that country, only falling back to the hint when the website gives no country evidence. A natural person's name listed as the site operator's representative, owner, proprietor, or managing director — for example the name following "Vertreten durch", "Vertretungsberechtigt", "Inhaber", "Inhaberin", "Geschäftsführer", "Geschäftsführerin", "Owner", "Proprietor", "Represented by", "Managing Director", "CEO", or "Founder" in an impressum or legal notice — is the human REPRESENTATIVE of the business, NOT the company name: never return a bare personal name (a given name plus surname with no legal form and no brand word, e.g. "Anton Lytvynenko") as companyName. When the operator is a sole proprietorship / Einzelunternehmen whose only named entity is a person, set companyName to the business's trading or brand name instead — the name under which it actually operates, taken from the logo, header, site title, or domain label (e.g. "ki-aktiv") — with entityScope "exact_operating_entity"; if no trading or brand name is evident anywhere in the evidence, leave companyName empty and set entityScope "uncertain" rather than returning the person's name. When the homepage evidence is genuinely ambiguous, leave companyName empty and set entityScope accordingly. Also produce searchAliases: 1 to 4 short, search-friendly names for the exact operating entity that a recruiter could type to find this company's employees on LinkedIn. Include only the legal entity name, its brand or short form, and the domain token. searchAliases must never contain call-to-action, marketing, slogan, navigation, menu, button, or heading phrases (for example "Nehmen Sie Kontakt", "Learn More", "Mehr erfahren", "Contact us"), and never a parent group or unrelated brand. If you are unsure, return only the domain token. Then choose the best 1 to 5 follow-up links that are most likely to contain missing official company information, legal identity, address details, or company-level contact details. Prefer kontakt, contact, impressum, imprint, legal, about, company, team, and footer-linked pages when relevant. If this site's own impressum, legal notice, or contact page is hosted on a different domain (common for sole proprietors, freelancers, and agencies that link their impressum/contact to a separate operating-company domain), include that exact impressum/legal/contact URL as a follow-up link so the legal entity, address, and contacts can be read. Do not include personal data. Do not invent information. Email addresses on public websites are frequently obfuscated to defeat scrapers (for example info@remove-this.example.com, kontakt@nospam.example.de, name (at) example [dot] de): reconstruct the real address by removing anti-harvest tokens such as remove-this., removethis., remove., nospam., no-spam., kein-spam., delete-this., antispam. from the domain and local part and by decoding textual separators ( (at)/[at]/ AT to @ and (dot)/[dot]/ DOT to .). The emitted domain must be a real registrable domain — never keep a fabricated label like remove-this. or nospam. as part of it; only emit an email you can confidently reconstruct into a valid address, otherwise omit it. A partner, client, customer, supplier, reseller, distributor, or any third party merely mentioned or credited on the page (for example after "in partnership with", "operated in partnership with", "powered by", "a partner of", "client:", "reseller of", "distributor for") is NOT the operating entity of this site and must never be returned as companyName; the operating entity is the one that owns this domain and is named as owner/operator in its own impressum/legal notice/footer, so when the only legal-form name on the page belongs to such a third party whose brand does not match this domain, leave companyName empty with entityScope "uncertain". companyName must be a human-readable brand or legal entity name, never the bare domain string: never return the domain with its TLD or in all caps (for example never "QUBBERVISION.COM", "EXAMPLE.COM", or "example.com") as companyName. When the only available name is the domain, use its clean brand form without the TLD and in normal capitalisation (for example "Qubber", not "QUBBERVISION.COM"), and always prefer any real brand or legal entity evident elsewhere on the page (logo, header, site title, impressum, or footer) over the domain token. Always extract the operating entity's full postal address exactly as written in the impressum, legal notice, contact, or footer evidence: the street name and number, the postal/ZIP code, the city or town, and the state or region when shown. Whenever a street line or a postal code appears anywhere in the evidence, you MUST populate address, city, and zip from it — never leave city or zip empty and return only the country when the evidence contains them. Never infer, guess, or invent an address, city, or postal code that is not present in the evidence. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","searchAliases":["..."],"address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"followUpUrls":["https://..."]}. Use empty strings or empty arrays when unknown.`
         },
         {
           role: "user",
@@ -992,7 +1042,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Consolidate organization-level company information from official website evidence only. Use the supplied homepage and follow-up pages to extract the exact legal operating entity for the supplied domain, the postal address, shared company inboxes, main switchboard phone numbers, and company LinkedIn page URLs. Prefer impressum/legal notice/contact/footer evidence over marketing copy. The legal entity named in this website's own impressum, legal notice, or contact/footer block is the operating entity for this website: return it as companyName with entityScope "exact_operating_entity" even when its registered name differs from the public brand, the person operating the site, or the domain label. Only withhold the name (leaving companyName empty with the matching entityScope) when the evidence shows it belongs to a separate parent group, holding company, umbrella brand, or an unrelated third-party brand rather than the operator of this site. A company name shown with a legal form in this website's own footer, copyright line, header, logo block, or impressum — for example "© 2026 Example Co.,Ltd.", "Example GmbH", "Example Inc.", "Example S.A.", "Example Ltd." — is this site's exact operating entity: return it as companyName with entityScope "exact_operating_entity" unless the evidence clearly shows it is a separate parent group or unrelated brand. Exception: a footer credit, copyright line, or "created/realised/designed/developed by", "réalisé par", "site by", "webdesign by", "powered by" attribution that names the web design or web development AGENCY that built the site — recognisable because it usually links to a DIFFERENT external domain than this site and/or sits next to such wording — is NOT the operating entity; ignore that agency name and instead use the entity named as the owner/operator in the impressum or legal notice ("Propriétaire", "Inhaber", "Betreiber", "Herausgeber", "Owner", e.g. a "SAS"/"SARL"/"GmbH" company) as the exact operating entity. The supplied Country is an unverified hint that may be wrong; determine the country from this website's own evidence (registered office, "headquartered in" statements, impressum or postal address, or the international phone dialing code such as +49 Germany, +972 Israel, +82 South Korea, +86 China) and return that country, only falling back to the hint when the website gives no country evidence. A natural person's name listed as the site operator's representative, owner, proprietor, or managing director — for example the name following "Vertreten durch", "Vertretungsberechtigt", "Inhaber", "Inhaberin", "Geschäftsführer", "Geschäftsführerin", "Owner", "Proprietor", "Represented by", "Managing Director", "CEO", or "Founder" in an impressum or legal notice — is the human REPRESENTATIVE of the business, NOT the company name: never return a bare personal name (a given name plus surname with no legal form and no brand word, e.g. "Anton Lytvynenko") as companyName. When the operator is a sole proprietorship / Einzelunternehmen whose only named entity is a person, set companyName to the business's trading or brand name instead — the name under which it actually operates, taken from the logo, header, site title, or domain label (e.g. "ki-aktiv") — with entityScope "exact_operating_entity"; if no trading or brand name is evident anywhere in the evidence, leave companyName empty and set entityScope "uncertain" rather than returning the person's name. When the evidence is genuinely ambiguous, leave companyName empty and set entityScope accordingly. Also produce searchAliases: 1 to 4 short, search-friendly names for the exact operating entity that a recruiter could type to find this company's employees on LinkedIn. Include only the legal entity name, its brand or short form, and the domain token. searchAliases must never contain call-to-action, marketing, slogan, navigation, menu, button, or heading phrases (for example "Nehmen Sie Kontakt", "Learn More", "Mehr erfahren", "Contact us"), and never a parent group or unrelated brand. If you are unsure, return only the domain token. Do not include personal data and do not invent values. Email addresses on public websites are frequently obfuscated to defeat scrapers (for example info@remove-this.example.com, kontakt@nospam.example.de, name (at) example [dot] de): reconstruct the real address by removing anti-harvest tokens such as remove-this., removethis., remove., nospam., no-spam., kein-spam., delete-this., antispam. from the domain and local part and by decoding textual separators ( (at)/[at]/ AT to @ and (dot)/[dot]/ DOT to .). The emitted domain must be a real registrable domain — never keep a fabricated label like remove-this. or nospam. as part of it; only emit an email you can confidently reconstruct into a valid address, otherwise omit it. A partner, client, customer, supplier, reseller, distributor, or any third party merely mentioned or credited on the page (for example after "in partnership with", "operated in partnership with", "powered by", "a partner of", "client:", "reseller of", "distributor for") is NOT the operating entity of this site and must never be returned as companyName; the operating entity is the one that owns this domain and is named as owner/operator in its own impressum/legal notice/footer, so when the only legal-form name on the page belongs to such a third party whose brand does not match this domain, leave companyName empty with entityScope "uncertain". companyName must be a human-readable brand or legal entity name, never the bare domain string: never return the domain with its TLD or in all caps (for example never "QUBBERVISION.COM", "EXAMPLE.COM", or "example.com") as companyName. When the only available name is the domain, use its clean brand form without the TLD and in normal capitalisation (for example "Qubber", not "QUBBERVISION.COM"), and always prefer any real brand or legal entity evident elsewhere on the page (logo, header, site title, impressum, or footer) over the domain token. Always extract the operating entity's full postal address exactly as written in the impressum, legal notice, contact, or footer evidence: the street name and number, the postal/ZIP code, the city or town, and the state or region when shown. Whenever a street line or a postal code appears anywhere in the evidence, you MUST populate address, city, and zip from it — never leave city or zip empty and return only the country when the evidence contains them. Never infer, guess, or invent an address, city, or postal code that is not present in the evidence. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","searchAliases":["..."],"address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"linkedInUrls":["https://..."]}. Use empty strings or arrays when unknown.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Consolidate organization-level company information from official website evidence only. Use the supplied homepage and follow-up pages to extract the exact legal operating entity for the supplied domain, the postal address, shared company inboxes, main switchboard phone numbers, and company LinkedIn page URLs. Prefer impressum/legal notice/contact/footer evidence over marketing copy. Return the COMPLETE registered legal name exactly as written in the impressum, legal notice, or footer, including every word and the legal form suffix (for example GmbH, GmbH & Co. KG, AG, UG, SLU, SARL, S.r.l., BV, Ltd., Inc.); never shorten a multi-word legal name down to the short public brand, so if the impressum shows "Autech Tesla Automation GmbH" return "Autech Tesla Automation GmbH" and not "Autech Tesla". The legal entity named in this website's own impressum, legal notice, or contact/footer block is the operating entity for this website: return it as companyName with entityScope "exact_operating_entity" even when its registered name differs from the public brand, the person operating the site, or the domain label. Only withhold the name (leaving companyName empty with the matching entityScope) when the evidence shows it belongs to a separate parent group, holding company, umbrella brand, or an unrelated third-party brand rather than the operator of this site. A company name shown with a legal form in this website's own footer, copyright line, header, logo block, or impressum — for example "© 2026 Example Co.,Ltd.", "Example GmbH", "Example Inc.", "Example S.A.", "Example Ltd." — is this site's exact operating entity: return it as companyName with entityScope "exact_operating_entity" unless the evidence clearly shows it is a separate parent group or unrelated brand. Exception: a footer credit, copyright line, or "created/realised/designed/developed by", "réalisé par", "site by", "webdesign by", "powered by" attribution that names the web design or web development AGENCY that built the site — recognisable because it usually links to a DIFFERENT external domain than this site and/or sits next to such wording — is NOT the operating entity; ignore that agency name and instead use the entity named as the owner/operator in the impressum or legal notice ("Propriétaire", "Inhaber", "Betreiber", "Herausgeber", "Owner", e.g. a "SAS"/"SARL"/"GmbH" company) as the exact operating entity. The supplied Country is an unverified hint that may be wrong; determine the country from this website's own evidence (registered office, "headquartered in" statements, impressum or postal address, or the international phone dialing code such as +49 Germany, +972 Israel, +82 South Korea, +86 China) and return that country, only falling back to the hint when the website gives no country evidence. A natural person's name listed as the site operator's representative, owner, proprietor, or managing director — for example the name following "Vertreten durch", "Vertretungsberechtigt", "Inhaber", "Inhaberin", "Geschäftsführer", "Geschäftsführerin", "Owner", "Proprietor", "Represented by", "Managing Director", "CEO", or "Founder" in an impressum or legal notice — is the human REPRESENTATIVE of the business, NOT the company name: never return a bare personal name (a given name plus surname with no legal form and no brand word, e.g. "Anton Lytvynenko") as companyName. When the operator is a sole proprietorship / Einzelunternehmen whose only named entity is a person, set companyName to the business's trading or brand name instead — the name under which it actually operates, taken from the logo, header, site title, or domain label (e.g. "ki-aktiv") — with entityScope "exact_operating_entity"; if no trading or brand name is evident anywhere in the evidence, leave companyName empty and set entityScope "uncertain" rather than returning the person's name. When the evidence is genuinely ambiguous, leave companyName empty and set entityScope accordingly. Also produce searchAliases: 1 to 4 short, search-friendly names for the exact operating entity that a recruiter could type to find this company's employees on LinkedIn. Include only the legal entity name, its brand or short form, and the domain token. searchAliases must never contain call-to-action, marketing, slogan, navigation, menu, button, or heading phrases (for example "Nehmen Sie Kontakt", "Learn More", "Mehr erfahren", "Contact us"), and never a parent group or unrelated brand. If you are unsure, return only the domain token. Do not include personal data and do not invent values. Email addresses on public websites are frequently obfuscated to defeat scrapers (for example info@remove-this.example.com, kontakt@nospam.example.de, name (at) example [dot] de): reconstruct the real address by removing anti-harvest tokens such as remove-this., removethis., remove., nospam., no-spam., kein-spam., delete-this., antispam. from the domain and local part and by decoding textual separators ( (at)/[at]/ AT to @ and (dot)/[dot]/ DOT to .). The emitted domain must be a real registrable domain — never keep a fabricated label like remove-this. or nospam. as part of it; only emit an email you can confidently reconstruct into a valid address, otherwise omit it. A partner, client, customer, supplier, reseller, distributor, or any third party merely mentioned or credited on the page (for example after "in partnership with", "operated in partnership with", "powered by", "a partner of", "client:", "reseller of", "distributor for") is NOT the operating entity of this site and must never be returned as companyName; the operating entity is the one that owns this domain and is named as owner/operator in its own impressum/legal notice/footer, so when the only legal-form name on the page belongs to such a third party whose brand does not match this domain, leave companyName empty with entityScope "uncertain". companyName must be a human-readable brand or legal entity name, never the bare domain string: never return the domain with its TLD or in all caps (for example never "QUBBERVISION.COM", "EXAMPLE.COM", or "example.com") as companyName. When the only available name is the domain, use its clean brand form without the TLD and in normal capitalisation (for example "Qubber", not "QUBBERVISION.COM"), and always prefer any real brand or legal entity evident elsewhere on the page (logo, header, site title, impressum, or footer) over the domain token. Always extract the operating entity's full postal address exactly as written in the impressum, legal notice, contact, or footer evidence: the street name and number, the postal/ZIP code, the city or town, and the state or region when shown. Whenever a street line or a postal code appears anywhere in the evidence, you MUST populate address, city, and zip from it — never leave city or zip empty and return only the country when the evidence contains them. Never infer, guess, or invent an address, city, or postal code that is not present in the evidence. Return strict JSON with {"companyName":"...","entityScope":"exact_operating_entity|parent_group|brand_or_product|uncertain","searchAliases":["..."],"address":"...","city":"...","zip":"...","state":"...","country":"...","emails":["..."],"phones":["..."],"linkedInUrls":["https://..."]}. Use empty strings or arrays when unknown.`
         },
         {
           role: "user",
@@ -1236,7 +1286,7 @@ export class AzureOpenAIClient {
     const promptMessages: Array<{ role: "system" | "user"; content: string }> = [
       {
         role: "system",
-        content: this.buildExaPlannerSystemPrompt(mainContext, searchStrategyContext, targetQueryCount, requestedLocalities, forbiddenBroadeningTerms)
+        content: this.buildExaPlannerSystemPrompt(mainContext, searchStrategyContext, targetQueryCount, requestedLocalities, forbiddenBroadeningTerms, requestedCategories as LeadCategory[])
       },
       {
         role: "user",
@@ -1285,49 +1335,102 @@ export class AzureOpenAIClient {
     );
 
     if (initialQueries.length > 1 && this.exaQueriesNeedDiversification(initialQueries, requestedLocalities, baselineQueries)) {
-      const rewrittenContent = await this.runChatWithTimeout(
-        [
-          promptMessages[0],
-          {
-            role: "user",
-            content: this.buildExaPlannerDiversityRewritePrompt(
-              filter,
-              requestedLocalities,
-              requestedCategories as LeadCategory[],
-              baselineQueries,
-              recentQueryHistory,
-              excludedDomainExamples,
-              initialQueries,
-              targetQueryCount,
-              forbiddenBroadeningTerms
-            )
-          }
-        ],
-        { maxTokens: 4000 },
-        plannerTimeoutMs,
-        "Exa query planner diversity rewrite"
-      );
+      // The diversity rewrite is an OPTIONAL enhancement on top of the already-valid initialQueries.
+      // If the rewrite fails (e.g. the model returns a query that swaps the required country locality
+      // for a broader region grouping like "Benelux"/"Nordics" and trips the locality validator), we
+      // must NOT throw away the valid initial batch and abort the whole Exa run. Degrade gracefully:
+      // log the reason and fall back to the locality-correct initialQueries so the search keeps going.
+      try {
+        const rewrittenContent = await this.runChatWithTimeout(
+          [
+            promptMessages[0],
+            {
+              role: "user",
+              content: this.buildExaPlannerDiversityRewritePrompt(
+                filter,
+                requestedLocalities,
+                requestedCategories as LeadCategory[],
+                baselineQueries,
+                recentQueryHistory,
+                excludedDomainExamples,
+                initialQueries,
+                targetQueryCount,
+                forbiddenBroadeningTerms
+              )
+            }
+          ],
+          { maxTokens: 4000 },
+          plannerTimeoutMs,
+          "Exa query planner diversity rewrite"
+        );
 
-      const rewrittenParsed = this.parseJsonObject<{
-        queries?: string[];
-        error?: string;
-        constraintCheck?: {
-          requiredLocalities?: string[];
-          allQueriesPreserveLocality?: boolean;
-          forbiddenBroadeningTermsPresent?: boolean;
-          preservedLocalitiesByQuery?: Array<{ query?: string; preservedLocalities?: string[] }>;
-        };
-      }>(rewrittenContent);
-      return this.validateExaPlannerQueries(
-        rewrittenParsed,
-        requestedLocalities,
-        forbiddenBroadeningTerms,
-        targetQueryCount,
-        "Exa query planner diversity rewrite"
-      );
+        const rewrittenParsed = this.parseJsonObject<{
+          queries?: string[];
+          error?: string;
+          constraintCheck?: {
+            requiredLocalities?: string[];
+            allQueriesPreserveLocality?: boolean;
+            forbiddenBroadeningTermsPresent?: boolean;
+            preservedLocalitiesByQuery?: Array<{ query?: string; preservedLocalities?: string[] }>;
+          };
+        }>(rewrittenContent);
+        return this.validateExaPlannerQueries(
+          rewrittenParsed,
+          requestedLocalities,
+          forbiddenBroadeningTerms,
+          targetQueryCount,
+          "Exa query planner diversity rewrite"
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`Exa query planner diversity rewrite failed; falling back to the validated initial queries. (${reason})`);
+        return initialQueries;
+      }
     }
 
     return initialQueries;
+  }
+
+  // Expand each REQUESTED country into the set of tokens that unambiguously mean that same country:
+  // the country name plus its demonym/native name and the specific sub-national regions/cities the
+  // planner is encouraged to drill into. This makes the locality validator accept natural query
+  // wording like "Swiss camera makers in the Zurich region" or "in Lombardy, Italy" — which are
+  // MORE precise than the country name, not a broadening. Aliases are only ever added for countries
+  // that are actually requested, so a company outside the required countries can never pass.
+  private buildAcceptedLocalityTokens(requestedLocalities: string[]): string[] {
+    const aliasesByCountry: Record<string, string[]> = {
+      germany: ["german", "deutschland", "owl", "ostwestfalen", "bielefeld", "paderborn", "stuttgart", "baden wuerttemberg", "baden wurttemberg", "munich", "muenchen", "munchen", "bavaria", "bayern", "nrw", "ruhr", "berlin", "hamburg"],
+      france: ["french", "auvergne rhone alpes", "lyon", "grand est", "ile de france", "paris", "toulouse"],
+      italy: ["italian", "italia", "lombardy", "lombardia", "milan", "milano", "emilia romagna", "bologna", "modena", "veneto", "padova", "vicenza", "treviso", "friuli", "udine", "piedmont", "piemonte", "turin", "torino"],
+      netherlands: ["dutch", "holland", "brainport", "eindhoven", "twente", "enschede", "randstad", "rotterdam", "amsterdam"],
+      belgium: ["belgian", "belgique", "belgie", "flanders", "flemish", "ghent", "gent", "antwerp", "antwerpen", "kortrijk", "wallonia", "brussels"],
+      switzerland: ["swiss", "schweiz", "suisse", "zurich", "zuerich", "ticino", "romandy", "geneva", "basel"],
+      sweden: ["swedish", "sverige", "gothenburg", "goteborg", "goeteborg", "stockholm", "oresund", "malmoe", "malmo"],
+      austria: ["austrian", "oesterreich", "osterreich", "linz", "upper austria", "graz", "styria", "vienna", "wien"],
+      spain: ["spanish", "espana", "catalonia", "catalunya", "barcelona", "basque", "bilbao", "valencia", "zaragoza", "navarra", "madrid"],
+      denmark: ["danish", "danmark", "odense", "aarhus", "copenhagen", "kobenhavn"],
+      portugal: ["portuguese", "porto", "braga", "lisbon", "lisboa"],
+      poland: ["polish", "polska", "silesia", "katowice", "poznan", "wroclaw", "krakow", "cracow", "warsaw", "warszawa"],
+      "czech republic": ["czech", "czechia", "brno", "ostrava", "prague", "praha"],
+      uk: ["british", "britain", "united kingdom", "england", "scotland", "wales", "london"],
+      "united kingdom": ["british", "britain", "uk", "england", "scotland", "wales", "london"]
+    };
+
+    const tokens = new Set<string>();
+    for (const locality of requestedLocalities) {
+      const normalized = this.normalizePlannerPhrase(locality);
+      if (!normalized) {
+        continue;
+      }
+      tokens.add(normalized);
+      for (const alias of aliasesByCountry[normalized] ?? []) {
+        const normalizedAlias = this.normalizePlannerPhrase(alias);
+        if (normalizedAlias) {
+          tokens.add(normalizedAlias);
+        }
+      }
+    }
+    return Array.from(tokens);
   }
 
   private validateExaPlannerQueries(
@@ -1363,7 +1466,7 @@ export class AzureOpenAIClient {
       throw new Error(`${label} returned ${queries.length} queries, expected exactly ${targetQueryCount}.`);
     }
 
-    const normalizedLocalities = Array.from(new Set(requestedLocalities.map((value) => this.normalizePlannerPhrase(value)).filter(Boolean)));
+    const normalizedLocalities = this.buildAcceptedLocalityTokens(requestedLocalities);
     for (const query of queries) {
       const normalizedQuery = this.normalizePlannerPhrase(query);
       if (normalizedLocalities.length > 0 && !normalizedLocalities.some((locality) => this.normalizedPlannerPhraseIncludes(normalizedQuery, locality))) {
@@ -1416,46 +1519,57 @@ export class AzureOpenAIClient {
   }
 
   private buildPlannerGeographyAngleExamples(requestedLocalities: string[]): string[] {
-    const primaryLocality = this.getPlannerPrimaryLocality(requestedLocalities);
-    const normalizedPrimaryLocality = this.normalizePlannerPhrase(primaryLocality);
+    // Geography is a category-agnostic diversity axis (a camera maker in an underexplored country is
+    // as novel as an integrator there). Empirically (exa yield labs): per-country rotation and
+    // sub-national region/city drill-down surface far more NEW companies than generic region-wide
+    // queries, and multi-country region groupings (DACH/Benelux/Nordics/Iberia/EMEA) both get rejected
+    // by the hard locality validator AND re-surface already-known companies. Underexplored countries
+    // (e.g. Poland, Iberia, Nordics, NL, BE, IT) out-yield the most-mined market (Germany).
+    const subNationalHints: Record<string, string> = {
+      germany:
+        "a narrow German industrial cluster or city (e.g. OWL/Bielefeld, Stuttgart/Baden-Wuerttemberg, Munich/Bavaria, NRW/Ruhr) — Germany is already heavily mined, so drill into a specific cluster instead of the whole country",
+      france: "a specific French region or city (e.g. Auvergne-Rhone-Alpes/Lyon, Grand Est, Ile-de-France)",
+      italy: "a specific Italian region or city (e.g. Lombardy/Milan, Emilia-Romagna/Bologna, Veneto/Padova-Vicenza, Piedmont/Turin)",
+      netherlands: "a specific Dutch high-tech cluster (e.g. Brainport Eindhoven, Twente/Enschede, Randstad)",
+      belgium: "a specific Belgian region or city (e.g. Flanders/Ghent-Antwerp-Kortrijk)",
+      switzerland: "a specific Swiss region or city (e.g. Zurich, Ticino, Romandy)",
+      sweden: "a specific Swedish city or region (e.g. Gothenburg, Stockholm, Oresund/Malmoe)",
+      austria: "a specific Austrian region or city (e.g. Linz/Upper Austria, Graz/Styria, Vienna)",
+      spain: "a specific Spanish region or city (e.g. Catalonia/Barcelona, Basque Country/Bilbao, Valencia, Zaragoza)",
+      denmark: "a specific Danish city or cluster (e.g. the Odense robotics cluster, Aarhus, Copenhagen)",
+      portugal: "a specific Portuguese region or city (e.g. Porto/Braga, Lisbon)",
+      poland: "a specific Polish region or city (e.g. Silesia/Katowice, Poznan, Wroclaw, Krakow) — Poland is largely unexplored and therefore high-yield",
+      "czech republic": "a specific Czech city or region (e.g. Brno, Ostrava, Prague)"
+    };
 
-    if (normalizedPrimaryLocality === "germany") {
-      return [
-        "* Germany nationwide",
-        "* DACH",
-        "* NRW / Ruhr",
-        "* OWL",
-        "* Bavaria / Munich",
-        "* Baden-Wuerttemberg / Stuttgart",
-        "* Hamburg / Northern Germany",
-        "* Benelux",
-        "* Nordics",
-        "* another relevant Europe-first cluster if it stays inside the target geography"
+    const concreteCountries = requestedLocalities
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .filter((value) => this.normalizePlannerPhrase(value) !== "europe");
+
+    if (concreteCountries.length > 0) {
+      const guidance = [
+        "Rotate the geography across the concrete required countries listed below. Every query must name at least one required country verbatim so it satisfies the locality constraint.",
+        "CRITICAL: write the LITERAL required country name (for example Switzerland, Austria, Italy, Netherlands, Poland) verbatim in every query. A demonym or adjective form (Swiss, Austrian, Italian, German, Spanish, Dutch, Polish) or a region/city name on its own does NOT satisfy the locality requirement. When you drill into a region or city, still write the full country name in the SAME query, e.g. \"in the Zurich region of Switzerland\", \"in Lombardy, Italy\", or \"in the Brainport Eindhoven cluster of the Netherlands\".",
+        "Prefer drilling into a specific industrial region, cluster, or city INSIDE a required country (while still naming that country in the query) instead of repeating the same whole-country phrasing — sub-national angles surface companies that broad country-level queries miss.",
+        "Spread the queries across DIFFERENT required countries; do not put most queries in the same one. Favour countries and regions that are less likely already exhausted over the single largest, most obvious market.",
+        "Never use multi-country region groupings such as DACH, Benelux, Nordics, Scandinavia, Iberia, Central Europe, or EMEA as the locality — they are rejected by the locality constraint and tend to re-surface already-known companies. Always name concrete countries from the required list.",
+        ""
       ];
+      const perCountry = concreteCountries.slice(0, 12).map((country) => {
+        const hint = subNationalHints[this.normalizePlannerPhrase(country)];
+        return hint
+          ? `* ${country} — optionally ${hint}`
+          : `* ${country} — optionally a specific industrial region or city inside ${country}`;
+      });
+      return [...guidance, ...perCountry];
     }
 
-    if (normalizedPrimaryLocality === "europe") {
-      return [
-        "* Europe-wide",
-        "* France",
-        "* DACH",
-        "* Benelux",
-        "* Nordics",
-        "* Italy / Northern Italy",
-        "* Iberia",
-        "* Central Europe",
-        "* a single-country angle that stays inside Europe",
-        "* another relevant Europe-first cluster that still stays inside Europe"
-      ];
-    }
-
+    // Sole abstract "Europe" (or region) locality: every query must keep the Europe-wide wording, so
+    // geography cannot be the diversity axis here. Steer diversity onto the non-geography angles.
     return [
-      `* ${primaryLocality} nationwide`,
-      `* capital-region angle inside ${primaryLocality}`,
-      `* northern ${primaryLocality}`,
-      `* southern ${primaryLocality}`,
-      `* a major industrial cluster inside ${primaryLocality}`,
-      `* another relevant sub-region that still stays inside ${primaryLocality}`
+      "* keep the required Europe-wide scope in every query (the locality cannot be narrowed to a single country here)",
+      "* because geography is fixed, drive diversity through the capability, vertical, use-case, and delivery-model angles instead of the region"
     ];
   }
 
@@ -1530,13 +1644,102 @@ export class AzureOpenAIClient {
     };
   }
 
+  private buildExaPlannerArchetypeFramingBlock(requestedCategories: LeadCategory[]): string[] {
+    const archetypeByCategory: Partial<Record<LeadCategory, string>> = {
+      integrator_vision_industrial_ai: "integrator",
+      integrator_vision_ai_consulting: "integrator",
+      integrator_vision_ai_freelancer: "integrator",
+      integrator_general_ai: "integrator",
+      integrator_relevant_focus: "integrator",
+      industrial_end_customer_scaled: "end_customer",
+      camera_manufacturer_partner: "camera_manufacturer",
+      machine_builder_ai_enablement: "machine_builder",
+      machine_builder_vision_ai: "machine_builder",
+      software_platform_embedding: "software_platform"
+    };
+
+    const specs: Record<string, { label: string; framing: string; phrases: string[]; wrong: string }> = {
+      integrator: {
+        label: "AI or vision solution integrators, consultancies, engineering firms, or specialist freelancers",
+        framing: "delivers customer-specific AI or vision projects and owns the implementation, integration, and deployment work",
+        phrases: ["implementation ownership", "customer project delivery", "system integration", "production deployment", "retained engineering support"],
+        wrong: "pure hardware, camera, optics, or component product manufacturers, the end customers that only operate such systems, and advisory-only consultancies with no technical delivery"
+      },
+      end_customer: {
+        label: "industrial end customers that own and operate their own production at scale",
+        framing: "owns and operates its own factories, production lines, or plants at industrial scale, including larger multi-site producer groups",
+        phrases: ["operates its own factories", "runs its own production lines", "multi-site producer group", "industrial-scale manufacturer", "in-house production"],
+        wrong: "system integrators, automation service providers, consultancies, machine builders, OEMs, packaging-machine and equipment suppliers, camera or sensor vendors, ingredient traders, and distributors"
+      },
+      camera_manufacturer: {
+        label: "camera, imaging-sensor, or smart-camera hardware manufacturers",
+        framing: "designs and sells its own cameras, imaging sensors, or smart-camera hardware products",
+        phrases: ["own camera product line", "imaging sensor manufacturer", "smart-camera hardware vendor", "designs and builds its own imaging hardware"],
+        wrong: "system integrators, end customers, distributors and resellers without an own hardware product, and pure software vendors"
+      },
+      machine_builder: {
+        label: "machine builders and OEMs that design and ship their own machines or systems",
+        framing: "designs, builds, and ships its own machines, production systems, or inspection stations",
+        phrases: ["ships its own machines", "OEM machine builder", "builds its own production systems", "own inspection machine product"],
+        wrong: "system integrators, end customers operating third-party machines, pure component vendors, and consultancies"
+      },
+      software_platform: {
+        label: "software platform vendors that build and sell their own software product",
+        framing: "builds and sells its own software platform, workflow suite, or tool environment that other users build on, configure, or extend",
+        phrases: ["own software platform", "workflow suite vendor", "extensible tool environment", "product-led software company"],
+        wrong: "project-based integrators and consultancies, hardware vendors, and end customers that only use software"
+      }
+    };
+
+    const selected = Array.from(new Set(
+      requestedCategories
+        .map((category) => archetypeByCategory[category])
+        .filter((value): value is string => Boolean(value))
+    ));
+
+    if (selected.length === 0) {
+      return [];
+    }
+
+    const integratorFamilyArchetypes = new Set(["integrator"]);
+    const hasNonIntegrator = selected.some((archetype) => !integratorFamilyArchetypes.has(archetype));
+
+    const lines: string[] = [
+      "",
+      "Archetype-specific query framing:",
+      "The desired target categories for this run map to the following company archetypes.",
+      "Frame each query around the archetype that the query targets. Do not describe one archetype with another archetype's core signal.",
+      "Frame each query around the target's business model - what the company delivers to customers or what it sells - rather than a bare list of technologies or buzzwords, because a technology-noun list tends to surface product and hardware vendors instead of the intended archetype."
+    ];
+
+    for (const archetype of selected) {
+      const spec = specs[archetype];
+      if (!spec) {
+        continue;
+      }
+      lines.push(`* ${spec.label}: frame the target as a company that ${spec.framing}. Useful phrases: ${spec.phrases.join(", ")}. In such queries, treat as wrong targets ${spec.wrong}, unless those are also desired this run.`);
+    }
+
+    if (hasNonIntegrator) {
+      lines.push(
+        "Important: only integrator, consulting, or freelancer archetypes require a delivery, implementation, integration, or deployment ownership phrase.",
+        "For end-customer, software-platform, camera-manufacturer, and machine-builder archetypes, do NOT force delivery, implementation, integration, or deployment ownership wording. Use that archetype's own core signal instead: owns and operates its own production at scale for end customers, builds and sells its own software product for software platforms, and designs and ships its own hardware or machines for camera manufacturers and machine builders.",
+        "Do not add an in-house quality-control, inspection, or Vision-AI application requirement into discovery queries for end-customer archetypes. The later AI check and research step evaluate that fit; the discovery query only needs to find the right archetype at the right scale in the required locality."
+      );
+    }
+
+    return lines;
+  }
+
   private buildExaPlannerSystemPrompt(
     mainContext: string | undefined,
     searchStrategyContext: string | undefined,
     queryCount: number,
     requestedLocalities: string[],
-    forbiddenBroadeningTerms: string[]
+    forbiddenBroadeningTerms: string[],
+    requestedCategories: LeadCategory[] = []
   ): string {
+    const archetypeFramingLines = this.buildExaPlannerArchetypeFramingBlock(requestedCategories);
     const requiresLiteralGermany = requestedLocalities
       .map((value) => this.normalizePlannerPhrase(value))
       .includes("germany");
@@ -1586,7 +1789,7 @@ export class AzureOpenAIClient {
       "* Do not mention ONE WARE inside the search queries unless the user explicitly requests it.",
       "* Your only job is to create Exa company-discovery queries that help find official company websites matching the supplied target profile.",
       "* Keep the search intent close to the supplied ICP, filter, target categories, locations, industries, and avoid rules.",
-      "* Prioritize concrete capability, ownership, productization, deployment, implementation, integration, or operational signals over generic AI wording.",
+      "* Prioritize concrete, archetype-appropriate capability, ownership, or operational signals over generic AI wording.",
       "* Every query should make clear what kind of company should be found.",
       "* Every query should make clear what kind of company should not be found.",
       "* Every query should prefer official company websites.",
@@ -1704,9 +1907,10 @@ export class AzureOpenAIClient {
       "* Do not overfocus on classic industrial manufacturing unless the supplied filter explicitly requires it.",
       "* When the supplied filter is industrial, stay industrial.",
       "* When the supplied filter includes machine builders, OEMs, hardware partners, medtech, drones, robotics, platforms, end customers, or other non-integrator categories, treat those as valid targets and do not exclude them.",
-      "* Prefer companies that build, integrate, deploy, customize, operate, or support AI-enabled technical solutions.",
-      "* Prefer real implementation, deployment, productization, or operational ownership over advisory-only positioning.",
+      "* Prefer companies that build, integrate, deploy, customize, operate, run at scale, or support AI-enabled technical solutions, depending on the selected target archetype.",
+      "* Prefer real ownership and operational substance appropriate to the selected archetype (implementation and delivery ownership for integrators; owning and running production for end customers; owning a shipped product for platforms, camera makers, and machine builders) over advisory-only positioning.",
       "* Deprioritize finance, HR, recruiting, investors, generic consulting, pure resellers, generic SaaS products, and directory-like aggregator pages unless the supplied target profile explicitly says otherwise.",
+      ...archetypeFramingLines,
       "",
       "Category handling rules:",
       "The user input contains automatically assembled category sections.",
@@ -1775,7 +1979,7 @@ export class AzureOpenAIClient {
       "* use the recent query history as evidence,",
       "* avoid exact or near-repeat queries,",
       "* deliberately test different search angles,",
-      "* include explicit delivery, deployment, productization, or implementation signals,",
+      "* include an archetype-appropriate ownership or capability signal that matches the selected target categories (delivery for integrators, own-production for end customers, own-product for platforms and hardware makers),",
       "* include strong natural-language exclusions for the wrong companies,",
       "* and find official company websites, not broad content pages.",
       "",
@@ -1831,11 +2035,11 @@ export class AzureOpenAIClient {
       "1. The required locality term.",
       "2. The target company type.",
       "3. The relevant capability, vertical, or use case.",
-      "4. A delivery, deployment, productization, integration, implementation, or ownership phrase.",
+      "4. An archetype-appropriate ownership or capability phrase that matches the Archetype-specific query framing section (a delivery, implementation, or integration phrase for integrators; an owns-and-operates-own-production phrase for end customers; a builds-its-own-software-product phrase for software platforms; a builds-and-ships-its-own-hardware or machines phrase for camera manufacturers and machine builders).",
       "5. A natural-language exclusion clause naming the most likely wrong company types for that angle.",
       "6. A noisy-result exclusion tail.",
       "",
-      "Useful delivery and ownership phrases:",
+      "Useful delivery and ownership phrases (for integrator, consulting, and freelancer archetypes; for end-customer, software-platform, camera-manufacturer, and machine-builder archetypes use the Archetype-specific query framing phrases instead):",
       "",
       "* implementation ownership",
       "* customer-specific implementation",
@@ -2147,6 +2351,20 @@ export class AzureOpenAIClient {
           ].join("\n")
         : undefined,
       [
+        "Specialization and anti-duplication mandate:",
+        "Broad company-type queries keep returning the same already-known companies. To reach fresh official domains, every query in this set must be concretely specialized, and the set as a whole must rotate across distinct specialization axes instead of repeating one sentence skeleton with a single swapped noun.",
+        "Specialization axes to rotate across (use a visible mix; do not put every query on the same axis):",
+        "* Sub-region / industrial cluster: narrow to a specific city, metro area, named industrial cluster, or sub-region inside the required locality instead of the whole country or a whole large state, while still preserving the required locality term.",
+        "* Application / use-case / end market: anchor on a concrete application, production process, defect type, material, or customer industry the target serves.",
+        "* Named technology anchor: anchor on a specific tool, product family, framework, camera or sensor brand, or standard that the target company itself uses, integrates, builds on, or is compatible with. This is a signal about what the target mentions on its own site; it does NOT mean searching for the maker or vendor of that technology and it does NOT change the target archetype.",
+        "Structural variation requirement:",
+        "* Do not reuse the same opening, the same self-description, and the same exclusion tail across queries or across the recent history. Vary the opening, the company self-description, the anchor, and the exclusion framing so each query reads visibly different rather than a synonym swap of the previous one.",
+        recentQueryHistory.length > 0
+          ? "* Every new query must move to a sub-region, application, or named technology anchor that does not already appear in the recent query history above."
+          : undefined
+      ].filter(Boolean).join("\n"),
+      this.buildExaSaturationPivotBlock(recentQueryHistory),
+      [
         "Recent query history with outcomes:",
         `These are the last ${recentQueryHistory.length} queries, newest first.`,
         "These queries have already been tried.",
@@ -2228,6 +2446,7 @@ export class AzureOpenAIClient {
       forbiddenBroadeningTerms.length > 0 ? `* Do not use these forbidden broadening terms unless they are explicitly requested: ${forbiddenBroadeningTerms.join(", ")}.` : undefined,
       "* Do not copy any draft query or recent historical query too closely.",
       "* Do not let more than two queries share the same opening pattern.",
+      "* Make each rewritten query concretely specialized on a distinct axis - a narrower sub-region or industrial cluster, a specific application or end market, or a named technology, tool, or product family the target itself uses or integrates - and do not put more than one query on the same axis.",
       "* Use the exact probe-type spread listed below. Make each query visibly feel like its assigned probe type.",
       `* At least half of the queries must avoid opening with ${plannerOpeningExample} official company websites of.`,
       "* Do not reuse any baseline query verbatim.",
@@ -2449,6 +2668,49 @@ export class AzureOpenAIClient {
 
   private buildExaBaselineQuerySummary(baselineQueries: string[]): string {
     return baselineQueries.map((query, index) => `Angle ${index + 1}: ${this.compactPromptText(query, 180)}`).join("\n");
+  }
+
+  private buildExaSaturationPivotBlock(
+    recentQueryHistory: ExaQueryHistoryInsight[]
+  ): string | undefined {
+    if (recentQueryHistory.length === 0) {
+      return undefined;
+    }
+
+    let returned = 0;
+    let excluded = 0;
+    let accepted = 0;
+    let rejectedDifferentCategory = 0;
+    let rejectedOther = 0;
+    for (const entry of recentQueryHistory) {
+      returned += entry.returnedResults ?? 0;
+      excluded += entry.filteredByExcludedDomains ?? 0;
+      accepted += entry.accepted ?? 0;
+      rejectedDifferentCategory += entry.rejectedDifferentCategory ?? 0;
+      rejectedOther += entry.rejectedOther ?? 0;
+    }
+
+    const evaluated = accepted + rejectedDifferentCategory + rejectedOther;
+    const exclusionRatio = returned > 0 ? excluded / returned : 0;
+    const otherRatio = evaluated > 0 ? rejectedOther / evaluated : 0;
+    const acceptRatio = evaluated > 0 ? accepted / evaluated : 0;
+
+    const highExclusion = returned >= 20 && exclusionRatio >= 0.6;
+    const lowYield = evaluated >= 15 && (otherRatio >= 0.5 || acceptRatio <= 0.15);
+    if (!highExclusion && !lowYield) {
+      return undefined;
+    }
+
+    const lines: string[] = [
+      "Search-surface exhaustion signal (computed from the outcomes above):",
+      `Across recent history the surface returned ${returned} results, of which ${excluded} (${Math.round(exclusionRatio * 100)}%) were already-known excluded domains; of ${evaluated} evaluated companies only ${accepted} (${Math.round(acceptRatio * 100)}%) qualified while ${rejectedOther} landed in other and ${rejectedDifferentCategory} in a non-selected category.`,
+      "This means the obvious query routes for this run are heavily mined and now return the generic long tail, not fresh qualifying companies.",
+      "Do not repeat the broad company-type phrasings that produced this outcome. Each new query must open on a different, more specific route that has not been mined yet.",
+      "Keep the same target archetype and the same required locality, but rotate each new query onto a distinct under-mined angle drawn from this run's own target profile: a different customer industry or end market, a different application or use case, a different company sub-type inside the same archetype, a narrower sub-region or industrial cluster inside the allowed locality, or a specific technology, tool, product family, or standard that the target itself uses or integrates.",
+      "Naming a technology the target works with is a legitimate discovery anchor and does not change the archetype. What is forbidden is drifting the target itself toward a different archetype: do not switch a service, integrator, consulting, or engineering run toward hardware, component, optics, or product manufacturers just to find fresh domains. Change the discovery angle, not the target archetype."
+    ];
+
+    return lines.join("\n");
   }
 
   private buildExaRecentQueryHistorySummary(recentQueryHistory: ExaQueryHistoryInsight[]): string {
@@ -4405,16 +4667,26 @@ export class AzureOpenAIClient {
     mainContext?: string,
     prequalification?: PrequalificationConfig,
     learning?: LeadLearningData,
-    compactMode = false
+    compactMode = false,
+    targetCategoryRefinement?: string
   ): ChatMessage[] {
+    const trimmedRefinement = targetCategoryRefinement?.trim();
+    const refinementBlock = trimmedRefinement
+      ? `# Additional Required Focus (HARD — decisive gate)\nThe operator restricted this run to a required focus: "${trimmedRefinement}". This focus is the DECISIVE gate and OVERRIDES archetype fit — apply it FIRST, before choosing any category.\n- A company qualifies for a target category ONLY when its OWN base-website evidence clearly places it INSIDE this focus (for example the required sector, market segment, or specialization). If the base website does not clearly satisfy this focus, you MUST return category "irrelevant" with a low relevanceScore, even when the company is an otherwise perfect archetype (a large scaled producer, integrator, manufacturer, plant operator, etc.). A strong archetype in the WRONG sector or segment is NOT a match.\n- Do NOT assign a target category while your own rationale says the focus is "not evidenced", "not shown", or "not clear". If the required focus is not clearly evidenced on the base website, the category is irrelevant — no exceptions.\n- Judge the focus only from the company's own base website, never from its name, the search query, or a single unrelated subpage.\n- ALSO include in your JSON a boolean field "focusMatch": set it to true ONLY when the base website clearly shows the required focus, and false otherwise. Whenever focusMatch is false, category MUST be "irrelevant".`
+      : undefined;
+    const scaleBandBlock = "# Industrial End-Customer Scale Band\nThe industrial_end_customer_scaled category is only for a genuine industrial producer or processor that operates its OWN production at a scale where a dedicated machine-vision or inspection project (typically a five-figure EUR project) is both worthwhile and directly addressable. Classify as other when the operation is a small artisanal or manufaktur-scale producer without real industrial production lines. Also classify as other when the company is a globally diversified mega-conglomerate or holding group so large or fragmented that no single production site or decision is addressable for a focused project. Regionally or nationally leading focused producer groups that run their own industrial plants are the ideal fit; a tiny specialty workshop and a global consumer-goods giant are both out of band.";
     const compactWebsiteContext = [
       "# Website Task\nClassify the company only from its own crawled website pages.",
       "# Website Page Type Gate\nFirst confirm the crawled pages are the self-owned site of ONE single operating company. If instead they are a company directory/business-listing/register/regional-or-industry overview page that lists many firms, a news/press/magazine/blog-portal/editorial page, or a file-sharing/file-hosting/cloud-storage/download/asset-CDN page, classify the company as irrelevant regardless of any company, AI, or industrial keywords on the page. A page that profiles or lists multiple companies, publishes articles, or only hosts files is never a qualifiable company.",
+      "# Base-Website Fit Gate\nThe fit decision MUST come from the base website of the operating company itself (its homepage and own main pages), not from a single deep subpage that merely matched a search query. If the crawled evidence describes only a media/asset server, a marketing microsite, a campaign or product-detail subpage, or a shared web host that is not the company's own primary company site, classify as irrelevant. Do not qualify a company from a subpage snippet when the base website does not itself prove the fit.",
       "# Website Decision Rules\nIf the website mainly sells external customer project delivery, choose an integrator category. If it mainly sells its own shipped software product or diagnostic plugin, choose machine_builder_ai_enablement. If it mainly sells a platform or runtime where customers deploy apps, modules, agents, or workflows, choose software_platform_embedding.",
+      scaleBandBlock,
       "# Website Specific Reminders\nA certified PACS/viewer-integrated medical plugin is machine_builder_ai_enablement. A runtime, turnkey appliance, or app-lifecycle platform for OEM digital services is software_platform_embedding even if PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration is mentioned. If the product lets customers launch industrial apps without building the integration stack themselves, prefer software_platform_embedding. A closed municipal or route-planning platform stays other unless customers clearly build on top of it. Broad engineering or MBSE-style capability pages without explicit AI, automation, MES/SCADA, inspection, or embeddable product/platform proof should stay other. Research institutes, Fraunhofer-style institutes, universities, labs, clusters, and publicly funded competence centers are not integrators or customer delivery partners unless the website clearly sells commercial external implementation services as the main business model.",
       "# Country Rule\nAlso determine the company's headquarters country from the website's own evidence only: a registered office or postal address, an 'impressum'/'legal notice', a 'headquartered in' statement, or an international phone dialing code (e.g. +49 Germany, +43 Austria, +41 Switzerland, +31 Netherlands, +1 United States, +972 Israel, +86 China). Return the English country name. Do NOT infer the country from the domain TLD, the website language, or any supplied hint. If the website shows no reliable country evidence, return an empty string for country. A US/non-European company must be reported with its real country even when the page is in German or English.",
       "# Output Reminder\nChoose the closest archetype across all categories. Do not prefer integrators when the fit path is ambiguous. Respond with a JSON object: {\"category\": string, \"relevanceScore\": number, \"rationale\": string, \"country\": string}."
-    ].join("\n\n");
+    ]
+      .filter((block): block is string => Boolean(block))
+      .join("\n\n");
 
 
     const fullWebsiteContext = [
@@ -4428,8 +4700,11 @@ export class AzureOpenAIClient {
         content: [
           QUICK_QUALIFICATION_CONTEXT,
           buildPrequalificationContextBlock(prequalification, undefined, mainContext),
+          refinementBlock,
           compactMode ? compactWebsiteContext : fullWebsiteContext
-        ].join("\n\n")
+        ]
+          .filter((block): block is string => Boolean(block))
+          .join("\n\n")
       },
       {
         role: "user",

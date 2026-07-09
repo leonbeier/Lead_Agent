@@ -206,7 +206,7 @@ export class DebugConsoleService {
 
   async classifyCompanyForExecution(
     company: CompanySample,
-    options: { annotateDebugStage?: boolean } = {}
+    options: { annotateDebugStage?: boolean; targetCategoryRefinement?: string } = {}
   ): Promise<DebugConsoleWebsiteAnalysis> {
     return this.classifyWebsite(company, options);
   }
@@ -267,6 +267,10 @@ export class DebugConsoleService {
   ): Promise<{
     resolvedName?: string;
     resolvedCountry?: string;
+    resolvedAddress?: string;
+    resolvedCity?: string;
+    resolvedZip?: string;
+    resolvedState?: string;
     aiProfileName?: string;
     aiEntityScope?: string;
     aiProfileTrusted?: boolean;
@@ -279,6 +283,10 @@ export class DebugConsoleService {
     return {
       resolvedName: resolved?.companyName?.trim() || undefined,
       resolvedCountry: resolved?.country?.trim() || undefined,
+      resolvedAddress: resolved?.address?.trim() || undefined,
+      resolvedCity: resolved?.city?.trim() || undefined,
+      resolvedZip: resolved?.zip?.trim() || undefined,
+      resolvedState: resolved?.state?.trim() || undefined,
       aiProfileName: identity?.officialWebsiteProfile?.companyName?.trim() || undefined,
       aiEntityScope: identity?.officialWebsiteProfile?.entityScope || undefined,
       aiProfileTrusted: identity?.isTrustedOfficialWebsiteProfile,
@@ -448,11 +456,31 @@ export class DebugConsoleService {
 
   private async classifyWebsite(
     company: CompanySample,
-    options: { annotateDebugStage?: boolean } = {}
+    options: { annotateDebugStage?: boolean; targetCategoryRefinement?: string } = {}
   ): Promise<DebugConsoleWebsiteAnalysis> {
     try {
       const websiteProfile = await this.webSearchAgent.crawlCompanyWebsite(company.domain, "open_crawler_search");
-      const azureEvaluation = await this.debugCategorizeWebsite(company, websiteProfile?.summary ?? company.shortDescription);
+      // The fit decision MUST always be grounded in the company's own BASE website. When a domain is
+      // known but the base-website crawl produced no usable evidence, we must NOT fall back to the
+      // discovery snippet (a search/Exa summary of whatever subpage happened to match the query).
+      // That fallback is exactly how off-target companies slipped through: a media/asset server or a
+      // single fitting-looking subpage looked qualified even though the base website never proved the
+      // fit. Without base-website evidence the company cannot be qualified and stays out of scope.
+      const azureEvaluation = company.domain && !websiteProfile
+        ? {
+            rawInput: company.shortDescription,
+            promptMessages: [],
+            compactRetryUsed: false,
+            category: "irrelevant",
+            relevanceScore: 0,
+            rationale: "Base website could not be crawled, so the company fit could not be verified on its own site.",
+            country: undefined as string | undefined
+          }
+        : await this.debugCategorizeWebsite(
+            company,
+            websiteProfile?.summary ?? company.shortDescription,
+            options.targetCategoryRefinement
+          );
       const sourceFilter = options.annotateDebugStage === false
         ? company.sourceFilter
         : `${company.sourceFilter} | debug-stage=ai_prefilter`;
@@ -1143,7 +1171,8 @@ export class DebugConsoleService {
 
   private async debugCategorizeWebsite(
     company: CompanySample,
-    websiteEvidence: string
+    websiteEvidence: string,
+    targetCategoryRefinement?: string
   ): Promise<DebugConsoleAzureEvaluation> {
     const azureClient = this.azureOpenAIClient as unknown as {
       compactClassificationInput: (value: string, limit: number) => string;
@@ -1154,16 +1183,22 @@ export class DebugConsoleService {
         mainContext?: string,
         prequalification?: unknown,
         learning?: unknown,
-        compactMode?: boolean
+        compactMode?: boolean,
+        targetCategoryRefinement?: string
       ) => Array<{ role: string; content: string }>;
       runChat: (messages: Array<{ role: string; content: string }>, options: { maxTokens?: number; deployment?: string }) => Promise<string>;
       parseJsonObject: <T>(content: string) => T;
       normalizeCategory: (category: string) => string;
+      applyRequiredFocusGate: <T extends { category: string; relevanceScore: number; rationale: string; country?: string }>(
+        result: T,
+        focusMatch: boolean | undefined,
+        targetCategoryRefinement: string | undefined
+      ) => T;
       categorizeDryRun: (description: string) => { category: string; relevanceScore: number; rationale: string };
     };
 
     const fullRawInput = azureClient.compactClassificationInput(websiteEvidence, 2200);
-    const fullMessages = azureClient.buildWebsiteClassificationMessages(company.name, company.domain, fullRawInput, undefined, undefined, undefined, false);
+    const fullMessages = azureClient.buildWebsiteClassificationMessages(company.name, company.domain, fullRawInput, undefined, undefined, undefined, false, targetCategoryRefinement);
 
     if (!readiness.azureConfigured) {
       const fallback = azureClient.categorizeDryRun(websiteEvidence);
@@ -1180,31 +1215,43 @@ export class DebugConsoleService {
 
     try {
       const content = await azureClient.runChat(fullMessages, { maxTokens: 160 });
-      const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string; country?: string }>(content);
-      return {
-        rawInput: fullRawInput,
-        promptMessages: fullMessages,
-        compactRetryUsed: false,
+      const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string; country?: string; focusMatch?: boolean }>(content);
+      const gated = azureClient.applyRequiredFocusGate({
         category: azureClient.normalizeCategory(parsed.category),
         relevanceScore: parsed.relevanceScore,
         rationale: parsed.rationale,
         country: parsed.country?.trim() || undefined
+      }, parsed.focusMatch, targetCategoryRefinement);
+      return {
+        rawInput: fullRawInput,
+        promptMessages: fullMessages,
+        compactRetryUsed: false,
+        category: gated.category,
+        relevanceScore: gated.relevanceScore,
+        rationale: gated.rationale,
+        country: gated.country
       };
     } catch {
       const compactRawInput = azureClient.compactClassificationInput(websiteEvidence, 1500);
-      const compactMessages = azureClient.buildWebsiteClassificationMessages(company.name, company.domain, compactRawInput, undefined, undefined, undefined, true);
+      const compactMessages = azureClient.buildWebsiteClassificationMessages(company.name, company.domain, compactRawInput, undefined, undefined, undefined, true, targetCategoryRefinement);
 
       try {
         const content = await azureClient.runChat(compactMessages, { maxTokens: 160 });
-        const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string; country?: string }>(content);
-        return {
-          rawInput: compactRawInput,
-          promptMessages: compactMessages,
-          compactRetryUsed: true,
+        const parsed = azureClient.parseJsonObject<{ category: string; relevanceScore: number; rationale: string; country?: string; focusMatch?: boolean }>(content);
+        const gated = azureClient.applyRequiredFocusGate({
           category: azureClient.normalizeCategory(parsed.category),
           relevanceScore: parsed.relevanceScore,
           rationale: parsed.rationale,
           country: parsed.country?.trim() || undefined
+        }, parsed.focusMatch, targetCategoryRefinement);
+        return {
+          rawInput: compactRawInput,
+          promptMessages: compactMessages,
+          compactRetryUsed: true,
+          category: gated.category,
+          relevanceScore: gated.relevanceScore,
+          rationale: gated.rationale,
+          country: gated.country
         };
       } catch {
         return {

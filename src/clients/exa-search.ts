@@ -592,6 +592,10 @@ export class ExaSearchClient {
   private buildIntentTerms(filter: OrganizationFilter): string[] {
     const text = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
+    if (filter.targetCategories?.[0] === "integrator_general_ai") {
+      return ["customer projects", "machine vision", "AI automation", "system integrator"];
+    }
+
     if (/(mes|scada|plc|ot integration|automation software|sondermaschinen)/.test(text)) {
       return ["customer projects", "project delivery", "industrial automation", "engineering services"];
     }
@@ -609,6 +613,10 @@ export class ExaSearchClient {
 
   private buildDiscoveryTerms(filter: OrganizationFilter): string[] {
     const text = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
+
+    if (filter.targetCategories?.[0] === "integrator_general_ai") {
+      return ["system integrator", "machine vision", "AI automation", "customer projects"];
+    }
 
     if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(text)) {
       return ["system integrator", "customer projects", "industrial inspection", "engineering services"];
@@ -633,11 +641,15 @@ export class ExaSearchClient {
     const normalizedText = [filter.persona, filter.notes, ...filter.keywords].join(" ").toLowerCase();
 
     if (filter.targetCategories?.includes("industrial_end_customer_scaled")) {
-      return "in-house quality control, visual inspection, process automation, production-line inspection, and machine-vision adoption";
+      return "own factories, production lines, and industrial-scale in-house manufacturing, including larger multi-site producer groups";
     }
 
     if (filter.targetCategories?.includes("machine_builder_ai_enablement")) {
       return "machine builders, OEMs, and automation equipment suppliers that can add AI-enabled inspection, quality control, machine vision, or smart automation options to customer machines";
+    }
+
+    if (filter.targetCategories?.[0] === "integrator_general_ai") {
+      return "industrial automation and software integration with a clear AI or machine-vision angle, such as camera-based inspection, optical quality control, industrial image processing, defect detection, or AI-enabled automation projects delivered for manufacturing customers";
     }
 
     if (/(machine vision|bildverarbeitung|inspection|aoi|image processing|computer vision)/.test(normalizedText)) {
@@ -671,6 +683,15 @@ export class ExaSearchClient {
         "retrofit-ready machine vision, sensing, and smart automation options",
         "OEM equipment with inline inspection, sorting, or verification add-ons",
         "customer-specific machinery upgrades for traceability and process optimization"
+      ];
+    }
+
+    if (filter.targetCategories?.[0] === "integrator_general_ai") {
+      return [
+        "camera-based quality control and visual inspection",
+        "AI-enabled automation and industrial image processing",
+        "optical inspection, defect detection, and machine vision integration",
+        "smart automation and AI or vision retrofits on production lines"
       ];
     }
 
@@ -711,9 +732,9 @@ export class ExaSearchClient {
     const operatorExclusion = "Exclude system integrators, consultancies, machine builders, OEMs, automation vendors, directories, marketplaces, job boards, news articles, PDFs, and component vendors.";
 
     return [
-      `${location} ${industryFocus} with own production operations and likely need for ${semanticFocus}. Prefer official company websites of industrial end customers, factories, processing plants, production groups, or plant operators that buy and run production equipment. ${operatorExclusion}`,
-      `${location} industrial end customers running factories or production lines in ${industries || "manufacturing"} with visible quality control, visual inspection, or process automation needs. Prefer official websites of factory operators, producers, processors, or production groups that operate plants and purchase machinery for their own production, not system integrators, machine builders, OEMs, resellers, or directories.`,
-      `${location} scaled industrial end customers with internal QC, inspection, or production-automation upside across ${industries || "manufacturing"}. Prefer official company websites of factory operators, producers, processors, and production groups using production lines in-house. ${operatorExclusion}`
+      `${location} ${industryFocus} with own production operations at industrial scale, including larger multi-site producer groups, likely running ${semanticFocus}. Prefer official company websites of industrial end customers, factories, processing plants, production groups, or plant operators that buy and run production equipment. ${operatorExclusion}`,
+      `${location} industrial end customers running factories or production lines in ${industries || "manufacturing"} that own and operate their own plants at industrial scale, including larger multi-site producer groups. Prefer official websites of factory operators, producers, processors, or production groups that operate plants and purchase machinery for their own production, not system integrators, machine builders, OEMs, resellers, or directories.`,
+      `${location} scaled industrial end customers and larger multi-site producer groups across ${industries || "manufacturing"} that make and process their own products in-house on industrial production lines. Prefer official company websites of factory operators, producers, processors, and production groups using production lines in-house. ${operatorExclusion}`
     ];
   }
 

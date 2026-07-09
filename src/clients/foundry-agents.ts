@@ -338,7 +338,8 @@ export class FoundryAgentsClient {
           `Template email body:\n${template.emailBody}`,
           `Template LinkedIn connection request:\n${template.linkedInConnectionRequest}`,
           `Template LinkedIn message:\n${template.linkedInMessage}`,
-          `Template phone script:\n${template.phoneScript}`
+          `Template phone script:\n${template.phoneScript}`,
+          "Outreach rules: Follow the supplied template's tone, structure, and length closely and only personalize with a concrete factual hook taken from the company's own website; do not invent facts, benchmarks, customer names, or metrics that are not in the evidence. Keep linkedInConnectionRequest a short teaser of at most 200 characters that matches the template connection request, and keep linkedInMessage close to the length and structure of the template LinkedIn message. Do not use dash punctuation such as '–' or '—'. Never mix languages."
         ].join("\n\n")
       );
 
@@ -461,6 +462,7 @@ export class FoundryAgentsClient {
           company.domain ? `Website: ${company.domain}` : "Website: unknown",
           company.country ? `Country: ${company.country}` : "Country: unknown",
           "Target roles: CEO, CTO, COO, Geschäftsführer, Inhaber, Managing Director, Innovation Manager, Partner Manager, Technology Manager, Operations Manager.",
+          "Prioritize surfacing the company's top decision-maker first (owner, founder, Geschäftsführer, Inhaber, CEO, Managing Director), including by name when the evidence reveals it, and generate dedicated leadership queries before any queries targeting developers or engineers.",
           evidence
         ].join("\n\n")
       );

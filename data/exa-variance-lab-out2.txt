@@ -1,0 +1,206 @@
+Exclude/seen set built: total=7987 (recurring=1997, hubspot=4020). Sending 1200 to Exa per query.
+
+============================================================
+BENCH_pack_it_es_cognex
+QUERY: Official websites of packaging-line machine-vision integrators in Italy and Spain using Cognex or Keyence systems for print, label, fill-level and closure inspection on production lines.
+------------------------------------------------------------
+  returned=20  already-seen=9  NEW=11
+   NEW lynxlabel.com  ->  machine_builder_vision_ai (98)  <== MATCHING TARGET
+       Industrial inline label inspection system with defect, OCR, OCV, and code checking is the core product.
+   NEW metapack.it  ->  machine_builder_ai_enablement (82)
+       Ships pharma serialization, labeling, and machine-vision inspection products with OCR/OCV and print-inspect traceability.
+   NEW univision.it  ->  machine_builder_vision_ai (96)  <== MATCHING TARGET
+       Sells industrial automatic inspection systems and machine-vision solutions for production lines.
+   NEW marchesini.com  ->  machine_builder_vision_ai (96)  <== MATCHING TARGET
+       Packaging machine maker with explicit AI inspection and machine-vision product lines for pharma and beauty.
+
+============================================================
+L_IT_native
+QUERY: Aziende e integratori italiani di sistemi di visione artificiale e automazione industriale che progettano e realizzano impianti di ispezione, controllo qualit├á e guida robot su misura per aziende manifatturiere.
+------------------------------------------------------------
+  returned=20  already-seen=9  NEW=11
+   NEW cm-as.it  ->  other (41)
+       Industrial automation integrator, but no explicit machine-vision or inspection signal appears.
+   NEW supremaimpianti.it  ->  other (72)
+       Custom industrial automation integrator, but no explicit machine-vision or inspection signal appears.
+   NEW nazari.it  ->  other (72)
+       Custom industrial automation integrator, but no explicit machine-vision or image-processing signal appears.
+   NEW emmebimpianti.com  ->  other (58)
+       Industrial automation services are clear, but no explicit machine-vision or image-processing evidence appears.
+
+============================================================
+L_ES_native
+QUERY: Empresas e integradores espa├▒oles de sistemas de visi├│n artificial y automatizaci├│n industrial que dise├▒an y desarrollan proyectos a medida de inspecci├│n, control de calidad y guiado de robots para f├íbricas.
+------------------------------------------------------------
+  returned=20  already-seen=12  NEW=5
+   NEW tecnypro.eu  ->  other (34)
+       Industrial robotics and automation services are shown, but no explicit machine-vision or AI delivery evidence appears.
+   NEW nuavis.com  ->  integrator_vision_industrial_ai (96)  <== MATCHING TARGET
+       Delivers custom industrial vision and machine-learning projects plus products for process supervision and inspection.
+   NEW tadia.ai  ->  machine_builder_vision_ai (98)  <== MATCHING TARGET
+       Industrial vision AI quality-control product with explicit defect inspection and line integration.
+   NEW factoria365.com  ->  integrator_vision_industrial_ai (91)  <== MATCHING TARGET
+       Industrial automation firm explicitly delivering vision artificial and AI solutions for customer processes.
+
+============================================================
+L_DE_native
+QUERY: Systemintegratoren und Ingenieurb├╝ros f├╝r industrielle Bildverarbeitung, Automatisierung und Sondermaschinenbau, die kundenspezifische Inspektions-, Pr├╝f- und Roboterf├╝hrungssysteme f├╝r die Fertigung realisieren.
+------------------------------------------------------------
+  returned=20  already-seen=18  NEW=2
+   NEW awm-tec.de  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+   NEW jbe.gmbh  ->  other (62)
+       Engineering firm for custom machinery and automation, but no explicit machine-vision or AI delivery evidence.
+
+============================================================
+X_pcb_electronics
+QUERY: Official websites of machine-vision inspection integrators for electronics, PCB and semiconductor assembly (AOI, solder-joint and component-placement inspection) in Germany, Italy, Poland and Austria.
+------------------------------------------------------------
+  returned=20  already-seen=15  NEW=0
+
+============================================================
+X_pharma_serialization
+QUERY: Official websites of vision inspection integrators for pharmaceutical serialization, blister, vial and syringe inspection using OCR and OCV in Italy, Spain and Switzerland.
+------------------------------------------------------------
+  returned=20  already-seen=5  NEW=5
+   NEW seavision-group.it  ->  machine_builder_vision_ai (98)  <== MATCHING TARGET
+       Ships machine-vision inspection systems and pharma track-and-trace products as core offerings.
+   NEW brevetti-cea.com  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+   NEW metapack.it  ->  machine_builder_vision_ai (86)  <== MATCHING TARGET
+       Ships machine-vision inspection and print-inspect traceability products for pharma packaging lines.
+   NEW visiott.com  ->  machine_builder_ai_enablement (84)
+       Ships serialization, aggregation, and vision inspection equipment for traceable packaging lines.
+
+============================================================
+X_metal_welding
+QUERY: Official websites of vision-guided robotic welding and metal surface inspection integrators for the metal, steel and foundry industry in Italy, Spain and Poland.
+------------------------------------------------------------
+  returned=20  already-seen=6  NEW=12
+   NEW dgweld.it  ->  machine_builder_ai_enablement (78)
+       Designs robotic welding cells and industrial automation equipment; no explicit vision AI, but strong machine-builder fit.
+   NEW roboteco-italargon.it  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+   NEW valentek.it  ->  machine_builder_ai_enablement (78)
+       Ships automated welding equipment and positioners; vision is not explicit, but hardware could benefit from AI upgrades.
+   NEW eurosald.com  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+
+============================================================
+X_battery_ev
+QUERY: Official websites of machine-vision and AI inspection integrators for battery cell, EV and e-mobility production lines in Germany, Sweden and Hungary.
+------------------------------------------------------------
+  returned=20  already-seen=10  NEW=5
+   NEW sturm-gruppe.com  ->  machine_builder_ai_enablement (78)
+       German industrial equipment builder for automation and e-mobility systems; Vision AI could enhance shipped machines.
+   NEW vcbattery.com  ->  machine_builder_vision_ai (92)  <== MATCHING TARGET
+       CT inspection solutions for EV battery inspection indicate a shipped machine-vision inspection product.
+   NEW glimp.se  ->  machine_builder_vision_ai (92)  <== MATCHING TARGET
+       Scalable X-ray CT scanning platform for battery defect detection is core machine-vision inspection product.
+   NEW nac.naatbatt.org  ->  irrelevant (99)
+       Conference page for a trade association, not a single operating company offering services or products.
+
+============================================================
+R_IT_veneto_friuli
+QUERY: Official websites of machine-vision and automation system integrators in Veneto and Friuli, Italy (Padova, Vicenza, Treviso, Udine) delivering custom inspection and robotics projects.
+------------------------------------------------------------
+  returned=20  already-seen=6  NEW=10
+   NEW vvdelettrotecnica.it  ->  other (58)
+       Industrial automation software services, but no explicit machine-vision or image-processing evidence.
+   NEW meccanicaitaliaspa.it  ->  machine_builder_ai_enablement (82)
+       Industrial automation machine builder with shipped palletizers, depalletizers, and packaging equipment.
+   NEW afeautomazione.it  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+   NEW tesiautomazioni.it  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+
+============================================================
+R_PL_silesia_greater
+QUERY: Official websites of industrial automation and machine-vision integrators in Silesia and greater Poland (Katowice, Pozna┼ä, Wroc┼éaw) delivering custom inspection and robot projects.
+------------------------------------------------------------
+  returned=20  already-seen=0  NEW=20
+   NEW arm-robotics.pl  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+   NEW issautomation.pl  ->  other (58)
+       Industrial automation services are clear, but no explicit machine-vision or image-processing delivery is shown.
+   NEW rob-tech.pl  ->  other (58)
+       Industrial automation and robot integration services are clear, but no explicit machine-vision or AI delivery evidence appears.
+   NEW robotpol.pl  ->  other (78)
+       Industrial robot integrator with no explicit machine-vision or AI delivery evidence.
+
+============================================================
+R_ES_valencia_zaragoza
+QUERY: Official websites of machine-vision and automation integrators around Valencia, Zaragoza and Navarra in Spain delivering custom inspection and robotics projects for factories.
+------------------------------------------------------------
+  returned=20  already-seen=6  NEW=7
+   NEW masterautomatism.com  ->  integrator_vision_industrial_ai (93)  <== MATCHING TARGET
+       Custom machinery firm explicitly implements machine vision solutions for quality and process optimization.
+   NEW j3dvision.com  ->  machine_builder_vision_ai (96)  <== MATCHING TARGET
+       Sells automated 3D vision inspection systems for paint defect detection in automotive production lines.
+   NEW vksgarrasvalencia.es  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+   NEW ainia.com  ->  irrelevant (96)
+       AINIA is a multi-topic innovation institute/association page, not a single operating company site.
+
+============================================================
+R_BE_flanders
+QUERY: Official websites of machine-vision and industrial automation integrators in Flanders, Belgium (Ghent, Antwerp, Kortrijk) delivering custom inspection and robotics projects.
+------------------------------------------------------------
+  returned=20  already-seen=10  NEW=10
+   NEW repron.be  ->  integrator_vision_industrial_ai (96)  <== MATCHING TARGET
+       Industrial automation partner delivering robotics and machine vision solutions with custom implementation and service support.
+   NEW jans-automation.be  ->  other (58)
+       Industrial automation and machine building services are clear, but no explicit machine-vision or AI delivery signal appears.
+   NEW automates.be  ->  integrator_relevant_focus (86)  <== MATCHING TARGET
+       Cobot integrator offering custom vision and industrial automation solutions for customer projects.
+   NEW ieservices.be  ->  irrelevant (0)
+       Official website could not be loaded reliably, so the company is rejected before qualification.
+
+============================================================
+A_binpicking_robotguide
+QUERY: Official websites of system integrators delivering 3D-vision bin-picking and vision-guided robot loading cells for manufacturers in Germany, the Netherlands and Italy.
+------------------------------------------------------------
+  returned=20  already-seen=11  NEW=8
+   NEW robomotive.nl  ->  machine_builder_vision_ai (96)  <== MATCHING TARGET
+       Ships robot picking systems with explicit 3D vision for material handling and order picking.
+   NEW obotize.nl  ->  machine_builder_ai_enablement (78)
+       Builds automation systems for metalworking production; no explicit vision or AI evidence on the site.
+   NEW optiserve.nl  ->  machine_builder_vision_ai (96)  <== MATCHING TARGET
+       Ships optical sorting machines for inspection and object recognition in industrial quality control.
+   NEW inteko-gmbh.de  ->  machine_builder_ai_enablement (82)
+       Builds transport systems and automation equipment; cameras are mentioned as an add-on for quality inspection and assembly.
+
+============================================================
+A_surface_ocr_defect
+QUERY: Official websites of machine-vision integrators delivering surface-defect detection and OCR code-reading inspection systems for production lines in Spain, Italy and Poland.
+------------------------------------------------------------
+  returned=20  already-seen=11  NEW=8
+   NEW tadia.ai  ->  machine_builder_vision_ai (98)  <== MATCHING TARGET
+       Industrial vision AI quality-control system with explicit defect inspection and production-line deployment.
+   NEW erpx.it  ->  software_platform_embedding (86)
+       Industrial platform with ERP, MES, WMS, CNC, AI, computer vision, and factory integration capabilities.
+   NEW orobix.com  ->  integrator_general_ai (86)  <== MATCHING TARGET
+       AI delivery firm projects, manages, and monitors customer AI solutions; no explicit vision focus shown.
+   NEW mcr.es  ->  integrator_vision_industrial_ai (92)  <== MATCHING TARGET
+       Industrial automation engineering with explicit vision-based quality control project delivery.
+
+
+############################################################
+SUMMARY ÔÇö variance / novelty per prompt
+(goal: returned~20, NEW>=1, and >=1 NEW in a matching target category)
+############################################################
+BENCH_pack_it_es_cognex    returned=20  NEW=11  matchingNew= 3  relevantFocusNew=0  GOAL MET
+L_IT_native                returned=20  NEW=11  matchingNew= 0  relevantFocusNew=0  ÔÇö
+L_ES_native                returned=20  NEW= 5  matchingNew= 3  relevantFocusNew=0  GOAL MET
+L_DE_native                returned=20  NEW= 2  matchingNew= 0  relevantFocusNew=0  ÔÇö
+X_pcb_electronics          returned=20  NEW= 0  matchingNew= 0  relevantFocusNew=0  ÔÇö
+X_pharma_serialization     returned=20  NEW= 5  matchingNew= 2  relevantFocusNew=0  GOAL MET
+X_metal_welding            returned=20  NEW=12  matchingNew= 0  relevantFocusNew=0  ÔÇö
+X_battery_ev               returned=20  NEW= 5  matchingNew= 2  relevantFocusNew=0  GOAL MET
+R_IT_veneto_friuli         returned=20  NEW=10  matchingNew= 0  relevantFocusNew=0  ÔÇö
+R_PL_silesia_greater       returned=20  NEW=20  matchingNew= 0  relevantFocusNew=0  ÔÇö
+R_ES_valencia_zaragoza     returned=20  NEW= 7  matchingNew= 2  relevantFocusNew=0  GOAL MET
+R_BE_flanders              returned=20  NEW=10  matchingNew= 2  relevantFocusNew=1  GOAL MET
+A_binpicking_robotguide    returned=20  NEW= 8  matchingNew= 2  relevantFocusNew=0  GOAL MET
+A_surface_ocr_defect       returned=20  NEW= 8  matchingNew= 3  relevantFocusNew=0  GOAL MET
+

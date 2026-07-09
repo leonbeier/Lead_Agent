@@ -708,11 +708,11 @@ test("extractCompanyAddress ignores a leading copyright year in legal entity nam
 
 test("findExistingCompany reuses HubSpot companies whose stored domain still includes protocol and www", async () => {
   const client = new HubSpotClient();
-  const searchCalls: Array<{ objectType: string; propertyName: string; value: string }> = [];
+  const searchCalls: Array<{ objectType: string; propertyName: string; values: string[] }> = [];
 
-  client["searchObject"] = async (objectType: "companies" | "contacts", propertyName: string, value: string) => {
-    searchCalls.push({ objectType, propertyName, value });
-    if (objectType === "companies" && propertyName === "domain" && value === "https://www.sample-automation.de") {
+  client["searchObjectAny"] = async (objectType: "companies" | "contacts", propertyName: string, values: string[]) => {
+    searchCalls.push({ objectType, propertyName, values });
+    if (objectType === "companies" && propertyName === "domain" && values.includes("https://www.sample-automation.de")) {
       return {
         id: "existing-company-id",
         properties: {
@@ -734,7 +734,7 @@ test("findExistingCompany reuses HubSpot companies whose stored domain still inc
   assert.deepEqual(
     searchCalls
       .filter((call) => call.objectType === "companies" && call.propertyName === "domain")
-      .map((call) => call.value),
+      .flatMap((call) => call.values),
     [
       "sample-automation.de",
       "www.sample-automation.de",
@@ -836,9 +836,9 @@ test("companyExistsInHubSpot matches a www-stored domain that bare-domain intake
   const client = new HubSpotClient();
   const queried: Array<{ property: string; value: string }> = [];
   // Simulate a HubSpot record stored as "www.satvision.es": only that exact variant matches.
-  client["searchObject"] = (async (_objectType: string, propertyName: string, value: string) => {
-    queried.push({ property: propertyName, value });
-    return propertyName === "domain" && value === "www.satvision.es"
+  client["searchObjectAny"] = (async (_objectType: string, propertyName: string, values: string[]) => {
+    values.forEach((value) => queried.push({ property: propertyName, value }));
+    return propertyName === "domain" && values.includes("www.satvision.es")
       ? ({ id: "company-existing", properties: {} } as any)
       : null;
   }) as any;
@@ -853,9 +853,9 @@ test("companyExistsInHubSpot matches a subsidiary to its parent brand by name", 
   const client = new HubSpotClient();
   const queried: string[] = [];
   // No domain match (keyence.fr != keyence.com); only the brand-root name "KEYENCE" exists.
-  client["searchObject"] = (async (_objectType: string, propertyName: string, value: string) => {
-    queried.push(`${propertyName}:${value}`);
-    return propertyName === "name" && value === "KEYENCE"
+  client["searchObjectAny"] = (async (_objectType: string, propertyName: string, values: string[]) => {
+    values.forEach((value) => queried.push(`${propertyName}:${value}`));
+    return propertyName === "name" && values.includes("KEYENCE")
       ? ({ id: "company-keyence", properties: {} } as any)
       : null;
   }) as any;
@@ -2172,4 +2172,115 @@ test("extractCompanyAddress keeps the trusted AI name when the impressum legal e
   });
 
   assert.equal(extracted?.companyName, "Acme Vision");
+});
+
+// A live Railway run saturates the Node event loop (aiPrefilterConcurrency=60 + synchronous parsing
+// of multi-MB pages), so page.goto's wall-clock timer fires even though Chromium already rendered the
+// DOM. Local single-threaded runs never reproduce that, so these tests SIMULATE the goto timeout with
+// a fake browser and assert the salvage + visibility behavior deterministically.
+function buildFakeBrowserPage(options: {
+  gotoError?: Error;
+  gotoStatus?: number;
+  content: string;
+  finalUrl?: string;
+}) {
+  let closed = false;
+  const page = {
+    async goto() {
+      if (options.gotoError) {
+        throw options.gotoError;
+      }
+      return { status: () => options.gotoStatus ?? 200 };
+    },
+    async waitForLoadState() {
+      return undefined;
+    },
+    url() {
+      return options.finalUrl ?? "https://saturated-site.de/";
+    },
+    async content() {
+      return options.content;
+    },
+    async close() {
+      closed = true;
+    },
+    get isClosed() {
+      return closed;
+    }
+  };
+  const browser = {
+    async newPage() {
+      return page;
+    }
+  };
+  return { browser, page };
+}
+
+test("fetchHtmlWithBrowser salvages the already-rendered DOM when page.goto hits the wall-clock timeout under saturation", async () => {
+  const client = new HubSpotClient();
+  const renderedHtml = "<html><body><h1>Sample Automation GmbH</h1><p>Wir sind ein inhabergefuehrter Systemintegrator fuer industrielle Bildverarbeitung, PLC- und SCADA-Automatisierung sowie KI-gestuetzte Qualitaetspruefung fuer die produzierende Industrie in ganz Deutschland und Europa.</p><p>Musterstrasse 12, 19053 Schwerin, Deutschland</p><a href=\"mailto:info@sample-automation.de\">info@sample-automation.de</a></body></html>";
+  const { browser } = buildFakeBrowserPage({
+    gotoError: new Error("page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"https://saturated-site.de/\", waiting until \"domcontentloaded\"\n"),
+    content: renderedHtml,
+    finalUrl: "https://saturated-site.de/"
+  });
+  client["getSharedWebTaskBrowser"] = async () => browser as unknown as Awaited<ReturnType<HubSpotClient["getSharedWebTaskBrowser"]>>;
+
+  const html = await client["fetchHtmlWithBrowser"]("https://saturated-site.de/");
+
+  assert.equal(html, renderedHtml, "the salvaged DOM must be returned instead of null");
+  assert.equal(client["browserGotoTimeoutCount"], 1, "the goto timeout must be counted (visible saturation signal)");
+  assert.equal(client["browserGotoTimeoutSalvagedCount"], 1, "the recovery must be counted");
+  assert.equal(client["resolvedFinalUrls"].get("https://saturated-site.de/"), "https://saturated-site.de/");
+});
+
+test("fetchHtmlWithBrowser returns null (and does not falsely salvage) when a goto timeout leaves no usable content", async () => {
+  const client = new HubSpotClient();
+  const { browser } = buildFakeBrowserPage({
+    gotoError: new Error("page.goto: Timeout 30000ms exceeded."),
+    content: "<html><head></head><body></body></html>"
+  });
+  client["getSharedWebTaskBrowser"] = async () => browser as unknown as Awaited<ReturnType<HubSpotClient["getSharedWebTaskBrowser"]>>;
+
+  const html = await client["fetchHtmlWithBrowser"]("https://blank-site.de/");
+
+  assert.equal(html, null, "a genuinely blank page must not be salvaged");
+  assert.equal(client["browserGotoTimeoutCount"], 1, "the timeout is still counted");
+  assert.equal(client["browserGotoTimeoutSalvagedCount"], 0, "nothing was salvaged");
+});
+
+test("isNavigationTimeoutError recognizes page.goto wall-clock timeouts but not browser-crash errors", () => {
+  const client = new HubSpotClient();
+  assert.equal(client["isNavigationTimeoutError"](new Error("page.goto: Timeout 30000ms exceeded.")), true);
+  assert.equal(client["isNavigationTimeoutError"](new Error("Timeout 30000ms exceeded")), true);
+  assert.equal(client["isNavigationTimeoutError"](new Error("Target closed")), false);
+  assert.equal(client["isNavigationTimeoutError"](new Error("net::ERR_NAME_NOT_RESOLVED")), false);
+});
+
+test("isBrowserInfrastructureError distinguishes a broken Chromium from an ordinary page miss", () => {
+  const client = new HubSpotClient();
+  assert.equal(client["isBrowserInfrastructureError"](new Error("Target closed")), true);
+  assert.equal(client["isBrowserInfrastructureError"](new Error("Target page, context or browser has been closed")), true);
+  assert.equal(client["isBrowserInfrastructureError"](new Error("Browser has disconnected")), true);
+  assert.equal(client["isBrowserInfrastructureError"](new Error("Failed to launch chromium")), true);
+  assert.equal(client["isBrowserInfrastructureError"](new Error("page.goto: Timeout 30000ms exceeded.")), false);
+  assert.equal(client["isBrowserInfrastructureError"](new Error("net::ERR_CONNECTION_REFUSED")), false);
+});
+
+test("buildLikelyContactPageUrls probes identity pages with AND without a trailing slash", () => {
+  const client = new HubSpotClient();
+  const urls: string[] = client["buildLikelyContactPageUrls"]("https://example.de/");
+  // Live-measured on mak-cet.de: "/impressum" served the real impressum (legal entity + postal
+  // address) while "/impressum/" returned only an empty JS shell. Probing a single slash variant
+  // lost the address on those SPA/client-routed sites and forced recovery onto the saturation-
+  // sensitive browser follow-up. Both cheap plain-fetch variants must be present for the identity
+  // pages so the address stays recoverable on a resource-starved worker.
+  for (const page of ["impressum", "kontakt", "contact", "contact-us", "about-us", "about", "datenschutz", "ansprechpartner"]) {
+    assert.ok(urls.includes(`https://example.de/${page}`), `missing no-slash variant /${page}`);
+    assert.ok(urls.includes(`https://example.de/${page}/`), `missing slash variant /${page}/`);
+  }
+  // The no-slash identity variants must be ordered first so they survive any downstream slice.
+  assert.equal(urls[0], "https://example.de/impressum");
+  // No duplicates.
+  assert.equal(urls.length, new Set(urls).size, "buildLikelyContactPageUrls must not contain duplicates");
 });

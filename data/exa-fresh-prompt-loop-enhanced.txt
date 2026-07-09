@@ -1,0 +1,84 @@
+Exclude/seen set built: total=7329 (recurring=1997, hubspot=3944). Sending 1200 to Exa per query.
+Rounds=3, queries/round=4. Each round feeds ALL prior queries back as saturated history.
+
+############################################################
+ROUND 1  (history size fed in: 0 prior queries)
+############################################################
+
+  Q: Find official company websites of machine vision system integrators based in Germany specializing in industrial AI project delivery, customer-specific implementation, and production deployment for manufacturing quality inspection and defect detection, excluding camera manufacturers, machine builders, generic AI consultancies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.00  specialization=[APP]  returned=20  NEW=1
+       NEW senswork.us -> machine_builder_vision_ai (90)  <== MATCHING
+
+  Q: Locate official websites of automation software integrators in Germany with expertise in industrial image processing and embedded vision deployment for production-line inspection and visual quality control, demonstrating hands-on system integration and retained engineering support, excluding pure hardware vendors, OEM equipment manufacturers, consulting boutiques, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.32  specialization=[APP]  returned=20  NEW=0
+
+  Q: Search for official company homepages of German industrial AI solution providers focused on customer-specific machine vision integration and field deployment in automotive and semiconductor manufacturing sectors, with clear implementation ownership and project delivery evidence, excluding machine builders, camera hardware sellers, generic AI agencies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.48  specialization=[APP]  returned=20  NEW=2
+       NEW 2222.us.com -> irrelevant (5)
+       NEW probing-ai.com -> other (40)
+
+  Q: Identify official websites of industrial automation integrators in the Ruhr area of Germany delivering vision AI and inspection AI projects with system integration and production deployment capabilities, serving manufacturing and robotics verticals, excluding machine-vision component suppliers, machine builders, consulting firms, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.39  specialization=[REGION+APP]  returned=20  NEW=3
+       NEW niederrhein-automation.com -> other (40)
+       NEW momac-group.de -> irrelevant (0)
+       NEW unruh-robotics-automation.de -> integrator_relevant_focus (75)  <== MATCHING
+
+############################################################
+ROUND 2  (history size fed in: 4 prior queries)
+############################################################
+
+  Q: Identify official company websites of automation integrators in the Stuttgart region of Germany specializing in industrial AI and machine vision solutions for defect detection and quality inspection in automotive manufacturing, with clear customer-specific implementation and production deployment ownership, excluding machine builders, camera manufacturers, consulting boutiques, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.58  specialization=[REGION+APP]  returned=20  NEW=6
+       NEW cdmtech.de -> integrator_vision_industrial_ai (85)  <== MATCHING
+       NEW mqs-automotive.de -> irrelevant (0)
+       NEW eyyes.bitberry.cloud -> machine_builder_vision_ai (85)  <== MATCHING
+
+  Q: Find official websites of German industrial AI system integrators delivering embedded vision and edge AI deployment projects for semiconductor fabrication inspection and process control, demonstrating hands-on integration and retained engineering support, excluding pure hardware vendors, OEM equipment manufacturers, generic AI consultancies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.58  specialization=[APP]  returned=20  NEW=4
+       NEW digitron.de -> other (40)
+       NEW center4.eu -> other (40)
+       NEW insytes.ai -> other (40)
+
+  Q: Locate official company homepages of machine vision solution providers in the Hamburg metropolitan area of Germany focused on production-line visual quality control and optical inspection with customer project delivery and system integration capabilities, excluding machine-vision component suppliers, machine builders, consulting firms, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.49  specialization=[REGION+APP]  returned=20  NEW=2
+       NEW messtechnik-neth.de -> other (40)
+       NEW hafen-hamburg.de -> industrial_end_customer_scaled (70)
+
+  Q: Search for official websites of industrial automation integrators in Germany experienced in integrating Cognex and Keyence vision systems for industrial AI inspection applications in manufacturing, with proven implementation ownership and field deployment, excluding camera manufacturers, machine builders, generic AI agencies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.52  specialization=[TECH+APP]  returned=20  NEW=0
+
+############################################################
+ROUND 3  (history size fed in: 8 prior queries)
+############################################################
+  [exa fetch failed after retries] TypeError: fetch failed
+
+  Q: Find official company websites of industrial AI and machine vision integrators in the Munich metropolitan area of Germany specializing in customer-specific implementation and production deployment for optical inspection and defect detection in electronics manufacturing, excluding camera manufacturers, machine builders, generic AI consultancies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.77  specialization=[REGION+APP]  returned=0  NEW=0
+  [exa fetch failed after retries] TypeError: fetch failed
+
+  Q: Locate official homepages of German automation system integrators delivering embedded vision and industrial image processing solutions with hands-on project delivery and retained engineering support for pharmaceutical production quality control, excluding pure hardware vendors, OEM equipment manufacturers, consulting boutiques, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.73  specialization=[APP]  returned=0  NEW=0
+
+  Q: Search for official websites of automation software engineering firms in the Berlin area of Germany focused on integrating Cognex and Keyence machine vision systems for industrial AI inspection workflows in automotive supply chains, demonstrating implementation ownership and field deployment, excluding machine builders, camera hardware sellers, generic AI agencies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.63  specialization=[REGION+TECH+APP]  returned=20  NEW=4
+       NEW x-visual.com -> other (40)
+       NEW qvisions.eu -> machine_builder_vision_ai (85)  <== MATCHING
+       NEW napeans.com -> integrator_vision_industrial_ai (75)  <== MATCHING
+
+  Q: Identify official company websites of industrial automation integrators in the Saxony region of Germany with expertise in system integration and production deployment of vision AI for semiconductor defect detection and process control, with clear customer project delivery and embedded deployment capabilities, excluding machine-vision component suppliers, machine builders, consulting firms, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.58  specialization=[REGION+APP]  returned=20  NEW=10
+       NEW emaxx.com -> integrator_relevant_focus (65)  <== MATCHING
+       NEW adenso.solutions -> irrelevant (0)
+       NEW edge-vision.de -> irrelevant (0)
+
+
+############################################################
+SUMMARY ÔÇö fresh specialized prompts across rounds
+(dupVsPrior: 1.00 = near-duplicate of an earlier query; lower = fresher)
+############################################################
+ROUND 1: queries=4  avgDupVsPrior=0.30  specialization[region=1 tech=0 app=4]  NEW=6  matchingNEW=2
+ROUND 2: queries=4  avgDupVsPrior=0.54  specialization[region=2 tech=1 app=4]  NEW=12  matchingNEW=2
+ROUND 3: queries=4  avgDupVsPrior=0.68  specialization[region=3 tech=1 app=4]  NEW=14  matchingNEW=3
+
+Worst dupVsPrior across all rounds: 0.77 (want < 0.6 = no near-duplicates)
+Total NEW companies across all rounds: 32   matching-target NEW: 7

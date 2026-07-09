@@ -9,6 +9,8 @@ import { defaultFilters } from "./filters";
 import { LeadPipelineAgent } from "./agents/lead-pipeline";
 import { LeadWorkerRunService } from "./agents/lead-worker-run";
 import { FoundryAgentsClient } from "./clients/foundry-agents";
+import { HubSpotClient } from "./clients/hubspot";
+import { describeRuntimeResourceProfile, getRuntimeResourceProfile } from "./runtime-resources";
 import { CATEGORY_EXECUTION_CONTEXT } from "./prompting/one-ware-playbook";
 import { resolveSearchStrategyPresetContext } from "./search-presets";
 import { LeadRunProgress } from "./types";
@@ -496,6 +498,7 @@ const leadJobSchema = z.object({
   aiPrefilterConcurrency: z.coerce.number().int().min(1).optional(),
   outreachPrepConcurrency: z.coerce.number().int().min(1).optional(),
   contactSearchConcurrency: z.coerce.number().int().min(1).optional(),
+  serialDownstreamExecution: z.boolean().optional(),
   disableHubSpotDeduplication: z.boolean().optional(),
   maxRuntimeMs: z.coerce.number().int().min(60_000).max(10_800_000).optional(),
   earlyStopEnabled: z.boolean().optional(),
@@ -531,6 +534,7 @@ const settingsUpdateSchema = z.object({
   aiPrefilterConcurrency: z.coerce.number().int().min(1).optional(),
   outreachPrepConcurrency: z.coerce.number().int().min(1).optional(),
   contactSearchConcurrency: z.coerce.number().int().min(1).optional(),
+  serialDownstreamExecution: z.boolean().optional(),
   maxRuntimeMs: z.coerce.number().int().min(60_000).max(10_800_000).optional(),
   earlyStopEnabled: z.boolean().optional(),
   earlyStopReviewCount: z.coerce.number().int().min(5).max(30).optional(),
@@ -1273,6 +1277,10 @@ async function runTestBenchCompany(
       debugConsoleService.resolveCompanyIdentityForProbe(preCategorized).catch(() => ({
         resolvedName: undefined,
         resolvedCountry: undefined,
+        resolvedAddress: undefined,
+        resolvedCity: undefined,
+        resolvedZip: undefined,
+        resolvedState: undefined,
         aiProfileName: undefined,
         aiEntityScope: undefined,
         aiProfileTrusted: undefined,
@@ -1296,6 +1304,10 @@ async function runTestBenchCompany(
       domain: company.domain,
       resolvedName: identity.resolvedName ?? null,
       resolvedCountry: identity.resolvedCountry ?? null,
+      resolvedAddress: identity.resolvedAddress ?? null,
+      resolvedCity: identity.resolvedCity ?? null,
+      resolvedZip: identity.resolvedZip ?? null,
+      resolvedState: identity.resolvedState ?? null,
       aiProfileName: identity.aiProfileName ?? null,
       aiEntityScope: identity.aiEntityScope ?? null,
       aiProfileTrusted: identity.aiProfileTrusted ?? null,
@@ -1483,6 +1495,47 @@ app.post("/api/hubspot/workflow-trigger-new", async (request, response, next) =>
   }
 });
 
+// Reproduces the production browser-crawl contention INSIDE the deployed container. `railway run`
+// executes locally with prod env, so it CANNOT reproduce Railway's CPU/memory scarcity — the actual
+// cause of the wall-clock page.goto timeouts. This endpoint runs the real shared-Chromium fetch path
+// at a chosen fan-out on the live container and returns the goto-timeout / salvage counters plus the
+// detected resource profile, so the prod-only failure can be observed and verified after a fix.
+const crawlBenchmarkSchema = z.object({
+  domains: z.array(z.string().min(1).max(300)).min(1).max(50).optional(),
+  concurrency: z.coerce.number().int().min(1).max(64).optional()
+});
+
+const DEFAULT_CRAWL_BENCHMARK_DOMAINS = [
+  "https://mak-cet.de/",
+  "https://acerosrl.com/",
+  "https://winspect.info/",
+  "https://fmvision.it/",
+  "https://scorpionvision.com/",
+  "https://prophesee.ai/",
+  "https://sygvision.com/",
+  "https://blickfeld.com/",
+  "https://athenais.tech/",
+  "https://maxiluxsystems.com/",
+  "https://neobram.ai/",
+  "https://ateq.com/"
+];
+
+app.post("/api/diagnostics/crawl-benchmark", async (request, response, next) => {
+  try {
+    const parsed = crawlBenchmarkSchema.parse(request.body ?? {});
+    const domains = parsed.domains ?? DEFAULT_CRAWL_BENCHMARK_DOMAINS;
+    const concurrency = parsed.concurrency ?? 40;
+    const client = new HubSpotClient();
+    const benchmark = await client.runCrawlBenchmark(domains, concurrency);
+    response.json({
+      resources: getRuntimeResourceProfile(),
+      benchmark
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : "Unknown error";
   const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof (error as { statusCode?: unknown }).statusCode === "number"
@@ -1497,5 +1550,29 @@ export function startServer(): void {
   app.listen(env.PORT, "0.0.0.0", () => {
     console.log(`Lead Agent listening on 0.0.0.0:${env.PORT}`);
     console.log(`Lead Agent runtime data dir: ${getLeadAgentRuntimeDataDirectory()}`);
+    console.log(`Lead Agent ${describeRuntimeResourceProfile()}`);
   });
+
+  // Periodic memory sampler. A mid-run container SIGKILL (clean "Starting Container", no JS trace)
+  // is a cgroup OOM: RSS crossing the memory limit while many crawls hold large page HTML + Chromium.
+  // Logging RSS vs the limit makes that OOM observable (and correlatable with the run stage) instead
+  // of an invisible restart that silently loses the whole run. Timer is unref'd so it never keeps the
+  // event loop alive on its own.
+  const memoryLimitGb = getRuntimeResourceProfile().memoryLimitGb;
+  const memoryTimer = setInterval(() => {
+    const usage = process.memoryUsage();
+    const rssGb = usage.rss / 1024 ** 3;
+    const heapGb = usage.heapUsed / 1024 ** 3;
+    const externalGb = usage.external / 1024 ** 3;
+    const pct = memoryLimitGb ? Math.round((rssGb / memoryLimitGb) * 100) : 0;
+    const line = `[mem] rss=${rssGb.toFixed(2)}GB heap=${heapGb.toFixed(2)}GB ext=${externalGb.toFixed(2)}GB limit=${memoryLimitGb ? memoryLimitGb.toFixed(2) : "?"}GB (${pct}%)`;
+    if (memoryLimitGb && rssGb / memoryLimitGb > 0.8) {
+      console.warn(`${line} HIGH-MEMORY`);
+    } else {
+      console.log(line);
+    }
+  }, 10_000);
+  if (typeof memoryTimer.unref === "function") {
+    memoryTimer.unref();
+  }
 }

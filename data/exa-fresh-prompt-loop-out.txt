@@ -1,0 +1,82 @@
+Exclude/seen set built: total=7329 (recurring=1997, hubspot=3944). Sending 1200 to Exa per query.
+Rounds=3, queries/round=4. Each round feeds ALL prior queries back as saturated history.
+
+############################################################
+ROUND 1  (history size fed in: 0 prior queries)
+############################################################
+
+  Q: Find official company websites of German industrial AI and machine vision system integrators specializing in customer-specific implementation, production deployment, and system integration for manufacturing and industrial automation, excluding camera manufacturers, machine builders, generic AI consultancies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.00  specialization=[generic]  returned=20  NEW=1
+       NEW aonic.de -> other (40)
+
+  Q: Locate official websites of automation software integrators in Germany delivering industrial image processing and vision AI projects with hands-on implementation and retained engineering support for quality inspection and defect detection, excluding pure hardware vendors, OEMs, consulting boutiques, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.31  specialization=[APP]  returned=20  NEW=1
+       NEW annolution.com -> other (40)
+
+  Q: Search for official company homepages of German machine vision and industrial AI solution providers focused on embedded vision deployment and customer project delivery in industrial automation and manufacturing sectors, avoiding machine builders, camera hardware sellers, generic AI agencies, freelancers, and industrial end customers, and excluding directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.49  specialization=[generic]  returned=20  NEW=3
+       NEW embex.de -> integrator_relevant_focus (70)  <== MATCHING
+       NEW brillz.com -> other (40)
+       NEW fyso.dev -> other (40)
+
+  Q: Identify official websites of German system integrators with expertise in industrial AI and machine vision for production-line inspection and optical quality control, demonstrating implementation ownership and field deployment capabilities, excluding machine builders, camera manufacturers, AI consulting firms, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.52  specialization=[APP]  returned=20  NEW=0
+
+############################################################
+ROUND 2  (history size fed in: 4 prior queries)
+############################################################
+
+  Q: Find official company websites of German industrial automation integrators specializing in machine vision and industrial AI with proven customer-specific implementation and production deployment experience in semiconductor and embedded electronics sectors, excluding machine builders, camera manufacturers, AI consulting firms, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.68  specialization=[APP]  returned=20  NEW=1
+       NEW therobotronix.com -> integrator_relevant_focus (65)  <== MATCHING
+
+  Q: Locate official websites of German system integration firms delivering industrial image processing and vision AI solutions for robotics and drone perception applications, demonstrating hands-on project delivery and retained engineering support, excluding pure hardware vendors, OEMs, consulting boutiques, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.61  specialization=[APP]  returned=20  NEW=5
+       NEW cretec-cybernetics.com -> irrelevant (0)
+       NEW cis-rostock.de -> machine_builder_ai_enablement (75)
+       NEW vision.ing-possible.de -> integrator_vision_industrial_ai (85)  <== MATCHING
+
+  Q: Search for official homepages of automation software integrators in Germany focused on edge AI vision and embedded vision deployment for quality inspection and defect detection in manufacturing, with clear implementation ownership and customer project delivery, excluding camera hardware sellers, machine builders, generic AI agencies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.70  specialization=[APP]  returned=20  NEW=1
+       NEW lumina-tech.ai -> irrelevant (0)
+
+  Q: Identify official company websites of German industrial AI and machine vision integrators operating in the Baden-W├╝rttemberg and Stuttgart region, delivering system integration and production deployment services for optical inspection and visual quality control, excluding machine builders, camera manufacturers, AI consulting firms, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.65  specialization=[REGION+APP]  returned=20  NEW=4
+       NEW maxxvision.com -> other (40)
+       NEW sightproc.de -> integrator_vision_industrial_ai (75)  <== MATCHING
+       NEW senswork.us -> machine_builder_vision_ai (90)  <== MATCHING
+
+############################################################
+ROUND 3  (history size fed in: 8 prior queries)
+############################################################
+
+  Q: Find official company websites of German industrial automation integrators specializing in machine vision and industrial AI for automotive manufacturing quality inspection, with proven customer-specific implementation and production deployment experience, excluding machine builders, camera manufacturers, AI consulting firms, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.80  specialization=[APP]  returned=20  NEW=1
+       NEW adi-gmbh.com -> machine_builder_vision_ai (90)  <== MATCHING
+
+  Q: Locate official homepages of German system integrators delivering embedded vision and edge AI solutions for semiconductor production inspection, demonstrating hands-on project delivery and retained engineering support, excluding pure hardware vendors, OEMs, consulting boutiques, freelancers, and software platforms, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.67  specialization=[APP]  returned=20  NEW=2
+       NEW synosys.ai -> integrator_general_ai (60)  <== MATCHING
+       NEW anvistec-auto.com -> other (30)
+
+  Q: Search for official websites of German automation software integrators focused on industrial image processing and visual quality control in the robotics and medtech imaging sectors, with clear implementation ownership and customer project delivery, excluding machine builders, camera hardware sellers, generic AI agencies, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.67  specialization=[APP]  returned=20  NEW=1
+       NEW qvisions.eu -> machine_builder_vision_ai (85)  <== MATCHING
+
+  Q: Identify official company websites of German industrial AI and machine vision system integrators operating in the Hamburg and Northern Germany region, delivering system integration and production deployment services for optical inspection and defect detection, excluding machine builders, camera manufacturers, AI consulting firms, freelancers, and industrial end customers, and not directories, marketplaces, job boards, news articles, PDFs, or irrelevant content pages.
+     dupVsPrior=0.79  specialization=[REGION+APP]  returned=20  NEW=3
+       NEW messtechnik-neth.de -> other (40)
+       NEW spi.de -> other (40)
+       NEW effektor.de -> irrelevant (10)
+
+
+############################################################
+SUMMARY ÔÇö fresh specialized prompts across rounds
+(dupVsPrior: 1.00 = near-duplicate of an earlier query; lower = fresher)
+############################################################
+ROUND 1: queries=4  avgDupVsPrior=0.33  specialization[region=0 tech=0 app=2]  NEW=5  matchingNEW=1
+ROUND 2: queries=4  avgDupVsPrior=0.66  specialization[region=1 tech=0 app=4]  NEW=11  matchingNEW=4
+ROUND 3: queries=4  avgDupVsPrior=0.73  specialization[region=1 tech=0 app=4]  NEW=7  matchingNEW=3
+
+Worst dupVsPrior across all rounds: 0.80 (want < 0.6 = no near-duplicates)
+Total NEW companies across all rounds: 23   matching-target NEW: 8

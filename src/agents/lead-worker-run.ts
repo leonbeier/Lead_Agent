@@ -4,6 +4,7 @@ import { HubSpotClient, isPlausibleCompanyName, looksLikeHexOrUuidSlug, HUBSPOT_
 import type { ExtractedCompanyAddress } from "../clients/hubspot.js";
 import { LeadPipelineAgent, EUROPEAN_TLDS } from "./lead-pipeline.js";
 import { env } from "../config.js";
+import { resolveResourceAwareConcurrency } from "../runtime-resources.js";
 import type {
   OrganizationFilter,
   CompanySample,
@@ -82,6 +83,7 @@ interface QualifiedCompanyState {
   removed: boolean;
   completedAt?: string;
   hubspotError?: string;
+  hubspotAttempts?: number;
 }
 
 interface SearchAggregate {
@@ -148,6 +150,25 @@ interface LeadWorkerRunDependencies {
   leadPipelineAgent?: LeadPipelineAgent;
   contactTaskTimeoutMs?: number;
   hubspotTaskTimeoutMs?: number;
+}
+
+// A FIFO async mutex. acquire() resolves to a release() function once every previously-acquired
+// holder has released. It is used to run the browser-bound downstream stages (contact discovery ->
+// outreach prep -> HubSpot write) strictly one at a time when serialDownstreamExecution is enabled,
+// so at most ONE website crawl executes at any moment. Measured 2026-07-01: parallel downstream
+// crawls balloon a 3-4 s crawl to 40 s+ under load and blow the 45 s page-collection budget, which
+// leaves companies with no address/contacts. Serializing keeps every crawl inside budget.
+export class SerialExecutionGate {
+  private tail: Promise<void> = Promise.resolve();
+
+  acquire(): Promise<() => void> {
+    const previous = this.tail;
+    let release!: () => void;
+    this.tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return previous.then(() => release);
+  }
 }
 
 export class AsyncQueue<T> {
@@ -246,9 +267,15 @@ const RESEARCH_BRIEF_TASK_TIMEOUT_MS = 300_000;
 // They therefore tolerate higher fan-out and are the stages that most speed up an end-to-end run.
 // Contact discovery and the HubSpot identity crawl DO drive the shared Chromium instance, so they
 // stay low to avoid the documented /dev/shm OOM on Railway.
-const MAX_AI_CONCURRENCY = 12;
-const MAX_OUTREACH_CONCURRENCY = 10;
-export const MAX_CONTACT_CONCURRENCY = 4;
+//
+// These ceilings are ALSO clamped to the container's real CPU allowance (perCoreFactor 2 because the
+// stage is HTTP/Azure-bound but still parses multi-MB pages synchronously): on a constrained Railway
+// container a fixed 12-way AI fan-out saturates the shared cores and starves the browser's page.goto
+// callback past its wall-clock timeout — the production-only empty-contacts defect. On an
+// unconstrained dev box the effective core count is large, so these stay at their full values.
+const MAX_AI_CONCURRENCY = resolveResourceAwareConcurrency(12, 2);
+const MAX_OUTREACH_CONCURRENCY = resolveResourceAwareConcurrency(10, 2);
+export const MAX_CONTACT_CONCURRENCY = resolveResourceAwareConcurrency(4);
 
 // Contact discovery is BROWSER-BOUND: every company's page collection runs through the shared
 // Chromium, which serves only HUBSPOT_BROWSER_TASK_CONCURRENCY (default 2) serial lanes. Scheduling
@@ -278,6 +305,10 @@ export function resolveContactSearchConcurrency(
 // CONSECUTIVE transient failures per filter (reset on any success) before retiring it, so a slow
 // Exa window no longer collapses the whole run.
 const MAX_FILTER_CONSECUTIVE_EXA_FAILURES = 3;
+// A qualified company must never be silently dropped because one HubSpot write timed out or hit a
+// transient API error / rate-limit backoff. Re-enqueue it for a bounded number of attempts before
+// giving up, so a slow or throttled HubSpot window does not lose leads.
+const MAX_HUBSPOT_TASK_ATTEMPTS = 3;
 // When contact discovery returns zero contacts we re-attempt a bounded number of times before
 // accepting an empty result, so a single load-induced crawl failure does not strand a company
 // without any reachable contact.
@@ -477,11 +508,21 @@ export class LeadWorkerRunService {
       throw new Error("Mindestens eine Zielkategorie ist fuer den neuen Worker-Run erforderlich.");
     }
 
+    const targetCategoryRefinement = request.targetCategoryRefinement?.trim() || undefined;
+
     const targetLeadCount = Math.max(1, request.targetLeadCount ?? 1);
     const deadlineMs = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? 10 * 60_000);
+    // Serial downstream execution (default ON). Exa search + AI prefilter stay parallel; contact
+    // discovery, outreach prep and the HubSpot write collapse onto a SINGLE global worker that
+    // processes one company fully before the next, so only one website crawl runs at a time. This
+    // is the measured fix for load-induced crawl failure (parallel crawls -> 45 s budget blown ->
+    // no address/contacts). Set serialDownstreamExecution: false to reactivate the parallel pools.
+    const downstreamSerial = request.serialDownstreamExecution !== false;
     const aiConcurrency = Math.min(MAX_AI_CONCURRENCY, Math.max(1, request.aiPrefilterConcurrency ?? 2));
-    const outreachConcurrency = Math.min(MAX_OUTREACH_CONCURRENCY, Math.max(1, request.outreachPrepConcurrency ?? 6));
-    const contactConcurrency = resolveContactSearchConcurrency(request.contactSearchConcurrency);
+    const outreachConcurrency = downstreamSerial
+      ? 1
+      : Math.min(MAX_OUTREACH_CONCURRENCY, Math.max(1, request.outreachPrepConcurrency ?? 6));
+    const contactConcurrency = downstreamSerial ? 1 : resolveContactSearchConcurrency(request.contactSearchConcurrency);
     const exaQueryCount = Math.max(1, request.exaQueryCount ?? 4);
     const screeningDatabase = await this.controlPlaneStore.getCompanyScreeningDatabase();
     const learning = typeof this.controlPlaneStore.getLearning === "function"
@@ -503,7 +544,29 @@ export class LeadWorkerRunService {
       || (company.country ?? "").trim().length > 0
       || hasEuropeanTld(company.domain);
     const exaConcurrency = Math.min(2, Math.max(1, filters.length));
-    const hubspotConcurrency = 3;
+    const hubspotConcurrency = downstreamSerial ? 1 : 3;
+    // Shared serial gate for the downstream stages. When serial, every contact/outreach/hubspot
+    // task acquires this single slot before doing work, guaranteeing one-company-at-a-time
+    // execution across all three stages. downstreamGateActive counts holders + waiters so a task
+    // parked at the gate still registers as in-flight and cannot trigger premature run termination.
+    const downstreamGate = new SerialExecutionGate();
+    let downstreamGateActive = 0;
+    const acquireDownstreamSlot = async (): Promise<(() => void) | undefined> => {
+      if (!downstreamSerial) {
+        return undefined;
+      }
+      downstreamGateActive += 1;
+      const release = await downstreamGate.acquire();
+      let released = false;
+      return () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        release();
+        downstreamGateActive -= 1;
+      };
+    };
     const aiQueue = new AsyncQueue<{ company: CompanySample; searchId?: string }>();
     const outreachQueue = new AsyncQueue<QualifiedCompanyState>();
     const contactQueue = new AsyncQueue<QualifiedCompanyState>();
@@ -597,7 +660,7 @@ export class LeadWorkerRunService {
     const countHeldQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed && state.hubspotStatus !== "done").length;
     const countAssignedQualifiedStates = () => Array.from(qualifiedStates.values()).filter((state) => !state.removed && state.pipelineAssigned && state.hubspotStatus !== "done").length;
     const countDownstreamInFlight = () =>
-      metrics.queueSizes.outreachInFlight + metrics.queueSizes.contactInFlight + metrics.queueSizes.hubspotInFlight + outreachQueue.size + contactQueue.size + hubspotQueue.size;
+      metrics.queueSizes.outreachInFlight + metrics.queueSizes.contactInFlight + metrics.queueSizes.hubspotInFlight + outreachQueue.size + contactQueue.size + hubspotQueue.size + downstreamGateActive;
     const countAiPending = () => aiPendingCount;
     const neededCompanies = () => Math.max(0, targetLeadCount - metrics.hubspotWritten - countHeldQualifiedStates() - countAiPending());
     const hasReachedTarget = () => metrics.hubspotWritten >= targetLeadCount;
@@ -1085,7 +1148,8 @@ export class LeadWorkerRunService {
           }
 
           const analysis = await this.debugConsoleService.classifyCompanyForExecution(item.company, {
-            annotateDebugStage: false
+            annotateDebugStage: false,
+            targetCategoryRefinement
           });
           const categorizedCompany = analysis.categorizedCompany;
 
@@ -1217,6 +1281,7 @@ export class LeadWorkerRunService {
         metrics.queueSizes.outreachInFlight += 1;
         state.outreachStatus = "running";
         emitProgress();
+        const releaseOutreachSlot = await acquireDownstreamSlot();
         try {
           let researchBriefTimeout: ReturnType<typeof setTimeout> | undefined;
           const researchBriefTimeoutPromise = new Promise<never>((_, reject) => {
@@ -1251,6 +1316,7 @@ export class LeadWorkerRunService {
           });
         } finally {
           metrics.queueSizes.outreachInFlight = Math.max(0, metrics.queueSizes.outreachInFlight - 1);
+          releaseOutreachSlot?.();
           emitProgress();
         }
       }
@@ -1270,6 +1336,7 @@ export class LeadWorkerRunService {
         metrics.queueSizes.contactInFlight += 1;
         state.contactStatus = "running";
         emitProgress();
+        const releaseContactSlot = await acquireDownstreamSlot();
         try {
           let contactDebug: ContactDebugResult = { selectedContacts: [] } as ContactDebugResult;
           // Retry contact discovery only when an attempt actually FAILS (throws/times out). A
@@ -1331,6 +1398,7 @@ export class LeadWorkerRunService {
           maybeQueueHubSpot(state);
         } finally {
           metrics.queueSizes.contactInFlight = Math.max(0, metrics.queueSizes.contactInFlight - 1);
+          releaseContactSlot?.();
           emitProgress();
         }
       }
@@ -1346,6 +1414,12 @@ export class LeadWorkerRunService {
         if (state.removed || state.hubspotStatus === "done") {
           continue;
         }
+
+        // Serialize the whole HubSpot stage (identity crawl + write) behind the shared downstream
+        // gate. Acquired before the identity-resolution crawl and released on EVERY exit path
+        // (both early scope/name skips and the finally). The idempotent release plus the
+        // downstreamGateActive counter keep run-termination accounting correct.
+        const releaseHubspotSlot = await acquireDownstreamSlot();
 
         // Authoritative locality hard-constraint gate. The qualification-time scope check runs on
         // the sourcing-time country, which is derived from a domain/snippet heuristic and can
@@ -1422,6 +1496,7 @@ export class LeadWorkerRunService {
           screeningQueue.enqueue({ type: "upsert", record: buildScreeningRecord(state.company) });
           maybePromoteStandby();
           emitProgress();
+          releaseHubspotSlot?.();
           continue;
         }
 
@@ -1445,6 +1520,7 @@ export class LeadWorkerRunService {
           screeningQueue.enqueue({ type: "upsert", record: buildScreeningRecord(state.company) });
           maybePromoteStandby();
           emitProgress();
+          releaseHubspotSlot?.();
           continue;
         }
 
@@ -1458,9 +1534,15 @@ export class LeadWorkerRunService {
           // research brief is kept for rankings/business potential/company fields; this only writes
           // a per-person message that the HubSpot note builder prefers. A per-contact generation
           // failure or timeout never blocks the write: that contact simply falls back to the brief.
-          if (Array.isArray(state.contacts) && state.contacts.length > 0) {
+          // Only generate for contacts that do NOT already have a message, so a HubSpot write retry
+          // (re-enqueued after a timeout/transient error) does not redo the expensive Azure outreach
+          // generation — it just retries the failed write.
+          const contactsNeedingOutreach = Array.isArray(state.contacts)
+            ? state.contacts.filter((contact) => !contact.personalizedOutreach)
+            : [];
+          if (contactsNeedingOutreach.length > 0) {
             await Promise.all(
-              state.contacts.map(async (contact) => {
+              contactsNeedingOutreach.map(async (contact) => {
                 try {
                   const personalizedOutreach = await Promise.race([
                     this.debugConsoleService.generatePersonalizedOutreachForExecution(
@@ -1538,6 +1620,21 @@ export class LeadWorkerRunService {
             }, this.hubspotTaskTimeoutMs);
           });
 
+          // The serial downstream gate exists to keep only ONE website crawl running at a time
+          // (contact discovery + identity resolution). Everything crawl-bound for this company is
+          // already done: the identity was resolved above and passed to the writer as an override, so
+          // syncQualifiedCompanies below is a pure-HTTP HubSpot write (no browser crawl). Release the
+          // gate NOW so the next company's contact-discovery crawl can proceed while this (potentially
+          // slow / rate-limited, up to hubspotTaskTimeoutMs) HTTP write runs, instead of stalling the
+          // whole pipeline behind it. The task stays counted as in-flight via hubspotInFlight until
+          // the finally, so run termination accounting is unaffected, and no second crawl is
+          // introduced. Guard: only release early when we actually pass the resolved-address override
+          // (production path); without it the writer may independently re-resolve (crawl), so we keep
+          // the gate held to preserve the one-crawl-at-a-time guarantee.
+          if (writeAddressOverride !== undefined) {
+            releaseHubspotSlot?.();
+          }
+
           let syncResult;
           try {
             syncResult = await Promise.race([
@@ -1592,14 +1689,30 @@ export class LeadWorkerRunService {
           log(`HubSpot fertig: ${state.company.name} (companySynced=${successfulCompanyWrites}, contactSynced=${syncResult.contactSyncedCount})`);
           maybePromoteStandby();
         } catch (error) {
-          state.hubspotStatus = "failed";
-          state.removed = true;
-          state.pipelineAssigned = false;
-          state.hubspotError = error instanceof Error ? error.message : String(error);
-          logError(`HubSpot Fehler fuer ${state.company.name}: ${state.hubspotError}`);
-          maybePromoteStandby();
+          const message = error instanceof Error ? error.message : String(error);
+          const attempts = (state.hubspotAttempts ?? 0) + 1;
+          state.hubspotAttempts = attempts;
+          // A HubSpot write failure (timeout or transient API error / rate-limit backoff) must not
+          // silently drop a fully-qualified company. Re-enqueue it for a bounded number of retries
+          // before giving up. The company goes to the BACK of the queue, which naturally spaces out
+          // the retry and gives a throttled HubSpot window time to recover. Only when the run is
+          // stopping or the attempt budget is exhausted do we mark it failed.
+          if (attempts < MAX_HUBSPOT_TASK_ATTEMPTS && !stopping) {
+            state.hubspotStatus = "queued";
+            state.hubspotError = message;
+            logError(`HubSpot Fehler fuer ${state.company.name} (Versuch ${attempts}/${MAX_HUBSPOT_TASK_ATTEMPTS}), wird erneut eingereiht: ${message}`);
+            hubspotQueue.enqueue(state);
+          } else {
+            state.hubspotStatus = "failed";
+            state.removed = true;
+            state.pipelineAssigned = false;
+            state.hubspotError = message;
+            logError(`HubSpot Fehler fuer ${state.company.name} nach ${attempts} Versuchen: ${state.hubspotError}`);
+            maybePromoteStandby();
+          }
         } finally {
           metrics.queueSizes.hubspotInFlight = Math.max(0, metrics.queueSizes.hubspotInFlight - 1);
+          releaseHubspotSlot?.();
           emitProgress();
         }
       }
@@ -1921,44 +2034,48 @@ export class LeadWorkerRunService {
           emitProgress();
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          if (this.isExaCreditsExhaustedError(errorMessage) || this.isExaTemporarilyUnavailableError(error)) {
-            if (this.isExaCreditsExhaustedError(errorMessage)) {
-              stopReason = stopReason || "exa_credits_exhausted";
-              stopping = true;
-              log(`Exa-Suche gestoppt. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
-              await flushBufferedLiveRawCompanies();
-              stopAiQueue();
-              maybePromoteStandby();
-              break;
-            }
-
-            const consecutiveFailures = (filterConsecutiveExaFailures.get(filter.name) ?? 0) + 1;
-            filterConsecutiveExaFailures.set(filter.name, consecutiveFailures);
-            hadTemporaryExaFailure = true;
+          if (this.isExaCreditsExhaustedError(errorMessage)) {
+            stopReason = stopReason || "exa_credits_exhausted";
+            stopping = true;
+            log(`Exa-Suche gestoppt. Bereits angenommene Firmen werden trotzdem fertig verarbeitet. (${errorMessage})`);
             await flushBufferedLiveRawCompanies();
+            stopAiQueue();
+            maybePromoteStandby();
+            break;
+          }
 
-            // Only retire the filter once it has failed transiently several times in a row. A single
-            // timeout keeps the filter in rotation so a slow Exa window does not end the run early.
-            if (consecutiveFailures < MAX_FILTER_CONSECUTIVE_EXA_FAILURES) {
-              log(`Exa-Batch fuer ${filter.name} fehlgeschlagen (Versuch ${consecutiveFailures}/${MAX_FILTER_CONSECUTIVE_EXA_FAILURES}). Worker versucht denselben Filter erneut. (${errorMessage})`);
-              continue;
-            }
+          // Any other failure — a temporary Exa outage/timeout OR a recoverable planner error such
+          // as a diversity-rewrite query that failed locality validation — must NEVER kill the
+          // worker or end the run. A single bad planned batch is not fatal: retry the same filter a
+          // few times (the planner is stochastic, so a retry usually yields a valid batch), then
+          // retire only that filter and keep searching with the remaining ones. The run stops just
+          // when every filter has been retired.
+          if (this.isExaTemporarilyUnavailableError(error)) {
+            hadTemporaryExaFailure = true;
+          }
+          const consecutiveFailures = (filterConsecutiveExaFailures.get(filter.name) ?? 0) + 1;
+          filterConsecutiveExaFailures.set(filter.name, consecutiveFailures);
+          await flushBufferedLiveRawCompanies();
 
-            temporarilyUnavailableFilters.add(filter.name);
-            log(`Exa-Batch fuer ${filter.name} nach ${consecutiveFailures} Fehlversuchen ausgeschieden. Worker versucht mit den uebrigen Filtern weiterzumachen. (${errorMessage})`);
-            if (temporarilyUnavailableFilters.size >= filters.length) {
-              stopReason = stopReason || "exa_search_unavailable";
-              stopping = true;
-              log("Alle Exa-Filter sind nach temporaeren Suchfehlern ausgeschieden. Bereits angenommene Firmen werden trotzdem fertig verarbeitet.");
-              stopAiQueue();
-              maybePromoteStandby();
-              break;
-            }
-
+          // Only retire the filter once it has failed several times in a row. A single failure keeps
+          // the filter in rotation so a slow Exa window or one bad planner batch does not end the run.
+          if (consecutiveFailures < MAX_FILTER_CONSECUTIVE_EXA_FAILURES) {
+            log(`Exa-Batch fuer ${filter.name} fehlgeschlagen (Versuch ${consecutiveFailures}/${MAX_FILTER_CONSECUTIVE_EXA_FAILURES}). Worker versucht denselben Filter erneut. (${errorMessage})`);
             continue;
           }
 
-          throw error;
+          temporarilyUnavailableFilters.add(filter.name);
+          log(`Exa-Batch fuer ${filter.name} nach ${consecutiveFailures} Fehlversuchen ausgeschieden. Worker versucht mit den uebrigen Filtern weiterzumachen. (${errorMessage})`);
+          if (temporarilyUnavailableFilters.size >= filters.length) {
+            stopReason = stopReason || "exa_search_unavailable";
+            stopping = true;
+            log("Alle Exa-Filter sind nach wiederholten Suchfehlern ausgeschieden. Bereits angenommene Firmen werden trotzdem fertig verarbeitet.");
+            stopAiQueue();
+            maybePromoteStandby();
+            break;
+          }
+
+          continue;
         } finally {
           metrics.queueSizes.exaInFlight = Math.max(0, metrics.queueSizes.exaInFlight - 1);
           emitProgress();

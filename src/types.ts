@@ -149,6 +149,7 @@ export interface PublicContactCandidate {
  */
 export interface PersonalizedContactOutreach {
   message: string;
+  connectionRequest?: string;
   language: OutreachLanguage;
   researchFinding?: string;
   underlyingLimitation?: string;
@@ -209,6 +210,11 @@ export interface LeadAgentSettings {
   aiPrefilterConcurrency?: number;
   outreachPrepConcurrency?: number;
   contactSearchConcurrency?: number;
+  // When true (default), the browser-bound downstream stages (contact discovery, outreach prep and
+  // the HubSpot write) run through a SINGLE global worker, one company at a time, so only one
+  // website crawl runs at any moment. Exa search and AI prefilter stay parallel. Set to false to
+  // reactivate the fully parallel downstream worker pools.
+  serialDownstreamExecution?: boolean;
   earlyStopEnabled: boolean;
   earlyStopReviewCount: number;
   earlyStopThreshold: number;
@@ -535,6 +541,9 @@ export interface LeadJobRequest {
   aiPrefilterConcurrency?: number;
   outreachPrepConcurrency?: number;
   contactSearchConcurrency?: number;
+  // When true (default), contact discovery, outreach prep and the HubSpot write run through a
+  // SINGLE global worker, one company at a time. Set to false to reactivate the parallel path.
+  serialDownstreamExecution?: boolean;
   disableHubSpotDeduplication?: boolean;
   earlyStopEnabled?: boolean;
   earlyStopReviewCount?: number;

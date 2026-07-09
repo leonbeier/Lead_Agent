@@ -1186,7 +1186,18 @@ export class OpenCrawlerSearchClient {
           totalScore = signals.reduce((sum, signal) => sum + signal.scoreDelta, 0);
         }
 
-        const summary = pageResults.map((result) => result.summary).join(" || ").slice(0, 1800);
+        // Enrich the summary with headquarters/identity evidence (contact / impressum / legal
+        // notice pages). Those pages are deliberately excluded from discovery scoring, but their
+        // statutory address text is the only reliable headquarters-country evidence. Without it
+        // the downstream AI classifier has to guess the country, which produced non-European
+        // companies (e.g. a Jordan-based firm) being labelled as German and synced. We fetch one
+        // identity page and prepend its raw visible text (never its scoring signals) so the AI
+        // classifier can read the real address; discovery scoring stays unchanged.
+        const identityLinks = this.selectIdentityLinks(html, landingUrl, fetchedInternalUrls);
+        const identityText = await this.fetchIdentityEvidence(identityLinks, fetchedInternalUrls);
+
+        const bodySummary = pageResults.map((result) => result.summary).join(" || ");
+        const summary = (identityText ? `IDENTITY: ${identityText} || ${bodySummary}` : bodySummary).slice(0, 2400);
 
         return {
           domain: normalizedDomain,
@@ -1418,6 +1429,108 @@ export class OpenCrawlerSearchClient {
       .sort((left, right) => right.score - left.score)
       .slice(0, maxInternalPages)
       .map(({ url, label }) => ({ url, label }));
+  }
+
+  private selectIdentityLinks(
+    html: string,
+    baseUrl: string,
+    fetchedInternalUrls: Set<string>
+  ): Array<{ url: string; label: string }> {
+    const baseHostname = new URL(baseUrl).hostname.replace(/^www\./i, "");
+    // Legal-notice / contact / about pages carry the statutory headquarters address (incl. country).
+    // These are excluded from discovery scoring but are the only reliable country-evidence source.
+    // Cover the common European language variants so the classifier gets country evidence regardless
+    // of the site's language (targets are European: DE/EN/IT/ES/PT/FR/NL/Nordics).
+    const identityPattern = /(impressum|imprint|mentions-?legales|legal-?notice|kontakt|contact|contatti|contatto|contacto|contato|contactez|about|ueber|uber|unternehmen|company|chi-?siamo|quienes|a-?propos|qui-?sommes|over-?ons|om-?oss)/i;
+    const selected: Array<{ url: string; label: string; score: number }> = [];
+    const seenUrls = new Set<string>();
+
+    for (const anchor of this.extractAnchors(html, baseUrl)) {
+      const candidateUrl = new URL(anchor.href, baseUrl);
+      if (candidateUrl.hostname.replace(/^www\./i, "") !== baseHostname) {
+        continue;
+      }
+
+      const haystack = `${candidateUrl.pathname} ${anchor.text}`;
+      if (!identityPattern.test(haystack)) {
+        continue;
+      }
+
+      const pageUrl = candidateUrl.toString();
+      if (seenUrls.has(pageUrl) || fetchedInternalUrls.has(pageUrl)) {
+        continue;
+      }
+
+      seenUrls.add(pageUrl);
+      selected.push({
+        url: pageUrl,
+        label: this.buildPageLabel(anchor.text, candidateUrl.pathname),
+        score: this.scoreIdentityLink(haystack)
+      });
+    }
+
+    return selected
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 1)
+      .map(({ url, label }) => ({ url, label }));
+  }
+
+  private scoreIdentityLink(value: string): number {
+    const lowered = value.toLowerCase();
+    if (/(impressum|imprint|mentions-?legales|legal-?notice)/.test(lowered)) {
+      return 4;
+    }
+
+    if (/(kontakt|contact|contatti|contatto|contacto|contato|contactez)/.test(lowered)) {
+      return 3;
+    }
+
+    return 1;
+  }
+
+  private async fetchIdentityEvidence(
+    links: Array<{ url: string; label: string }>,
+    fetchedInternalUrls: Set<string>
+  ): Promise<string> {
+    for (const link of links) {
+      if (!this.canCrawlMorePages()) {
+        break;
+      }
+
+      if (fetchedInternalUrls.has(link.url)) {
+        continue;
+      }
+
+      fetchedInternalUrls.add(link.url);
+
+      try {
+        const response = await fetch(link.url, {
+          redirect: "follow",
+          signal: AbortSignal.timeout(INTERNAL_PAGE_CRAWL_TIMEOUT_MS),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; ONE-WARE-Lead-Agent/1.0; +https://one-ware.com)"
+          }
+        });
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const pageHtml = await this.readResponseTextWithTimeout(response, INTERNAL_PAGE_CRAWL_TIMEOUT_MS);
+        this.recordCrawledPage();
+        // Return the raw visible text (not the business summary) so the AI classifier can read the
+        // full statutory address incl. country. We deliberately avoid parsing the address here; the
+        // classifier extracts the headquarters country from this evidence.
+        const visible = this.extractVisibleText(pageHtml).trim();
+        if (visible) {
+          return `${link.label}: ${visible}`.slice(0, 1200);
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return "";
   }
 
   private selectDeepDiveInternalLinks(
