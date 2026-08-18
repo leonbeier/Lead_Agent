@@ -350,8 +350,11 @@ export class DebugConsoleService {
   ): Promise<DebugConsoleAiPrefilterResult> {
     const companies = this.buildWebsiteCompanies(request, filter);
     const aiPrefilterConcurrency = Math.max(1, request.aiPrefilterConcurrency ?? this.defaultAiPrefilterConcurrency);
+    // The live worker passes the operator refinement into the classifier, so the test lab must too;
+    // otherwise the lab silently evaluates a different prompt than production.
+    const targetCategoryRefinement = request.targetCategoryRefinement?.trim() || undefined;
     const analyzedWebsites = await this.mapWithConcurrency(
-      companies.map((company) => async () => this.classifyWebsite(company)),
+      companies.map((company) => async () => this.classifyWebsite(company, { targetCategoryRefinement })),
       aiPrefilterConcurrency
     );
 

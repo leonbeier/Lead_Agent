@@ -57,6 +57,13 @@ const CRAWL_DISCOVERY_CONCURRENCY = 8;
 const INTERNAL_PAGE_CRAWL_CONCURRENCY = 3;
 const MAX_INTERNAL_PAGES = 4;
 const MAX_DEEP_DIVE_INTERNAL_PAGES = 6;
+// Evidence budget handed to the AI classifier. Cookie-consent banners and navigation menus occupy
+// the first few hundred characters of almost every European company page, so a tight budget left the
+// classifier with boilerplate only and it rejected genuine large producers as "scale not evidenced".
+const PAGE_SUMMARY_PARAGRAPHS = 8;
+const PAGE_SUMMARY_LIMIT = 1300;
+const IDENTITY_EVIDENCE_LIMIT = 900;
+const WEBSITE_EVIDENCE_LIMIT = 7000;
 const MAX_CRAWL_QUEUE_MULTIPLIER = 2;
 const SERVICE_LED_MAX_SOURCE_PAGES = 8;
 const SERVICE_LED_MAX_CANDIDATE_DOMAINS = 14;
@@ -1196,8 +1203,12 @@ export class OpenCrawlerSearchClient {
         const identityLinks = this.selectIdentityLinks(html, landingUrl, fetchedInternalUrls);
         const identityText = await this.fetchIdentityEvidence(identityLinks, fetchedInternalUrls);
 
+        // The business pages come FIRST and the statutory identity evidence LAST. Impressum /
+        // legal-notice pages on modern sites open with long cookie-consent and privacy prose, so
+        // prepending them used to consume most of the evidence budget and the classifier never saw
+        // the production, plant, brand, or headcount evidence it needs to judge industrial scale.
         const bodySummary = pageResults.map((result) => result.summary).join(" || ");
-        const summary = (identityText ? `IDENTITY: ${identityText} || ${bodySummary}` : bodySummary).slice(0, 2400);
+        const summary = (identityText ? `${bodySummary} || IDENTITY: ${identityText}` : bodySummary).slice(0, WEBSITE_EVIDENCE_LIMIT);
 
         return {
           domain: normalizedDomain,
@@ -1523,7 +1534,7 @@ export class OpenCrawlerSearchClient {
         // classifier extracts the headquarters country from this evidence.
         const visible = this.extractVisibleText(pageHtml).trim();
         if (visible) {
-          return `${link.label}: ${visible}`.slice(0, 1200);
+          return `${link.label}: ${visible}`.slice(0, IDENTITY_EVIDENCE_LIMIT);
         }
       } catch {
         continue;
@@ -1724,7 +1735,7 @@ export class OpenCrawlerSearchClient {
       .split(/\s{2,}|\n+/)
       .map((part) => part.trim())
       .filter((part) => part.length >= 40)
-      .slice(0, 3);
+      .slice(0, PAGE_SUMMARY_PARAGRAPHS);
 
     const parts = [title, metaDescription, firstHeading, ...bodyText].filter((part): part is string => Boolean(part));
     if (parts.length === 0) {
@@ -1737,7 +1748,7 @@ export class OpenCrawlerSearchClient {
     return [pathHint, `${prefix}${parts.join(" | ")}`]
       .filter(Boolean)
       .join(" | ")
-      .slice(0, 700);
+      .slice(0, PAGE_SUMMARY_LIMIT);
   }
 
   private inferCountryFromDomain(domain: string, summary: string): string | undefined {

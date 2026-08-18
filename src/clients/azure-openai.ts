@@ -142,7 +142,7 @@ function loadOutreachContext(): string {
   return cachedOutreachContext;
 }
 
-const WEBSITE_CLASSIFIER_INPUT_LIMIT = 2200;
+const WEBSITE_CLASSIFIER_INPUT_LIMIT = 6800;
 const QUICK_QUALIFICATION_CONTEXT = [
   "# Identity\nYou classify company fit for ONE WARE from company descriptions and crawled website text.",
   "# Goal\nChoose exactly one category. Stay conservative and unbiased. Do not prefer integrators by default.",
@@ -372,7 +372,7 @@ export class AzureOpenAIClient {
           false,
           targetCategoryRefinement
         ),
-        { maxTokens: 160, deployment: CLASSIFIER_DEPLOYMENT }
+        { maxTokens: 260, deployment: CLASSIFIER_DEPLOYMENT }
       );
 
       const parsed = this.parseJsonObject<{
@@ -1286,7 +1286,7 @@ export class AzureOpenAIClient {
     const promptMessages: Array<{ role: "system" | "user"; content: string }> = [
       {
         role: "system",
-        content: this.buildExaPlannerSystemPrompt(mainContext, searchStrategyContext, targetQueryCount, requestedLocalities, forbiddenBroadeningTerms, requestedCategories as LeadCategory[])
+        content: this.buildExaPlannerSystemPrompt(mainContext, searchStrategyContext, targetQueryCount, requestedLocalities, forbiddenBroadeningTerms, requestedCategories as LeadCategory[], options.targetCategoryRefinement)
       },
       {
         role: "user",
@@ -1440,6 +1440,7 @@ export class AzureOpenAIClient {
       constraintCheck?: {
         requiredLocalities?: string[];
         allQueriesPreserveLocality?: boolean;
+        allQueriesPreserveRefinement?: boolean;
         forbiddenBroadeningTermsPresent?: boolean;
         preservedLocalitiesByQuery?: Array<{ query?: string; preservedLocalities?: string[] }>;
       };
@@ -1455,6 +1456,10 @@ export class AzureOpenAIClient {
 
     if (response.constraintCheck?.allQueriesPreserveLocality === false) {
       throw new Error(`${label} returned queries that violate locality constraints.`);
+    }
+
+    if (response.constraintCheck?.allQueriesPreserveRefinement === false) {
+      throw new Error(`${label} returned queries that drop the required operator refinement.`);
     }
 
     if (response.constraintCheck?.forbiddenBroadeningTermsPresent) {
@@ -1737,9 +1742,11 @@ export class AzureOpenAIClient {
     queryCount: number,
     requestedLocalities: string[],
     forbiddenBroadeningTerms: string[],
-    requestedCategories: LeadCategory[] = []
+    requestedCategories: LeadCategory[] = [],
+    targetCategoryRefinement?: string
   ): string {
     const archetypeFramingLines = this.buildExaPlannerArchetypeFramingBlock(requestedCategories);
+    const trimmedRefinement = targetCategoryRefinement?.trim();
     const requiresLiteralGermany = requestedLocalities
       .map((value) => this.normalizePlannerPhrase(value))
       .includes("germany");
@@ -1752,6 +1759,13 @@ export class AzureOpenAIClient {
         requiredLocalities: requestedLocalities,
         allQueriesPreserveLocality: true,
         forbiddenBroadeningTermsPresent: false,
+        ...(trimmedRefinement
+          ? {
+              requiredRefinement: trimmedRefinement,
+              allQueriesPreserveRefinement: true,
+              refinementScaleRequirement: "the explicit size or scale wording carried in every query, or none when the refinement states no size requirement"
+            }
+          : {}),
         preservedLocalitiesByQuery: Array.from({ length: Math.max(1, queryCount) }, (_, index) => ({
           query: `query ${index + 1}`,
           preservedLocalities: requestedLocalities
@@ -1781,6 +1795,11 @@ export class AzureOpenAIClient {
       requestedLocalities.length > 0 ? "* Search explicitly only inside the required locality scope. Do not broaden to a parent region or wider market." : undefined,
       forbiddenBroadeningTerms.length > 0 ? `* Forbidden broadening terms unless explicitly requested in the locality list: ${forbiddenBroadeningTerms.join(", ")}.` : undefined,
       requiresLiteralGermany ? "* If the required locality is Germany, every query must literally contain Germany and must not replace it with Europe, European, DACH, EU, EMEA, global, worldwide, or international." : undefined,
+      trimmedRefinement ? `* Required operator refinement, as binding as the locality: "${trimmedRefinement}". Every single query must describe targets that satisfy this refinement.` : undefined,
+      trimmedRefinement ? "* Never compress, summarise, generalise, or drop any part of the refinement. If the refinement names a sector, every query must name that sector. If the refinement names a size, scale, revenue, employee-count, plant-count, or group-structure requirement, every query must carry that same size wording explicitly in its own text - a query that only names the sector while silently dropping the size bar is a constraint violation." : undefined,
+      trimmedRefinement ? "* Restate the refinement in the target language and business vocabulary of the query, but keep its concrete numbers and thresholds unchanged. Do not lower, round down, soften, or replace a stated threshold with a vaguer word such as large, leading, or established." : undefined,
+      trimmedRefinement ? "* Report your own compliance in constraintCheck.allQueriesPreserveRefinement and describe the exact scale wording you carried in constraintCheck.refinementScaleRequirement. If you cannot satisfy the refinement in every query, return the failure JSON with error \"refinement_constraint_unsatisfied\" instead of emitting weaker queries." : undefined,
+      "* Target only official websites of single operating companies. Explicitly exclude job boards, recruiting and employer-branding portals, career aggregators, staffing agencies, industry associations and federations, chambers of commerce, regional or economic-development portals, trade magazines and news portals, B2B marketplaces and sourcing platforms, company directories and registers, universities and research institutes, and listicle or ranking pages.",
       "* If you cannot satisfy all hard constraints, return an explicit planner error JSON and do not guess.",
       "",
       "Query-planning rules:",
@@ -2255,6 +2274,7 @@ export class AzureOpenAIClient {
       "Every query must be a detailed natural-language Exa search instruction.",
       "Every query must preserve the required locality term.",
       "Every query must stay only within the required locality scope.",
+      trimmedRefinement ? "Every query must satisfy the operator refinement in full, including any size, scale, revenue, employee-count, plant-count, or group-structure requirement it states." : undefined,
       "Every query must include explicit exclusions.",
       "Every query must avoid exact or near-exact repetition of recent query history.",
       "Every query must respect the selected target categories and must not exclude desired categories.",
@@ -2309,9 +2329,11 @@ export class AzureOpenAIClient {
         requestedCategories.length > 0 ? `* Desired target categories for this run: ${requestedCategories.join(", ")}` : undefined,
         targetCategoryRefinement?.trim()
           ? [
-              "* Additional narrowing instruction for this run:",
+              "* Additional narrowing instruction for this run (BINDING — as hard as the locality):",
               "  Innerhalb der gesuchten Gruppen sollen ausschliesslich folgende gesucht werden:",
-              `  ${targetCategoryRefinement.trim()}`
+              `  ${targetCategoryRefinement.trim()}`,
+              "  Carry this refinement into EVERY query in full. Keep any stated size, scale, revenue, employee-count, plant-count, or group-structure requirement literally in the query text; do not compress it away and do not replace a number with a vague adjective.",
+              "  Report compliance in constraintCheck.allQueriesPreserveRefinement and constraintCheck.refinementScaleRequirement."
             ].join("\n")
           : undefined,
         this.buildExaSearchUndesiredCategorySummary(requestedCategories),
@@ -4672,9 +4694,9 @@ export class AzureOpenAIClient {
   ): ChatMessage[] {
     const trimmedRefinement = targetCategoryRefinement?.trim();
     const refinementBlock = trimmedRefinement
-      ? `# Additional Required Focus (HARD — decisive gate)\nThe operator restricted this run to a required focus: "${trimmedRefinement}". This focus is the DECISIVE gate and OVERRIDES archetype fit — apply it FIRST, before choosing any category.\n- A company qualifies for a target category ONLY when its OWN base-website evidence clearly places it INSIDE this focus (for example the required sector, market segment, or specialization). If the base website does not clearly satisfy this focus, you MUST return category "irrelevant" with a low relevanceScore, even when the company is an otherwise perfect archetype (a large scaled producer, integrator, manufacturer, plant operator, etc.). A strong archetype in the WRONG sector or segment is NOT a match.\n- Do NOT assign a target category while your own rationale says the focus is "not evidenced", "not shown", or "not clear". If the required focus is not clearly evidenced on the base website, the category is irrelevant — no exceptions.\n- Judge the focus only from the company's own base website, never from its name, the search query, or a single unrelated subpage.\n- ALSO include in your JSON a boolean field "focusMatch": set it to true ONLY when the base website clearly shows the company's PRIMARY business is exactly the required focus. Companies in adjacent, related, or superficially similar sectors do NOT qualify — for example, when the focus is a specific production sector, producers in a DIFFERENT sector (including other regulated or industrial production such as pharmaceutical, cosmetic, chemical, or consumer-health manufacturing under a food-production focus) are NOT a match. When the primary sector is not clearly the required one, or you are in doubt, set focusMatch=false. Whenever focusMatch is false, category MUST be "irrelevant".`
+      ? `# Additional Required Focus (HARD — decisive gate)\nThe operator restricted this run to a required focus: "${trimmedRefinement}". This focus is the DECISIVE gate and OVERRIDES archetype fit — apply it FIRST, before choosing any category.\n- The refinement text itself defines the sector boundary. Read it the way an industry expert of that sector would read it: every sub-sector, product family, and process variant that a practitioner would naturally count as part of the named sector is INSIDE the focus. Do NOT invent a narrower reading than the operator wrote. Example of the required reasoning: under a food-production focus, beverages, breweries, dairies, bakery and confectionery, meat and convenience products, frozen goods, ingredients, and other edible-goods manufacturing are all INSIDE the focus, because a food-industry expert counts them as food production.\n- Only a genuinely DIFFERENT sector is outside. Under a food-production focus, pharmaceutical, cosmetic, chemical, packaging-material, machinery, plant-engineering, laboratory-service, wholesale, retail, and logistics companies are outside, because they do not manufacture edible goods themselves.\n- Judge the SECTOR question and the SCALE question separately. Missing scale evidence is a scale decision, never a focus mismatch: if the sector clearly matches, focusMatch is true even when you later reject the company for scale reasons.\n- If the base website does not place the company inside the focus sector, you MUST return category "irrelevant" with a low relevanceScore, even when the company is an otherwise perfect archetype. A strong archetype in the WRONG sector is NOT a match.\n- Judge the focus only from the company's own base website, never from its name, the search query, or a single unrelated subpage.\n- ALSO include in your JSON a boolean field "focusMatch": true when the base website shows the company's PRIMARY business is inside the required sector as defined above, false when the primary business belongs to a genuinely different sector or the pages carry no sector evidence at all. Whenever focusMatch is false, category MUST be "irrelevant".`
       : undefined;
-    const scaleBandBlock = "# Industrial End-Customer Scale Band\nThe industrial_end_customer_scaled category is only for a genuine industrial producer or processor that operates its OWN production at a scale where a dedicated machine-vision or inspection project (typically a five-figure EUR project) is both worthwhile and directly addressable. Classify as other when the operation is a small artisanal or manufaktur-scale producer without real industrial production lines. Also classify as other when the company is a globally diversified mega-conglomerate or holding group so large or fragmented that no single production site or decision is addressable for a focused project. Regionally or nationally leading focused producer groups that run their own industrial plants are the ideal fit; a tiny specialty workshop and a global consumer-goods giant are both out of band.";
+    const scaleBandBlock = "# Industrial End-Customer Scale Band\nThe industrial_end_customer_scaled category is only for a genuine industrial producer or processor that operates its OWN production at a scale where a dedicated machine-vision or inspection project (typically a five-figure EUR project) is both worthwhile and directly addressable.\n- Company websites almost never publish revenue figures, so do NOT require a revenue number. Judge industrial scale from the proxy evidence that producer websites DO carry: several named production sites, plants, works, or 'Standorte'/'Werke'; a group, holding, or 'Gruppe' structure with subsidiaries; a portfolio of several brands or product lines; national retail listing, export markets, or international subsidiaries; career pages advertising shift work, plant roles, or a large workforce; stated employee counts, production volumes, capacities, or output figures; own logistics, warehousing, or filling and packaging lines.\n- Qualify the company when the pages show it is an industrial producer in scope AND at least one of those scale proxies is visible. Reject as other when the visible evidence points to a small artisanal, manufaktur, farm-shop, or single-workshop operation without real industrial production lines, or when the pages show only a brand or webshop with no own production.\n- Also classify as other when the company is a globally diversified mega-conglomerate or holding group so large or fragmented that no single production site or decision is addressable for a focused project.\n- Regionally or nationally leading focused producer groups that run their own industrial plants are the ideal fit; a tiny specialty workshop and a global consumer-goods giant are both out of band.\n- Never reject an in-scope industrial producer with the reasoning that it lacks machine-vision, AI, inspection, software, or delivery evidence. End customers are supposed to have none of that — that is exactly why they are prospects.";
     const compactWebsiteContext = [
       "# Website Task\nClassify the company only from its own crawled website pages.",
       "# Website Page Type Gate\nFirst confirm the crawled pages are the self-owned site of ONE single operating company. If instead they are a company directory/business-listing/register/regional-or-industry overview page that lists many firms, a news/press/magazine/blog-portal/editorial page, or a file-sharing/file-hosting/cloud-storage/download/asset-CDN page, classify the company as irrelevant regardless of any company, AI, or industrial keywords on the page. A page that profiles or lists multiple companies, publishes articles, or only hosts files is never a qualifiable company.",

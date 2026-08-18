@@ -91,8 +91,11 @@ test("website classification prompt always enforces the base-website fit gate an
   assert.match(systemPrompt, /media\/asset server|marketing microsite|deep subpage/i);
   // Scale band: reject tiny artisanal producers and global mega-conglomerates.
   assert.match(systemPrompt, /Industrial End-Customer Scale Band/i);
-  assert.match(systemPrompt, /artisanal or manufaktur-scale/i);
+  assert.match(systemPrompt, /artisanal, manufaktur, farm-shop, or single-workshop/i);
   assert.match(systemPrompt, /globally diversified mega-conglomerate or holding group/i);
+  // Scale must be judged from proxy evidence, never from a published revenue figure.
+  assert.match(systemPrompt, /do NOT require a revenue number/i);
+  assert.match(systemPrompt, /Never reject an in-scope industrial producer with the reasoning that it lacks machine-vision/i);
 });
 
 test("website classification prompt enforces the additional required focus as a HARD constraint when provided", () => {
@@ -124,6 +127,12 @@ test("website classification prompt enforces the additional required focus as a 
   assert.match(systemPromptWithRefinement, /im Food Produktionssektor/);
   assert.match(systemPromptWithRefinement, /OVERRIDES archetype fit/i);
   assert.match(systemPromptWithRefinement, /strong archetype in the WRONG sector/i);
+  // The refinement defines the sector boundary the way an industry expert reads it: sibling
+  // sub-sectors (e.g. beverages under a food-production focus) are INSIDE, and missing scale
+  // evidence is a scale decision, never a focus mismatch.
+  assert.match(systemPromptWithRefinement, /the way an industry expert of that sector would read it/i);
+  assert.match(systemPromptWithRefinement, /beverages, breweries, dairies/i);
+  assert.match(systemPromptWithRefinement, /Missing scale evidence is a scale decision, never a focus mismatch/i);
 
   const withoutRefinement = azureClient.buildWebsiteClassificationMessages(
     "Some Producer",
