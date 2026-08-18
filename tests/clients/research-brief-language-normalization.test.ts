@@ -80,6 +80,53 @@ test("Azure buildResearchBrief normalizes German to de", async (t) => {
   assert.equal(brief.outreachLanguage, "de");
 });
 
+test("Azure buildResearchBrief makes the end-customer outreach scaffold authoritative", async (t) => {
+  const previousAzureConfigured = readiness.azureConfigured;
+  readiness.azureConfigured = true;
+  t.after(() => {
+    readiness.azureConfigured = previousAzureConfigured;
+  });
+
+  const client = new AzureOpenAIClient() as unknown as {
+    foundryAgentsClient: { buildResearchBrief: () => Promise<ResearchBrief | null> };
+    webSearchAgent: {
+      crawlCompanyWebsite: () => Promise<{ summary: string; landingUrl: string; relevantUrls: string[] }>;
+      buildResearchContext: () => Promise<undefined>;
+    };
+    runChat: (messages: Array<{ role: string; content: string }>) => Promise<string>;
+    buildResearchBrief: typeof AzureOpenAIClient.prototype.buildResearchBrief;
+  };
+  let capturedMessages: Array<{ role: string; content: string }> = [];
+
+  client.foundryAgentsClient.buildResearchBrief = async () => null;
+  client.webSearchAgent.crawlCompanyWebsite = async () => ({
+    summary: "Scaled German food producer operating its own production lines.",
+    landingUrl: "https://sample-food.de",
+    relevantUrls: []
+  });
+  client.webSearchAgent.buildResearchContext = async () => undefined;
+  client.runChat = async (messages) => {
+    capturedMessages = messages;
+    return JSON.stringify(buildResearchBriefPayload("German"));
+  };
+
+  await client.buildResearchBrief({
+    ...buildSampleCompany(),
+    name: "Sample Food GmbH",
+    domain: "https://sample-food.de",
+    category: "industrial_end_customer_scaled"
+  }, false);
+
+  const systemPrompt = capturedMessages
+    .filter((message) => message.role === "system")
+    .map((message) => message.content)
+    .join("\n");
+  assert.match(systemPrompt, /opening 'Hey \[Name\],'/);
+  assert.match(systemPrompt, /complete ONE WARE value paragraph/);
+  assert.match(systemPrompt, /sign-off 'Viele Grüße\\nLeon'/);
+  assert.match(systemPrompt, /Do not replace 'Hey' with 'Hallo'/);
+});
+
 test("Azure buildResearchBrief accepts legacy consulting_freelancer categories", async (t) => {
   const previousAzureConfigured = readiness.azureConfigured;
   readiness.azureConfigured = true;

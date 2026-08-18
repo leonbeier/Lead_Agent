@@ -508,8 +508,6 @@ export class LeadWorkerRunService {
       throw new Error("Mindestens eine Zielkategorie ist fuer den neuen Worker-Run erforderlich.");
     }
 
-    const targetCategoryRefinement = request.targetCategoryRefinement?.trim() || undefined;
-
     const targetLeadCount = Math.max(1, request.targetLeadCount ?? 1);
     const deadlineMs = Date.now() + Math.max(60_000, request.maxRuntimeMs ?? 10 * 60_000);
     // Serial downstream execution (default ON). Exa search + AI prefilter stay parallel; contact
@@ -1148,8 +1146,7 @@ export class LeadWorkerRunService {
           }
 
           const analysis = await this.debugConsoleService.classifyCompanyForExecution(item.company, {
-            annotateDebugStage: false,
-            targetCategoryRefinement
+            annotateDebugStage: false
           });
           const categorizedCompany = analysis.categorizedCompany;
 

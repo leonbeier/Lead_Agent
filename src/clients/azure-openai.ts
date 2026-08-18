@@ -181,8 +181,7 @@ export class AzureOpenAIClient {
     mainContext?: string,
     prequalification?: PrequalificationConfig,
     targetCategories?: LeadCategory[],
-    learning?: LeadLearningData,
-    targetCategoryRefinement?: string
+    learning?: LeadLearningData
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale">> {
     const deterministicCategory = this.categorizeDeterministic(name, description, learning);
 
@@ -210,12 +209,9 @@ export class AzureOpenAIClient {
           content: [
             QUICK_QUALIFICATION_CONTEXT,
             buildPrequalificationContextBlock(prequalification, undefined, mainContext),
-            targetCategoryRefinement?.trim()
-              ? `# Additional Required Focus (HARD — decisive gate)\nThe operator restricted this run to a required focus: "${targetCategoryRefinement.trim()}". This focus OVERRIDES archetype fit — apply it FIRST. A company qualifies for a target category ONLY when its evidence clearly places it INSIDE this focus. If the focus is not clearly evidenced, you MUST return "irrelevant" with a low relevanceScore, even when the company is an otherwise perfect archetype; a strong archetype in the WRONG sector is NOT a match. Never assign a target category while noting the focus is "not evidenced" or "not shown", and never infer the focus from the company name or search query alone.`
-              : undefined,
             "Do not prefer integrators over other categories. Pick the closest archetype from all available categories, including machine builders/OEMs, software platforms, end customers, camera vendors, irrelevant, and other.",
             "If the firm mainly sells its own AOI system, machine, hardware-assisted inspection product, or productized API offering, do not force it into an integrator category unless customer project-delivery ownership clearly dominates."
-          ].filter((block): block is string => Boolean(block)).join("\n\n")
+          ].join("\n\n")
         },
         {
           role: "user",
@@ -306,32 +302,6 @@ export class AzureOpenAIClient {
     }
   }
 
-  /**
-   * Deterministic enforcement of the operator's required focus (targetCategoryRefinement).
-   * The AI reports focusMatch=false when the base website does not clearly show the required sector.
-   * When a refinement is set and the model explicitly returns focusMatch=false, the company is forced
-   * to "irrelevant" regardless of the archetype category the model picked — this closes the leak where
-   * the model narrates "focus not evidenced" yet still assigns a target category. A missing focusMatch
-   * is treated as "no explicit mismatch" and left unchanged, so genuine matches that omit the field are
-   * never over-rejected. Companies already classified "irrelevant" are left unchanged.
-   */
-  applyRequiredFocusGate<T extends { category: LeadCategory; relevanceScore: number; rationale: string; country?: string }>(
-    result: T,
-    focusMatch: boolean | undefined,
-    targetCategoryRefinement: string | undefined
-  ): T {
-    const trimmed = targetCategoryRefinement?.trim();
-    if (!trimmed || result.category === "irrelevant" || focusMatch !== false) {
-      return result;
-    }
-    return {
-      ...result,
-      category: "irrelevant" as LeadCategory,
-      relevanceScore: Math.min(result.relevanceScore ?? 0, 15),
-      rationale: `Base website does not clearly match the required focus "${trimmed}", so the company is out of scope.`
-    };
-  }
-
   async categorizeWebsiteCrawl(
     name: string,
     domain: string | undefined,
@@ -339,8 +309,7 @@ export class AzureOpenAIClient {
     dryRun: boolean,
     mainContext?: string,
     prequalification?: PrequalificationConfig,
-    learning?: LeadLearningData,
-    targetCategoryRefinement?: string
+    learning?: LeadLearningData
   ): Promise<Pick<PreCategorizedCompany, "category" | "relevanceScore" | "rationale" | "country">> {
     if (dryRun || !readiness.azureConfigured) {
       return this.categorizeDryRun(crawledWebsiteSummary);
@@ -369,8 +338,7 @@ export class AzureOpenAIClient {
           mainContext,
           prequalification,
           learning,
-          false,
-          targetCategoryRefinement
+          false
         ),
         { maxTokens: 160, deployment: CLASSIFIER_DEPLOYMENT }
       );
@@ -380,14 +348,13 @@ export class AzureOpenAIClient {
         relevanceScore: number;
         rationale: string;
         country?: string;
-        focusMatch?: boolean;
       }>(content);
 
-      return this.applyRequiredFocusGate({
+      return {
         ...parsed,
         category: this.normalizeCategory(parsed.category),
         country: parsed.country?.trim() || undefined
-      }, parsed.focusMatch, targetCategoryRefinement);
+      };
     } catch {
       try {
         const compactRetrySummary = this.compactClassificationInput(websiteEvidence, 1500);
@@ -399,8 +366,7 @@ export class AzureOpenAIClient {
             mainContext,
             prequalification,
             learning,
-            true,
-            targetCategoryRefinement
+            true
           ),
           { maxTokens: 160, deployment: CLASSIFIER_DEPLOYMENT }
         );
@@ -410,14 +376,13 @@ export class AzureOpenAIClient {
           relevanceScore: number;
           rationale: string;
           country?: string;
-          focusMatch?: boolean;
         }>(retryContent);
 
-        return this.applyRequiredFocusGate({
+        return {
           ...retryParsed,
           category: this.normalizeCategory(retryParsed.category),
           country: retryParsed.country?.trim() || undefined
-        }, retryParsed.focusMatch, targetCategoryRefinement);
+        };
       } catch {
         return {
           category: "other",
@@ -684,9 +649,6 @@ export class AzureOpenAIClient {
     }
 
     try {
-      const endCustomerContactGuidance = company.category === "industrial_end_customer_scaled"
-        ? " For this industrial end-customer producer, the most valuable decision-makers are operational and production leaders: Head of Production, Head of Operations, Head or Manager of Quality (QC/QA), Plant Manager, Head of Manufacturing, Head of Digitalization, Innovation Manager, or Head of Engineering. A company-wide CEO or Geschäftsführer of a large producer group is usually NOT the right contact for a focused machine-vision or inspection project, so when both are available prefer such operational, quality, or innovation leaders in the first slot over a group-level CEO/Geschäftsführer."
-        : "";
       const contactPayload = rankedCandidates.map((candidate, index) => ({
         contactId: `contact_${index + 1}`,
         firstName: candidate.firstName,
@@ -705,7 +667,7 @@ export class AzureOpenAIClient {
       const content = await this.runChat([
         {
           role: "system",
-          content: `${buildMainContextBlock(undefined)}\n\nTask: Rank and select up to 4 public web-search contacts for outbound outreach.${endCustomerContactGuidance} Use this step mainly to prioritize, not to aggressively discard. Managers and decision-makers first: whenever the candidate list contains any evidence-backed decision-maker (owner, founder, Geschäftsführer, Inhaber, CEO, CTO, COO, Managing Director, or comparable leadership title), you MUST select at least one such decision-maker and place them in the first slot; never return a selection made up only of developers or engineers when a decision-maker candidate is available. If fewer than 4 relevant manager-type people are evidence-backed, fill remaining slots with developers or engineering contacts. Reject only candidates that are clearly invalid, for example one-word names, CTA text, navigation fragments, generic phrases such as represented by, our customers, about us, team, contact, company, business, or similar non-person labels. Reject candidates whose evidence points to a different company, parent brand, partner brand, directory, or unrelated domain unless the evidence explicitly says they work for the supplied company. This also applies to LinkedIn-only candidates: reject a person whose LinkedIn profile or stated employer names a DIFFERENT company — including a company with a similar-sounding or near-duplicate name at a different domain (for example a same-looking brand token that actually belongs to another firm) — unless the evidence explicitly ties that person to the supplied company's own website or domain. A candidate whose only reachable channel is an email on a different company's corporate domain than the supplied company (for example a distributor, reseller, marketplace, integrator partner, or component-supplier employee surfaced through the supplied company's pages) must be rejected unless the evidence explicitly states that person works for the supplied company; never keep such a foreign-domain email contact, because it would attach outreach to the wrong company. Do not treat LinkedIn company pages or generic company mailboxes as people, but you may keep one such company-level fallback contact when it is the only evidence-backed public outreach channel for the supplied company. Treat founder or company-founding evidence in snippets, for example wording like "we founded <company>", as a strong executive-leadership signal even if no explicit CEO title is present. Prefer one executive sponsor plus one technical or operational owner when possible. Prefer contacts that combine multiple reachable data points such as personal LinkedIn URL, named company email, and phone. Avoid HR, recruiting, finance, legal, support, generic sales, marketing, students, advisors, and unrelated contacts when stronger company-matching contacts exist. When evidence-backed personal LinkedIn profiles or named employee contacts exist for the supplied company, keep them rather than returning an empty result. Use only the provided evidence. Return strict JSON with {"selectedContactIds":["..."],"reason":"..."}.`
+          content: `${buildMainContextBlock(undefined)}\n\nTask: Rank and select up to 4 public web-search contacts for outbound outreach. Use this step mainly to prioritize, not to aggressively discard. Managers and decision-makers first: whenever the candidate list contains any evidence-backed decision-maker (owner, founder, Geschäftsführer, Inhaber, CEO, CTO, COO, Managing Director, or comparable leadership title), you MUST select at least one such decision-maker and place them in the first slot; never return a selection made up only of developers or engineers when a decision-maker candidate is available. If fewer than 4 relevant manager-type people are evidence-backed, fill remaining slots with developers or engineering contacts. Reject only candidates that are clearly invalid, for example one-word names, CTA text, navigation fragments, generic phrases such as represented by, our customers, about us, team, contact, company, business, or similar non-person labels. Reject candidates whose evidence points to a different company, parent brand, partner brand, directory, or unrelated domain unless the evidence explicitly says they work for the supplied company. A candidate whose only reachable channel is an email on a different company's corporate domain than the supplied company (for example a distributor, reseller, marketplace, integrator partner, or component-supplier employee surfaced through the supplied company's pages) must be rejected unless the evidence explicitly states that person works for the supplied company; never keep such a foreign-domain email contact, because it would attach outreach to the wrong company. Do not treat LinkedIn company pages or generic company mailboxes as people, but you may keep one such company-level fallback contact when it is the only evidence-backed public outreach channel for the supplied company. Treat founder or company-founding evidence in snippets, for example wording like "we founded <company>", as a strong executive-leadership signal even if no explicit CEO title is present. Prefer one executive sponsor plus one technical or operational owner when possible. Prefer contacts that combine multiple reachable data points such as personal LinkedIn URL, named company email, and phone. Avoid HR, recruiting, finance, legal, support, generic sales, marketing, students, advisors, and unrelated contacts when stronger company-matching contacts exist. When evidence-backed personal LinkedIn profiles or named employee contacts exist for the supplied company, keep them rather than returning an empty result. Use only the provided evidence. Return strict JSON with {"selectedContactIds":["..."],"reason":"..."}.`
         },
         {
           role: "user",
@@ -4667,26 +4629,16 @@ export class AzureOpenAIClient {
     mainContext?: string,
     prequalification?: PrequalificationConfig,
     learning?: LeadLearningData,
-    compactMode = false,
-    targetCategoryRefinement?: string
+    compactMode = false
   ): ChatMessage[] {
-    const trimmedRefinement = targetCategoryRefinement?.trim();
-    const refinementBlock = trimmedRefinement
-      ? `# Additional Required Focus (HARD — decisive gate)\nThe operator restricted this run to a required focus: "${trimmedRefinement}". This focus is the DECISIVE gate and OVERRIDES archetype fit — apply it FIRST, before choosing any category.\n- A company qualifies for a target category ONLY when its OWN base-website evidence clearly places it INSIDE this focus (for example the required sector, market segment, or specialization). If the base website does not clearly satisfy this focus, you MUST return category "irrelevant" with a low relevanceScore, even when the company is an otherwise perfect archetype (a large scaled producer, integrator, manufacturer, plant operator, etc.). A strong archetype in the WRONG sector or segment is NOT a match.\n- Do NOT assign a target category while your own rationale says the focus is "not evidenced", "not shown", or "not clear". If the required focus is not clearly evidenced on the base website, the category is irrelevant — no exceptions.\n- Judge the focus only from the company's own base website, never from its name, the search query, or a single unrelated subpage.\n- ALSO include in your JSON a boolean field "focusMatch": set it to true ONLY when the base website clearly shows the company's PRIMARY business is exactly the required focus. Companies in adjacent, related, or superficially similar sectors do NOT qualify — for example, when the focus is a specific production sector, producers in a DIFFERENT sector (including other regulated or industrial production such as pharmaceutical, cosmetic, chemical, or consumer-health manufacturing under a food-production focus) are NOT a match. When the primary sector is not clearly the required one, or you are in doubt, set focusMatch=false. Whenever focusMatch is false, category MUST be "irrelevant".`
-      : undefined;
-    const scaleBandBlock = "# Industrial End-Customer Scale Band\nThe industrial_end_customer_scaled category is only for a genuine industrial producer or processor that operates its OWN production at a scale where a dedicated machine-vision or inspection project (typically a five-figure EUR project) is both worthwhile and directly addressable. Classify as other when the operation is a small artisanal or manufaktur-scale producer without real industrial production lines. Also classify as other when the company is a globally diversified mega-conglomerate or holding group so large or fragmented that no single production site or decision is addressable for a focused project. Regionally or nationally leading focused producer groups that run their own industrial plants are the ideal fit; a tiny specialty workshop and a global consumer-goods giant are both out of band.";
     const compactWebsiteContext = [
       "# Website Task\nClassify the company only from its own crawled website pages.",
       "# Website Page Type Gate\nFirst confirm the crawled pages are the self-owned site of ONE single operating company. If instead they are a company directory/business-listing/register/regional-or-industry overview page that lists many firms, a news/press/magazine/blog-portal/editorial page, or a file-sharing/file-hosting/cloud-storage/download/asset-CDN page, classify the company as irrelevant regardless of any company, AI, or industrial keywords on the page. A page that profiles or lists multiple companies, publishes articles, or only hosts files is never a qualifiable company.",
-      "# Base-Website Fit Gate\nThe fit decision MUST come from the base website of the operating company itself (its homepage and own main pages), not from a single deep subpage that merely matched a search query. If the crawled evidence describes only a media/asset server, a marketing microsite, a campaign or product-detail subpage, or a shared web host that is not the company's own primary company site, classify as irrelevant. Do not qualify a company from a subpage snippet when the base website does not itself prove the fit.",
       "# Website Decision Rules\nIf the website mainly sells external customer project delivery, choose an integrator category. If it mainly sells its own shipped software product or diagnostic plugin, choose machine_builder_ai_enablement. If it mainly sells a platform or runtime where customers deploy apps, modules, agents, or workflows, choose software_platform_embedding.",
-      scaleBandBlock,
       "# Website Specific Reminders\nA certified PACS/viewer-integrated medical plugin is machine_builder_ai_enablement. A runtime, turnkey appliance, or app-lifecycle platform for OEM digital services is software_platform_embedding even if PLC, OPC UA, MQTT, SCADA, MES, remote operations, or system integration is mentioned. If the product lets customers launch industrial apps without building the integration stack themselves, prefer software_platform_embedding. A closed municipal or route-planning platform stays other unless customers clearly build on top of it. Broad engineering or MBSE-style capability pages without explicit AI, automation, MES/SCADA, inspection, or embeddable product/platform proof should stay other. Research institutes, Fraunhofer-style institutes, universities, labs, clusters, and publicly funded competence centers are not integrators or customer delivery partners unless the website clearly sells commercial external implementation services as the main business model.",
       "# Country Rule\nAlso determine the company's headquarters country from the website's own evidence only: a registered office or postal address, an 'impressum'/'legal notice', a 'headquartered in' statement, or an international phone dialing code (e.g. +49 Germany, +43 Austria, +41 Switzerland, +31 Netherlands, +1 United States, +972 Israel, +86 China). Return the English country name. Do NOT infer the country from the domain TLD, the website language, or any supplied hint. If the website shows no reliable country evidence, return an empty string for country. A US/non-European company must be reported with its real country even when the page is in German or English.",
       "# Output Reminder\nChoose the closest archetype across all categories. Do not prefer integrators when the fit path is ambiguous. Respond with a JSON object: {\"category\": string, \"relevanceScore\": number, \"rationale\": string, \"country\": string}."
-    ]
-      .filter((block): block is string => Boolean(block))
-      .join("\n\n");
+    ].join("\n\n");
 
 
     const fullWebsiteContext = [
@@ -4700,11 +4652,8 @@ export class AzureOpenAIClient {
         content: [
           QUICK_QUALIFICATION_CONTEXT,
           buildPrequalificationContextBlock(prequalification, undefined, mainContext),
-          refinementBlock,
           compactMode ? compactWebsiteContext : fullWebsiteContext
-        ]
-          .filter((block): block is string => Boolean(block))
-          .join("\n\n")
+        ].join("\n\n")
       },
       {
         role: "user",
