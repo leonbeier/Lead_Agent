@@ -375,8 +375,16 @@ export class FoundryAgentsClient {
     return "en";
   }
 
+  private buildTargetRoleGuidance(category: PreCategorizedCompany["category"] | undefined): string {
+    if (category === "industrial_end_customer_scaled") {
+      return "Target contact roles for this scaled industrial end customer, in priority order: COO, Head of Production or Produktionsleiter, Plant Manager or Werksleiter, Head of Quality or Qualitätsleiter (QC/QA), Innovation Manager or Head of Innovation, Head of Digitalization, Head of Operations, Head of Engineering. A group-level CEO or Geschäftsführer is usually the wrong entry point for a focused inspection or quality project, so surface these operational, quality, and innovation leaders first.";
+    }
+
+    return "Target contact roles: CEO, CTO, COO, Geschäftsführer, Inhaber, Managing Director, Innovation Manager, Partner Manager, Technology Manager, Operations Manager.";
+  }
+
   async discoverPublicContacts(
-    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country"> & Partial<Pick<PreCategorizedCompany, "category">>,
     evidence: string,
     dryRun: boolean
   ): Promise<PublicContactCandidate[]> {
@@ -391,7 +399,7 @@ export class FoundryAgentsClient {
           `Company: ${company.name}`,
           company.domain ? `Website: ${company.domain}` : "Website: unknown",
           company.country ? `Country: ${company.country}` : "Country: unknown",
-          "Target contact roles: CEO, CTO, COO, Geschäftsführer, Inhaber, Managing Director, Innovation Manager, Partner Manager, Technology Manager, Operations Manager.",
+          this.buildTargetRoleGuidance(company.category),
           evidence
         ].join("\n\n")
       );
@@ -446,7 +454,7 @@ export class FoundryAgentsClient {
   }
 
   async suggestPublicContactQueries(
-    company: Pick<PreCategorizedCompany, "name" | "domain" | "country">,
+    company: Pick<PreCategorizedCompany, "name" | "domain" | "country"> & Partial<Pick<PreCategorizedCompany, "category">>,
     evidence: string,
     dryRun: boolean
   ): Promise<string[]> {
@@ -461,8 +469,10 @@ export class FoundryAgentsClient {
           `Company: ${company.name}`,
           company.domain ? `Website: ${company.domain}` : "Website: unknown",
           company.country ? `Country: ${company.country}` : "Country: unknown",
-          "Target roles: CEO, CTO, COO, Geschäftsführer, Inhaber, Managing Director, Innovation Manager, Partner Manager, Technology Manager, Operations Manager.",
-          "Prioritize surfacing the company's top decision-maker first (owner, founder, Geschäftsführer, Inhaber, CEO, Managing Director), including by name when the evidence reveals it, and generate dedicated leadership queries before any queries targeting developers or engineers.",
+          this.buildTargetRoleGuidance(company.category),
+          company.category === "industrial_end_customer_scaled"
+            ? "Prioritize surfacing the operational decision-makers first (COO, Produktionsleiter or Head of Production, Werksleiter or Plant Manager, Qualitätsleiter or Head of Quality, Innovation Manager), including by name when the evidence reveals it, and generate dedicated queries for these roles before any queries targeting a group-level CEO, developers, or engineers."
+            : "Prioritize surfacing the company's top decision-maker first (owner, founder, Geschäftsführer, Inhaber, CEO, Managing Director), including by name when the evidence reveals it, and generate dedicated leadership queries before any queries targeting developers or engineers.",
           evidence
         ].join("\n\n")
       );

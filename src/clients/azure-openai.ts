@@ -685,7 +685,7 @@ export class AzureOpenAIClient {
 
     try {
       const endCustomerContactGuidance = company.category === "industrial_end_customer_scaled"
-        ? " For this industrial end-customer producer, the most valuable decision-makers are operational and production leaders: Head of Production, Head of Operations, Head or Manager of Quality (QC/QA), Plant Manager, Head of Manufacturing, Head of Digitalization, Innovation Manager, or Head of Engineering. A company-wide CEO or Geschäftsführer of a large producer group is usually NOT the right contact for a focused machine-vision or inspection project, so when both are available prefer such operational, quality, or innovation leaders in the first slot over a group-level CEO/Geschäftsführer."
+        ? " For this industrial end-customer producer, the most valuable decision-makers are operational, production, quality, and innovation leaders, in this priority order: COO or Chief Operating Officer, Head of Production or Produktionsleiter, Plant Manager or Werksleiter, Head or Manager of Quality (Qualitätsleiter, QC/QA), Innovation Manager or Head of Innovation, Head of Digitalization, Head of Manufacturing, Head of Operations, and Head of Engineering. A company-wide CEO or Geschäftsführer of a large producer group is usually NOT the right contact for a focused machine-vision or inspection project, so when both are available prefer such operational, quality, or innovation leaders in the first slot over a group-level CEO/Geschäftsführer."
         : "";
       const contactPayload = rankedCandidates.map((candidate, index) => ({
         contactId: `contact_${index + 1}`,
@@ -1666,10 +1666,10 @@ export class AzureOpenAIClient {
         wrong: "pure hardware, camera, optics, or component product manufacturers, the end customers that only operate such systems, and advisory-only consultancies with no technical delivery"
       },
       end_customer: {
-        label: "industrial end customers that own and operate their own production at scale",
-        framing: "owns and operates its own factories, production lines, or plants at industrial scale, including larger multi-site producer groups",
-        phrases: ["operates its own factories", "runs its own production lines", "multi-site producer group", "industrial-scale manufacturer", "in-house production"],
-        wrong: "system integrators, automation service providers, consultancies, machine builders, OEMs, packaging-machine and equipment suppliers, camera or sensor vendors, ingredient traders, and distributors"
+        label: "large industrial end customers that own and operate their own production at scale",
+        framing: "owns and operates its own factories, production lines, or plants at industrial scale, including larger multi-site producer groups, ideally at around EUR 250 million or more annual revenue or with several production sites",
+        phrases: ["operates its own factories", "runs its own production lines", "multi-site producer group", "industrial-scale manufacturer", "in-house production", "large-revenue manufacturer"],
+        wrong: "small workshops and low-volume producers far below that scale, system integrators, automation service providers, consultancies, machine builders, OEMs, packaging-machine and equipment suppliers, camera or sensor vendors, ingredient traders, and distributors"
       },
       camera_manufacturer: {
         label: "camera, imaging-sensor, or smart-camera hardware manufacturers",
