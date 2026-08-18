@@ -267,3 +267,65 @@ test("reconcilePersonalLinkedInUrl promotes a /in/ sourceUrl and ignores company
     undefined
   );
 });
+
+test("dedupePublicContacts never merges two differently-named people that share a generic mailbox", () => {
+  const client = new AzureOpenAIClient() as unknown as {
+    dedupePublicContacts: (contacts: PublicContactCandidate[]) => PublicContactCandidate[];
+  };
+
+  const merged = client.dedupePublicContacts([
+    {
+      firstName: "Heiko",
+      lastName: "Modell",
+      jobTitle: "CEO",
+      email: "info@bauer-gruppe.de",
+      sourceUrl: "https://bauer-gruppe.de/impressum",
+      label: "website_contact"
+    },
+    {
+      firstName: "Martin",
+      lastName: "Humfeldt",
+      jobTitle: "Produktionsleiter",
+      email: "info@bauer-gruppe.de",
+      linkedinUrl: "https://de.linkedin.com/in/martin-humfeldt-66b8808",
+      sourceUrl: "https://de.linkedin.com/in/martin-humfeldt-66b8808",
+      label: "linkedin_profile"
+    }
+  ] as PublicContactCandidate[]);
+
+  assert.equal(merged.length, 2);
+  const heiko = merged.find((contact) => contact.lastName === "Modell");
+  const martin = merged.find((contact) => contact.lastName === "Humfeldt");
+  assert.ok(heiko && martin);
+  // The Impressum officer must never inherit the other person's personal LinkedIn profile.
+  assert.equal(heiko?.linkedinUrl, undefined);
+  assert.equal(martin?.linkedinUrl, "https://de.linkedin.com/in/martin-humfeldt-66b8808");
+});
+
+test("dedupePublicContacts still merges the same person split across two evidence sources", () => {
+  const client = new AzureOpenAIClient() as unknown as {
+    dedupePublicContacts: (contacts: PublicContactCandidate[]) => PublicContactCandidate[];
+  };
+
+  const merged = client.dedupePublicContacts([
+    {
+      firstName: "Martin",
+      lastName: "Humfeldt",
+      jobTitle: "Produktionsleiter",
+      email: "m.humfeldt@bauer-gruppe.de",
+      sourceUrl: "https://bauer-gruppe.de/kontakt",
+      label: "website_contact"
+    },
+    {
+      firstName: "Martin",
+      lastName: "Humfeldt",
+      linkedinUrl: "https://de.linkedin.com/in/martin-humfeldt-66b8808",
+      sourceUrl: "https://de.linkedin.com/in/martin-humfeldt-66b8808",
+      label: "linkedin_profile"
+    }
+  ] as PublicContactCandidate[]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].email, "m.humfeldt@bauer-gruppe.de");
+  assert.equal(merged[0].linkedinUrl, "https://de.linkedin.com/in/martin-humfeldt-66b8808");
+});

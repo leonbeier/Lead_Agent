@@ -899,14 +899,37 @@ export class AzureOpenAIClient {
     const clusters: PublicContactCandidate[] = [];
     const keyToCluster = new Map<string, number>();
 
+    // Two contacts that both carry a full personal name and those names differ are different people,
+    // no matter what other key they happen to share. Without this guard a shared generic mailbox
+    // (info@, kontakt@, presse@ ...) collapsed two distinct people into one record, so an Impressum
+    // officer's name ended up carrying a completely different person's LinkedIn profile.
+    const fullNameOf = (contact: PublicContactCandidate): string | undefined => {
+      const name = [contact.firstName, contact.lastName]
+        .map((part) => part?.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " "))
+        .filter(Boolean)
+        .join(" ");
+      return name.includes(" ") ? name : undefined;
+    };
+
     for (const contact of contacts) {
       const keys = candidateKeys(contact);
-      const targetIndex = keys.map((key) => keyToCluster.get(key)).find((index) => index !== undefined);
+      const contactName = fullNameOf(contact);
+      const targetIndex = keys
+        .map((key) => keyToCluster.get(key))
+        .find((index) => {
+          if (index === undefined) {
+            return false;
+          }
+          const clusterName = fullNameOf(clusters[index]);
+          return !(contactName && clusterName && contactName !== clusterName);
+        });
       if (targetIndex === undefined) {
         const newIndex = clusters.length;
         clusters.push(contact);
         for (const key of keys) {
-          keyToCluster.set(key, newIndex);
+          if (!keyToCluster.has(key)) {
+            keyToCluster.set(key, newIndex);
+          }
         }
         continue;
       }
