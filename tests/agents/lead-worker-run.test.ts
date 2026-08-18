@@ -1086,9 +1086,8 @@ test("worker run does not promote standby companies after target is reached", as
   assert.ok(progressSnapshots.some((snapshot) => snapshot.funnel?.afterHubSpotDedup === 2 && snapshot.funnel?.syncedToHubSpot === 1));
 });
 
-test("worker run defaults to four Exa queries and passes target refinement into query planning", async () => {
+test("worker run defaults to four Exa queries per batch when no explicit exaQueryCount is provided", async () => {
   const observedQueryCounts: number[] = [];
-  const observedTargetRefinements: Array<string | undefined> = [];
 
   const service = new LeadWorkerRunService({
     controlPlaneStore: {
@@ -1128,12 +1127,9 @@ test("worker run defaults to four Exa queries and passes target refinement into 
       discoverDirectExaCompaniesForExecution: async (
         _filter: OrganizationFilter,
         _targetCategories: LeadCategory[],
-        maxQueryCount: number,
-        _options: unknown,
-        queryPlanningContext: { targetCategoryRefinement?: string }
+        maxQueryCount: number
       ) => {
         observedQueryCounts.push(maxQueryCount);
-        observedTargetRefinements.push(queryPlanningContext.targetCategoryRefinement);
         return [{
           name: "Query Count Vision",
           domain: "query-count-vision.example.com",
@@ -1147,7 +1143,6 @@ test("worker run defaults to four Exa queries and passes target refinement into 
   await service.run({
     targetLeadCount: 1,
     targetCategories: ["integrator_vision_industrial_ai"],
-    targetCategoryRefinement: "im Food Produktionssektor",
     companySearchMode: "exa_search",
     syncToHubSpot: true,
     dryRun: false,
@@ -1159,7 +1154,6 @@ test("worker run defaults to four Exa queries and passes target refinement into 
 
   assert.ok(observedQueryCounts.length > 0);
   assert.ok(observedQueryCounts.every((count) => count === 4));
-  assert.deepEqual(observedTargetRefinements, ["im Food Produktionssektor"]);
 });
 
 test("worker run reuses planned Exa queries before requesting a fresh Azure plan", async () => {

@@ -127,7 +127,7 @@ export const DEFAULT_PREQUALIFICATION_CATEGORY_CONTEXTS: Record<SelectableLeadCa
   },
   industrial_end_customer_scaled: {
     addOnContext:
-      "Treat as relevant only when the company has its own production, operational scale, and a believable quality-control, inspection, or process-automation need. Look for factories, plants, manufacturing lines, engineering teams, or industrial operations."
+      "Treat as relevant only when the company has its own production, operational scale, and a believable quality-control, inspection, or process-automation need. Look for factories, plants, manufacturing lines, engineering teams, or industrial operations. Scale is the decisive gate: prefer producers with roughly EUR 250 million or more annual revenue, or clear equivalent evidence such as several plants, more than about 1000 employees, an international production footprint, or a group structure with multiple production sites. Any producing industry can qualify when this scale and an in-house production process are evidenced; food and beverage production, printing and packaging printing, and surface, coating or finishing quality control are the verticals with the strongest track record so far and should be treated as the highest-confidence fits rather than as the only allowed ones. Reject small and mid-sized workshops, craft businesses, and low-volume producers even when their process would technically fit, and reject pure traders, distributors, agencies, and service providers without their own production."
   },
   camera_manufacturer_partner: {
     addOnContext:
@@ -255,24 +255,24 @@ export const OUTREACH_TEMPLATES: Record<string, OutreachTemplate> = {
   },
   industrial_end_customer_scaled_template: {
     key: "industrial_end_customer_scaled_template",
-    audience: "Industrial end customers with own production and sufficient scale for high-value QC/process-automation projects",
-    goal: "Position ONE WARE as a fast and economical path to production-ready Vision AI for scaled operations.",
-    subject: "Visuelle Prüfprozesse in eurer Produktion",
+    audience: "Operational leaders (COO, Produktionsleiter, Werksleiter, Qualitätsleiter, Innovation Manager) at large producers with own production and enough scale for high-value QC and automation projects",
+    goal: "Offer a fast, low-risk proof of concept: the customer sends a few images, ONE WARE's AI builds the complete application, and a working PoC exists within days — cheaper and more capable than off-the-shelf systems such as Keyence.",
+    subject: "Bildbasierte Qualitätskontrolle: PoC in wenigen Tagen",
     emailBody:
-      "Hey [Name],\n\nich habe gesehen, dass ihr bei [Firma] viel in der Produktion von [Produkt/Branche] macht und Qualität dort wahrscheinlich stark von visuellen Prüfprozessen abhängt.\n\nDas hat mich an ähnliche Kunden erinnert, die für automatische Kontrollanlagen sehr viel Geld ausgegeben haben, bei denen am Ende aber trotzdem nur ein Teil der Anwendungen zuverlässig funktioniert hat.\n\nWir arbeiten dafür an einem neuen Ansatz: Statt klassischer Bildverarbeitung oder einem Standard-KI-Modell erzeugt unsere Software automatisch ein eigenes KI-Modell für genau die jeweilige Prüfaufgabe, die Bilddaten und die Zielhardware.\n\nOft reicht dadurch schon eine günstige Kamera mit der CPU eines IPCs aus, um Anwendungen umzusetzen, die vorher zu teuer, zu langsam oder technisch nicht möglich waren.\n\nWäre es interessant, sich den Ansatz einmal an einem Beispiel aus eurer Produktion anzuschauen?\n\nViele Grüße\nLeon",
+      "Hallo Herr/Frau [Name],\n\nich habe gesehen, dass Sie bei [Firma] für [Produktion / Qualität / Operations] verantwortlich sind.\n\nWir haben ein zum Patent angemeldetes Verfahren entwickelt, mit dem unsere KI aus wenigen Bildern Ihrer Teile oder Produkte die komplette Prüfanwendung selbst aufbaut. Sie nehmen also nur ein paar Bilder auf, wir liefern in kürzester Zeit einen lauffähigen Proof of Concept. Wenn das Ergebnis überzeugt, setzen wir die vollständige Lösung in Ihrer Linie um.\n\nGegenüber fertigen Systemen, zum Beispiel von Keyence, ist das deutlich günstiger, deckt auch Prüfaufgaben ab, die mit Standardsystemen nicht lösbar sind, und ist wesentlich schneller umgesetzt.\n\nTypische Anwendungen bei Herstellern Ihrer Größe sind Oberflächen- und Druckbildkontrolle, Fehler- und Fremdkörpererkennung, Vollständigkeits- und Etikettenprüfung sowie Prozessüberwachung in der Linie.\n\nWäre ein kurzer PoC an einem konkreten Prüffall bei Ihnen interessant?\n\nViele Grüße\n[Ihr Name]",
     linkedInConnectionRequest:
-      "Hey [Name], ich habe gesehen, dass Qualität in eurer Produktion wahrscheinlich stark von visuellen Prüfprozessen abhängt. Wir arbeiten an einem neuen Ansatz dafür. Freue mich auf den Austausch.",
+      "Hi [Name], ich bin Leon von ONE WARE. Wir bauen aus wenigen Bildern Ihrer Produkte eine komplette KI-Prüfanwendung und liefern in kürzester Zeit einen PoC. Wäre spannend, mich mit Ihnen zu [Branche] zu vernetzen.",
     linkedInMessage:
-      "Hey [Name],\n\nich habe gesehen, dass ihr bei [Firma] viel in der Produktion von [Produkt/Branche] macht und Qualität dort wahrscheinlich stark von visuellen Prüfprozessen abhängt.\n\nDas hat mich an ähnliche Kunden erinnert, die für automatische Kontrollanlagen sehr viel Geld ausgegeben haben, bei denen am Ende aber trotzdem nur ein Teil der Anwendungen zuverlässig funktioniert hat.\n\nWir arbeiten dafür an einem neuen Ansatz: Statt klassischer Bildverarbeitung oder einem Standard-KI-Modell erzeugt unsere Software automatisch ein eigenes KI-Modell für genau die jeweilige Prüfaufgabe, die Bilddaten und die Zielhardware.\n\nOft reicht dadurch schon eine günstige Kamera mit der CPU eines IPCs aus, um Anwendungen umzusetzen, die vorher zu teuer, zu langsam oder technisch nicht möglich waren.\n\nWäre es interessant, sich den Ansatz einmal an einem Beispiel aus eurer Produktion anzuschauen?\n\nViele Grüße\nLeon",
+      "Hi [Name], danke fürs Vernetzen.\n\nIch hatte gesehen, dass Sie bei [Firma] in [Produktion / Qualität / Operations] verantwortlich sind.\n\nWir haben ein zum Patent angemeldetes Verfahren, mit dem unsere KI aus wenigen Bildern Ihrer Teile oder Produkte die komplette Prüfanwendung selbst aufbaut. Sie nehmen ein paar Bilder auf, wir liefern in kürzester Zeit einen lauffähigen PoC. Passt das Ergebnis, setzen wir die komplette Lösung in der Linie um.\n\nDas ist günstiger als fertige Systeme wie von Keyence, kann deutlich mehr Prüfaufgaben abdecken und ist sehr schnell umgesetzt. Gut funktioniert das zum Beispiel bei Oberflächen-, Druckbild- und Lebensmittelkontrolle.\n\nWäre ein PoC an einem konkreten Prüffall bei Ihnen interessant?",
     phoneScript:
-      "Hallo Herr/Frau [Name], hier ist Leon von ONE WARE. Ich wollte kurz fragen, ob bei euch in der Produktion Qualität stark von visuellen Prüfprozessen abhängt. Wir haben einen neuen Ansatz, bei dem unsere Software automatisch ein eigenes KI-Modell für genau die jeweilige Prüfaufgabe erzeugt. Oft reicht dafür schon eine günstige Kamera mit der CPU eines IPCs. Wäre es interessant, sich das mal an einem Beispiel aus eurer Produktion anzuschauen?",
-    subjectEn: "Visual inspection in your production",
+      "Hallo Herr/Frau [Name], hier ist [Ihr Name] von ONE WARE. Ich wollte kurz fragen, ob Sie aktuell Prüfaufgaben in der Produktion haben, die mit Kamerasystemen schwer oder nur teuer lösbar sind. Wir haben ein zum Patent angemeldetes Verfahren, bei dem unsere KI aus wenigen Bildern die komplette Prüfanwendung selbst aufbaut. Sie schicken uns ein paar Bilder, wir liefern in kürzester Zeit einen PoC. Das ist günstiger als fertige Systeme wie von Keyence und deckt auch schwierigere Fälle ab. Wäre so ein PoC bei Ihnen interessant?",
+    subjectEn: "Image-based quality control: proof of concept within days",
     emailBodyEn:
-      "Hey [Name],\n\nI saw that you produce a lot of [product/industry] at [company], where quality probably depends heavily on visual inspection.\n\nThat reminded me of similar customers who had spent a lot of money on automated inspection systems, but where in the end only part of the applications worked reliably.\n\nWe are working on a new approach for this: instead of classical image processing or a standard AI model, our software automatically generates its own AI model for exactly the given inspection task, the image data, and the target hardware.\n\nOften a low-cost camera with the CPU of an IPC is already enough to implement applications that were previously too expensive, too slow, or technically impossible.\n\nWould it be interesting to look at the approach with an example from your production?\n\nBest,\nLeon",
+      "Hi [Name],\n\nI saw that you are responsible for [production / quality / operations] at [company].\n\nWe have developed a patent-pending process in which our AI builds the complete inspection application itself from just a few images of your parts or products. You only take some images, and we deliver a working proof of concept within a very short time. If the result convinces you, we implement the full solution in your line.\n\nCompared with off-the-shelf systems such as Keyence, this is significantly cheaper, also covers inspection tasks that standard systems cannot solve, and is implemented much faster.\n\nTypical applications at manufacturers of your size are surface and print inspection, defect and foreign-object detection, completeness and label checks, and inline process monitoring.\n\nWould a short proof of concept on one concrete inspection case be interesting for you?\n\nBest regards,\n[Your Name]",
     linkedInConnectionRequestEn:
-      "Hey [Name], I saw that quality in your production probably depends heavily on visual inspection. We're working on a new approach for exactly that. Happy to connect.",
+      "Hi [Name], I'm Leon from ONE WARE. From just a few images of your products, our AI builds a complete inspection application and we deliver a proof of concept within days. Would be glad to connect around [industry].",
     linkedInMessageEn:
-      "Hey [Name],\n\nI saw that you produce a lot of [product/industry] at [company], where quality probably depends heavily on visual inspection.\n\nThat reminded me of similar customers who had spent a lot of money on automated inspection systems, but where in the end only part of the applications worked reliably.\n\nWe are working on a new approach for this: instead of classical image processing or a standard AI model, our software automatically generates its own AI model for exactly the given inspection task, the image data, and the target hardware.\n\nOften a low-cost camera with the CPU of an IPC is already enough to implement applications that were previously too expensive, too slow, or technically impossible.\n\nWould it be interesting to look at the approach with an example from your production?\n\nBest,\nLeon"
+      "Hi [Name], thanks for connecting.\n\nI saw that you are responsible for [production / quality / operations] at [company].\n\nWe have a patent-pending process where our AI builds the complete inspection application itself from just a few images of your parts or products. You take some images, we deliver a working proof of concept within a very short time. If the result fits, we implement the full solution in your line.\n\nThis is cheaper than off-the-shelf systems such as Keyence, covers considerably more inspection tasks, and is implemented very quickly. It works particularly well for surface, print, and food inspection.\n\nWould a proof of concept on one concrete inspection case be interesting for you?"
   },
   camera_manufacturer_partner_template: {
     key: "camera_manufacturer_partner_template",
@@ -416,10 +416,12 @@ export const CATEGORY_PREQUALIFICATION_CONTEXT: Record<LeadCategory, CategoryPre
     label: "Scaled industrial end customers",
     classificationRules: [
       "Relevant when the company runs its own manufacturing, production lines, plants, or industrial operations at meaningful scale.",
+      "Scale gate: prefer producers with roughly EUR 250 million or more annual revenue, or equivalent evidence such as multiple plants, more than about 1000 employees, international production sites, or a producer group structure. Treat clearly smaller producers as other unless the website shows comparable industrial scale.",
+      "Any producing industry can qualify. Food and beverage production, printing and packaging printing, and surface, coating, or finishing quality control are the proven highest-confidence verticals, but they are examples of good fit, not an exclusive list.",
       "Look for evidence of quality control, inspection, defect detection, process automation, packaging, assembly, or engineering-led operations.",
       "Engineering ownership, factory footprint, multi-site production, or industrial equipment references strengthen relevance. Internal IT or software integration units supporting a larger industrial group should usually not be placed here unless they directly operate the production environment itself."
     ],
-    disqualifiers: ["Small workshop without engineering capacity", "No own production context", "Distributor or trader with no industrial operations"]
+    disqualifiers: ["Small workshop or low-volume producer without industrial scale", "Producer clearly far below the ~EUR 250 million revenue or multi-plant scale bar", "No own production context", "Distributor or trader with no industrial operations"]
   },
   camera_manufacturer_partner: {
     category: "camera_manufacturer_partner",
@@ -559,12 +561,17 @@ export const CATEGORY_EXECUTION_CONTEXT: Record<LeadCategory, CategoryExecutionC
     category: "industrial_end_customer_scaled",
     label: "Scaled industrial end customer",
     researchPriorities: [
-      "Confirm production scale and internal engineering capability.",
-      "Find QC, inspection, and process automation leverage points."
+      "Confirm production scale (revenue around EUR 250 million or more, multiple plants, or a large production footprint) and internal engineering capability.",
+      "Find QC, inspection, and process automation leverage points, especially in food and beverage production, printing and packaging printing, and surface, coating, or finishing inspection.",
+      "Identify one concrete production or quality use case where a photo-based proof of concept would be easy to start."
     ],
-    outreachPriorities: ["Lead with economics, feasibility, and speed to production."],
-    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name, [Branche] with the actual production sector or product line. Ground personalization in concrete production context only."],
-    avoidSignals: ["Abstract transformation talk"]
+    outreachPriorities: [
+      "Lead with the proof-of-concept path: the customer supplies a few images of the parts or products, ONE WARE's AI builds the complete application, and a working PoC exists within a very short time before any full rollout is decided.",
+      "Contrast with off-the-shelf inspection systems such as Keyence: lower cost, broader range of solvable inspection tasks, and much faster implementation, made possible by ONE WARE's patent-pending model-generation process.",
+      "Address operational leaders: COO, Innovation Manager, Head of Production or Produktionsleiter, Werksleiter, and Head of Quality or Qualitätsleiter."
+    ],
+    personalizationRules: ["Start from the segment template. Fill in [Name] with the contact name, [Branche] with the actual production sector or product line. Ground personalization in concrete production context only, for example the produced goods, the inspected surface, the print process, or a named production site."],
+    avoidSignals: ["Abstract transformation talk", "Long implementation-project framing that hides the fast PoC offer", "Addressing group-level CEOs instead of production, quality, operations, or innovation leaders"]
   },
   camera_manufacturer_partner: {
     category: "camera_manufacturer_partner",
