@@ -469,13 +469,23 @@ export const defaultFilters: OrganizationFilter[] = [
   },
   {
     name: "DACH Scaled Industrial End Customers",
-    persona: "Industrial end customer with own production scale and likely QC/process-automation upside",
-    industries: ["Food Production", "Consumer Goods", "Pharma Manufacturing", "Automotive Manufacturing", "Electrical Manufacturing"],
-    keywords: ["quality control", "visual inspection", "process automation", "production line", "machine vision"],
+    persona: "Large industrial end customer (roughly EUR 250 million+ revenue or multi-plant scale) with own production and likely QC/process-automation upside, reachable through COO, Produktionsleiter, Werksleiter, Qualitätsleiter, or Innovation Manager",
+    industries: ["Food Production", "Beverage Production", "Printing and Packaging", "Metal and Surface Finishing", "Consumer Goods", "Pharma Manufacturing", "Automotive Manufacturing", "Electrical Manufacturing"],
+    keywords: [
+      "quality control",
+      "visual inspection",
+      "surface inspection",
+      "print inspection",
+      "food safety inspection",
+      "defect detection",
+      "process automation",
+      "production line",
+      "machine vision"
+    ],
     locations: ["Germany", "Austria", "Switzerland"],
-    employeeRanges: ["201,500", "501,1000", "1001,5000", "5001,10000"],
+    employeeRanges: ["501,1000", "1001,5000", "5001,10000"],
     targetCategories: ["industrial_end_customer_scaled"],
-    notes: "Prefer companies with visible production engineering ownership and enough scale for high-value projects. Target factory operators and manufacturers that buy and run production equipment, not machine builders, OEMs, or automation vendors."
+    notes: "Prefer large producers with roughly EUR 250 million or more revenue, several plants, or an international production footprint plus visible production engineering ownership. Food and beverage production, printing and packaging printing, and surface or finishing quality control are the proven best-performing verticals, but any producing industry at that scale qualifies. Target factory operators and manufacturers that buy and run production equipment, not machine builders, OEMs, or automation vendors."
   },
   {
     name: "Europe Camera Manufacturers",

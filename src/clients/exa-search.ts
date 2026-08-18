@@ -732,9 +732,9 @@ export class ExaSearchClient {
     const operatorExclusion = "Exclude system integrators, consultancies, machine builders, OEMs, automation vendors, directories, marketplaces, job boards, news articles, PDFs, and component vendors.";
 
     return [
-      `${location} ${industryFocus} with own production operations at industrial scale, including larger multi-site producer groups, likely running ${semanticFocus}. Prefer official company websites of industrial end customers, factories, processing plants, production groups, or plant operators that buy and run production equipment. ${operatorExclusion}`,
+      `${location} ${industryFocus} with own production operations at large industrial scale, ideally EUR 250 million or more annual revenue or several production plants, likely running ${semanticFocus}. Prefer official company websites of industrial end customers, factories, processing plants, production groups, or plant operators that buy and run production equipment. ${operatorExclusion}`,
       `${location} industrial end customers running factories or production lines in ${industries || "manufacturing"} that own and operate their own plants at industrial scale, including larger multi-site producer groups. Prefer official websites of factory operators, producers, processors, or production groups that operate plants and purchase machinery for their own production, not system integrators, machine builders, OEMs, resellers, or directories.`,
-      `${location} scaled industrial end customers and larger multi-site producer groups across ${industries || "manufacturing"} that make and process their own products in-house on industrial production lines. Prefer official company websites of factory operators, producers, processors, and production groups using production lines in-house. ${operatorExclusion}`
+      `${location} large-revenue industrial end customers and multi-site producer groups across ${industries || "manufacturing"} that make and process their own products in-house on industrial production lines, with strong hits in food and beverage production, printing and packaging printing, and surface, coating or finishing quality control. Prefer official company websites of factory operators, producers, processors, and production groups using production lines in-house. ${operatorExclusion}`
     ];
   }
 
@@ -745,7 +745,7 @@ export class ExaSearchClient {
     angle: string
   ): string {
     const industries = filter.industries.slice(0, 2).join(" and ") || "manufacturing";
-    return `${location} industrial end customers in ${industries} with own production lines and need for ${angle}, ${semanticFocus}. Prefer official company websites of factories, plant operators, producers, processors, and production groups that buy and operate machinery in-house. Exclude system integrators, consultancies, machine builders, OEMs, directories, marketplaces, job boards, news articles, PDFs, and component vendors.`;
+    return `${location} large industrial end customers in ${industries} with own production lines at EUR 250 million or more revenue scale and need for ${angle}, ${semanticFocus}. Prefer official company websites of factories, plant operators, producers, processors, and production groups that buy and operate machinery in-house. Exclude system integrators, consultancies, machine builders, OEMs, directories, marketplaces, job boards, news articles, PDFs, and component vendors.`;
   }
 
   private buildMachineBuilderPrimaryQueries(
